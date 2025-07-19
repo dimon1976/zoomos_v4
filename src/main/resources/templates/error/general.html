@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Ошибка - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Произошла ошибка',
+        ~{::div.page-actions}
+      )}">
+<head>
+    <title>Ошибка - Обработка файлов</title>
+    <style>
+        .error-container {
+            text-align: center;
+            padding: 40px 0;
+        }
+        .error-icon {
+            font-size: 4rem;
+            color: #dc3545;
+            margin-bottom: 20px;
+        }
+        .error-code {
+            font-size: 1.5rem;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+        .error-message {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+        .error-details {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions">
+    <a th:href="@{/}" class="btn btn-secondary">
+        <i class="fas fa-home me-1"></i>На главную
+    </a>
+</div>
+
+<section>
+    <div class="error-container">
+        <div class="error-icon">
+            <i class="fas fa-exclamation-circle"></i>
+        </div>
+        <div class="error-code">Ошибка</div>
+        <div class="error-message" th:text="${errorMessage ?: 'Произошла непредвиденная ошибка'}">
+            Произошла непредвиденная ошибка
+        </div>
+        <div class="mt-4">
+            <a th:href="@{/}" class="btn btn-primary">
+                <i class="fas fa-home me-1"></i>Вернуться на главную
+            </a>
+            <button onclick="window.history.back()" class="btn btn-outline-secondary ms-2">
+                <i class="fas fa-arrow-left me-1"></i>Вернуться назад
+            </button>
+        </div>
+        <div class="error-details mt-4" th:if="${requestUri}">
+            <p><strong>URL:</strong> <span th:text="${requestUri}"></span></p>
+            <p><strong>Время:</strong> <span th:text="${#dates.format(new java.util.Date(timestamp), 'dd.MM.yyyy HH:mm:ss')}"></span></p>
+        </div>
+    </div>
+</section>
+
+<script>
+    console.error('Page error: ' + document.querySelector('.error-message').textContent);
+</script>
+</body>
+</html>

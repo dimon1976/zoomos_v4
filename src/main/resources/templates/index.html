@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Главная - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Главная страница',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Главная - Обработка файлов</title>
+    <style>
+        .feature-icon {
+            font-size: 2rem;
+            height: 3rem;
+            width: 3rem;
+            border-radius: 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы (кнопки справа от заголовка) -->
+<div class="page-actions">
+    <a th:href="@{/clients/create}" class="btn btn-primary">
+        <i class="fas fa-plus me-1"></i>Новый клиент
+    </a>
+</div>
+
+<section>
+    <!-- Приветствие -->
+    <div class="p-5 mb-4 bg-light rounded-3">
+        <div class="container-fluid py-4">
+            <h1 class="display-5 fw-bold">Приложение для обработки файлов</h1>
+            <p class="col-md-8 fs-4">Загружайте, обрабатывайте и выгружайте данные для ваших клиентов</p>
+        </div>
+    </div>
+
+    <!-- Основные функции -->
+    <h2 class="mb-4">Основные функции</h2>
+    <div class="row g-4 py-3">
+        <div class="col-md-4">
+            <div class="card h-100 card-hover">
+                <div class="card-body text-center">
+                    <div class="feature-icon bg-primary text-white">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <h3 class="card-title">Клиенты</h3>
+                    <p class="card-text">Управление клиентами и их данными.</p>
+                    <a th:href="@{/clients}" class="btn btn-outline-primary mt-3">
+                        <i class="fas fa-arrow-right me-1"></i>Перейти
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 card-hover">
+                <div class="card-body text-center">
+                    <div class="feature-icon bg-success text-white">
+                        <i class="fas fa-file-import"></i>
+                    </div>
+                    <h3 class="card-title">Обработка файлов</h3>
+                    <p class="card-text">Импорт, экспорт и преобразование данных.</p>
+                    <a th:href="@{/clients}" class="btn btn-outline-success mt-3">
+                        <i class="fas fa-file-upload me-1"></i>Начать
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 card-hover">
+                <div class="card-body text-center">
+                    <div class="feature-icon bg-info text-white">
+                        <i class="fas fa-tools"></i>
+                    </div>
+                    <h3 class="card-title">Утилиты</h3>
+                    <p class="card-text">Дополнительные инструменты для работы с данными.</p>
+                    <a th:href="@{/utils}" class="btn btn-outline-info mt-3">
+                        <i class="fas fa-cog me-1"></i>Инструменты
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Последние операции -->
+    <h2 class="mt-5 mb-4">Последние операции</h2>
+    <div class="alert alert-info" role="alert">
+        <i class="fas fa-info-circle me-2"></i>Здесь будут отображаться последние файловые операции
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Домашняя страница загружена');
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Клиенты - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Клиенты',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Клиенты - Обработка файлов</title>
+    <style>
+        .search-form {
+            max-width: 500px;
+        }
+        .client-card:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-3px);
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
+        }
+        .client-stats {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы (кнопки справа от заголовка) -->
+<div class="page-actions">
+    <a th:href="@{/clients/create}" class="btn btn-primary">
+        <i class="fas fa-plus me-1"></i>Новый клиент
+    </a>
+</div>
+
+<section>
+    <!-- Поиск клиентов -->
+    <div class="mb-4">
+        <form th:action="@{/clients/search}" method="get" class="search-form">
+            <div class="input-group">
+                <input type="text" name="query" class="form-control" placeholder="Поиск клиентов по имени"
+                       th:value="${searchQuery}">
+                <button class="btn btn-outline-secondary" type="submit">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Результаты поиска -->
+    <div th:if="${searchQuery}" class="mb-3">
+        <p>
+            Результаты поиска для: <strong th:text="${searchQuery}"></strong>
+            <a th:href="@{/clients}" class="btn btn-sm btn-outline-secondary ms-2">
+                <i class="fas fa-times me-1"></i>Сбросить
+            </a>
+        </p>
+    </div>
+
+    <!-- Пустое состояние, если нет клиентов -->
+    <div th:if="${#lists.isEmpty(clients)}" class="empty-state">
+        <i class="fas fa-users-slash fa-3x text-muted mb-3"></i>
+        <h3>Нет клиентов</h3>
+        <p class="text-muted" th:if="${searchQuery}">По вашему запросу ничего не найдено.</p>
+        <p class="text-muted" th:unless="${searchQuery}">Создайте вашего первого клиента, чтобы начать работу.</p>
+        <a th:href="@{/clients/create}" class="btn btn-primary mt-3">
+            <i class="fas fa-plus me-1"></i>Создать клиента
+        </a>
+    </div>
+
+    <!-- Список клиентов -->
+    <div th:unless="${#lists.isEmpty(clients)}" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        <div th:each="client : ${clients}" class="col">
+            <div class="card h-100 client-card">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <a th:href="@{/clients/{id}(id=${client.id})}" class="text-decoration-none">
+                            <span th:text="${client.name}">Имя клиента</span>
+                        </a>
+                    </h5>
+                    <p class="card-text text-muted" th:if="${client.description}" th:text="${client.description}">Описание клиента</p>
+                    <p class="card-text text-muted" th:unless="${client.description}">Нет описания</p>
+
+                    <div class="d-flex align-items-center mt-3 client-stats">
+                        <i class="fas fa-file-alt text-primary me-2"></i>
+                        <span th:text="${client.fileOperationsCount != null ? client.fileOperationsCount : 0}">0</span>
+                        <span class="ms-1">файловых операций</span>
+                    </div>
+
+                    <div th:if="${client.contactEmail}" class="d-flex align-items-center mt-2 client-stats">
+                        <i class="fas fa-envelope text-muted me-2"></i>
+                        <span th:text="${client.contactEmail}">email@example.com</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <div class="btn-group w-100">
+                        <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-eye me-1"></i>Просмотр
+                        </a>
+                        <a th:href="@{/clients/{id}/edit(id=${client.id})}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fas fa-edit me-1"></i>Изменить
+                        </a>
+                        <!-- Исправленная кнопка удаления - используем data-атрибуты вместо прямого th:onclick -->
+                        <button type="button" class="btn btn-outline-danger btn-sm client-delete-btn"
+                                th:data-client-id="${client.id}"
+                                th:data-client-name="${client.name}">
+                            <i class="fas fa-trash me-1"></i>Удалить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <div class="modal fade" id="deleteClientModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Подтверждение удаления</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Вы уверены, что хотите удалить клиента <strong id="clientNameToDelete"></strong>?</p>
+                    <p class="text-danger"><strong>Внимание:</strong> Это действие нельзя отменить. Все файлы и операции этого клиента будут удалены.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <form id="deleteClientForm" method="post">
+                        <button type="submit" class="btn btn-danger">Удалить</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Страница клиентов загружена');
+
+        // Находим все кнопки удаления и добавляем обработчик события
+        document.querySelectorAll('.client-delete-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                // Получаем данные из data-атрибутов
+                const clientId = this.getAttribute('data-client-id');
+                const clientName = this.getAttribute('data-client-name');
+
+                // Показываем модальное окно подтверждения
+                showDeleteConfirmation(clientId, clientName);
+            });
+        });
+    });
+
+    // Функция для отображения модального окна подтверждения удаления
+    function showDeleteConfirmation(clientId, clientName) {
+        // Обновляем форму удаления
+        document.getElementById('deleteClientForm').action = '/clients/' + clientId + '/delete';
+
+        // Обновляем текст подтверждения
+        document.getElementById('clientNameToDelete').textContent = clientName;
+
+        // Показываем модальное окно
+        var modal = new bootstrap.Modal(document.getElementById('deleteClientModal'));
+        modal.show();
+    }
+</script>
+</body>
+</html>

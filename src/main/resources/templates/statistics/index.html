@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<head>
+    <title>Статистика</title>
+</head>
+<body>
+<!-- Page title -->
+<h1 layout:fragment="page-title">Общая статистика</h1>
+
+<!-- Main content -->
+<div layout:fragment="content">
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i> Общая статистика операций
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <p class="text-muted">Статистика по операциям пока недоступна</p>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i> Данный раздел будет содержать информацию о всех операциях в системе с возможностью фильтрации по датам и клиентам
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-file-import me-2"></i> Импорт данных
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <p class="text-muted">Статистика по импорту пока недоступна</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-file-export me-2"></i> Экспорт данных
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <p class="text-muted">Статистика по экспорту пока недоступна</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-clock me-2"></i> Журнал последних операций
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <p class="text-muted">Журнал операций пока пуст</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

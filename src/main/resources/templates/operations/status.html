@@ -1,0 +1,232 @@
+<!-- Нужно создать шаблон operations/status.html -->
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Статус операции - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Статус операции #' + ${operation.id},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Статус операции - Обработка файлов</title>
+    <style>
+        .progress-ring {
+            width: 80px;
+            height: 80px;
+        }
+        .progress-ring circle {
+            fill: transparent;
+            stroke: #e9ecef;
+            stroke-width: 4;
+        }
+        .progress-ring .progress {
+            stroke: #007bff;
+            stroke-linecap: round;
+            transition: stroke-dasharray 0.5s ease;
+        }
+        .status-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        .operation-details {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .refresh-button {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary me-2">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+    <button class="btn btn-outline-primary" onclick="refreshStatus()" id="refreshBtn">
+        <i class="fas fa-sync-alt me-1"></i>Обновить
+    </button>
+</div>
+
+<section>
+    <!-- Основная информация об операции -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="operation-details">
+                <div class="row align-items-center">
+                    <div class="col-md-2 text-center">
+                        <!-- Индикатор прогресса или статуса -->
+                        <div th:if="${operation.status.name() == 'PROCESSING'}" class="text-center">
+                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="16"></circle>
+                                <circle class="progress" cx="18" cy="18" r="16"
+                                        th:attr="stroke-dasharray=${operation.processingProgress ?: 0} + ', 100'"
+                                        stroke-dashoffset="0"></circle>
+                            </svg>
+                            <div class="fw-bold" th:text="${operation.processingProgress ?: 0} + '%'">0%</div>
+                        </div>
+                        <div th:unless="${operation.status.name() == 'PROCESSING'}" class="status-icon"
+                             th:classappend="${statusClass}">
+                            <i th:class="${operation.status.name() == 'COMPLETED' ? 'fas fa-check-circle text-success' :
+                                         operation.status.name() == 'FAILED' ? 'fas fa-times-circle text-danger' :
+                                         'fas fa-clock text-warning'}"></i>
+                        </div>
+                    </div>
+                    <div class="col-md-10">
+                        <h4 th:text="${operationTypeDisplay + ' файла'}">Импорт файла</h4>
+                        <p class="mb-1"><strong>Файл:</strong> <span th:text="${operation.fileName}">file.csv</span></p>
+                        <p class="mb-1"><strong>Статус:</strong>
+                            <span class="badge" th:classappend="${statusClass}"
+                                  th:text="${statusDisplay}">В обработке</span>
+                        </p>
+                        <p class="mb-1"><strong>Клиент:</strong>
+                            <a th:href="@{/clients/{id}(id=${clientId})}"
+                               th:text="${clientName}">Клиент</a>
+                        </p>
+                        <p class="mb-0"><strong>Время:</strong>
+                            <span th:text="${formattedStartedAt}">01.01.2025 10:00:00</span>
+                            <span th:if="${formattedCompletedAt}" th:text="'- ' + ${formattedCompletedAt}"></span>
+                            <small class="text-muted ms-2" th:text="'(' + ${duration} + ')'">(5 мин)</small>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <!-- Статистика -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">Статистика</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="fw-bold fs-4 text-primary" th:text="${operation.totalRecords ?: 0}">0</div>
+                            <small class="text-muted">Всего</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="fw-bold fs-4 text-success" th:text="${operation.processedRecords ?: 0}">0</div>
+                            <small class="text-muted">Обработано</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="fw-bold fs-4 text-danger" th:text="${operation.totalRecords != null and operation.processedRecords != null ? operation.totalRecords - operation.processedRecords : 0}">0</div>
+                            <small class="text-muted">Осталось</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Детали выполнения -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-list-alt me-2"></i>Детали выполнения
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <!-- Показываем разные детали в зависимости от статуса -->
+                    <div th:if="${operation.status.name() == 'PENDING'}">
+                        <div class="alert alert-info mb-0">
+                            <i class="fas fa-hourglass-start me-2"></i>
+                            Операция ожидает начала обработки...
+                        </div>
+                    </div>
+
+                    <div th:if="${operation.status.name() == 'PROCESSING'}">
+                        <div class="alert alert-primary mb-3">
+                            <i class="fas fa-spinner fa-spin me-2"></i>
+                            Идет обработка файла...
+                        </div>
+
+                        <!-- Прогресс бар -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span>Прогресс обработки</span>
+                                <span th:text="${operation.processingProgress ?: 0} + '%'">0%</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                     role="progressbar"
+                                     th:style="'width: ' + ${operation.processingProgress ?: 0} + '%'">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div th:if="${operation.status.name() == 'COMPLETED'}">
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>Операция завершена успешно!</strong>
+                            <br>Обработано <strong th:text="${operation.recordCount ?: operation.processedRecords}">0</strong> записей
+                            за <strong th:text="${duration}">время</strong>
+                        </div>
+
+                        <!-- Возможные действия после завершения -->
+                        <div class="mt-3">
+                            <h6>Доступные действия:</h6>
+                            <div class="btn-group">
+                                <a th:href="@{/clients/{id}(id=${clientId})}"
+                                   class="btn btn-outline-secondary btn-sm">
+                                    <i class="fas fa-eye me-1"></i>Просмотреть данные
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div th:if="${operation.status.name() == 'FAILED'}">
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle me-2"></i>
+                            <strong>Операция завершена с ошибкой</strong>
+                            <br th:if="${operation.errorMessage}" />
+                            <span th:if="${operation.errorMessage}" th:text="${operation.errorMessage}">Ошибка</span>
+                        </div>
+
+                        <!-- Возможные действия при ошибке -->
+                        <div class="mt-3">
+                            <h6>Рекомендуемые действия:</h6>
+                            <ul>
+                                <li>Проверьте формат файла и соответствие заголовков</li>
+                                <li>Убедитесь в корректности данных</li>
+                                <li>Попробуйте загрузить файл заново</li>
+                            </ul>
+                            <a th:href="@{/clients/{id}/import(id=${clientId})}"
+                               class="btn btn-primary">
+                                <i class="fas fa-redo me-1"></i>Попробовать снова
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    var operationId = /*[[${operation.id}]]*/ 0;
+    var operationStatus = /*[[${operation.status.name()}]]*/ 'PENDING';
+
+    // Автообновление для операций в процессе
+    if (operationStatus === 'PROCESSING' || operationStatus === 'PENDING') {
+        setInterval(refreshStatus, 5000); // Обновляем каждые 5 секунд
+    }
+
+    function refreshStatus() {
+        window.location.reload();
+    }
+    /*]]>*/
+</script>
+</body>
+</html>

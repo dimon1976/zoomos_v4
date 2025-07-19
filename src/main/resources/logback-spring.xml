@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <conversionRule conversionWord="clr"
+                    converterClass="org.springframework.boot.logging.logback.ColorConverter" />
+    <conversionRule conversionWord="wex"
+                    converterClass="org.springframework.boot.logging.logback.WhitespaceThrowableProxyConverter" />
+    <conversionRule conversionWord="wEx"
+                    converterClass="org.springframework.boot.logging.logback.ExtendedWhitespaceThrowableProxyConverter" />
+    <!-- Определение свойств логирования -->
+    <property name="LOG_DIR" value="./logs" />
+    <property name="LOG_FILE_NAME" value="file-processor" />
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{requestId}] %-5level %logger{36} - %msg%n" />
+    <property name="FILE_LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{requestId}] %-5level %logger{36} - %msg%n" />
+    <property name="CONSOLE_LOG_PATTERN" value="%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr([%thread]){magenta} %clr([%X{requestId}]){blue} %clr(%-5level) %clr(%logger{36}){cyan} - %msg%n" />
+
+    <!-- Аппендер для вывода в консоль с цветовой маркировкой -->
+    <appender name="Console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Аппендер для вывода всех логов в файл -->
+    <appender name="File" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${LOG_FILE_NAME}.log</file>
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/archived/${LOG_FILE_NAME}-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Аппендер для отдельной записи ошибок -->
+    <appender name="ErrorFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/error.log</file>
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/archived/error-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+    </appender>
+
+    <!-- Аппендер для файловых операций -->
+    <appender name="FileOperations" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/file-operations.log</file>
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/archived/file-operations-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- ============ ПРОФИЛЬ ПО УМОЛЧАНИЮ (СТАНДАРТНЫЙ) ============ -->
+    <springProfile name="default,!verbose,!silent">
+        <!-- Логгер для файловых операций -->
+        <logger name="my.java.service.file" level="INFO" additivity="false">
+            <appender-ref ref="FileOperations" />
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для контроллеров -->
+        <logger name="my.java.controller" level="INFO" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для сервисов -->
+        <logger name="my.java.service" level="INFO" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для репозиториев -->
+        <logger name="my.java.repository" level="INFO" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для Hibernate SQL - отключено в стандартном режиме -->
+        <logger name="org.hibernate.SQL" level="INFO" additivity="false">
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для параметров Hibernate SQL - отключено в стандартном режиме -->
+        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="INFO" additivity="false">
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Стандартный уровень логирования -->
+        <root level="INFO">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+            <appender-ref ref="ErrorFile" />
+        </root>
+    </springProfile>
+
+    <!-- ============ ПРОФИЛЬ ПОДРОБНОГО ЛОГИРОВАНИЯ ============ -->
+    <springProfile name="verbose">
+        <!-- Логгер для файловых операций -->
+        <logger name="my.java.service.file" level="DEBUG" additivity="false">
+            <appender-ref ref="FileOperations" />
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для контроллеров -->
+        <logger name="my.java.controller" level="DEBUG" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для сервисов -->
+        <logger name="my.java.service" level="DEBUG" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для репозиториев -->
+        <logger name="my.java.repository" level="DEBUG" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для Hibernate SQL -->
+        <logger name="org.hibernate.SQL" level="DEBUG" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для параметров Hibernate SQL -->
+        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="TRACE" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Повышенный уровень логирования -->
+        <root level="INFO">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+            <appender-ref ref="ErrorFile" />
+        </root>
+    </springProfile>
+
+    <!-- ============ ТИХИЙ ПРОФИЛЬ ДЛЯ ПРОДАКШЕНА ============ -->
+    <springProfile name="silent">
+        <!-- Логгер для файловых операций -->
+        <logger name="my.java.service.file" level="WARN" additivity="false">
+            <appender-ref ref="FileOperations" />
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для контроллеров -->
+        <logger name="my.java.controller" level="WARN" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для сервисов -->
+        <logger name="my.java.service" level="WARN" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для репозиториев -->
+        <logger name="my.java.repository" level="WARN" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Логгер для Hibernate - только ошибки -->
+        <logger name="org.hibernate" level="ERROR" additivity="false">
+            <appender-ref ref="File" />
+            <appender-ref ref="ErrorFile" />
+        </logger>
+
+        <!-- Минимальный уровень логирования -->
+        <root level="WARN">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+            <appender-ref ref="ErrorFile" />
+        </root>
+    </springProfile>
+</configuration>

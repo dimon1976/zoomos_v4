@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title=${client.id != null ? 'Редактирование клиента - Обработка файлов' : 'Новый клиент - Обработка файлов'},
+        content=~{::section},
+        scripts=~{::script},
+        styles=~{::style},
+        pageTitle=${client.id != null ? 'Редактирование клиента' : 'Создание нового клиента'},
+        pageActions=~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.id != null ? 'Редактирование клиента - Обработка файлов' : 'Новый клиент - Обработка файлов'}">Клиент - Обработка файлов</title>
+    <style>
+        .required-field::after {
+            content: "*";
+            color: red;
+            margin-left: 3px;
+        }
+        .form-section {
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .form-section-title {
+            margin-bottom: 1.5rem;
+            color: #495057;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 0.5rem;
+        }
+        .form-feedback {
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
+        }
+        .card-form {
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border: none;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="${client.id != null ? '/clients/' + client.id : '/clients'}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</div>
+
+<section>
+    <div class="card card-form">
+        <div class="card-body">
+            <form th:action="${client.id != null ? '/clients/' + client.id + '/edit' : '/clients/create'}"
+                  th:object="${client}" method="post" class="needs-validation" novalidate>
+
+                <!-- Скрытые поля -->
+                <input type="hidden" th:field="*{id}" />
+
+                <!-- Основная информация -->
+                <div class="form-section">
+                    <h4 class="form-section-title">Основная информация</h4>
+                    <div class="row g-3">
+                        <!-- Имя клиента -->
+                        <div class="col-md-12">
+                            <label for="name" class="form-label required-field">Имя клиента</label>
+                            <input type="text" class="form-control" id="name" th:field="*{name}"
+                                   th:classappend="${#fields.hasErrors('name')} ? 'is-invalid'" required>
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('name')}" th:errors="*{name}">
+                                Пожалуйста, введите имя клиента.
+                            </div>
+                            <div class="form-text text-muted">
+                                Укажите полное имя клиента или название организации
+                            </div>
+                        </div>
+
+                        <!-- Описание -->
+                        <div class="col-12">
+                            <label for="description" class="form-label">Описание</label>
+                            <textarea class="form-control" id="description" th:field="*{description}" rows="3"
+                                      placeholder="Краткое описание клиента или дополнительная информация"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Контактная информация -->
+                <div class="form-section">
+                    <h4 class="form-section-title">Контактная информация</h4>
+                    <div class="row g-3">
+                        <!-- Контактный email -->
+                        <div class="col-md-6">
+                            <label for="contactEmail" class="form-label">Email</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                <input type="email" class="form-control" id="contactEmail" th:field="*{contactEmail}"
+                                       th:classappend="${#fields.hasErrors('contactEmail')} ? 'is-invalid'"
+                                       placeholder="email@example.com">
+                                <div class="invalid-feedback" th:if="${#fields.hasErrors('contactEmail')}" th:errors="*{contactEmail}">
+                                    Пожалуйста, введите корректный email.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Контактный телефон -->
+                        <div class="col-md-6">
+                            <label for="contactPhone" class="form-label">Телефон</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                <input type="text" class="form-control" id="contactPhone" th:field="*{contactPhone}"
+                                       placeholder="+7 (XXX) XXX-XX-XX">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Кнопки действий -->
+                <div class="d-flex justify-content-between mt-4">
+                    <a th:href="${client.id != null ? '/clients/' + client.id : '/clients'}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Отмена
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>
+                        <span th:text="${client.id != null ? 'Сохранить изменения' : 'Создать клиента'}">Сохранить</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Валидация формы на стороне клиента
+        const forms = document.querySelectorAll('.needs-validation');
+        Array.from(forms).forEach(form => {
+            form.addEventListener('submit', event => {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+
+        // Плавный скроллинг к полям с ошибками
+        const invalidFields = document.querySelectorAll('.is-invalid');
+        if (invalidFields.length > 0) {
+            invalidFields[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            invalidFields[0].focus();
+        }
+    });
+</script>
+</body>
+</html>

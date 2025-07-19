@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Доступ запрещен - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Доступ запрещен',
+        ~{::div.page-actions}
+      )}">
+<head>
+    <title>Доступ запрещен - Обработка файлов</title>
+    <style>
+        .error-container {
+            text-align: center;
+            padding: 40px 0;
+        }
+        .error-code {
+            font-size: 6rem;
+            font-weight: bold;
+            color: #dc3545;
+            margin-bottom: 20px;
+        }
+        .error-message {
+            font-size: 1.5rem;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions">
+    <a th:href="@{/}" class="btn btn-secondary">
+        <i class="fas fa-home me-1"></i>На главную
+    </a>
+</div>
+
+<section>
+    <div class="error-container">
+        <div class="error-code">403</div>
+        <div class="error-message" th:text="${errorMessage ?: 'У вас нет доступа к этому ресурсу'}">
+            У вас нет доступа к этому ресурсу
+        </div>
+        <div class="mt-4">
+            <a th:href="@{/}" class="btn btn-primary">
+                <i class="fas fa-home me-1"></i>Вернуться на главную
+            </a>
+            <button onclick="window.history.back()" class="btn btn-outline-secondary ms-2">
+                <i class="fas fa-arrow-left me-1"></i>Вернуться назад
+            </button>
+        </div>
+    </div>
+</section>
+
+<script>
+    console.warn('Access denied: ' + window.location.pathname);
+</script>
+</body>
+</html>
