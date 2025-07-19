@@ -1,6 +1,5 @@
 package com.java.model;
 
-import com.java.model.entity.Client;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

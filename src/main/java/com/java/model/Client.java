@@ -1,4 +1,4 @@
-package com.java.model.entity;
+package com.java.model;
 
 import com.java.model.FileOperation;
 import jakarta.persistence.*;

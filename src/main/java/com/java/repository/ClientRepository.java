@@ -1,6 +1,6 @@
 package com.java.repository;
 
-import com.java.model.entity.Client;
+import com.java.model.Client;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
