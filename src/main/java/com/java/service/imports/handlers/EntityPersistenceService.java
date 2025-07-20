@@ -2,10 +2,8 @@ package com.java.service.imports.handlers;
 
 import com.java.model.entity.ImportSession;
 import com.java.model.enums.EntityType;
-import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
@@ -25,9 +23,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class EntityPersistenceService {
 
-    private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
-    private final EntityManager entityManager;
+
 
     /**
      * Сохраняет батч записей в БД
