@@ -84,6 +84,53 @@ public class FileAnalyzerService {
     }
 
     /**
+     * Анализирует уже сохраненный файл по указанному пути
+     */
+    public FileMetadata analyzeFile(Path filePath) throws IOException {
+        return analyzeFile(filePath, filePath.getFileName().toString());
+    }
+
+    /**
+     * Анализирует уже сохраненный файл по указанному пути
+     *
+     * @param filePath путь к файлу
+     * @param originalFilename исходное имя файла для отображения
+     */
+    public FileMetadata analyzeFile(Path filePath, String originalFilename) throws IOException {
+        log.info("Начало анализа файла по пути: {}", filePath);
+
+        try {
+            FileMetadata metadata = new FileMetadata();
+            metadata.setOriginalFilename(originalFilename);
+            metadata.setFileSize(pathResolver.getFileSize(filePath));
+            metadata.setTempFilePath(filePath.toString());
+
+            String fileFormat = detectFileFormat(originalFilename);
+            metadata.setFileFormat(fileFormat);
+            metadata.setFileHash(calculateFileHash(filePath));
+
+            if ("CSV".equalsIgnoreCase(fileFormat) || "TXT".equalsIgnoreCase(fileFormat)) {
+                analyzeCsvFile(filePath, metadata);
+            } else if ("XLSX".equalsIgnoreCase(fileFormat) || "XLS".equalsIgnoreCase(fileFormat)) {
+                analyzeExcelFile(filePath, metadata);
+            } else {
+                throw new UnsupportedOperationException("Неподдерживаемый формат файла: " + fileFormat);
+            }
+
+            log.info("Анализ файла завершен. Кодировка: {}, Разделитель: {}, Колонок: {}",
+                    metadata.getDetectedEncoding(),
+                    metadata.getDetectedDelimiter(),
+                    metadata.getTotalColumns());
+
+            return metadata;
+
+        } catch (Exception e) {
+            throw new IOException("Ошибка анализа файла: " + e.getMessage(), e);
+        }
+    }
+
+
+    /**
      * Анализирует CSV файл
      */
     private void analyzeCsvFile(Path filePath, FileMetadata metadata) throws IOException {

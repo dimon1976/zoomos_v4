@@ -86,7 +86,8 @@ public class AsyncImportService {
                 tempFilePath = pathResolver.saveToTempFile(request.getFile(), "import_" + clientId);
             }
 
-            FileMetadata metadata = fileAnalyzerService.analyzeFile(request.getFile());
+            // Анализируем файл по сохраненному пути, а не из MultipartFile
+            FileMetadata metadata = fileAnalyzerService.analyzeFile(tempFilePath, request.getFile().getOriginalFilename());
             metadata.setImportSession(session);
             metadata.setTempFilePath(tempFilePath.toString());
             metadata = metadataRepository.save(metadata);

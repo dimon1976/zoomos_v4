@@ -268,8 +268,8 @@ public class ImportProcessorService {
      * Обрабатывает батч записей
      */
     @Transactional
-    private void processBatch(ImportSession session, ImportTemplate template,
-                              List<Map<String, String>> batch, AtomicLong currentRow) {
+    public void processBatch(ImportSession session, ImportTemplate template,
+                             List<Map<String, String>> batch, AtomicLong currentRow) {
         log.debug("Обработка батча из {} записей", batch.size());
 
         List<Map<String, Object>> transformedBatch = new ArrayList<>();
