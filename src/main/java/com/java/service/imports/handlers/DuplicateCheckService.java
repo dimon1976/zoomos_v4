@@ -121,7 +121,7 @@ public class DuplicateCheckService {
             case AV_DATA:
                 return "av_data";
             case AV_HANDBOOK:
-                return "customers";
+                return "av_handbook";
             default:
                 throw new IllegalArgumentException("Неизвестный тип сущности: " + entityType);
         }

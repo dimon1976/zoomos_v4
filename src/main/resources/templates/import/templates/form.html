@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{layout/main :: html(
-        ${templateId ? 'Редактирование шаблона' : 'Новый шаблон'},
+        ${template.id != null ? 'Редактирование шаблона' : 'Новый шаблон'},
         ~{::section},
         ~{::script},
         ~{::style},
-        ${templateId ? 'Редактирование шаблона' : 'Новый шаблон'},
+        ${template.id != null ? 'Редактирование шаблона' : 'Новый шаблон'},
         ~{::.page-actions}
       )}">
 <head>
@@ -45,7 +45,7 @@
 </div>
 
 <section>
-    <form th:action="${templateId ? '/import/templates/' + templateId + '/edit' : '/import/templates/create'}"
+    <form th:action="${template.id != null ? '/import/templates/' + template.id + '/edit' : '/import/templates/create'}"
           th:object="${template}" method="post" class="needs-validation" novalidate>
 
         <input type="hidden" th:field="*{clientId}">
@@ -240,7 +240,7 @@
             </a>
             <button type="submit" class="btn btn-primary">
                 <i class="fas fa-save me-1"></i>
-                <span th:text="${templateId ? 'Сохранить изменения' : 'Создать шаблон'}">Сохранить</span>
+                <span th:text="${template.id != null ? 'Сохранить изменения' : 'Создать шаблон'}">Сохранить</span>
             </button>
         </div>
     </form>
