@@ -73,6 +73,12 @@
                 <i class="fas fa-file-export me-1"></i>Экспорт данных
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates"
+                    type="button" role="tab" aria-controls="templates" aria-selected="false">
+                <i class="fas fa-cog me-1"></i>Шаблоны импорта
+            </button>
+        </li>
     </ul>
 
     <div class="tab-content" id="clientTabsContent">
@@ -87,6 +93,80 @@
         <div class="tab-pane fade" id="export" role="tabpanel" aria-labelledby="export-tab">
             <!-- Основная форма экспорта -->
 
+        </div>
+        <!-- Вкладка шаблонов импорта -->
+        <div class="tab-pane fade" id="templates" role="tabpanel" aria-labelledby="templates-tab">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-file-import me-2"></i>Шаблоны импорта
+                        </h5>
+                        <a th:href="@{/import/templates/client/{clientId}(clientId=${client.id})}"
+                           class="btn btn-primary btn-sm">
+                            <i class="fas fa-cog me-1"></i>Управление шаблонами
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        Шаблоны импорта позволяют настроить соответствие между колонками файла и полями в базе данных.
+                    </p>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Как это работает:</strong>
+                        <ol class="mb-0 mt-2">
+                            <li>Создайте шаблон импорта с настройками маппинга полей</li>
+                            <li>Загрузите файл CSV или Excel</li>
+                            <li>Выберите подходящий шаблон</li>
+                            <li>Система автоматически импортирует данные согласно настройкам</li>
+                        </ol>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-check-circle text-success me-2"></i>Преимущества
+                                    </h6>
+                                    <ul class="mb-0">
+                                        <li>Автоматическое определение кодировки</li>
+                                        <li>Поддержка CSV, Excel (XLS, XLSX)</li>
+                                        <li>Валидация данных перед импортом</li>
+                                        <li>Обработка больших файлов</li>
+                                        <li>Детальные отчеты об ошибках</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-cogs text-primary me-2"></i>Возможности
+                                    </h6>
+                                    <ul class="mb-0">
+                                        <li>Настройка обработки дубликатов</li>
+                                        <li>Стратегии обработки ошибок</li>
+                                        <li>Трансформация данных</li>
+                                        <li>Значения по умолчанию</li>
+                                        <li>Валидация по регулярным выражениям</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <a th:href="@{/import/templates/client/{clientId}/create(clientId=${client.id})}"
+                           class="btn btn-success">
+                            <i class="fas fa-plus me-1"></i>Создать первый шаблон
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

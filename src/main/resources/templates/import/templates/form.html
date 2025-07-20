@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title=${templateId ? 'Редактирование шаблона' : 'Новый шаблон'},
+        content=~{::section},
+        scripts=~{::script},
+        styles=~{::style},
+        pageTitle=${templateId ? 'Редактирование шаблона' : 'Новый шаблон'},
+        pageActions=~{::.page-actions}
+      )}">
+<head>
+    <title>Шаблон импорта</title>
+    <style>
+        .field-mapping-row {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            position: relative;
+        }
+        .field-mapping-row:hover {
+            background-color: #e9ecef;
+        }
+        .remove-field-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+        }
+        .field-type-select {
+            max-width: 150px;
+        }
+        .drag-handle {
+            cursor: move;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/import/templates/client/{clientId}(clientId=${template.clientId})}"
+       class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Назад к списку
+    </a>
+</div>
+
+<section>
+    <form th:action="${templateId ? '/import/templates/' + templateId + '/edit' : '/import/templates/create'}"
+          th:object="${template}" method="post" class="needs-validation" novalidate>
+
+        <input type="hidden" th:field="*{clientId}">
+
+        <!-- Основная информация -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Основная информация</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="name" class="form-label required-field">Название шаблона</label>
+                        <input type="text" class="form-control" id="name" th:field="*{name}"
+                               th:classappend="${#fields.hasErrors('name')} ? 'is-invalid'" required>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('name')}"
+                             th:errors="*{name}">Ошибка</div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="entityType" class="form-label required-field">Тип сущности</label>
+                        <select class="form-select" id="entityType" th:field="*{entityType}"
+                                th:classappend="${#fields.hasErrors('entityType')} ? 'is-invalid'" required>
+                            <option value="">-- Выберите тип --</option>
+                            <option th:each="type : ${T(com.java.model.enums.EntityType).values()}"
+                                    th:value="${type}" th:text="${type.displayName}">Тип</option>
+                        </select>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('entityType')}"
+                             th:errors="*{entityType}">Ошибка</div>
+                    </div>
+
+                    <div class="col-12">
+                        <label for="description" class="form-label">Описание</label>
+                        <textarea class="form-control" id="description" th:field="*{description}"
+                                  rows="2"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Настройки обработки -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Настройки обработки</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="duplicateStrategy" class="form-label">Обработка дубликатов</label>
+                        <select class="form-select" id="duplicateStrategy" th:field="*{duplicateStrategy}">
+                            <option th:each="strategy : ${T(com.java.model.enums.DuplicateStrategy).values()}"
+                                    th:value="${strategy}" th:text="${strategy.displayName}">Стратегия</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="errorStrategy" class="form-label">Обработка ошибок</label>
+                        <select class="form-select" id="errorStrategy" th:field="*{errorStrategy}">
+                            <option th:each="strategy : ${T(com.java.model.enums.ErrorStrategy).values()}"
+                                    th:value="${strategy}" th:text="${strategy.displayName}">Стратегия</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="fileType" class="form-label">Тип файла</label>
+                        <select class="form-select" id="fileType" th:field="*{fileType}">
+                            <option value="">Автоопределение</option>
+                            <option value="CSV">CSV</option>
+                            <option value="XLSX">Excel (XLSX)</option>
+                            <option value="XLS">Excel (XLS)</option>
+                            <option value="TXT">Текст (TXT)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="encoding" class="form-label">Кодировка</label>
+                        <select class="form-select" id="encoding" th:field="*{encoding}">
+                            <option value="">Автоопределение</option>
+                            <option value="UTF-8">UTF-8</option>
+                            <option value="Windows-1251">Windows-1251</option>
+                            <option value="ISO-8859-1">ISO-8859-1</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="delimiter" class="form-label">Разделитель (для CSV)</label>
+                        <select class="form-select" id="delimiter" th:field="*{delimiter}">
+                            <option value="">Автоопределение</option>
+                            <option value=",">, (запятая)</option>
+                            <option value=";">; (точка с запятой)</option>
+                            <option value="\t">Tab (табуляция)</option>
+                            <option value="|">| (вертикальная черта)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="skipHeaderRows" class="form-label">Пропустить строк заголовка</label>
+                        <input type="number" class="form-control" id="skipHeaderRows"
+                               th:field="*{skipHeaderRows}" min="0" max="10">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Маппинг полей -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Маппинг полей</h5>
+                <button type="button" class="btn btn-sm btn-success" onclick="addFieldMapping()">
+                    <i class="fas fa-plus me-1"></i>Добавить поле
+                </button>
+            </div>
+            <div class="card-body">
+                <div th:if="${#fields.hasErrors('fields')}" class="alert alert-danger">
+                    <span th:errors="*{fields}">Ошибка полей</span>
+                </div>
+
+                <div id="fieldMappings">
+                    <div th:each="field, stat : ${template.fields}" class="field-mapping-row">
+                        <input type="hidden" th:field="*{fields[__${stat.index}__].id}">
+
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Колонка в файле</label>
+                                <input type="text" class="form-control"
+                                       th:field="*{fields[__${stat.index}__].columnName}"
+                                       placeholder="Название или индекс">
+                            </div>
+
+                            <div class="col-md-3">
+                                <label class="form-label required-field">Поле в БД</label>
+                                <input type="text" class="form-control"
+                                       th:field="*{fields[__${stat.index}__].entityFieldName}"
+                                       required>
+                            </div>
+
+                            <div class="col-md-2">
+                                <label class="form-label">Тип данных</label>
+                                <select class="form-select field-type-select"
+                                        th:field="*{fields[__${stat.index}__].fieldType}">
+                                    <option th:each="type : ${T(com.java.model.enums.FieldType).values()}"
+                                            th:value="${type}" th:text="${type}">Тип</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-2">
+                                <label class="form-label">Формат даты</label>
+                                <input type="text" class="form-control"
+                                       th:field="*{fields[__${stat.index}__].dateFormat}"
+                                       placeholder="dd.MM.yyyy">
+                            </div>
+
+                            <div class="col-md-2">
+                                <label class="form-label">По умолчанию</label>
+                                <input type="text" class="form-control"
+                                       th:field="*{fields[__${stat.index}__].defaultValue}">
+                            </div>
+
+                            <div class="col-md-12">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox"
+                                           th:field="*{fields[__${stat.index}__].isRequired}">
+                                    <label class="form-check-label">Обязательное</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox"
+                                           th:field="*{fields[__${stat.index}__].isUnique}">
+                                    <label class="form-check-label">Уникальное</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn btn-sm btn-danger remove-field-btn"
+                                onclick="removeFieldMapping(this)">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div th:if="${#lists.isEmpty(template.fields)}"
+                     class="text-center text-muted py-3">
+                    Добавьте поля для маппинга
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="d-flex justify-content-between">
+            <a th:href="@{/import/templates/client/{clientId}(clientId=${template.clientId})}"
+               class="btn btn-secondary">
+                <i class="fas fa-times me-1"></i>Отмена
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-1"></i>
+                <span th:text="${templateId ? 'Сохранить изменения' : 'Создать шаблон'}">Сохранить</span>
+            </button>
+        </div>
+    </form>
+</section>
+
+<script>
+    let fieldIndex = [[${#lists.size(template.fields)}]];
+
+    function addFieldMapping() {
+        const container = document.getElementById('fieldMappings');
+        const fieldHtml = `
+        <div class="field-mapping-row">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Колонка в файле</label>
+                    <input type="text" class="form-control"
+                           name="fields[${fieldIndex}].columnName"
+                           placeholder="Название или индекс">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label required-field">Поле в БД</label>
+                    <input type="text" class="form-control"
+                           name="fields[${fieldIndex}].entityFieldName"
+                           required>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Тип данных</label>
+                    <select class="form-select field-type-select"
+                            name="fields[${fieldIndex}].fieldType">
+                        <option value="STRING">STRING</option>
+                        <option value="INTEGER">INTEGER</option>
+                        <option value="DECIMAL">DECIMAL</option>
+                        <option value="DATE">DATE</option>
+                        <option value="DATETIME">DATETIME</option>
+                        <option value="BOOLEAN">BOOLEAN</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Формат даты</label>
+                    <input type="text" class="form-control"
+                           name="fields[${fieldIndex}].dateFormat"
+                           placeholder="dd.MM.yyyy">
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">По умолчанию</label>
+                    <input type="text" class="form-control"
+                           name="fields[${fieldIndex}].defaultValue">
+                </div>
+
+                <div class="col-md-12">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox"
+                               name="fields[${fieldIndex}].isRequired"
+                               value="true">
+                        <label class="form-check-label">Обязательное</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox"
+                               name="fields[${fieldIndex}].isUnique"
+                               value="true">
+                        <label class="form-check-label">Уникальное</label>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-sm btn-danger remove-field-btn"
+                    onclick="removeFieldMapping(this)">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+
+        container.insertAdjacentHTML('beforeend', fieldHtml);
+        fieldIndex++;
+    }
+
+    function removeFieldMapping(button) {
+        button.closest('.field-mapping-row').remove();
+    }
+</script>
+</body>
+</html>

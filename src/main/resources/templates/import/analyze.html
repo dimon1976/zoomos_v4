@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Анализ файла - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Анализ файла для импорта',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Анализ файла</title>
+    <style>
+        .file-info-card {
+            background-color: #f8f9fa;
+        }
+        .column-preview {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .sample-data {
+            font-size: 0.875rem;
+        }
+        .template-option {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .template-option:hover {
+            background-color: #e9ecef;
+        }
+        .template-option.selected {
+            border-color: #007bff;
+            background-color: #e7f1ff;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Отмена
+    </a>
+</div>
+
+<section>
+    <!-- Информация о файле -->
+    <div class="card file-info-card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Информация о файле</h5>
+            <div class="row">
+                <div class="col-md-4">
+                    <p class="mb-1"><strong>Файл:</strong>
+                        <span th:text="${analysis.filename}">file.csv</span></p>
+                    <p class="mb-1"><strong>Размер:</strong>
+                        <span th:text="${#numbers.formatDecimal(analysis.fileSize / 1048576.0, 1, 2)} + ' МБ'">
+                            0 МБ
+                        </span>
+                    </p>
+                    <p class="mb-1"><strong>Формат:</strong>
+                        <span class="badge bg-info" th:text="${analysis.fileFormat}">CSV</span>
+                    </p>
+                </div>
+                <div class="col-md-4">
+                    <p class="mb-1"><strong>Кодировка:</strong>
+                        <span th:text="${analysis.encoding}">UTF-8</span></p>
+                    <p class="mb-1" th:if="${analysis.delimiter}"><strong>Разделитель:</strong>
+                        <code th:text="${analysis.delimiter}">;</code>
+                    </p>
+                    <p class="mb-1"><strong>Колонок:</strong>
+                        <span th:text="${analysis.totalColumns}">0</span></p>
+                </div>
+                <div class="col-md-4">
+                    <p class="mb-1"><strong>Заголовки:</strong>
+                        <span th:text="${analysis.hasHeader ? 'Да' : 'Нет'}">Да</span></p>
+                    <p class="mb-1"><strong>Примеров данных:</strong>
+                        <span th:text="${#lists.size(analysis.sampleData)}">0</span> строк</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Предпросмотр данных -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Предпросмотр данных</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive column-preview">
+                <table class="table table-sm table-bordered sample-data">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th th:each="header : ${analysis.columnHeaders}"
+                            th:text="${header}">Колонка</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="row, stat : ${analysis.sampleData}">
+                        <td th:text="${stat.count}">1</td>
+                        <td th:each="header : ${analysis.columnHeaders}"
+                            th:text="${row.get('column_' + headerStat.index)}">
+                            Данные
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Выбор шаблона -->
+    <form th:action="@{/import/{clientId}/start(clientId=${clientId})}" method="post">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Выберите шаблон импорта</h5>
+            </div>
+            <div class="card-body">
+                <div th:if="${#lists.isEmpty(templates)}" class="text-center py-3">
+                    <p class="text-muted mb-3">У вас еще нет шаблонов импорта</p>
+                    <a th:href="@{/import/templates/client/{clientId}/create(clientId=${clientId})}"
+                       class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Создать шаблон
+                    </a>
+                </div>
+
+                <div th:unless="${#lists.isEmpty(templates)}" class="row">
+                    <div th:each="template : ${templates}" class="col-md-6 mb-3">
+                        <div class="card template-option"
+                             onclick="selectTemplate(this, [[${template.id}]])">
+                            <div class="card-body">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio"
+                                           name="templateId" th:value="${template.id}"
+                                           th:id="${'template' + template.id}" required>
+                                    <label class="form-check-label w-100"
+                                           th:for="${'template' + template.id}">
+                                        <h6 th:text="${template.name}">Название шаблона</h6>
+                                        <p class="text-muted mb-1"
+                                           th:text="${template.description}">Описание</p>
+                                        <small class="text-muted">
+                                            <span class="badge bg-secondary"
+                                                  th:text="${template.entityType.displayName}">Тип</span>
+                                            <span th:text="${#lists.size(template.fields)} + ' полей'">
+                                                0 полей
+                                            </span>
+                                        </small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Дополнительные настройки -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Дополнительные настройки</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="delimiter" class="form-label">Переопределить разделитель</label>
+                        <select class="form-select" id="delimiter" name="delimiter">
+                            <option value="">Использовать из шаблона</option>
+                            <option value=",">, (запятая)</option>
+                            <option value=";">; (точка с запятой)</option>
+                            <option value="\t">Tab (табуляция)</option>
+                            <option value="|">| (вертикальная черта)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="encoding" class="form-label">Переопределить кодировку</label>
+                        <select class="form-select" id="encoding" name="encoding">
+                            <option value="">Использовать автоопределение</option>
+                            <option value="UTF-8">UTF-8</option>
+                            <option value="Windows-1251">Windows-1251</option>
+                            <option value="ISO-8859-1">ISO-8859-1</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="skipHeaderRows" class="form-label">Пропустить строк</label>
+                        <input type="number" class="form-control" id="skipHeaderRows"
+                               name="skipHeaderRows" min="0" max="10">
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox"
+                                   id="validateOnly" name="validateOnly" value="true">
+                            <label class="form-check-label" for="validateOnly">
+                                Только проверка (без сохранения в БД)
+                            </label>
+                        </div>
+
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox"
+                                   id="asyncMode" name="asyncMode" value="true" checked>
+                            <label class="form-check-label" for="asyncMode">
+                                Асинхронная обработка (рекомендуется для больших файлов)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="d-flex justify-content-between">
+            <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+                <i class="fas fa-times me-1"></i>Отмена
+            </a>
+            <button type="submit" class="btn btn-primary" th:disabled="${#lists.isEmpty(templates)}">
+                <i class="fas fa-play me-1"></i>Начать импорт
+            </button>
+        </div>
+    </form>
+</section>
+
+<script>
+    function selectTemplate(card, templateId) {
+        // Снимаем выделение со всех карточек
+        document.querySelectorAll('.template-option').forEach(c => {
+            c.classList.remove('selected');
+        });
+
+        // Выделяем выбранную карточку
+        card.classList.add('selected');
+
+        // Выбираем радио-кнопку
+        document.getElementById('template' + templateId).checked = true;
+    }
+</script>
+</body>
+</html>
