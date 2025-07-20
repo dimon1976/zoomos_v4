@@ -1,7 +1,7 @@
 package com.java.service.client;
 
 import com.java.dto.ClientDto;
-import com.java.model.entity.Client;
+import com.java.model.Client;
 
 import java.util.List;
 import java.util.Optional;

@@ -1,6 +1,6 @@
 package com.java.service.client.impl;
 
-import com.java.model.entity.Client;
+import com.java.model.Client;
 import com.java.repository.ClientRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
