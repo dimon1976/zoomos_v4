@@ -7,6 +7,7 @@ import com.java.model.enums.ErrorStrategy;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
@@ -70,6 +71,7 @@ public class ImportTemplate {
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("columnIndex ASC")
+    @Default
     private List<ImportTemplateField> fields = new ArrayList<>();
 
     @CreationTimestamp
