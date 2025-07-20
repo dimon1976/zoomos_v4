@@ -118,7 +118,7 @@
                                 </thead>
                                 <tbody>
                                 <tr th:each="row : ${file.analysisResult.sampleData}">
-                                    <td th:each="header : ${file.analysisResult.columnHeaders}"
+                                    <td th:each="header, headerStat : ${file.analysisResult.columnHeaders}"
                                         th:text="${row.get('column_' + headerStat.index)}"
                                         class="text-nowrap">
                                         Данные

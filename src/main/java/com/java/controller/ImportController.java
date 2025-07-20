@@ -1,18 +1,18 @@
 package com.java.controller;
 
-import com.java.dto.FileAnalysisResultDto;
-import com.java.dto.ImportRequestDto;
+import com.java.dto.*;
 import com.java.mapper.FileMetadataMapper;
 import com.java.model.FileOperation;
 import com.java.model.entity.ImportSession;
-import com.java.repository.FileOperationRepository;
-import com.java.repository.ImportSessionRepository;
 import com.java.service.file.FileAnalyzerService;
 import com.java.service.imports.AsyncImportService;
 import com.java.service.imports.ImportTemplateService;
+import com.java.repository.FileOperationRepository;
+import com.java.repository.ImportSessionRepository;
 import com.java.util.PathResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +22,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Контроллер для операций импорта
@@ -40,7 +41,19 @@ public class ImportController {
     private final PathResolver pathResolver;
 
     // Временное хранилище для связи файлов с анализом
-    private final Map<String, AnalysisSession> analysisSessions = new HashMap<>();
+    private final Map<String, AnalysisSession> analysisSessions = new ConcurrentHashMap<>();
+
+    /**
+     * Очистка старых сессий анализа (запускается каждые 30 минут)
+     */
+    @Scheduled(fixedDelay = 1800000)
+    public void cleanupOldSessions() {
+        long cutoff = System.currentTimeMillis() - 3600000; // 1 час
+        analysisSessions.entrySet().removeIf(entry ->
+                entry.getValue().getCreatedAt() < cutoff
+        );
+        log.debug("Очищено старых сессий анализа: {}", analysisSessions.size());
+    }
 
     /**
      * Загрузка файлов для импорта
@@ -137,6 +150,7 @@ public class ImportController {
             for (FileInfo fileInfo : session.getFiles()) {
                 ImportRequestDto request = ImportRequestDto.builder()
                         .file(fileInfo.getOriginalFile())
+                        .savedFilePath(fileInfo.getSavedPath())
                         .templateId(templateId)
                         .validateOnly(validateOnly)
                         .asyncMode(asyncMode)
@@ -239,44 +253,30 @@ public class ImportController {
     // Вспомогательные методы
     private String getOperationTypeDisplay(FileOperation operation) {
         switch (operation.getOperationType()) {
-            case IMPORT:
-                return "Импорт";
-            case EXPORT:
-                return "Экспорт";
-            case PROCESS:
-                return "Обработка";
-            default:
-                return operation.getOperationType().name();
+            case IMPORT: return "Импорт";
+            case EXPORT: return "Экспорт";
+            case PROCESS: return "Обработка";
+            default: return operation.getOperationType().name();
         }
     }
 
     private String getStatusDisplay(FileOperation operation) {
         switch (operation.getStatus()) {
-            case PENDING:
-                return "Ожидание";
-            case PROCESSING:
-                return "В процессе";
-            case COMPLETED:
-                return "Завершено";
-            case FAILED:
-                return "Ошибка";
-            default:
-                return operation.getStatus().name();
+            case PENDING: return "Ожидание";
+            case PROCESSING: return "В процессе";
+            case COMPLETED: return "Завершено";
+            case FAILED: return "Ошибка";
+            default: return operation.getStatus().name();
         }
     }
 
     private String getStatusClass(FileOperation operation) {
         switch (operation.getStatus()) {
-            case PENDING:
-                return "status-pending";
-            case PROCESSING:
-                return "status-processing";
-            case COMPLETED:
-                return "status-success";
-            case FAILED:
-                return "status-error";
-            default:
-                return "status-unknown";
+            case PENDING: return "status-pending";
+            case PROCESSING: return "status-processing";
+            case COMPLETED: return "status-success";
+            case FAILED: return "status-error";
+            default: return "status-unknown";
         }
     }
 
@@ -290,6 +290,7 @@ public class ImportController {
     private static class AnalysisSession {
         private Long clientId;
         private List<FileInfo> files = new ArrayList<>();
+        private long createdAt = System.currentTimeMillis();
     }
 
     @lombok.Data

@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Path;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -22,6 +24,9 @@ public class ImportRequestDto {
     private Boolean validateOnly = false;
 
     private Boolean asyncMode = true;
+
+    // Путь к уже сохраненному файлу
+    private Path savedFilePath;
 
     // Переопределение настроек шаблона
     private String delimiter;

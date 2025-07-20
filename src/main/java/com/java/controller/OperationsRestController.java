@@ -1,6 +1,8 @@
 package com.java.controller;
 
+import com.java.model.Client;
 import com.java.model.FileOperation;
+import com.java.repository.ClientRepository;
 import com.java.repository.FileOperationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +23,7 @@ import java.util.stream.Collectors;
 public class OperationsRestController {
 
     private final FileOperationRepository fileOperationRepository;
+    private final ClientRepository clientRepository;
 
     /**
      * Получение списка операций клиента
@@ -30,11 +33,13 @@ public class OperationsRestController {
                                                       @RequestParam(defaultValue = "50") int limit) {
         log.debug("Запрос операций для клиента ID: {}", clientId);
 
+        // Проверяем существование клиента
+        Client client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+
         // Получаем последние операции клиента
-        List<FileOperation> operations = fileOperationRepository.findAll(
-                (root, query, cb) -> cb.equal(root.get("client").get("id"), clientId),
-                PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "startedAt"))
-        ).getContent();
+        PageRequest pageRequest = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "startedAt"));
+        List<FileOperation> operations = fileOperationRepository.findByClient(client, pageRequest).getContent();
 
         return operations.stream()
                 .map(this::toDto)
