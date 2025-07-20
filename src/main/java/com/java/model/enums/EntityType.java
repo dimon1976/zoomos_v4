@@ -1,8 +1,8 @@
 package com.java.model.enums;
 
 public enum EntityType {
-    PRODUCT("Продукт"),
-    CUSTOMER("Клиент");
+    AV_DATA("Азбука данные"),
+    AV_HANDBOOK("Азбука справочник");
 
     private final String displayName;
 

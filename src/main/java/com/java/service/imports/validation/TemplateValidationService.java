@@ -4,6 +4,7 @@ import com.java.dto.ImportTemplateDto;
 import com.java.dto.ImportTemplateFieldDto;
 import com.java.model.enums.EntityType;
 import com.java.model.enums.FieldType;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,16 +24,19 @@ public class TemplateValidationService {
     private static final Map<EntityType, Set<String>> ENTITY_FIELDS = new HashMap<>();
 
     static {
-        // Поля для продуктов
-        ENTITY_FIELDS.put(EntityType.PRODUCT, Set.of(
-                "name", "description", "sku", "price", "quantity",
-                "category", "brand", "weight", "dimensions"
+        // Поля для азбуки
+        ENTITY_FIELDS.put(EntityType.AV_DATA, Set.of(
+                "data_source", "operation_id", "client_id", "product_id", "product_name", "product_brand", "product_bar", "product_description", "product_url", "product_category1",
+                "product_category2", "product_category3", "product_price", "product_analog", "product_additional1", "product_additional2", "product_additional3", "product_additional4",
+                "product_additional5", "region", "region_Address", "competitor_Name", "competitor_Price", "competitor_Promotional_Price", "competitor_time", "competitor_date",
+                "competitor_local_date_time", "competitor_stock_status", "competitor_additional_price", "competitor_commentary", "competitor_product_name", "competitor_additional",
+                "competitor_additional2", "competitor_url", "competitor_web_cache_url"
         ));
 
-        // Поля для клиентов
-        ENTITY_FIELDS.put(EntityType.CUSTOMER, Set.of(
-                "name", "email", "phone", "address", "city",
-                "country", "postalCode", "company", "notes"
+        // Поля для справочника
+        ENTITY_FIELDS.put(EntityType.AV_HANDBOOK, Set.of(
+                "handbookRetailNetworkCode", "handbookRetailNetwork", "handbookPhysicalAddress", "handbookPriceZoneCode", "handbookWebSite",
+                "handbookRegionCode", "handbookRegionName"
         ));
     }
 
@@ -149,13 +153,13 @@ public class TemplateValidationService {
         Set<String> requiredFields = new HashSet<>();
 
         switch (entityType) {
-            case PRODUCT:
-                requiredFields.add("name");
-                requiredFields.add("price");
+            case AV_DATA:
+                requiredFields.add("productId");
                 break;
-            case CUSTOMER:
-                requiredFields.add("name");
-                requiredFields.add("email");
+            case AV_HANDBOOK:
+                requiredFields.add("handbookRetailNetworkCode");
+                requiredFields.add("handbookRetailNetwork");
+                requiredFields.add("handbookWebSite");
                 break;
         }
 
@@ -194,6 +198,7 @@ public class TemplateValidationService {
     /**
      * Исключение валидации
      */
+    @Getter
     public static class ValidationException extends RuntimeException {
         private final List<String> errors;
 
@@ -202,8 +207,5 @@ public class TemplateValidationService {
             this.errors = errors;
         }
 
-        public List<String> getErrors() {
-            return errors;
-        }
     }
 }

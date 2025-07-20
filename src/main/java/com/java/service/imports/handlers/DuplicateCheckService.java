@@ -118,9 +118,9 @@ public class DuplicateCheckService {
      */
     private String getTableName(EntityType entityType) {
         switch (entityType) {
-            case PRODUCT:
-                return "products";
-            case CUSTOMER:
+            case AV_DATA:
+                return "av_data";
+            case AV_HANDBOOK:
                 return "customers";
             default:
                 throw new IllegalArgumentException("Неизвестный тип сущности: " + entityType);

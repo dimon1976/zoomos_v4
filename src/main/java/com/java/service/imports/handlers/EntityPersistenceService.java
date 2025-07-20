@@ -12,9 +12,10 @@ import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Сервис для сохранения импортированных данных в БД
@@ -36,10 +37,10 @@ public class EntityPersistenceService {
         if (batch.isEmpty()) return 0;
 
         switch (entityType) {
-            case PRODUCT:
-                return saveProducts(batch);
-            case CUSTOMER:
-                return saveCustomers(batch);
+            case AV_DATA:
+                return saveAvData(batch);
+            case AV_HANDBOOK:
+                return saveAvHandbook(batch);
             default:
                 throw new UnsupportedOperationException("Неподдерживаемый тип сущности: " + entityType);
         }
@@ -48,21 +49,25 @@ public class EntityPersistenceService {
     /**
      * Сохраняет продукты
      */
-    private int saveProducts(List<Map<String, Object>> batch) {
-        String sql = "INSERT INTO products (name, description, sku, price, quantity, " +
-                "category, brand, weight, dimensions, created_at, updated_at) " +
-                "VALUES (:name, :description, :sku, :price, :quantity, " +
-                ":category, :brand, :weight, :dimensions, :createdAt, :updatedAt)";
+    private int saveAvData(List<Map<String, Object>> batch) {
+        String sql = "INSERT INTO av_data (data_source, operation_id, client_id, product_id, product_name, product_brand, product_bar, product_description, product_url, product_category1, product_category2, product_category3," +
+                " product_price, product_analog, product_additional1, product_additional2, product_additional3, product_additional4, product_additional5, region, region_Address, competitor_Name, competitor_Price," +
+                " competitor_Promotional_Price, competitor_time, competitor_date, competitor_local_date_time, competitor_stock_status, competitor_additional_price, competitor_commentary, competitor_product_name," +
+                " competitor_additional, competitor_additional2, competitor_url, competitor_web_cache_url, created_at, updated_at) " +
+                "VALUES (:dataSource, :operationId, :clientId, :productId, :productName, :productBrand, :productBar, :productDescription, :productUrl, :productCategory1, :productCategory2, :productCategory3, :productPrice," +
+                " :productAnalog, :productAdditional1, :productAdditional2, :productAdditional3, :productAdditional4, :productAdditional5, :region, :regionAddress, :competitorName, :competitorPrice, :competitorPromotionalPrice," +
+                " :competitorTime, :competitorDate, :competitorLocalDateTime, :competitorStockStatus, :competitorAdditionalPrice, :competitorCommentary, :competitorProductName, :competitorAdditional, :competitorAdditional2," +
+                " :competitorUrl, :competitorWebCacheUrl, :created_at, :updated_at)";
 
         // Добавляем системные поля
         LocalDateTime now = LocalDateTime.now();
-        batch.forEach(product -> {
-            product.putIfAbsent("createdAt", now);
-            product.putIfAbsent("updatedAt", now);
+        batch.forEach(avData -> {
+            avData.putIfAbsent("createdAt", now);
+            avData.putIfAbsent("updatedAt", now);
 
             // Преобразуем null значения в дефолтные
-            product.putIfAbsent("quantity", 0);
-            product.putIfAbsent("price", 0.0);
+//            avData.putIfAbsent("quantity", 0);
+            avData.putIfAbsent("productPrice", 0.0);
         });
 
         SqlParameterSource[] batchParams = SqlParameterSourceUtils.createBatch(batch);
@@ -74,17 +79,17 @@ public class EntityPersistenceService {
     /**
      * Сохраняет клиентов
      */
-    private int saveCustomers(List<Map<String, Object>> batch) {
-        String sql = "INSERT INTO customers (name, email, phone, address, city, " +
-                "country, postal_code, company, notes, created_at, updated_at) " +
-                "VALUES (:name, :email, :phone, :address, :city, " +
-                ":country, :postalCode, :company, :notes, :createdAt, :updatedAt)";
+    private int saveAvHandbook(List<Map<String, Object>> batch) {
+        String sql = "INSERT INTO av_handbook (handbook_retail_network_code, handbook_retail_network, handbook_physical_address, handbook_price_zone_code, handbook_web_site, " +
+                "handbook_region_code, handbook_region_name, created_at, updated_at) " +
+                "VALUES (:handbookRetailNetworkCode, :handbookRetailNetwork, :handbookPhysicalAddress, :handbookPriceZoneCode, :handbookWebSite, " +
+                ":handbookRegionCode, :handbookRegionName, :createdAt, :updatedAt)";
 
         // Добавляем системные поля
         LocalDateTime now = LocalDateTime.now();
-        batch.forEach(customer -> {
-            customer.putIfAbsent("createdAt", now);
-            customer.putIfAbsent("updatedAt", now);
+        batch.forEach(av_handbook -> {
+            av_handbook.putIfAbsent("createdAt", now);
+            av_handbook.putIfAbsent("updatedAt", now);
         });
 
         SqlParameterSource[] batchParams = SqlParameterSourceUtils.createBatch(batch);

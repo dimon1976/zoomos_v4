@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{layout/main :: html(
-        title=${templateId ? 'Редактирование шаблона' : 'Новый шаблон'},
-        content=~{::section},
-        scripts=~{::script},
-        styles=~{::style},
-        pageTitle=${templateId ? 'Редактирование шаблона' : 'Новый шаблон'},
-        pageActions=~{::.page-actions}
+        ${templateId ? 'Редактирование шаблона' : 'Новый шаблон'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${templateId ? 'Редактирование шаблона' : 'Новый шаблон'},
+        ~{::.page-actions}
       )}">
 <head>
     <title>Шаблон импорта</title>
