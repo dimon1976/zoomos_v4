@@ -129,16 +129,21 @@ public class ImportProcessorService {
                     .withCSVParser(parser)
                     .build();
 
-            // Пропускаем строки заголовка если нужно
-            for (int i = 0; i < template.getSkipHeaderRows(); i++) {
-                csvReader.readNext();
-            }
-
-            // Читаем заголовки для маппинга по имени
             String[] headers = null;
+            int skippedRows = 0;
+
+            // Сначала считываем строку заголовков, если она присутствует
             if (metadata.getHasHeader()) {
                 headers = csvReader.readNext();
+                skippedRows++; // учтем считанную строку
             }
+
+            // Далее пропускаем оставшиеся строки, указанные в шаблоне
+            while (skippedRows < template.getSkipHeaderRows()) {
+                csvReader.readNext();
+                skippedRows++;
+            }
+            int startRowNumber = skippedRows;
 
             // Обрабатываем данные батчами
             processBatches(session, template, csvReader, headers, cancelled);
@@ -319,7 +324,10 @@ public class ImportProcessorService {
         // Сохраняем батч в БД
         if (!transformedBatch.isEmpty()) {
             try {
-                int saved = persistenceService.saveBatch(transformedBatch, template.getEntityType());
+                int saved = persistenceService.saveBatch(
+                        transformedBatch,
+                        template.getEntityType(),
+                        session);
                 session.setSuccessRows(session.getSuccessRows() + saved);
 
                 // Сохраняем ключи дубликатов
