@@ -48,7 +48,8 @@ public class DuplicateCheckService {
     /**
      * Проверяет, является ли запись дубликатом
      */
-    public boolean isDuplicate(String key, EntityType entityType) {
+    public boolean isDuplicate(String key, ImportTemplate template) {
+        EntityType entityType = template.getEntityType();
         String cacheKey = entityType.name() + ":" + key;
 
         // Проверяем в кеше
@@ -58,7 +59,7 @@ public class DuplicateCheckService {
         }
 
         // Проверяем в БД
-        return checkInDatabase(key, entityType);
+        return checkInDatabase(key, template);
     }
 
     /**
@@ -72,38 +73,51 @@ public class DuplicateCheckService {
     /**
      * Проверяет наличие дубликата в базе данных
      */
-    private boolean checkInDatabase(String key, EntityType entityType) {
+    private boolean checkInDatabase(String key, ImportTemplate template) {
+        EntityType entityType = template.getEntityType();
         // Реализация зависит от структуры БД
         // Это примерная реализация
 
         String tableName = getTableName(entityType);
-        String[] keyParts = key.split("\\|");
+        String[] keyParts = key.split("\\|", -1);
 
-        // Формируем запрос для проверки
-        StringBuilder query = new StringBuilder("SELECT COUNT(*) FROM ").append(tableName);
-        query.append(" WHERE 1=1");
+        // Получаем уникальные поля в том же порядке, что и для формирования ключа
+        List<ImportTemplateField> uniqueFields = template.getFields().stream()
+                .filter(ImportTemplateField::getIsUnique)
+                .collect(Collectors.toList());
 
-        List<Object> params = new ArrayList<>();
-
-        // Добавляем условия для каждой части ключа
-        // Это упрощенная версия, в реальности нужно знать какие поля проверять
-        if (keyParts.length > 0 && !keyParts[0].equals("null")) {
-            query.append(" AND name = ?");
-            params.add(keyParts[0]);
-        }
-
-        if (params.isEmpty()) {
+        if (uniqueFields.isEmpty()) {
             return false;
         }
 
+        StringBuilder query = new StringBuilder("SELECT COUNT(*) FROM ")
+                .append(tableName).append(" WHERE 1=1");
+        List<Object> params = new ArrayList<>();
+
+        for (int i = 0; i < uniqueFields.size(); i++) {
+            String fieldName = uniqueFields.get(i).getEntityFieldName();
+            String columnName = toSnakeCase(fieldName);
+            String value = i < keyParts.length ? keyParts[i] : null;
+
+            if (value == null || value.equals("null") || value.isEmpty()) {
+                query.append(" AND ").append(columnName).append(" IS NULL");
+            } else {
+                query.append(" AND ").append(columnName).append(" = ?");
+                params.add(value);
+            }
+        }
+
         try {
-            Integer count = jdbcTemplate.queryForObject(query.toString(),
-                    params.toArray(), Integer.class);
+            Integer count = jdbcTemplate.queryForObject(query.toString(), params.toArray(), Integer.class);
             return count != null && count > 0;
         } catch (Exception e) {
             log.error("Ошибка проверки дубликата в БД", e);
             return false;
         }
+    }
+
+    private String toSnakeCase(String value) {
+        return value.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
     }
 
     /**

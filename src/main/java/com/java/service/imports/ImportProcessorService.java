@@ -296,7 +296,7 @@ public class ImportProcessorService {
                     );
 
                     if (batchDuplicateKeys.contains(duplicateKey) ||
-                            duplicateCheckService.isDuplicate(duplicateKey, template.getEntityType())) {
+                            duplicateCheckService.isDuplicate(duplicateKey, template)) {
 
                         session.setDuplicateRows(session.getDuplicateRows() + 1);
                         recordError(session, rowNumber, null, null,
