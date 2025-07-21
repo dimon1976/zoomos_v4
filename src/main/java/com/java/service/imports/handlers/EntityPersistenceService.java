@@ -59,6 +59,7 @@ public class EntityPersistenceService {
         // Добавляем системные поля
         LocalDateTime now = LocalDateTime.now();
         batch.forEach(avData -> {
+            avData.putIfAbsent("dataSource", "FILE"); // Источник данных
             avData.putIfAbsent("createdAt", now);
             avData.putIfAbsent("updatedAt", now);
 
