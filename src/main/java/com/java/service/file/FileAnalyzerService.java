@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
 /**
@@ -38,6 +39,12 @@ public class FileAnalyzerService {
     private static final List<Character> COMMON_DELIMITERS = Arrays.asList(',', ';', '\t', '|');
     private static final List<Character> COMMON_QUOTES = Arrays.asList('"', '\'');
 
+    // Константы для улучшения читаемости
+    private static final int ENCODING_BUFFER_SIZE = 4096;
+    private static final int CSV_SAMPLE_LINES = 10;
+    private static final int HASH_BUFFER_SIZE = 8192;
+    private static final char DEFAULT_ESCAPE_CHAR = '\\';
+
     /**
      * Анализирует файл и извлекает метаданные
      */
@@ -48,34 +55,7 @@ public class FileAnalyzerService {
         Path tempFile = pathResolver.saveToTempFile(file, "analyze");
 
         try {
-            FileMetadata metadata = new FileMetadata();
-            metadata.setOriginalFilename(file.getOriginalFilename());
-            metadata.setFileSize(file.getSize());
-            metadata.setTempFilePath(tempFile.toString());
-
-            // Определяем формат файла
-            String fileFormat = detectFileFormat(file.getOriginalFilename());
-            metadata.setFileFormat(fileFormat);
-
-            // Вычисляем хеш файла
-            metadata.setFileHash(calculateFileHash(tempFile));
-
-            // Анализируем в зависимости от формата
-            if ("CSV".equalsIgnoreCase(fileFormat) || "TXT".equalsIgnoreCase(fileFormat)) {
-                analyzeCsvFile(tempFile, metadata);
-            } else if ("XLSX".equalsIgnoreCase(fileFormat) || "XLS".equalsIgnoreCase(fileFormat)) {
-                analyzeExcelFile(tempFile, metadata);
-            } else {
-                throw new UnsupportedOperationException("Неподдерживаемый формат файла: " + fileFormat);
-            }
-
-            log.info("Анализ файла завершен. Кодировка: {}, Разделитель: {}, Колонок: {}",
-                    metadata.getDetectedEncoding(),
-                    metadata.getDetectedDelimiter(),
-                    metadata.getTotalColumns());
-
-            return metadata;
-
+            return performFileAnalysis(tempFile, file.getOriginalFilename(), file.getSize());
         } catch (Exception e) {
             // Удаляем временный файл при ошибке
             pathResolver.deleteFile(tempFile);
@@ -93,42 +73,49 @@ public class FileAnalyzerService {
     /**
      * Анализирует уже сохраненный файл по указанному пути
      *
-     * @param filePath путь к файлу
+     * @param filePath         путь к файлу
      * @param originalFilename исходное имя файла для отображения
      */
     public FileMetadata analyzeFile(Path filePath, String originalFilename) throws IOException {
         log.info("Начало анализа файла по пути: {}", filePath);
 
         try {
-            FileMetadata metadata = new FileMetadata();
-            metadata.setOriginalFilename(originalFilename);
-            metadata.setFileSize(pathResolver.getFileSize(filePath));
-            metadata.setTempFilePath(filePath.toString());
-
-            String fileFormat = detectFileFormat(originalFilename);
-            metadata.setFileFormat(fileFormat);
-            metadata.setFileHash(calculateFileHash(filePath));
-
-            if ("CSV".equalsIgnoreCase(fileFormat) || "TXT".equalsIgnoreCase(fileFormat)) {
-                analyzeCsvFile(filePath, metadata);
-            } else if ("XLSX".equalsIgnoreCase(fileFormat) || "XLS".equalsIgnoreCase(fileFormat)) {
-                analyzeExcelFile(filePath, metadata);
-            } else {
-                throw new UnsupportedOperationException("Неподдерживаемый формат файла: " + fileFormat);
-            }
-
-            log.info("Анализ файла завершен. Кодировка: {}, Разделитель: {}, Колонок: {}",
-                    metadata.getDetectedEncoding(),
-                    metadata.getDetectedDelimiter(),
-                    metadata.getTotalColumns());
-
-            return metadata;
-
+            long fileSize = pathResolver.getFileSize(filePath);
+            return performFileAnalysis(filePath, originalFilename, fileSize);
         } catch (Exception e) {
             throw new IOException("Ошибка анализа файла: " + e.getMessage(), e);
         }
     }
 
+    /**
+     * Выполняет основной анализ файла
+     */
+    private FileMetadata performFileAnalysis(Path filePath, String originalFilename, long fileSize)
+            throws IOException {
+        FileMetadata metadata = new FileMetadata();
+        metadata.setOriginalFilename(originalFilename);
+        metadata.setFileSize(fileSize);
+        metadata.setTempFilePath(filePath.toString());
+
+        String fileFormat = detectFileFormat(originalFilename);
+        metadata.setFileFormat(fileFormat);
+        metadata.setFileHash(calculateFileHash(filePath));
+
+        if ("CSV".equalsIgnoreCase(fileFormat) || "TXT".equalsIgnoreCase(fileFormat)) {
+            analyzeCsvFile(filePath, metadata);
+        } else if ("XLSX".equalsIgnoreCase(fileFormat) || "XLS".equalsIgnoreCase(fileFormat)) {
+            analyzeExcelFile(filePath, metadata);
+        } else {
+            throw new UnsupportedOperationException("Неподдерживаемый формат файла: " + fileFormat);
+        }
+
+        log.info("Анализ файла завершен. Кодировка: {}, Разделитель: {}, Колонок: {}",
+                metadata.getDetectedEncoding(),
+                metadata.getDetectedDelimiter(),
+                metadata.getTotalColumns());
+
+        return metadata;
+    }
 
     /**
      * Анализирует CSV файл
@@ -171,10 +158,17 @@ public class FileAnalyzerService {
                     sampleData.add(row);
                     count++;
                 }
-                metadata.setSampleData(convertToJson(sampleData));
+
+                if (!sampleData.isEmpty()) {
+                    metadata.setSampleData(convertToJson(sampleData));
+                }
+            } else {
+                metadata.setHasHeader(false);
+                metadata.setTotalColumns(0);
             }
         } catch (CsvValidationException e) {
-            throw new RuntimeException(e);
+            log.error("Ошибка валидации CSV", e);
+            throw new IOException("Ошибка чтения CSV файла: " + e.getMessage(), e);
         }
     }
 
@@ -187,7 +181,7 @@ public class FileAnalyzerService {
         try (Workbook workbook = WorkbookFactory.create(filePath.toFile())) {
             Sheet sheet = workbook.getSheetAt(0);
 
-            if (sheet.getPhysicalNumberOfRows() > 0) {
+            if (sheet != null && sheet.getPhysicalNumberOfRows() > 0) {
                 Row headerRow = sheet.getRow(0);
                 if (headerRow != null) {
                     metadata.setHasHeader(true);
@@ -217,7 +211,13 @@ public class FileAnalyzerService {
                             sampleData.add(rowData);
                         }
                     }
-                    metadata.setSampleData(convertToJson(sampleData));
+
+                    if (!sampleData.isEmpty()) {
+                        metadata.setSampleData(convertToJson(sampleData));
+                    }
+                } else {
+                    metadata.setHasHeader(false);
+                    metadata.setTotalColumns(0);
                 }
             }
         }
@@ -227,7 +227,7 @@ public class FileAnalyzerService {
      * Определяет кодировку файла
      */
     private String detectEncoding(Path filePath) throws IOException {
-        byte[] buf = new byte[4096];
+        byte[] buf = new byte[ENCODING_BUFFER_SIZE];
 
         try (FileInputStream fis = new FileInputStream(filePath.toFile())) {
             UniversalDetector detector = new UniversalDetector(null);
@@ -254,67 +254,171 @@ public class FileAnalyzerService {
      * Определяет формат CSV файла (разделитель, кавычки)
      */
     private CsvFormat detectCsvFormat(Path filePath, String encoding) throws IOException {
-        Map<Character, Integer> delimiterCounts = new HashMap<>();
-        Character detectedQuote = '"';
+        List<String> lines = new ArrayList<>();
 
-        // Читаем первые несколько строк для анализа
         try (BufferedReader reader = Files.newBufferedReader(filePath, Charset.forName(encoding))) {
-            List<String> lines = new ArrayList<>();
             String line;
             int count = 0;
-            while ((line = reader.readLine()) != null && count < 10) {
-                lines.add(line);
-                count++;
-            }
-
-            // Подсчитываем частоту разделителей
-            for (Character delimiter : COMMON_DELIMITERS) {
-                int totalCount = 0;
-                boolean consistent = true;
-                Integer previousCount = null;
-
-                for (String l : lines) {
-                    int delimiterCount = countOccurrences(l, delimiter);
-                    totalCount += delimiterCount;
-
-                    if (previousCount != null && previousCount != delimiterCount) {
-                        consistent = false;
-                    }
-                    previousCount = delimiterCount;
-                }
-
-                if (consistent && totalCount > 0) {
-                    delimiterCounts.put(delimiter, totalCount);
+            while ((line = reader.readLine()) != null && count < CSV_SAMPLE_LINES) {
+                if (!line.trim().isEmpty()) {
+                    lines.add(line);
+                    count++;
                 }
             }
-
-            // Выбираем разделитель с наибольшей частотой
-            Character detectedDelimiter = delimiterCounts.entrySet().stream()
-                    .max(Map.Entry.comparingByValue())
-                    .map(Map.Entry::getKey)
-                    .orElse(',');
-
-            // Определяем символ кавычек
-            for (String l : lines) {
-                for (Character quote : COMMON_QUOTES) {
-                    if (l.contains(String.valueOf(quote))) {
-                        detectedQuote = quote;
-                        break;
-                    }
-                }
-            }
-
-            return new CsvFormat(detectedDelimiter, detectedQuote, '\\');
         }
+
+        if (lines.isEmpty()) {
+            // Возвращаем дефолтные значения для пустого файла
+            return new CsvFormat(',', '"', DEFAULT_ESCAPE_CHAR);
+        }
+
+        // Объединяем первые строки для анализа
+        String sampleContent = String.join("\n", lines);
+
+        // Определяем символ кавычек
+        char detectedQuote = detectQuoteChar(sampleContent);
+
+        // Определяем разделитель через подсчет символов
+        char detectedDelimiter = detectDelimiterByCount(sampleContent, detectedQuote);
+
+        // Дополнительная проверка через парсинг для подтверждения
+        char confirmedDelimiter = confirmDelimiterByParsing(lines, detectedDelimiter, detectedQuote);
+
+        return new CsvFormat(confirmedDelimiter, detectedQuote, DEFAULT_ESCAPE_CHAR);
     }
+
+    /**
+     * Определяет разделитель по количеству вхождений
+     */
+    private char detectDelimiterByCount(String content, char quoteChar) {
+        Map<Character, Integer> delimiterCounts = new HashMap<>();
+
+        // Удаляем содержимое в кавычках для более точного подсчета
+        String contentWithoutQuoted = removeQuotedContent(content, quoteChar);
+
+        for (char delimiter : COMMON_DELIMITERS) {
+            int count = countOccurrences(contentWithoutQuoted, delimiter);
+            if (count > 0) {
+                delimiterCounts.put(delimiter, count);
+            }
+        }
+
+        return delimiterCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(',');
+    }
+
+    /**
+     * Подтверждает разделитель через парсинг CSV
+     */
+    private char confirmDelimiterByParsing(List<String> lines, char candidateDelimiter, char quoteChar) {
+        // Проверяем кандидата
+        if (isValidDelimiter(lines, candidateDelimiter, quoteChar)) {
+            return candidateDelimiter;
+        }
+
+        // Если кандидат не подошел, проверяем остальные
+        for (char delimiter : COMMON_DELIMITERS) {
+            if (delimiter != candidateDelimiter && isValidDelimiter(lines, delimiter, quoteChar)) {
+                return delimiter;
+            }
+        }
+
+        // Возвращаем кандидата как fallback
+        return candidateDelimiter;
+    }
+
+    /**
+     * Определяет символ кавычек по частоте использования
+     */
+    private char detectQuoteChar(String content) {
+        Map<Character, Integer> quoteCounts = new HashMap<>();
+
+        for (char quote : COMMON_QUOTES) {
+            int count = countOccurrences(content, quote);
+            if (count > 0) {
+                quoteCounts.put(quote, count);
+            }
+        }
+
+        return quoteCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse('"');
+    }
+
+    /**
+     * Проверяет валидность разделителя
+     */
+    private boolean isValidDelimiter(List<String> lines, char delimiter, char quoteChar) {
+        CSVParser parser = new CSVParserBuilder()
+                .withSeparator(delimiter)
+                .withQuoteChar(quoteChar)
+                .withEscapeChar(DEFAULT_ESCAPE_CHAR)
+                .build();
+
+        Integer expectedColumns = null;
+
+        for (String line : lines) {
+            try {
+                String[] tokens = parser.parseLine(line);
+                if (expectedColumns == null) {
+                    expectedColumns = tokens.length;
+                } else if (tokens.length != expectedColumns) {
+                    // Количество колонок не совпадает
+                    return false;
+                }
+            } catch (Exception e) {
+                // Ошибка парсинга
+                return false;
+            }
+        }
+
+        // Проверяем, что есть хотя бы 2 колонки
+        return expectedColumns != null && expectedColumns > 1;
+    }
+
+    /**
+     * Подсчитывает количество вхождений символа в строку
+     */
+    private int countOccurrences(String str, char ch) {
+        return (int) str.chars().filter(c -> c == ch).count();
+    }
+
+    /**
+     * Удаляет содержимое в кавычках для более точного подсчета разделителей
+     */
+    private String removeQuotedContent(String content, char quoteChar) {
+        StringBuilder result = new StringBuilder();
+        boolean inQuotes = false;
+
+        for (char c : content.toCharArray()) {
+            if (c == quoteChar) {
+                inQuotes = !inQuotes;
+            } else if (!inQuotes) {
+                result.append(c);
+            }
+        }
+
+        return result.toString();
+    }
+
 
     /**
      * Определяет формат файла по расширению
      */
     private String detectFileFormat(String filename) {
-        if (filename == null) return "UNKNOWN";
+        if (filename == null || filename.isEmpty()) {
+            return "UNKNOWN";
+        }
 
-        String extension = filename.substring(filename.lastIndexOf('.') + 1).toUpperCase();
+        int lastDotIndex = filename.lastIndexOf('.');
+        if (lastDotIndex < 0 || lastDotIndex == filename.length() - 1) {
+            return "UNKNOWN";
+        }
+
+        String extension = filename.substring(lastDotIndex + 1).toUpperCase();
         switch (extension) {
             case "CSV":
                 return "CSV";
@@ -338,7 +442,7 @@ public class FileAnalyzerService {
             try (InputStream is = Files.newInputStream(filePath);
                  DigestInputStream dis = new DigestInputStream(is, md)) {
 
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[HASH_BUFFER_SIZE];
                 while (dis.read(buffer) != -1) {
                     // Читаем файл для вычисления хеша
                 }
@@ -347,9 +451,9 @@ public class FileAnalyzerService {
             byte[] digest = md.digest();
             return bytesToHex(digest);
 
-        } catch (Exception e) {
-            log.error("Ошибка вычисления хеша файла", e);
-            return UUID.randomUUID().toString();
+        } catch (NoSuchAlgorithmException e) {
+            log.error("MD5 алгоритм не найден", e);
+            throw new IOException("Ошибка инициализации алгоритма хеширования", e);
         }
     }
 
@@ -357,7 +461,7 @@ public class FileAnalyzerService {
      * Конвертирует байты в hex строку
      */
     private String bytesToHex(byte[] bytes) {
-        StringBuilder result = new StringBuilder();
+        StringBuilder result = new StringBuilder(bytes.length * 2);
         for (byte b : bytes) {
             result.append(String.format("%02x", b));
         }
@@ -365,17 +469,12 @@ public class FileAnalyzerService {
     }
 
     /**
-     * Подсчитывает количество вхождений символа в строку
-     */
-    private int countOccurrences(String str, char ch) {
-        return (int) str.chars().filter(c -> c == ch).count();
-    }
-
-    /**
      * Получает значение ячейки Excel как строку
      */
     private String getCellValueAsString(Cell cell) {
-        if (cell == null) return "";
+        if (cell == null) {
+            return "";
+        }
 
         switch (cell.getCellType()) {
             case STRING:
@@ -384,11 +483,34 @@ public class FileAnalyzerService {
                 if (DateUtil.isCellDateFormatted(cell)) {
                     return cell.getDateCellValue().toString();
                 }
-                return String.valueOf(cell.getNumericCellValue());
+                // Убираем .0 для целых чисел
+                double numericValue = cell.getNumericCellValue();
+                if (numericValue == (long) numericValue) {
+                    return String.valueOf((long) numericValue);
+                }
+                return String.valueOf(numericValue);
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:
-                return cell.getCellFormula();
+                try {
+                    // Пытаемся вычислить формулу
+                    Workbook wb = cell.getSheet().getWorkbook();
+                    FormulaEvaluator evaluator = wb.getCreationHelper().createFormulaEvaluator();
+                    CellValue cellValue = evaluator.evaluate(cell);
+
+                    switch (cellValue.getCellType()) {
+                        case STRING:
+                            return cellValue.getStringValue();
+                        case NUMERIC:
+                            return String.valueOf(cellValue.getNumberValue());
+                        case BOOLEAN:
+                            return String.valueOf(cellValue.getBooleanValue());
+                        default:
+                            return cell.getCellFormula();
+                    }
+                } catch (Exception e) {
+                    return cell.getCellFormula();
+                }
             case BLANK:
                 return "";
             default:
