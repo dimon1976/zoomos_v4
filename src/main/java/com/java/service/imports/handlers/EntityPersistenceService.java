@@ -40,6 +40,10 @@ public class EntityPersistenceService {
             "created_at", "updated_at"
     );
 
+    private static final List<String> AV_HANDBOOK_PARAMS = List.of(
+            "handbookRetailNetworkCode", "handbookRetailNetwork", "handbookPhysicalAddress", "handbookPriceZoneCode", "handbookWebSite", "handbookRegionCode", "handbookRegionName", "createdAt", "updatedAt"
+    );
+
 
     /**
      * Сохраняет батч записей в БД
@@ -91,7 +95,6 @@ public class EntityPersistenceService {
             avData.putIfAbsent("updated_at", now);
 
             // Преобразуем null значения в дефолтные
-//            avData.putIfAbsent("quantity", 0);
             avData.putIfAbsent("productPrice", 0.0);
         });
 
@@ -113,6 +116,10 @@ public class EntityPersistenceService {
         // Добавляем системные поля
         LocalDateTime now = LocalDateTime.now();
         batch.forEach(av_handbook -> {
+            // Заполняем отсутствующие ключи значением null, чтобы
+            // NamedParameterJdbcTemplate не выбрасывал исключение
+            AV_HANDBOOK_PARAMS.forEach(param -> av_handbook.putIfAbsent(param, null));
+
             av_handbook.putIfAbsent("createdAt", now);
             av_handbook.putIfAbsent("updatedAt", now);
         });
