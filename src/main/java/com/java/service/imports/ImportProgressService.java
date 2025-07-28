@@ -1,12 +1,11 @@
 package com.java.service.imports;
 
+import com.java.controller.ImportProgressController;
 import com.java.dto.ImportProgressDto;
-import com.java.mapper.ImportSessionMapper;
 import com.java.model.entity.ImportSession;
 import com.java.model.enums.ImportStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -21,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class ImportProgressService {
 
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ImportProgressController progressController;
 
     // Кеш для отслеживания времени последнего обновления
     private final ConcurrentHashMap<Long, ZonedDateTime> lastUpdateTimes = new ConcurrentHashMap<>();
@@ -37,9 +36,9 @@ public class ImportProgressService {
 
         ImportProgressDto progress = buildProgressDto(session);
 
-        // Отправляем обновление конкретному клиенту
-        String destination = "/topic/import-progress/" + session.getFileOperation().getId();
-        messagingTemplate.convertAndSend(destination, progress);
+        // Отправляем обновление через контроллер
+        Long operationId = session.getFileOperation().getId();
+        progressController.sendProgressUpdate(operationId, progress);
 
         log.debug("Отправлено обновление прогресса для сессии {}: {}%",
                 session.getId(), progress.getProgressPercentage());
@@ -57,11 +56,8 @@ public class ImportProgressService {
         progress.setMessage(message);
 
         // Отправляем финальное обновление
-        String destination = "/topic/import-progress/" + session.getFileOperation().getId();
-        messagingTemplate.convertAndSend(destination, progress);
-
-        // Также отправляем общее уведомление
-        messagingTemplate.convertAndSend("/topic/notifications", progress);
+        Long operationId = session.getFileOperation().getId();
+        progressController.sendProgressUpdate(operationId, progress);
 
         // Очищаем кеш
         lastUpdateTimes.remove(session.getId());
@@ -77,8 +73,8 @@ public class ImportProgressService {
         progress.setUpdateType("ERROR");
         progress.setMessage(errorMessage);
 
-        String destination = "/topic/import-progress/" + session.getFileOperation().getId();
-        messagingTemplate.convertAndSend(destination, progress);
+        Long operationId = session.getFileOperation().getId();
+        progressController.sendProgressUpdate(operationId, progress);
 
         // Очищаем кеш
         lastUpdateTimes.remove(session.getId());

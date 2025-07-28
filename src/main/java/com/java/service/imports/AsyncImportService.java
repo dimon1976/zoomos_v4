@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Path;
 import java.time.ZonedDateTime;
 import java.util.concurrent.CompletableFuture;
 
@@ -77,8 +78,18 @@ public class AsyncImportService {
             sessionRepository.save(session);
             progressService.sendProgressUpdate(session);
 
-            FileMetadata metadata = fileAnalyzerService.analyzeFile(request.getFile());
+            // Сохраняем файл если он еще не сохранен
+            Path tempFilePath;
+            if (request.getSavedFilePath() != null) {
+                tempFilePath = request.getSavedFilePath();
+            } else {
+                tempFilePath = pathResolver.saveToTempFile(request.getFile(), "import_" + clientId);
+            }
+
+            // Анализируем файл по сохраненному пути, а не из MultipartFile
+            FileMetadata metadata = fileAnalyzerService.analyzeFile(tempFilePath, request.getFile().getOriginalFilename());
             metadata.setImportSession(session);
+            metadata.setTempFilePath(tempFilePath.toString());
             metadata = metadataRepository.save(metadata);
 
             // Устанавливаем общее количество строк

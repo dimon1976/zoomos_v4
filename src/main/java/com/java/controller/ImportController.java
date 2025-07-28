@@ -9,16 +9,20 @@ import com.java.service.imports.AsyncImportService;
 import com.java.service.imports.ImportTemplateService;
 import com.java.repository.FileOperationRepository;
 import com.java.repository.ImportSessionRepository;
-import jakarta.servlet.http.HttpSession;
+import com.java.util.PathResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.nio.file.Path;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Контроллер для операций импорта
@@ -34,73 +38,144 @@ public class ImportController {
     private final AsyncImportService asyncImportService;
     private final FileOperationRepository fileOperationRepository;
     private final ImportSessionRepository sessionRepository;
+    private final PathResolver pathResolver;
+
+    // Временное хранилище для связи файлов с анализом
+    private final Map<String, AnalysisSession> analysisSessions = new ConcurrentHashMap<>();
 
     /**
-     * Анализ файла и выбор шаблона
+     * Очистка старых сессий анализа (запускается каждые 30 минут)
      */
-    @PostMapping("/{clientId}/analyze")
-    public String analyzeFile(@PathVariable Long clientId,
-                              @RequestParam("file") MultipartFile file,
-                              Model model,
-                              HttpSession httpSession) {
-        log.debug("POST запрос на анализ файла для клиента ID: {}", clientId);
+    @Scheduled(fixedDelay = 1800000)
+    public void cleanupOldSessions() {
+        long cutoff = System.currentTimeMillis() - 3600000; // 1 час
+        analysisSessions.entrySet().removeIf(entry ->
+                entry.getValue().getCreatedAt() < cutoff
+        );
+        log.debug("Очищено старых сессий анализа: {}", analysisSessions.size());
+    }
+
+    /**
+     * Загрузка файлов для импорта
+     */
+    @PostMapping("/{clientId}/upload")
+    public String uploadFiles(@PathVariable Long clientId,
+                              @RequestParam("files") MultipartFile[] files,
+                              RedirectAttributes redirectAttributes) {
+        log.debug("POST запрос на загрузку {} файлов для клиента ID: {}", files.length, clientId);
 
         try {
-            // Анализируем файл
-            var metadata = fileAnalyzerService.analyzeFile(file);
-            var analysisResult = FileMetadataMapper.toAnalysisDto(metadata);
+            // Создаем сессию анализа
+            String sessionId = UUID.randomUUID().toString();
+            AnalysisSession session = new AnalysisSession();
+            session.setClientId(clientId);
 
-            // Получаем доступные шаблоны
-            var templates = templateService.getClientTemplates(clientId);
+            // Сохраняем файлы и анализируем их
+            for (MultipartFile file : files) {
+                if (!file.isEmpty()) {
+                    Path savedPath = pathResolver.saveToTempFile(file, "import_" + clientId);
+                    var metadata = fileAnalyzerService.analyzeFile(file);
 
-            // Сохраняем в сессии для следующего шага
-            httpSession.setAttribute("fileMetadata", metadata);
-            httpSession.setAttribute("originalFile", file);
+                    FileInfo fileInfo = new FileInfo();
+                    fileInfo.setOriginalFile(file);
+                    fileInfo.setSavedPath(savedPath);
+                    fileInfo.setMetadata(metadata);
+                    fileInfo.setAnalysisResult(FileMetadataMapper.toAnalysisDto(metadata));
 
-            model.addAttribute("analysis", analysisResult);
-            model.addAttribute("templates", templates);
-            model.addAttribute("clientId", clientId);
+                    session.getFiles().add(fileInfo);
+                }
+            }
 
-            return "import/analyze";
+            analysisSessions.put(sessionId, session);
+
+            // Перенаправляем на страницу анализа
+            return "redirect:/import/" + clientId + "/analyze?session=" + sessionId;
 
         } catch (Exception e) {
-            log.error("Ошибка анализа файла", e);
-            model.addAttribute("errorMessage", "Ошибка анализа файла: " + e.getMessage());
-            return "clients/details";
+            log.error("Ошибка загрузки файлов", e);
+            redirectAttributes.addFlashAttribute("errorMessage",
+                    "Ошибка загрузки файлов: " + e.getMessage());
+            return "redirect:/clients/" + clientId;
         }
     }
 
     /**
-     * Запуск импорта
+     * Страница анализа загруженных файлов
+     */
+    @GetMapping("/{clientId}/analyze")
+    public String showAnalysis(@PathVariable Long clientId,
+                               @RequestParam("session") String sessionId,
+                               Model model,
+                               RedirectAttributes redirectAttributes) {
+        log.debug("GET запрос на анализ файлов для клиента ID: {}", clientId);
+
+        AnalysisSession session = analysisSessions.get(sessionId);
+        if (session == null || !session.getClientId().equals(clientId)) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Сессия анализа не найдена");
+            return "redirect:/clients/" + clientId;
+        }
+
+        // Получаем доступные шаблоны
+        var templates = templateService.getClientTemplates(clientId);
+
+        model.addAttribute("sessionId", sessionId);
+        model.addAttribute("files", session.getFiles());
+        model.addAttribute("templates", templates);
+        model.addAttribute("clientId", clientId);
+
+        return "import/analyze";
+    }
+
+    /**
+     * Запуск импорта файлов
      */
     @PostMapping("/{clientId}/start")
     public String startImport(@PathVariable Long clientId,
-                              @ModelAttribute ImportRequestDto request,
-                              HttpSession httpSession,
+                              @RequestParam("sessionId") String sessionId,
+                              @RequestParam("templateId") Long templateId,
+                              @RequestParam(value = "validateOnly", defaultValue = "false") boolean validateOnly,
+                              @RequestParam(value = "asyncMode", defaultValue = "true") boolean asyncMode,
                               RedirectAttributes redirectAttributes) {
         log.debug("POST запрос на запуск импорта для клиента ID: {}", clientId);
 
         try {
-            // Получаем файл из сессии
-            MultipartFile file = (MultipartFile) httpSession.getAttribute("originalFile");
-            if (file == null) {
-                throw new IllegalStateException("Файл не найден в сессии");
+            AnalysisSession session = analysisSessions.get(sessionId);
+            if (session == null) {
+                throw new IllegalStateException("Сессия анализа не найдена");
             }
 
-            request.setFile(file);
+            List<Long> operationIds = new ArrayList<>();
 
-            // Запускаем асинхронный импорт
-            CompletableFuture<ImportSession> future = asyncImportService.startImport(request, clientId);
+            // Запускаем импорт для каждого файла
+            for (FileInfo fileInfo : session.getFiles()) {
+                ImportRequestDto request = ImportRequestDto.builder()
+                        .file(fileInfo.getOriginalFile())
+                        .savedFilePath(fileInfo.getSavedPath())
+                        .templateId(templateId)
+                        .validateOnly(validateOnly)
+                        .asyncMode(asyncMode)
+                        .build();
 
-            // Получаем сессию для отображения прогресса
-            var session = future.get(); // Ждем создания сессии
+                // Запускаем асинхронный импорт
+                CompletableFuture<ImportSession> future = asyncImportService.startImport(request, clientId);
 
-            // Очищаем сессию
-            httpSession.removeAttribute("fileMetadata");
-            httpSession.removeAttribute("originalFile");
+                // Получаем сессию для отображения прогресса
+                var importSession = future.get(); // Ждем создания сессии
+                operationIds.add(importSession.getFileOperation().getId());
+            }
 
-            // Перенаправляем на страницу прогресса
-            return "redirect:/import/status/" + session.getFileOperation().getId();
+            // Очищаем сессию анализа
+            analysisSessions.remove(sessionId);
+
+            // Если один файл - перенаправляем на его статус
+            if (operationIds.size() == 1) {
+                return "redirect:/import/status/" + operationIds.get(0);
+            }
+
+            // Если несколько - на список операций клиента
+            redirectAttributes.addFlashAttribute("successMessage",
+                    "Запущен импорт " + operationIds.size() + " файлов");
+            return "redirect:/clients/" + clientId + "#operations";
 
         } catch (Exception e) {
             log.error("Ошибка запуска импорта", e);
@@ -119,7 +194,6 @@ public class ImportController {
                                    RedirectAttributes redirectAttributes) {
         log.debug("GET запрос на просмотр статуса операции ID: {}", operationId);
 
-        // Находим операцию
         FileOperation operation = fileOperationRepository.findById(operationId)
                 .orElse(null);
 
@@ -156,7 +230,6 @@ public class ImportController {
         log.debug("POST запрос на отмену импорта для операции ID: {}", operationId);
 
         try {
-            // Находим сессию импорта
             var sessionOpt = sessionRepository.findByFileOperationId(operationId);
 
             if (sessionOpt.isEmpty()) {
@@ -178,7 +251,6 @@ public class ImportController {
     }
 
     // Вспомогательные методы
-
     private String getOperationTypeDisplay(FileOperation operation) {
         switch (operation.getOperationType()) {
             case IMPORT: return "Импорт";
@@ -213,7 +285,21 @@ public class ImportController {
         return dateTime.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"));
     }
 
-    // Внутренние классы для ответов
+    // Внутренние классы
+    @lombok.Data
+    private static class AnalysisSession {
+        private Long clientId;
+        private List<FileInfo> files = new ArrayList<>();
+        private long createdAt = System.currentTimeMillis();
+    }
+
+    @lombok.Data
+    private static class FileInfo {
+        private MultipartFile originalFile;
+        private Path savedPath;
+        private com.java.model.entity.FileMetadata metadata;
+        private FileAnalysisResultDto analysisResult;
+    }
 
     @lombok.Data
     @lombok.AllArgsConstructor

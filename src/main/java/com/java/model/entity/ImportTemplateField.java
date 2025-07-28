@@ -2,10 +2,7 @@ package com.java.model.entity;
 
 import com.java.model.enums.FieldType;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 /**
  * Поле шаблона импорта с маппингом и правилами трансформации
@@ -16,6 +13,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = "template")
 public class ImportTemplateField {
 
     @Id

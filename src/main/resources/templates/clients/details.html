@@ -14,6 +14,27 @@
         .tab-content {
             padding: 20px 0;
         }
+        .status-badge {
+            font-size: 0.875rem;
+        }
+        .operation-row:hover {
+            background-color: #f8f9fa;
+        }
+        .file-upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 0.5rem;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .file-upload-area:hover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        .file-upload-area.drag-over {
+            border-color: #28a745;
+            background-color: #e8f5e9;
+        }
     </style>
 </head>
 <body>
@@ -83,17 +104,109 @@
 
     <div class="tab-content" id="clientTabsContent">
         <!-- Вкладка операций -->
+        <div class="tab-pane fade show active" id="operations" role="tabpanel" aria-labelledby="operations-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-history me-2"></i>История операций
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="operationsTable">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Тип</th>
+                                <th>Файл</th>
+                                <th>Статус</th>
+                                <th>Время запуска</th>
+                                <th>Записей</th>
+                                <th>Действия</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <!-- Операции будут загружены через AJAX -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="noOperations" class="text-center text-muted py-4" style="display: none;">
+                        Нет операций для отображения
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Вкладка импорта файлов -->
         <div class="tab-pane fade" id="import" role="tabpanel" aria-labelledby="import-tab">
-            <!-- Проверка наличия активной операции импорта -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-file-import me-2"></i>Импорт файлов
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form th:action="@{/import/{clientId}/upload(clientId=${client.id})}"
+                          method="post" enctype="multipart/form-data" id="importForm">
+
+                        <div class="file-upload-area" id="fileUploadArea">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <h5>Перетащите файлы сюда или нажмите для выбора</h5>
+                            <p class="text-muted">Поддерживаемые форматы: CSV, Excel (XLS, XLSX), TXT</p>
+                            <input type="file" class="form-control d-none" id="files" name="files"
+                                   multiple required accept=".csv,.xlsx,.xls,.txt">
+                            <button type="button" class="btn btn-primary mt-3" onclick="document.getElementById('files').click()">
+                                <i class="fas fa-folder-open me-1"></i>Выбрать файлы
+                            </button>
+                        </div>
+
+                        <div id="selectedFiles" class="mt-4"></div>
+
+                        <div class="mt-3" id="uploadActions" style="display: none;">
+                            <button type="submit" class="btn btn-success" id="uploadBtn">
+                                <i class="fas fa-upload me-1"></i>Загрузить и анализировать
+                            </button>
+                            <button type="button" class="btn btn-secondary ms-2" onclick="clearFiles()">
+                                <i class="fas fa-times me-1"></i>Очистить
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="mt-4">
+                        <h6>Как это работает:</h6>
+                        <ol>
+                            <li>Выберите один или несколько файлов для импорта</li>
+                            <li>Система проанализирует структуру файлов</li>
+                            <li>Выберите подходящий шаблон импорта</li>
+                            <li>Запустите процесс импорта</li>
+                        </ol>
+                    </div>
+
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Совет:</strong> Вы можете загрузить несколько файлов одновременно.
+                        Максимальный размер каждого файла: 600 МБ.
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Вкладка экспорта данных -->
         <div class="tab-pane fade" id="export" role="tabpanel" aria-labelledby="export-tab">
-            <!-- Основная форма экспорта -->
-
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-file-export me-2"></i>Экспорт данных
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted text-center py-4">
+                        Функция экспорта данных находится в разработке
+                    </p>
+                </div>
+            </div>
         </div>
+
         <!-- Вкладка шаблонов импорта -->
         <div class="tab-pane fade" id="templates" role="tabpanel" aria-labelledby="templates-tab">
             <div class="card">
@@ -197,7 +310,204 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
-<script>
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    document.addEventListener('DOMContentLoaded', function() {
+        // Загружаем операции клиента
+        loadOperations();
+
+        // Обработка выбора файлов
+        const filesInput = document.getElementById('files');
+        if (filesInput) {
+            filesInput.addEventListener('change', function() {
+                displaySelectedFiles(this.files);
+            });
+        }
+
+        // Drag and drop
+        const uploadArea = document.getElementById('fileUploadArea');
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('drag-over');
+            });
+
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('drag-over');
+            });
+
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('drag-over');
+
+                const files = e.dataTransfer.files;
+                document.getElementById('files').files = files;
+                displaySelectedFiles(files);
+            });
+        }
+
+        // Обработка якоря в URL для переключения на нужную вкладку
+        if (window.location.hash === '#operations') {
+            const tab = new bootstrap.Tab(document.getElementById('operations-tab'));
+            tab.show();
+        }
+
+        // Автообновление операций каждые 5 секунд если есть активные операции
+        setInterval(function() {
+            if (hasActiveOperations) {
+                loadOperations();
+            }
+        }, 5000);
+    });
+
+    let hasActiveOperations = false;
+
+    function loadOperations() {
+        const clientId = /*[[${client.id}]]*/ 0;
+
+        fetch(`/api/clients/${clientId}/operations`)
+            .then(response => response.json())
+            .then(operations => {
+                displayOperations(operations);
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки операций:', error);
+                // Показываем заглушку если API еще не реализован
+                document.getElementById('noOperations').style.display = 'block';
+                document.querySelector('#operationsTable tbody').innerHTML = '';
+            });
+    }
+
+    function displayOperations(operations) {
+        const tbody = document.querySelector('#operationsTable tbody');
+        const noOps = document.getElementById('noOperations');
+
+        if (!operations || operations.length === 0) {
+            tbody.innerHTML = '';
+            noOps.style.display = 'block';
+            hasActiveOperations = false;
+            return;
+        }
+
+        noOps.style.display = 'none';
+        hasActiveOperations = operations.some(op =>
+            op.status === 'PROCESSING' || op.status === 'PENDING'
+        );
+
+        tbody.innerHTML = operations.map(op => `
+            <tr class="operation-row">
+                <td>${op.id}</td>
+                <td>
+                    <i class="fas fa-${getOperationIcon(op.operationType)} me-1"></i>
+                    ${getOperationTypeDisplay(op.operationType)}
+                </td>
+                <td class="text-truncate" style="max-width: 200px;" title="${op.fileName}">
+                    ${op.fileName}
+                </td>
+                <td>
+                    <span class="badge status-badge ${getStatusClass(op.status)}">
+                        ${getStatusDisplay(op.status)}
+                    </span>
+                </td>
+                <td>${formatDateTime(op.startedAt)}</td>
+                <td>${op.recordCount || '-'}</td>
+                <td>
+                    <a href="/import/status/${op.id}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-eye me-1"></i>Детали
+                    </a>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function displaySelectedFiles(files) {
+        const container = document.getElementById('selectedFiles');
+        const uploadActions = document.getElementById('uploadActions');
+
+        if (!files || files.length === 0) {
+            container.innerHTML = '';
+            uploadActions.style.display = 'none';
+            return;
+        }
+
+        let html = '<h6>Выбранные файлы:</h6><ul class="list-group">';
+        let totalSize = 0;
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const size = file.size / 1048576; // в МБ
+            totalSize += size;
+
+            // Проверяем размер файла
+            const sizeClass = size > 600 ? 'text-danger' : 'text-success';
+            const sizeWarning = size > 600 ? ' (превышен лимит!)' : '';
+
+            html += `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-file me-2"></i>${file.name}</span>
+                    <span class="badge bg-secondary ${sizeClass}">${size.toFixed(2)} МБ${sizeWarning}</span>
+                </li>
+            `;
+        }
+
+        html += '</ul>';
+        html += `<p class="mt-2 text-muted">Общий размер: ${totalSize.toFixed(2)} МБ</p>`;
+
+        container.innerHTML = html;
+        uploadActions.style.display = 'block';
+    }
+
+    function clearFiles() {
+        document.getElementById('files').value = '';
+        document.getElementById('selectedFiles').innerHTML = '';
+        document.getElementById('uploadActions').style.display = 'none';
+    }
+
+    function getOperationIcon(type) {
+        switch(type) {
+            case 'IMPORT': return 'file-import';
+            case 'EXPORT': return 'file-export';
+            case 'PROCESS': return 'cogs';
+            default: return 'file';
+        }
+    }
+
+    function getOperationTypeDisplay(type) {
+        switch(type) {
+            case 'IMPORT': return 'Импорт';
+            case 'EXPORT': return 'Экспорт';
+            case 'PROCESS': return 'Обработка';
+            default: return type;
+        }
+    }
+
+    function getStatusDisplay(status) {
+        switch(status) {
+            case 'PENDING': return 'Ожидание';
+            case 'PROCESSING': return 'В процессе';
+            case 'COMPLETED': return 'Завершено';
+            case 'FAILED': return 'Ошибка';
+            default: return status;
+        }
+    }
+
+    function getStatusClass(status) {
+        switch(status) {
+            case 'PENDING': return 'status-pending';
+            case 'PROCESSING': return 'status-processing';
+            case 'COMPLETED': return 'status-success';
+            case 'FAILED': return 'status-error';
+            default: return 'status-unknown';
+        }
+    }
+
+    function formatDateTime(dateTime) {
+        if (!dateTime) return '-';
+        const date = new Date(dateTime);
+        return date.toLocaleString('ru-RU');
+    }
+    /*]]*/
 </script>
 </body>
 </html>
