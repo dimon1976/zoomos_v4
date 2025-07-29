@@ -29,19 +29,29 @@ public class ImportProgressService {
      * Отправляет обновление прогресса через WebSocket
      */
     public void sendProgressUpdate(ImportSession session) {
+        log.debug("=== Отправка обновления прогресса для сессии {} ===", session.getId());
         // Ограничиваем частоту обновлений (не чаще раза в секунду)
         if (!shouldSendUpdate(session.getId())) {
+            log.trace("Пропуск обновления - слишком частые вызовы");
             return;
         }
 
         ImportProgressDto progress = buildProgressDto(session);
+        log.debug("Создан DTO прогресса: {}% ({}/{})",
+                progress.getProgressPercentage(),
+                progress.getProcessedRows(),
+                progress.getTotalRows());
 
         // Отправляем обновление через контроллер
         Long operationId = session.getFileOperation().getId();
-        progressController.sendProgressUpdate(operationId, progress);
-
-        log.debug("Отправлено обновление прогресса для сессии {}: {}%",
-                session.getId(), progress.getProgressPercentage());
+        log.debug("Отправка через WebSocket для операции ID: {}", operationId);
+        try {
+            progressController.sendProgressUpdate(operationId, progress);
+            log.info("✓ WebSocket обновление отправлено для сессии {}: {}%",
+                    session.getId(), progress.getProgressPercentage());
+        } catch (Exception e) {
+            log.error("✗ Ошибка отправки WebSocket обновления для сессии {}", session.getId(), e);
+        }
     }
 
     /**

@@ -12,6 +12,8 @@ import com.java.service.file.FileAnalyzerService;
 import com.java.util.PathResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.nio.file.Path;
 import java.time.ZonedDateTime;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 /**
  * Сервис для асинхронного выполнения импорта
@@ -40,6 +43,10 @@ public class AsyncImportService {
     private final ImportProgressService progressService;
     private final PathResolver pathResolver;
 
+    @Autowired
+    @Qualifier("importTaskExecutor")
+    private Executor taskExecutor;
+
     /**
      * Запускает асинхронный импорт файла
      */
@@ -47,9 +54,6 @@ public class AsyncImportService {
     @Transactional
     public CompletableFuture<ImportSession> startImport(ImportRequestDto request, Long clientId) {
         log.info("Запуск асинхронного импорта для клиента ID: {}", clientId);
-
-        ImportSession session = null;
-        FileOperation fileOperation = null;
 
         try {
             // Получаем клиента и шаблон
@@ -65,79 +69,93 @@ public class AsyncImportService {
             }
 
             // Создаем FileOperation
-            fileOperation = createFileOperation(request.getFile(), client);
+            FileOperation fileOperation = createFileOperation(request.getFile(), client);
             fileOperation = fileOperationRepository.save(fileOperation);
 
             // Создаем сессию импорта
-            session = createImportSession(fileOperation, template);
+            ImportSession session = createImportSession(fileOperation, template);
             session = sessionRepository.save(session);
 
-            // Анализируем файл
-            log.info("Анализ файла: {}", request.getFile().getOriginalFilename());
-            session.setStatus(ImportStatus.ANALYZING);
-            sessionRepository.save(session);
-            progressService.sendProgressUpdate(session);
+            log.info("Сессия импорта создана с ID: {}, операция ID: {}",
+                    session.getId(), fileOperation.getId());
 
-            // Сохраняем файл если он еще не сохранен
-            Path tempFilePath;
-            if (request.getSavedFilePath() != null) {
-                tempFilePath = request.getSavedFilePath();
-            } else {
-                tempFilePath = pathResolver.saveToTempFile(request.getFile(), "import_" + clientId);
-            }
+            // ВАЖНО: Анализ и настройка метаданных
+            setupSessionMetadata(session, request);
 
-            // Анализируем файл по сохраненному пути, а не из MultipartFile
-            FileMetadata metadata = fileAnalyzerService.analyzeFile(tempFilePath, request.getFile().getOriginalFilename());
-            metadata.setImportSession(session);
-            metadata.setTempFilePath(tempFilePath.toString());
-            metadata = metadataRepository.save(metadata);
+            // Сохраняем обновленную сессию
+            session = sessionRepository.save(session);
 
-            // Устанавливаем общее количество строк
-            if (metadata.getSampleData() != null) {
-                // Примерная оценка на основе размера файла и sample data
-                long estimatedRows = estimateRowCount(metadata);
-                session.setTotalRows(estimatedRows);
-                sessionRepository.save(session);
-            }
+            // ЗАПУСКАЕМ ОБРАБОТКУ В ОТДЕЛЬНОМ ПОТОКЕ
+            ImportSession finalSession = session;
+            CompletableFuture.runAsync(() -> {
+                try {
+                    log.info("Начало фоновой обработки импорта для сессии: {}", finalSession.getId());
+                    processorService.processImport(finalSession);
+                } catch (Exception e) {
+                    log.error("Ошибка фоновой обработки импорта", e);
+                    handleAsyncImportError(finalSession, e);
+                }
+            }, taskExecutor);
 
-            // Применяем переопределения настроек если есть
-            if (request.getDelimiter() != null) {
-                metadata.setDetectedDelimiter(request.getDelimiter());
-            }
-            if (request.getEncoding() != null) {
-                metadata.setDetectedEncoding(request.getEncoding());
-            }
-
-            // Запускаем обработку
-            if (!request.getValidateOnly()) {
-                processorService.processImport(session);
-            } else {
-                // Режим только валидации
-                validateOnly(session, template, metadata);
-            }
-
-            log.info("Импорт завершен для сессии ID: {}", session.getId());
+            // НЕМЕДЛЕННО ВОЗВРАЩАЕМ СЕССИЮ (НЕ ЖДЕМ ОБРАБОТКИ)
             return CompletableFuture.completedFuture(session);
 
         } catch (Exception e) {
-            log.error("Ошибка асинхронного импорта", e);
-
-            if (session != null) {
-                session.setStatus(ImportStatus.FAILED);
-                session.setCompletedAt(ZonedDateTime.now());
-                session.setErrorMessage(e.getMessage());
-                sessionRepository.save(session);
-                progressService.sendErrorNotification(session, e.getMessage());
-            }
-
-            if (fileOperation != null) {
-                fileOperation.setStatus(FileOperation.OperationStatus.FAILED);
-                fileOperation.setErrorMessage(e.getMessage());
-                fileOperation.setCompletedAt(ZonedDateTime.now());
-                fileOperationRepository.save(fileOperation);
-            }
-
+            log.error("Ошибка создания импорта", e);
             return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    /**
+     * Настраивает метаданные сессии
+     */
+    private void setupSessionMetadata(ImportSession session, ImportRequestDto request) {
+        try {
+            // Анализируем файл
+            Path tempFilePath = request.getSavedFilePath() != null
+                    ? request.getSavedFilePath()
+                    : pathResolver.saveToTempFile(request.getFile(), "import_temp");
+
+            FileMetadata metadata = fileAnalyzerService.analyzeFile(
+                    tempFilePath,
+                    request.getFile().getOriginalFilename()
+            );
+            metadata.setImportSession(session);
+            metadata = metadataRepository.save(metadata);
+
+            // Устанавливаем общее количество строк (примерная оценка)
+            long estimatedRows = estimateRowCount(metadata);
+            session.setTotalRows(estimatedRows);
+            session.setStatus(ImportStatus.PROCESSING);
+
+            log.info("Метаданные настроены: {} строк, статус: {}",
+                    estimatedRows, session.getStatus());
+
+        } catch (Exception e) {
+            log.error("Ошибка настройки метаданных", e);
+            session.setStatus(ImportStatus.FAILED);
+            session.setErrorMessage("Ошибка анализа файла: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Обрабатывает ошибки асинхронного импорта
+     */
+    private void handleAsyncImportError(ImportSession session, Exception e) {
+        try {
+            session.setStatus(ImportStatus.FAILED);
+            session.setCompletedAt(ZonedDateTime.now());
+            session.setErrorMessage(e.getMessage());
+            sessionRepository.save(session);
+
+            FileOperation fileOperation = session.getFileOperation();
+            fileOperation.markAsFailed(e.getMessage());
+            fileOperationRepository.save(fileOperation);
+
+            progressService.sendErrorNotification(session, e.getMessage());
+
+        } catch (Exception ex) {
+            log.error("Ошибка обработки ошибки импорта", ex);
         }
     }
 

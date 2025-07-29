@@ -275,13 +275,14 @@ public class ImportProcessorService {
     @Transactional
     public void processBatch(ImportSession session, ImportTemplate template,
                              List<Map<String, String>> batch, AtomicLong currentRow) {
-        log.debug("Обработка батча из {} записей", batch.size());
+        log.debug("=== Обработка батча из {} записей, сессия ID: {} ===", batch.size(), session.getId());
 
         List<Map<String, Object>> transformedBatch = new ArrayList<>();
         Set<String> batchDuplicateKeys = new HashSet<>();
 
         for (Map<String, String> rowData : batch) {
             long rowNumber = currentRow.get() - batch.size() + batch.indexOf(rowData) + 1;
+            log.trace("Обработка строки {}", rowNumber);
 
             try {
                 // Трансформируем данные согласно маппингу
@@ -329,6 +330,7 @@ public class ImportProcessorService {
                         template.getEntityType(),
                         session);
                 session.setSuccessRows(session.getSuccessRows() + saved);
+                log.debug("Сохранено {} записей в БД", saved);
 
                 // Сохраняем ключи дубликатов
                 if (template.getDuplicateStrategy() == DuplicateStrategy.SKIP_DUPLICATES) {
@@ -336,7 +338,7 @@ public class ImportProcessorService {
                 }
 
             } catch (Exception e) {
-                log.error("Ошибка сохранения батча", e);
+                log.error("Ошибка сохранения батча из {} записей", transformedBatch.size(), e);
                 session.setErrorRows(session.getErrorRows() + transformedBatch.size());
 
                 if (template.getErrorStrategy() == ErrorStrategy.STOP_ON_ERROR) {
@@ -346,11 +348,22 @@ public class ImportProcessorService {
         }
 
         // Обновляем прогресс
+        long oldProcessedRows = session.getProcessedRows();
         session.setProcessedRows(session.getProcessedRows() + batch.size());
-        sessionRepository.save(session);
+        log.debug("Прогресс обновлен: {} -> {} (обработано +{} записей)",
+                oldProcessedRows, session.getProcessedRows(), batch.size());
+
+        // ПРИНУДИТЕЛЬНО СОХРАНЯЕМ В ТРАНЗАКЦИИ
+        session = sessionRepository.saveAndFlush(session);
+        log.debug("Сессия сохранена в БД с прогрессом {}%", session.getProgressPercentage());
 
         // Отправляем обновление прогресса
-        progressService.sendProgressUpdate(session);
+        try {
+            progressService.sendProgressUpdate(session);
+            log.debug("WebSocket обновление прогресса отправлено");
+        } catch (Exception e) {
+            log.error("Ошибка отправки WebSocket обновления", e);
+        }
     }
 
     /**

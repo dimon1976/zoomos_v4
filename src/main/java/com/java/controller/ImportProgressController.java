@@ -87,8 +87,17 @@ public class ImportProgressController {
      */
     public void sendProgressUpdate(Long operationId, ImportProgressDto progress) {
         String destination = "/topic/import-progress/" + operationId;
-        messagingTemplate.convertAndSend(destination, progress);
-        log.trace("Отправлено обновление прогресса для операции {}", operationId);
+        log.debug("Отправка WebSocket сообщения на {}: прогресс {}%",
+                destination, progress.getProgressPercentage());
+        try {
+            messagingTemplate.convertAndSend(destination, progress);
+            log.debug("✓ WebSocket сообщение успешно отправлено");
+        } catch (Exception e) {
+            log.error("✗ Ошибка отправки WebSocket сообщения на {}", destination, e);
+            throw e;
+        }
+
+        log.trace("WebSocket обновление завершено для операции {}", operationId);
     }
 
     /**
