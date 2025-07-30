@@ -17,6 +17,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Path;
@@ -79,23 +81,36 @@ public class AsyncImportService {
             log.info("Сессия импорта создана с ID: {}, операция ID: {}",
                     session.getId(), fileOperation.getId());
 
-            // ВАЖНО: Анализ и настройка метаданных
-            setupSessionMetadata(session, request);
+//            // ВАЖНО: Анализ и настройка метаданных
+//            setupSessionMetadata(session, request);
+//
+//            // Сохраняем обновленную сессию
+//            session = sessionRepository.save(session);
 
-            // Сохраняем обновленную сессию
-            session = sessionRepository.save(session);
-
-            // ЗАПУСКАЕМ ОБРАБОТКУ В ОТДЕЛЬНОМ ПОТОКЕ
+            // ЗАПУСКАЕМ ОБРАБОТКУ ПОСЛЕ КОММИТА ТРАНЗАКЦИИ
             ImportSession finalSession = session;
-            CompletableFuture.runAsync(() -> {
-                try {
-                    log.info("Начало фоновой обработки импорта для сессии: {}", finalSession.getId());
-                    processorService.processImport(finalSession);
-                } catch (Exception e) {
-                    log.error("Ошибка фоновой обработки импорта", e);
-                    handleAsyncImportError(finalSession, e);
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            // Загружаем свежую сущность внутри новой транзакции
+                            ImportSession managed = sessionRepository.findById(finalSession.getId())
+                                    .orElseThrow(() -> new RuntimeException("Сессия импорта не найдена"));
+
+                            // Сначала анализируем файл и настраиваем метаданные
+                            setupSessionMetadata(managed, request);
+                            sessionRepository.save(managed);
+
+                            log.info("Начало фоновой обработки импорта для сессии: {}", managed.getId());
+                            processorService.processImport(managed);
+                        } catch (Exception e) {
+                            log.error("Ошибка фоновой обработки импорта", e);
+                            handleAsyncImportError(finalSession, e);
+                        }
+                    }, taskExecutor);
                 }
-            }, taskExecutor);
+            });
 
             // НЕМЕДЛЕННО ВОЗВРАЩАЕМ СЕССИЮ (НЕ ЖДЕМ ОБРАБОТКИ)
             return CompletableFuture.completedFuture(session);
@@ -122,6 +137,9 @@ public class AsyncImportService {
             );
             metadata.setImportSession(session);
             metadata = metadataRepository.save(metadata);
+            // сохраняем связь в обе стороны, чтобы корректно работала каскадная
+            // обработка и дальнейшие загрузки метаданных
+            session.setFileMetadata(metadata);
 
             // Устанавливаем общее количество строк (примерная оценка)
             long estimatedRows = estimateRowCount(metadata);

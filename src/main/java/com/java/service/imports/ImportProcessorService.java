@@ -29,6 +29,7 @@ import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 /**
  * Основной сервис обработки импорта файлов
@@ -60,6 +61,12 @@ public class ImportProcessorService {
      */
     @Transactional
     public void processImport(ImportSession session) {
+        // Загружать сессию из репозитория внутри транзакции, чтобы избежать
+        // проблем с detached entity и коллекциями orphanRemoval
+        ImportSession managedSession = sessionRepository.findById(session.getId())
+                .orElseThrow(() -> new RuntimeException("Сессия импорта не найдена"));
+
+        session = managedSession;
         log.info("Начало обработки импорта, сессия ID: {}", session.getId());
 
         // Регистрируем флаг отмены
@@ -71,8 +78,13 @@ public class ImportProcessorService {
             updateSessionStatus(session, ImportStatus.PROCESSING);
 
             // Получаем метаданные файла
+//            FileMetadata metadata = metadataRepository.findByImportSession(session)
+//                    .orElseThrow(() -> new RuntimeException("Метаданные файла не найдены"));
             FileMetadata metadata = metadataRepository.findByImportSession(session)
-                    .orElseThrow(() -> new RuntimeException("Метаданные файла не найдены"));
+                    .orElse(session.getFileMetadata());
+            if (metadata == null) {
+                throw new RuntimeException("Метаданные файла не найдены");
+            }
 
             // Получаем шаблон с полями
             ImportTemplate template = templateRepository.findByIdWithFields(session.getTemplate().getId())
@@ -113,6 +125,12 @@ public class ImportProcessorService {
                                 FileMetadata metadata, AtomicBoolean cancelled) throws Exception {
         Path filePath = Paths.get(metadata.getTempFilePath());
 
+        // Определяем общее количество строк в файле до начала обработки
+        long totalLines;
+        try (Stream<String> lines = Files.lines(filePath, Charset.forName(metadata.getDetectedEncoding()))) {
+            totalLines = lines.count();
+        }
+
         try (Reader reader = Files.newBufferedReader(filePath,
                 Charset.forName(metadata.getDetectedEncoding()))) {
 
@@ -144,6 +162,10 @@ public class ImportProcessorService {
                 skippedRows++;
             }
             int startRowNumber = skippedRows;
+            // Теперь мы знаем общее количество строк
+            long totalRows = totalLines - startRowNumber;
+            session.setTotalRows(totalRows);
+            sessionRepository.save(session);
 
             // Обрабатываем данные батчами
             processBatches(session, template, csvReader, headers, cancelled);
