@@ -57,7 +57,8 @@ public class ImportProgressService {
         if (progress.getTotalRows() != null) {
             operation.setTotalRecords(progress.getTotalRows().intValue());
         }
-        fileOperationRepository.save(operation);
+        // Сохраняем и сразу пишем в БД, чтобы прогресс был виден другим транзакциям
+        fileOperationRepository.saveAndFlush(operation);
 
         // Отправляем обновление через контроллер
         Long operationId = session.getFileOperation().getId();
@@ -123,7 +124,6 @@ public class ImportProgressService {
                 .processedRows(session.getProcessedRows())
                 .successRows(session.getSuccessRows())
                 .errorRows(session.getErrorRows())
-//                .progressPercentage(session.getProgressPercentage())
                 .progressPercentage(Math.min(session.getProgressPercentage(), 100))
                 .isCompleted(isCompleted(session.getStatus()))
                 .timestamp(System.currentTimeMillis())
