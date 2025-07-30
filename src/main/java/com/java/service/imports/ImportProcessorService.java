@@ -428,7 +428,13 @@ public class ImportProcessorService {
         FileOperation fileOperation = session.getFileOperation();
         fileOperation.setStatus(FileOperation.OperationStatus.COMPLETED);
         fileOperation.setRecordCount(session.getSuccessRows().intValue());
+        fileOperation.setTotalRecords(session.getTotalRows().intValue());
+        fileOperation.setProcessedRecords(session.getTotalRows().intValue());
+        fileOperation.setProcessingProgress(100);
         fileOperation.setCompletedAt(ZonedDateTime.now());
+
+        // гарантируем, что обработанные строки равны общему количеству
+        session.setProcessedRows(session.getTotalRows());
 
         sessionRepository.save(session);
 
