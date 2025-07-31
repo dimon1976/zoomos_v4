@@ -120,6 +120,7 @@
                                 <th>Тип</th>
                                 <th>Файл</th>
                                 <th>Статус</th>
+                                <th>Прогресс</th>
                                 <th>Время запуска</th>
                                 <th>Записей</th>
                                 <th>Действия</th>
@@ -409,6 +410,9 @@
                     <span class="badge status-badge ${getStatusClass(op.status)}">
                         ${getStatusDisplay(op.status)}
                     </span>
+                </td>
+                <td>
+                    ${op.processingProgress != null ? op.processingProgress + '%': '-'}
                 </td>
                 <td>${formatDateTime(op.startedAt)}</td>
                 <td>${op.recordCount || '-'}</td>

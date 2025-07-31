@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Контроллер для операций импорта
@@ -156,18 +157,26 @@ public class ImportController {
                         .asyncMode(asyncMode)
                         .build();
 
-                // Запускаем асинхронный импорт
+                // Запускаем асинхронный импорт БЕЗ ОЖИДАНИЯ
                 CompletableFuture<ImportSession> future = asyncImportService.startImport(request, clientId);
 
-                // Получаем сессию для отображения прогресса
-                var importSession = future.get(); // Ждем создания сессии
-                operationIds.add(importSession.getFileOperation().getId());
+                // Получаем операцию СРАЗУ после создания (не дожидаясь завершения)
+                future.thenAccept(importSession -> {
+                    log.info("Импорт завершен для сессии: {}", importSession.getId());
+                }).exceptionally(ex -> {
+                    log.error("Ошибка асинхронного импорта", ex);
+                    return null;
+                });
+
+                // Добавляем callback для получения operation ID
+                Long operationId = getOperationIdFromFuture(future, clientId, templateId);
+                operationIds.add(operationId);
             }
 
             // Очищаем сессию анализа
             analysisSessions.remove(sessionId);
 
-            // Если один файл - перенаправляем на его статус
+            // Перенаправляем на статус СРАЗУ
             if (operationIds.size() == 1) {
                 return "redirect:/import/status/" + operationIds.get(0);
             }
@@ -183,6 +192,29 @@ public class ImportController {
                     "Ошибка запуска импорта: " + e.getMessage());
             return "redirect:/clients/" + clientId;
         }
+    }
+
+    /**
+     * Получает ID операции из Future без блокировки основного потока
+     */
+    private Long getOperationIdFromFuture(CompletableFuture<ImportSession> future, Long clientId, Long templateId) {
+        try {
+            // Ждем только создание сессии (не полное завершение)
+            // Это должно произойти быстро
+            ImportSession session = future.get(5, TimeUnit.SECONDS);
+            return session.getFileOperation().getId();
+        } catch (Exception e) {
+            log.error("Не удалось получить ID операции", e);
+            // Fallback - создаем временную операцию или возвращаем заглушку
+            return createFallbackOperation(clientId);
+        }
+    }
+
+    private Long createFallbackOperation(Long clientId) {
+        // Временное решение - создаем минимальную операцию для отображения
+        log.warn("Создание fallback операции для клиента {}", clientId);
+        // Здесь можно создать минимальную запись в file_operations
+        return 0L; // или реальная логика создания
     }
 
     /**

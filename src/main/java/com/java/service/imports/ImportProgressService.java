@@ -2,11 +2,15 @@ package com.java.service.imports;
 
 import com.java.controller.ImportProgressController;
 import com.java.dto.ImportProgressDto;
+import com.java.model.FileOperation;
 import com.java.model.entity.ImportSession;
 import com.java.model.enums.ImportStatus;
+import com.java.repository.FileOperationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
@@ -21,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ImportProgressService {
 
     private final ImportProgressController progressController;
+    private final FileOperationRepository fileOperationRepository;
 
     // Кеш для отслеживания времени последнего обновления
     private final ConcurrentHashMap<Long, ZonedDateTime> lastUpdateTimes = new ConcurrentHashMap<>();
@@ -28,25 +33,49 @@ public class ImportProgressService {
     /**
      * Отправляет обновление прогресса через WebSocket
      */
+    @Transactional
     public void sendProgressUpdate(ImportSession session) {
+        log.debug("=== Отправка обновления прогресса для сессии {} ===", session.getId());
         // Ограничиваем частоту обновлений (не чаще раза в секунду)
         if (!shouldSendUpdate(session.getId())) {
+            log.trace("Пропуск обновления - слишком частые вызовы");
             return;
         }
 
         ImportProgressDto progress = buildProgressDto(session);
+        log.debug("Создан DTO прогресса: {}% ({}/{})",
+                progress.getProgressPercentage(),
+                progress.getProcessedRows(),
+                progress.getTotalRows());
+
+        // Обновляем связанную операцию
+        FileOperation operation = session.getFileOperation();
+        operation.setProcessingProgress(progress.getProgressPercentage());
+        if (progress.getProcessedRows() != null) {
+            operation.setProcessedRecords(progress.getProcessedRows().intValue());
+        }
+        if (progress.getTotalRows() != null) {
+            operation.setTotalRecords(progress.getTotalRows().intValue());
+        }
+        // Сохраняем и сразу пишем в БД, чтобы прогресс был виден другим транзакциям
+        fileOperationRepository.saveAndFlush(operation);
 
         // Отправляем обновление через контроллер
         Long operationId = session.getFileOperation().getId();
-        progressController.sendProgressUpdate(operationId, progress);
-
-        log.debug("Отправлено обновление прогресса для сессии {}: {}%",
-                session.getId(), progress.getProgressPercentage());
+        log.debug("Отправка через WebSocket для операции ID: {}", operationId);
+        try {
+            progressController.sendProgressUpdate(operationId, progress);
+            log.info("✓ WebSocket обновление отправлено для сессии {}: {}%",
+                    session.getId(), progress.getProgressPercentage());
+        } catch (Exception e) {
+            log.error("✗ Ошибка отправки WebSocket обновления для сессии {}", session.getId(), e);
+        }
     }
 
     /**
      * Отправляет уведомление о завершении импорта
      */
+    @Transactional
     public void sendCompletionNotification(ImportSession session) {
         ImportProgressDto progress = buildProgressDto(session);
         progress.setUpdateType("COMPLETED");
@@ -68,6 +97,7 @@ public class ImportProgressService {
     /**
      * Отправляет уведомление об ошибке
      */
+    @Transactional
     public void sendErrorNotification(ImportSession session, String errorMessage) {
         ImportProgressDto progress = buildProgressDto(session);
         progress.setUpdateType("ERROR");
@@ -94,7 +124,7 @@ public class ImportProgressService {
                 .processedRows(session.getProcessedRows())
                 .successRows(session.getSuccessRows())
                 .errorRows(session.getErrorRows())
-                .progressPercentage(session.getProgressPercentage())
+                .progressPercentage(Math.min(session.getProgressPercentage(), 100))
                 .isCompleted(isCompleted(session.getStatus()))
                 .timestamp(System.currentTimeMillis())
                 .updateType("PROGRESS")

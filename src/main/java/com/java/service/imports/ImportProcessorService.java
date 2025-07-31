@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.Reader;
@@ -29,6 +30,7 @@ import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 /**
  * Основной сервис обработки импорта файлов
@@ -60,6 +62,12 @@ public class ImportProcessorService {
      */
     @Transactional
     public void processImport(ImportSession session) {
+        // Загружать сессию из репозитория внутри транзакции, чтобы избежать
+        // проблем с detached entity и коллекциями orphanRemoval
+        ImportSession managedSession = sessionRepository.findById(session.getId())
+                .orElseThrow(() -> new RuntimeException("Сессия импорта не найдена"));
+
+        session = managedSession;
         log.info("Начало обработки импорта, сессия ID: {}", session.getId());
 
         // Регистрируем флаг отмены
@@ -71,8 +79,13 @@ public class ImportProcessorService {
             updateSessionStatus(session, ImportStatus.PROCESSING);
 
             // Получаем метаданные файла
+//            FileMetadata metadata = metadataRepository.findByImportSession(session)
+//                    .orElseThrow(() -> new RuntimeException("Метаданные файла не найдены"));
             FileMetadata metadata = metadataRepository.findByImportSession(session)
-                    .orElseThrow(() -> new RuntimeException("Метаданные файла не найдены"));
+                    .orElse(session.getFileMetadata());
+            if (metadata == null) {
+                throw new RuntimeException("Метаданные файла не найдены");
+            }
 
             // Получаем шаблон с полями
             ImportTemplate template = templateRepository.findByIdWithFields(session.getTemplate().getId())
@@ -113,6 +126,12 @@ public class ImportProcessorService {
                                 FileMetadata metadata, AtomicBoolean cancelled) throws Exception {
         Path filePath = Paths.get(metadata.getTempFilePath());
 
+        // Определяем общее количество строк в файле до начала обработки
+        long totalLines;
+        try (Stream<String> lines = Files.lines(filePath, Charset.forName(metadata.getDetectedEncoding()))) {
+            totalLines = lines.count();
+        }
+
         try (Reader reader = Files.newBufferedReader(filePath,
                 Charset.forName(metadata.getDetectedEncoding()))) {
 
@@ -144,6 +163,10 @@ public class ImportProcessorService {
                 skippedRows++;
             }
             int startRowNumber = skippedRows;
+            // Теперь мы знаем общее количество строк
+            long totalRows = totalLines - startRowNumber;
+            session.setTotalRows(totalRows);
+            sessionRepository.save(session);
 
             // Обрабатываем данные батчами
             processBatches(session, template, csvReader, headers, cancelled);
@@ -275,13 +298,14 @@ public class ImportProcessorService {
     @Transactional
     public void processBatch(ImportSession session, ImportTemplate template,
                              List<Map<String, String>> batch, AtomicLong currentRow) {
-        log.debug("Обработка батча из {} записей", batch.size());
+        log.debug("=== Обработка батча из {} записей, сессия ID: {} ===", batch.size(), session.getId());
 
         List<Map<String, Object>> transformedBatch = new ArrayList<>();
         Set<String> batchDuplicateKeys = new HashSet<>();
 
         for (Map<String, String> rowData : batch) {
             long rowNumber = currentRow.get() - batch.size() + batch.indexOf(rowData) + 1;
+            log.trace("Обработка строки {}", rowNumber);
 
             try {
                 // Трансформируем данные согласно маппингу
@@ -329,6 +353,7 @@ public class ImportProcessorService {
                         template.getEntityType(),
                         session);
                 session.setSuccessRows(session.getSuccessRows() + saved);
+                log.debug("Сохранено {} записей в БД", saved);
 
                 // Сохраняем ключи дубликатов
                 if (template.getDuplicateStrategy() == DuplicateStrategy.SKIP_DUPLICATES) {
@@ -336,7 +361,7 @@ public class ImportProcessorService {
                 }
 
             } catch (Exception e) {
-                log.error("Ошибка сохранения батча", e);
+                log.error("Ошибка сохранения батча из {} записей", transformedBatch.size(), e);
                 session.setErrorRows(session.getErrorRows() + transformedBatch.size());
 
                 if (template.getErrorStrategy() == ErrorStrategy.STOP_ON_ERROR) {
@@ -346,11 +371,22 @@ public class ImportProcessorService {
         }
 
         // Обновляем прогресс
+        long oldProcessedRows = session.getProcessedRows();
         session.setProcessedRows(session.getProcessedRows() + batch.size());
-        sessionRepository.save(session);
+        log.debug("Прогресс обновлен: {} -> {} (обработано +{} записей)",
+                oldProcessedRows, session.getProcessedRows(), batch.size());
+
+        // ПРИНУДИТЕЛЬНО СОХРАНЯЕМ В ТРАНЗАКЦИИ
+        session = sessionRepository.saveAndFlush(session);
+        log.debug("Сессия сохранена в БД с прогрессом {}%", session.getProgressPercentage());
 
         // Отправляем обновление прогресса
-        progressService.sendProgressUpdate(session);
+        try {
+            progressService.sendProgressUpdate(session);
+            log.debug("WebSocket обновление прогресса отправлено");
+        } catch (Exception e) {
+            log.error("Ошибка отправки WebSocket обновления", e);
+        }
     }
 
     /**
@@ -393,7 +429,13 @@ public class ImportProcessorService {
         FileOperation fileOperation = session.getFileOperation();
         fileOperation.setStatus(FileOperation.OperationStatus.COMPLETED);
         fileOperation.setRecordCount(session.getSuccessRows().intValue());
+        fileOperation.setTotalRecords(session.getTotalRows().intValue());
+        fileOperation.setProcessedRecords(session.getTotalRows().intValue());
+        fileOperation.setProcessingProgress(100);
         fileOperation.setCompletedAt(ZonedDateTime.now());
+
+        // гарантируем, что обработанные строки равны общему количеству
+        session.setProcessedRows(session.getTotalRows());
 
         sessionRepository.save(session);
 
