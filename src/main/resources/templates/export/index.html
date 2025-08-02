@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Экспорт данных - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Экспорт данных',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Экспорт данных</title>
+    <style>
+        .template-card {
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .template-card:hover {
+            background-color: #f8f9fa;
+        }
+        .template-card.selected {
+            border-color: #007bff;
+            background-color: #e7f1ff;
+        }
+        .filter-row {
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .operation-checkbox {
+            cursor: pointer;
+        }
+        .export-history-item {
+            cursor: pointer;
+        }
+        .export-history-item:hover {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/export/templates/client/{clientId}(clientId=${clientId})}"
+       class="btn btn-outline-primary me-2">
+        <i class="fas fa-cog me-1"></i>Управление шаблонами
+    </a>
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <form th:action="@{/export/client/{clientId}/start(clientId=${clientId})}"
+          method="post" id="exportForm">
+
+        <!-- Выбор операций для экспорта -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-file-import me-2"></i>Выберите операции для экспорта
+                </h5>
+            </div>
+            <div class="card-body">
+                <div th:if="${#lists.isEmpty(importOperations)}" class="text-center py-3">
+                    <p class="text-muted">Нет доступных операций импорта</p>
+                </div>
+
+                <div th:unless="${#lists.isEmpty(importOperations)}" class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                        <tr>
+                            <th width="40">
+                                <input type="checkbox" id="selectAll" class="form-check-input">
+                            </th>
+                            <th>ID</th>
+                            <th>Файл</th>
+                            <th>Дата</th>
+                            <th>Записей</th>
+                            <th>Статус</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="op : ${importOperations}" class="operation-row">
+                            <td>
+                                <input type="checkbox" name="operationIds"
+                                       th:value="${op.id}"
+                                       class="form-check-input operation-checkbox">
+                            </td>
+                            <td th:text="${op.id}">1</td>
+                            <td class="text-truncate" style="max-width: 200px;"
+                                th:text="${op.fileName}"
+                                th:title="${op.fileName}">file.csv</td>
+                            <td th:text="${#temporals.format(op.startedAt, 'dd.MM.yyyy HH:mm')}">
+                                01.01.2025
+                            </td>
+                            <td th:text="${op.recordCount ?: '-'}">100</td>
+                            <td>
+                                    <span class="badge"
+                                          th:classappend="${op.status.name() == 'COMPLETED' ? 'bg-success' :
+                                                         op.status.name() == 'FAILED' ? 'bg-danger' :
+                                                         'bg-secondary'}"
+                                          th:text="${op.status}">COMPLETED</span>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Выбор шаблона -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-file-export me-2"></i>Выберите шаблон экспорта
+                </h5>
+            </div>
+            <div class="card-body">
+                <div th:if="${#lists.isEmpty(templates)}" class="text-center py-3">
+                    <p class="text-muted mb-3">У вас еще нет шаблонов экспорта</p>
+                    <a th:href="@{/export/templates/client/{clientId}/create(clientId=${clientId})}"
+                       class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Создать шаблон
+                    </a>
+                </div>
+
+                <div th:unless="${#lists.isEmpty(templates)}" class="row">
+                    <div th:each="template : ${templates}" class="col-md-6 mb-3">
+                        <div class="card template-card"
+                             onclick="selectTemplate(this, [[${template.id}]])">
+                            <div class="card-body">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio"
+                                           name="templateId" th:value="${template.id}"
+                                           th:id="${'template' + template.id}"
+                                           th:checked="${lastUsedTemplate != null && lastUsedTemplate.id == template.id}"
+                                           required>
+                                    <label class="form-check-label w-100"
+                                           th:for="${'template' + template.id}">
+                                        <h6 th:text="${template.name}">Название шаблона</h6>
+                                        <p class="text-muted mb-1" th:text="${template.description}">
+                                            Описание
+                                        </p>
+                                        <small>
+                                            <span class="badge bg-secondary me-1"
+                                                  th:text="${template.entityType.displayName}">Тип</span>
+                                            <span class="badge bg-info me-1"
+                                                  th:text="${template.fileFormat}">CSV</span>
+                                            <span th:if="${template.exportStrategy}"
+                                                  class="badge bg-warning"
+                                                  th:text="${template.exportStrategy.displayName}">
+                                                Стратегия
+                                            </span>
+                                        </small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Фильтры -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-filter me-2"></i>Фильтры данных
+                </h5>
+                <button type="button" class="btn btn-sm btn-success" onclick="addFilter()">
+                    <i class="fas fa-plus me-1"></i>Добавить фильтр
+                </button>
+            </div>
+            <div class="card-body">
+                <!-- Фильтр по датам -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="dateFrom" class="form-label">Дата от</label>
+                        <input type="datetime-local" class="form-control"
+                               id="dateFrom" name="dateFrom">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="dateTo" class="form-label">Дата до</label>
+                        <input type="datetime-local" class="form-control"
+                               id="dateTo" name="dateTo">
+                    </div>
+                </div>
+
+                <!-- Динамические фильтры -->
+                <div id="dynamicFilters">
+                    <!-- Фильтры будут добавляться динамически -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Параметры файла -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-cogs me-2"></i>Параметры файла
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="fileFormat" class="form-label">Формат файла</label>
+                        <select class="form-select" id="fileFormat" name="fileFormat"
+                                onchange="toggleFormatSettings(this.value)">
+                            <option value="">По шаблону</option>
+                            <option value="CSV">CSV</option>
+                            <option value="XLSX">Excel (XLSX)</option>
+                        </select>
+                    </div>
+
+                    <!-- Настройки CSV -->
+                    <div id="csvSettings" class="col-md-9" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label for="csvDelimiter" class="form-label">Разделитель</label>
+                                <select class="form-select" id="csvDelimiter" name="csvDelimiter">
+                                    <option value="">По шаблону</option>
+                                    <option value=";">; (точка с запятой)</option>
+                                    <option value=",">, (запятая)</option>
+                                    <option value="\t">Tab</option>
+                                    <option value="|">| (вертикальная черта)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="csvEncoding" class="form-label">Кодировка</label>
+                                <select class="form-select" id="csvEncoding" name="csvEncoding">
+                                    <option value="">По шаблону</option>
+                                    <option value="UTF-8">UTF-8</option>
+                                    <option value="Windows-1251">Windows-1251</option>
+                                    <option value="ISO-8859-1">ISO-8859-1</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox"
+                           id="asyncMode" name="asyncMode" value="true" checked>
+                    <label class="form-check-label" for="asyncMode">
+                        Асинхронная обработка (рекомендуется для больших объемов)
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="d-flex justify-content-between">
+            <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+                <i class="fas fa-times me-1"></i>Отмена
+            </a>
+            <button type="submit" class="btn btn-primary"
+                    th:disabled="${#lists.isEmpty(templates) or #lists.isEmpty(importOperations)}">
+                <i class="fas fa-download me-1"></i>Начать экспорт
+            </button>
+        </div>
+    </form>
+
+    <!-- История экспортов -->
+    <div class="card mt-5" th:if="${!#lists.isEmpty(exportHistory)}">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-history me-2"></i>История экспортов
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="list-group">
+                <a th:each="export : ${exportHistory}"
+                   th:href="@{/export/status/{id}(id=${export.id})}"
+                   class="list-group-item list-group-item-action export-history-item">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1" th:text="${export.fileName}">export.csv</h6>
+                            <p class="mb-0">
+                                <small class="text-muted">
+                                    <span th:text="${export.templateName}">Шаблон</span> •
+                                    <span th:text="${#temporals.format(export.startedAt, 'dd.MM.yyyy HH:mm')}">
+                                        01.01.2025
+                                    </span> •
+                                    <span th:text="${export.exportedRows + ' записей'}">100 записей</span>
+                                </small>
+                            </p>
+                        </div>
+                        <span class="badge"
+                              th:classappend="${export.status.name() == 'COMPLETED' ? 'bg-success' :
+                                             export.status.name() == 'FAILED' ? 'bg-danger' :
+                                             'bg-warning'}"
+                              th:text="${export.status.displayName}">Завершено</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    let filterIndex = 0;
+    const entityFields = {};
+
+    // Выбор всех операций
+    document.getElementById('selectAll').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.operation-checkbox');
+        checkboxes.forEach(cb => cb.checked = this.checked);
+    });
+
+    function selectTemplate(card, templateId) {
+        document.querySelectorAll('.template-card').forEach(c => {
+            c.classList.remove('selected');
+        });
+        card.classList.add('selected');
+        document.getElementById('template' + templateId).checked = true;
+    }
+
+    function toggleFormatSettings(format) {
+        document.getElementById('csvSettings').style.display =
+            format === 'CSV' ? 'block' : 'none';
+    }
+
+    function addFilter() {
+        const container = document.getElementById('dynamicFilters');
+        const filterHtml = `
+            <div class="filter-row" id="filter_${filterIndex}">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <select class="form-select" name="additionalFilters[${filterIndex}].fieldName"
+                                onchange="updateFilterType(${filterIndex})">
+                            <option value="">-- Выберите поле --</option>
+                            ${getFieldOptions()}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" name="additionalFilters[${filterIndex}].filterType">
+                            <option value="EQUALS">Равно</option>
+                            <option value="NOT_EQUALS">Не равно</option>
+                            <option value="CONTAINS">Содержит</option>
+                            <option value="STARTS_WITH">Начинается с</option>
+                            <option value="ENDS_WITH">Заканчивается на</option>
+                            <option value="GREATER_THAN">Больше</option>
+                            <option value="LESS_THAN">Меньше</option>
+                            <option value="BETWEEN">Между</option>
+                            <option value="IN">Входит в список</option>
+                            <option value="IS_NULL">Пусто</option>
+                            <option value="IS_NOT_NULL">Не пусто</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text" class="form-control"
+                               name="additionalFilters[${filterIndex}].filterValue"
+                               placeholder="Значение">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-danger btn-sm"
+                                onclick="removeFilter(${filterIndex})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.insertAdjacentHTML('beforeend', filterHtml);
+        filterIndex++;
+    }
+
+    function removeFilter(index) {
+        document.getElementById('filter_' + index).remove();
+    }
+
+    function getFieldOptions() {
+        // Здесь нужно получить поля выбранной сущности
+        // Временно возвращаем базовые поля
+        const fields = [
+            'productId', 'productName', 'productBrand', 'productPrice',
+            'competitorName', 'competitorPrice', 'region'
+        ];
+
+        return fields.map(f => `<option value="${f}">${f}</option>`).join('');
+    }
+
+    function updateFilterType(index) {
+        // Можно добавить логику изменения типов фильтров в зависимости от поля
+    }
+    /*]]>*/
+</script>
+</body>
+</html>

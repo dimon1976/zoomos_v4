@@ -193,17 +193,82 @@
         </div>
 
         <!-- Вкладка экспорта данных -->
+        <!-- Вкладка экспорта данных -->
         <div class="tab-pane fade" id="export" role="tabpanel" aria-labelledby="export-tab">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-file-export me-2"></i>Экспорт данных
-                    </h5>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-file-export me-2"></i>Экспорт данных
+                        </h5>
+                        <div>
+                            <a th:href="@{/export/templates/client/{clientId}(clientId=${client.id})}"
+                               class="btn btn-outline-primary btn-sm me-2">
+                                <i class="fas fa-cog me-1"></i>Шаблоны экспорта
+                            </a>
+                            <a th:href="@{/export/client/{clientId}(clientId=${client.id})}"
+                               class="btn btn-primary btn-sm">
+                                <i class="fas fa-file-export me-1"></i>Экспортировать
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted text-center py-4">
-                        Функция экспорта данных находится в разработке
+                    <p class="card-text">
+                        Экспорт позволяет выгружать данные из базы в файлы CSV или Excel с применением фильтров и стратегий обработки.
                     </p>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Возможности экспорта:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>Выбор операций импорта для экспорта</li>
+                            <li>Применение фильтров по датам и полям</li>
+                            <li>Использование стратегий обработки данных</li>
+                            <li>Настройка формата и параметров файла</li>
+                            <li>Сохранение шаблонов для повторного использования</li>
+                        </ul>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-filter text-primary me-2"></i>Фильтрация
+                                    </h6>
+                                    <ul class="mb-0">
+                                        <li>По датам создания</li>
+                                        <li>По любым полям данных</li>
+                                        <li>По операциям импорта</li>
+                                        <li>Комбинированные фильтры</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-cogs text-success me-2"></i>Стратегии
+                                    </h6>
+                                    <ul class="mb-0">
+                                        <li>Экспорт без изменений</li>
+                                        <li>Сверка задание-отчет</li>
+                                        <li>Дополнение из справочника</li>
+                                        <li>Пользовательские правила</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <a th:href="@{/export/client/{clientId}(clientId=${client.id})}"
+                           class="btn btn-success">
+                            <i class="fas fa-download me-1"></i>Начать экспорт
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

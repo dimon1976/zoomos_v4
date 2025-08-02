@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Статус экспорта - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Статус экспорта #' + ${session.id},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Статус экспорта</title>
+    <style>
+        .status-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .progress-section {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/export/client/{id}(id=${clientId})}" class="btn btn-secondary me-2">
+        <i class="fas fa-arrow-left me-1"></i>Назад к экспорту
+    </a>
+    <a th:if="${session.status.name() == 'COMPLETED' && session.resultFilePath != null}"
+       th:href="@{/export/download/{id}(id=${session.id})}"
+       class="btn btn-success">
+        <i class="fas fa-download me-1"></i>Скачать файл
+    </a>
+</div>
+
+<section>
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Основная информация -->
+            <div class="progress-section">
+                <div class="text-center mb-4"
+                     th:if="${session.status.name() == 'PROCESSING' or session.status.name() == 'INITIALIZING'}">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Обработка...</span>
+                    </div>
+                    <h4 class="mt-3">Экспорт выполняется...</h4>
+                </div>
+
+                <div class="text-center mb-4"
+                     th:if="${session.status.name() == 'COMPLETED'}">
+                    <div class="status-icon text-success">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h4>Экспорт завершен успешно!</h4>
+                </div>
+
+                <div class="text-center mb-4"
+                     th:if="${session.status.name() == 'FAILED'}">
+                    <div class="status-icon text-danger">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <h4>Ошибка экспорта</h4>
+                </div>
+
+                <!-- Прогресс бар -->
+                <div th:if="${session.status.name() == 'PROCESSING'}" class="mb-4">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Прогресс</span>
+                        <span th:text="${session.progressPercentage + '%'}">0%</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar"
+                             th:style="'width: ' + ${session.progressPercentage} + '%'">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Детали -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Шаблон:</strong>
+                            <span th:text="${session.templateName}">Шаблон</span>
+                        </p>
+                        <p><strong>Файл:</strong>
+                            <span th:text="${session.fileName}">export.csv</span>
+                        </p>
+                        <p><strong>Начало:</strong>
+                            <span th:text="${#temporals.format(session.startedAt, 'dd.MM.yyyy HH:mm:ss')}">
+                                01.01.2025
+                            </span>
+                        </p>
+                        <p th:if="${session.completedAt}">
+                            <strong>Завершение:</strong>
+                            <span th:text="${#temporals.format(session.completedAt, 'dd.MM.yyyy HH:mm:ss')}">
+                                01.01.2025
+                            </span>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Статус:</strong>
+                            <span class="badge"
+                                  th:classappend="${session.status.name() == 'COMPLETED' ? 'bg-success' :
+                                                 session.status.name() == 'FAILED' ? 'bg-danger' :
+                                                 'bg-warning'}"
+                                  th:text="${session.status.displayName}">В процессе</span>
+                        </p>
+                        <p th:if="${session.duration}">
+                            <strong>Длительность:</strong>
+                            <span th:text="${session.duration}">5 мин</span>
+                        </p>
+                        <p th:if="${session.fileSize}">
+                            <strong>Размер файла:</strong>
+                            <span th:text="${#numbers.formatDecimal(session.fileSize / 1048576.0, 1, 2) + ' МБ'}">
+                                1.5 МБ
+                            </span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Ошибка -->
+                <div th:if="${session.errorMessage}" class="alert alert-danger mt-3">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <span th:text="${session.errorMessage}">Ошибка</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <!-- Статистика -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Статистика экспорта</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">
+                        <strong>Всего записей:</strong>
+                        <span th:text="${session.totalRows ?: 0}">0</span>
+                    </p>
+                    <p class="mb-2">
+                        <strong>Экспортировано:</strong>
+                        <span class="text-success" th:text="${session.exportedRows ?: 0}">0</span>
+                    </p>
+                    <p class="mb-2">
+                        <strong>Отфильтровано:</strong>
+                        <span class="text-warning" th:text="${session.filteredRows ?: 0}">0</span>
+                    </p>
+                    <p class="mb-0">
+                        <strong>Модифицировано:</strong>
+                        <span class="text-info" th:text="${session.modifiedRows ?: 0}">0</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Фильтры -->
+            <div class="card mt-3" th:if="${session.appliedFilters}">
+                <div class="card-header">
+                    <h6 class="mb-0">Примененные фильтры</h6>
+                </div>
+                <div class="card-body">
+                    <div th:each="filter : ${session.appliedFilters}">
+                        <small>
+                            <strong th:text="${filter.fieldName}">Поле</strong>
+                            <span th:text="${filter.filterType}">тип</span>
+                            <code th:text="${filter.filterValue}">значение</code>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:if="${session.status.name() == 'PROCESSING' or session.status.name() == 'INITIALIZING'}">
+    // Автообновление страницы каждые 3 секунды
+    setTimeout(function() {
+        window.location.reload();
+    }, 3000);
+</script>
+</body>
+</html>
