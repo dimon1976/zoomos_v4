@@ -27,10 +27,10 @@
             </h5>
         </div>
         <div class="card-body">
-            <form th:action="@{/export/client/{id}/start(id=${clientId})}" method="post">
+            <form th:action="@{/export/client/{id}/start(id=${clientId})}" method="post" th:object="${request}">
                 <div class="mb-3">
                     <label for="templateId" class="form-label">Шаблон</label>
-                    <select id="templateId" name="templateId" class="form-select" required>
+                    <select id="templateId" th:field="*{templateId}" class="form-select" required>
                         <option th:each="tmpl : ${templates}"
                                 th:value="${tmpl.id}"
                                 th:text="${tmpl.name}">Template</option>
@@ -38,7 +38,52 @@
                 </div>
                 <div class="mb-3">
                     <label for="operationIds" class="form-label">ID операций (через запятую)</label>
-                    <input type="text" id="operationIds" name="operationIds" class="form-control" required>
+                    <input type="text" id="operationIds" name="operationIds" class="form-control">
+                </div>
+
+                <div class="mb-3" th:if="${!#lists.isEmpty(recentOperations)}">
+                    <label class="form-label">Последние операции</label>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                            <tr>
+                                <th></th>
+                                <th>ID</th>
+                                <th>Файл</th>
+                                <th>Загружено</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="op : ${recentOperations}">
+                                <td>
+                                    <input class="form-check-input" type="checkbox" name="selectedOperationIds"
+                                           th:value="${op.id}">
+                                </td>
+                                <td th:text="${op.id}">1</td>
+                                <td th:text="${op.fileName}">file.csv</td>
+                                <td th:text="${#temporals.format(op.startedAt, 'dd.MM.yyyy HH:mm')}">01.01.2024 00:00</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="exportAll" name="exportAll">
+                    <label class="form-check-label" for="exportAll">Экспортировать всю таблицу</label>
+                </div>
+
+                <div id="filtersContainer" class="mb-3">
+                    <div th:each="tmpl : ${templates}" th:attr="data-template-id=${tmpl.id}" class="template-filters d-none">
+                        <div th:each="filter, iterStat : ${tmpl.filters}" class="mb-3">
+                            <input type="hidden" th:name="${'additionalFilters[' + iterStat.index + '].fieldName'}" th:value="${filter.fieldName}"/>
+                            <input type="hidden" th:name="${'additionalFilters[' + iterStat.index + '].filterType'}" th:value="${filter.filterType}"/>
+                            <label th:for="${'filter-' + tmpl.id + '-' + iterStat.index}" th:text="${filter.fieldName}" class="form-label">Filter</label>
+                            <input type="text" class="form-control" th:id="${'filter-' + tmpl.id + '-' + iterStat.index}"
+                                   th:name="${'additionalFilters[' + iterStat.index + '].filterValue'}"
+                                   th:value="${filter.filterValue}" />
+                        </div>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-play me-1"></i>Начать экспорт
@@ -47,6 +92,34 @@
         </div>
     </div>
 </section>
-<script></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const templateSelect = document.getElementById('templateId');
+        const filtersBlocks = document.querySelectorAll('.template-filters');
+        const exportAll = document.getElementById('exportAll');
+        const operationInput = document.getElementById('operationIds');
+        const operationCheckboxes = document.querySelectorAll('input[name="selectedOperationIds"]');
+
+        function updateFilters() {
+            filtersBlocks.forEach(block => {
+                const active = block.getAttribute('data-template-id') === templateSelect.value;
+                block.classList.toggle('d-none', !active);
+                block.querySelectorAll('input').forEach(i => i.disabled = !active);
+            });
+        }
+
+        function toggleOperations() {
+            const disabled = exportAll.checked;
+            operationInput.disabled = disabled;
+            operationCheckboxes.forEach(cb => cb.disabled = disabled);
+        }
+
+        templateSelect.addEventListener('change', updateFilters);
+        exportAll.addEventListener('change', toggleOperations);
+
+        updateFilters();
+        toggleOperations();
+    });
+</script>
 </body>
 </html>

@@ -20,8 +20,12 @@ public class ExportRequestDto {
     @NotNull(message = "ID шаблона обязателен")
     private Long templateId;
 
-    @NotEmpty(message = "Необходимо выбрать хотя бы одну операцию")
-    private List<Long> operationIds;
+    /**
+     * Список идентификаторов операций-источников.
+     * Может быть пустым, если требуется экспорт всей таблицы.
+     */
+    @Builder.Default
+    private List<Long> operationIds = new ArrayList<>();
 
     // Фильтры по датам
     private ZonedDateTime dateFrom;

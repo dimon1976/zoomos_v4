@@ -62,7 +62,7 @@ public class ExportProcessorService {
             // 1. Загружаем данные
             log.info("Загрузка данных для экспорта");
             List<Map<String, Object>> data = dataService.loadData(
-                    request.getOperationIds(),
+                    request.getOperationIds() != null ? request.getOperationIds() : Collections.emptyList(),
                     template,
                     request.getDateFrom(),
                     request.getDateTo(),
@@ -76,7 +76,7 @@ public class ExportProcessorService {
 
             // Подсчитываем отфильтрованные записи
             Long totalPossible = dataService.countData(
-                    request.getOperationIds(),
+                    request.getOperationIds() != null ? request.getOperationIds() : Collections.emptyList(),
                     template,
                     null, // без фильтра дат
                     null,
@@ -103,7 +103,7 @@ public class ExportProcessorService {
 
             // Для стратегии TASK_REPORT нужны дополнительные параметры
             if (template.getExportStrategy().name().equals("TASK_REPORT") &&
-                    request.getOperationIds().size() >= 2) {
+                    request.getOperationIds() != null && request.getOperationIds().size() >= 2) {
                 // Предполагаем, что первая операция - задание, вторая - отчет
                 context.put("taskOperationId", request.getOperationIds().get(0));
                 context.put("reportOperationId", request.getOperationIds().get(1));

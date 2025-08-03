@@ -77,7 +77,9 @@ public class ExportService {
         ExportSession session = ExportSession.builder()
                 .fileOperation(fileOperation)
                 .template(template)
-                .sourceOperationIds(objectMapper.valueToTree(request.getOperationIds()).toString())
+                .sourceOperationIds((request.getOperationIds() != null && !request.getOperationIds().isEmpty())
+                        ? objectMapper.valueToTree(request.getOperationIds()).toString()
+                        : null)
                 .dateFilterFrom(request.getDateFrom())
                 .dateFilterTo(request.getDateTo())
                 .appliedFilters(request.getAdditionalFilters() != null ?

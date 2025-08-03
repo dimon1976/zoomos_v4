@@ -54,7 +54,7 @@ public class ExportDataService {
         }
 
         // Фильтр по операциям
-        if (!operationIds.isEmpty()) {
+        if (operationIds != null && !operationIds.isEmpty()) {
             sql.append(" AND operation_id IN (");
             sql.append(operationIds.stream()
                     .map(id -> "?")
@@ -76,7 +76,7 @@ public class ExportDataService {
         // Применяем фильтры из шаблона
         List<ExportTemplateFilter> activeFilters = template.getFilters().stream()
                 .filter(ExportTemplateFilter::getIsActive)
-                .collect(Collectors.toList());
+                .toList();
 
         for (ExportTemplateFilter filter : activeFilters) {
             applyFilter(sql, params, filter.getFieldName(),
@@ -329,7 +329,7 @@ public class ExportDataService {
         }
 
         // Применяем те же фильтры
-        if (!operationIds.isEmpty()) {
+        if (operationIds != null && !operationIds.isEmpty()) {
             sql.append(" AND operation_id IN (");
             sql.append(operationIds.stream()
                     .map(id -> "?")

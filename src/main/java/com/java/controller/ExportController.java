@@ -3,6 +3,7 @@ package com.java.controller;
 import com.java.dto.ExportRequestDto;
 import com.java.dto.ExportSessionDto;
 import com.java.dto.ExportTemplateDto;
+import com.java.model.Client;
 import com.java.model.FileOperation;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
@@ -10,6 +11,7 @@ import com.java.service.exports.ExportService;
 import com.java.service.exports.ExportTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -41,8 +44,16 @@ public class ExportController {
     @GetMapping("/client/{clientId}")
     public String showExportPage(@PathVariable Long clientId, Model model) {
         List<ExportTemplateDto> templates = templateService.getClientTemplates(clientId);
+
+        Client client = new Client();
+        client.setId(clientId);
+        List<FileOperation> recentOperations = fileOperationRepository
+                .findRecentImportOperations(client, PageRequest.of(0, 20));
+
         model.addAttribute("templates", templates);
         model.addAttribute("clientId", clientId);
+        model.addAttribute("recentOperations", recentOperations);
+        model.addAttribute("request", new ExportRequestDto());
         return "export/start";
     }
 
@@ -51,20 +62,27 @@ public class ExportController {
      */
     @PostMapping("/client/{clientId}/start")
     public String startExport(@PathVariable Long clientId,
-                              @RequestParam Long templateId,
-                              @RequestParam String operationIds,
+                              @ModelAttribute ExportRequestDto request,
+                              @RequestParam(required = false) String operationIds,
+                              @RequestParam(name = "selectedOperationIds", required = false) List<Long> selectedOperations,
+                              @RequestParam(value = "exportAll", defaultValue = "false") boolean exportAll,
                               RedirectAttributes redirectAttributes) {
         try {
-            List<Long> ops = Arrays.stream(operationIds.split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .map(Long::parseLong)
-                    .collect(Collectors.toList());
+            List<Long> ops = new ArrayList<>();
+            if (!exportAll) {
+                if (operationIds != null) {
+                    ops.addAll(Arrays.stream(operationIds.split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .map(Long::parseLong)
+                            .toList());
+                }
+                if (selectedOperations != null) {
+                    ops.addAll(selectedOperations);
+                }
+            }
 
-            ExportRequestDto request = ExportRequestDto.builder()
-                    .templateId(templateId)
-                    .operationIds(ops)
-                    .build();
+            request.setOperationIds(ops.isEmpty() ? null : ops);
 
             ExportSessionDto session = exportService.startExport(request, clientId);
 
