@@ -1,19 +1,23 @@
 package com.java.model.entity;
 
+import com.java.model.enums.FilterType;
 import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
 @Table(name = "export_template_filters")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString(exclude = "template")
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class ExportTemplateFilter {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -23,8 +27,10 @@ public class ExportTemplateFilter {
     @Column(name = "field_name", nullable = false)
     private String fieldName;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "filter_type", nullable = false)
-    private String filterType; // EQUALS, CONTAINS, BETWEEN, IN, etc.
+//    private String filterType; // EQUALS, CONTAINS, BETWEEN, IN, etc.
+    private FilterType filterType; // EQUALS, CONTAINS, BETWEEN, IN, etc.
 
     @Column(name = "filter_value", nullable = false, columnDefinition = "TEXT")
     private String filterValue; // JSON для разных типов

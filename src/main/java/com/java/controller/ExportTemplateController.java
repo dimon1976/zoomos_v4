@@ -2,8 +2,12 @@ package com.java.controller;
 
 import com.java.dto.ExportTemplateDto;
 
+import com.java.dto.ExportTemplateFieldDto;
+import com.java.dto.ExportTemplateFilterDto;
 import com.java.model.enums.EntityType;
 import com.java.model.enums.ExportStrategy;
+import com.java.model.enums.FilterType;
+import com.java.service.EntityFieldService;
 import com.java.service.exports.ExportTemplateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,54 +31,49 @@ import java.util.List;
 public class ExportTemplateController {
 
     private final ExportTemplateService templateService;
+    private final EntityFieldService fieldService;
 
     /**
-     * Список шаблонов клиента
+     * Форма создания шаблона
      */
     @GetMapping("/client/{clientId}")
-    public String listClientTemplates(@PathVariable Long clientId, Model model) {
-        log.debug("GET запрос на получение шаблонов экспорта клиента ID: {}", clientId);
-
-        List<ExportTemplateDto> templates = templateService.getClientTemplates(clientId);
-        model.addAttribute("templates", templates);
+    public String listTemplates(@PathVariable Long clientId, Model model) {
+        model.addAttribute("templates", templateService.getClientTemplates(clientId));
         model.addAttribute("clientId", clientId);
-
         return "export/templates/list";
     }
 
-    /**
-     * Форма создания нового шаблона
-     */
     @GetMapping("/client/{clientId}/create")
     public String showCreateForm(@PathVariable Long clientId, Model model) {
-        log.debug("GET запрос на создание шаблона экспорта для клиента ID: {}", clientId);
-
         ExportTemplateDto template = new ExportTemplateDto();
         template.setClientId(clientId);
-
-        // Добавляем пустые списки для полей и фильтров
-        template.setFields(new ArrayList<>());
-        template.setFilters(new ArrayList<>());
-
         model.addAttribute("template", template);
         model.addAttribute("clientId", clientId);
-        model.addAttribute("entityTypes", EntityType.values());
-        model.addAttribute("exportStrategies", ExportStrategy.values());
-        model.addAttribute("filterTypes", FilterType.values());
-
+        populateAvailableFields(model, template);
         return "export/templates/form";
     }
 
     /**
-     * Создание нового шаблона
+     * Создание шаблона
      */
     @PostMapping("/create")
-    public String createTemplate(@Valid @ModelAttribute ExportTemplateDto template,
+    public String createTemplate(@Valid @ModelAttribute("template") ExportTemplateDto template,
                                  BindingResult bindingResult,
+                                 @RequestParam(required = false) String addField,
+                                 @RequestParam(required = false) Integer removeField,
+                                 @RequestParam(required = false) String addFilter,
+                                 @RequestParam(required = false) Integer removeFilter,
+                                 Model model,
                                  RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на создание шаблона экспорта: {}", template.getName());
+        String dynamic = handleDynamicFields(template, addField, removeField, addFilter, removeFilter, model);
+        if (dynamic != null) {
+            model.addAttribute("clientId", template.getClientId());
+            return dynamic;
+        }
 
         if (bindingResult.hasErrors()) {
+            model.addAttribute("clientId", template.getClientId());
+            populateAvailableFields(model, template);
             return "export/templates/form";
         }
 
@@ -82,58 +81,50 @@ public class ExportTemplateController {
             ExportTemplateDto created = templateService.createTemplate(template);
             redirectAttributes.addFlashAttribute("successMessage",
                     "Шаблон '" + created.getName() + "' успешно создан");
-
             return "redirect:/export/templates/" + created.getId();
-
         } catch (Exception e) {
-            log.error("Ошибка создания шаблона экспорта", e);
+            log.error("Ошибка создания шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
+            model.addAttribute("clientId", template.getClientId());
+            populateAvailableFields(model, template);
             return "export/templates/form";
         }
     }
 
     /**
-     * Просмотр деталей шаблона
+     * Просмотр шаблона
      */
     @GetMapping("/{templateId}")
     public String viewTemplate(@PathVariable Long templateId,
                                Model model,
                                RedirectAttributes redirectAttributes) {
-        log.debug("GET запрос на просмотр шаблона экспорта ID: {}", templateId);
-
         return templateService.getTemplate(templateId)
-                .map(template -> {
-                    model.addAttribute("template", template);
+                .map(t -> {
+                    model.addAttribute("template", t);
                     return "export/templates/view";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Шаблон не найден");
+                    redirectAttributes.addFlashAttribute("errorMessage", "Шаблон не найден");
                     return "redirect:/clients";
                 });
     }
 
     /**
-     * Форма редактирования шаблона
+     * Форма редактирования
      */
     @GetMapping("/{templateId}/edit")
     public String showEditForm(@PathVariable Long templateId,
                                Model model,
                                RedirectAttributes redirectAttributes) {
-        log.debug("GET запрос на редактирование шаблона экспорта ID: {}", templateId);
-
         return templateService.getTemplate(templateId)
-                .map(template -> {
-                    model.addAttribute("template", template);
+                .map(t -> {
+                    model.addAttribute("template", t);
                     model.addAttribute("templateId", templateId);
-                    model.addAttribute("entityTypes", EntityType.values());
-                    model.addAttribute("exportStrategies", ExportStrategy.values());
-                    model.addAttribute("filterTypes", FilterType.values());
+                    populateAvailableFields(model, t);
                     return "export/templates/form";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Шаблон не найден");
+                    redirectAttributes.addFlashAttribute("errorMessage", "Шаблон не найден");
                     return "redirect:/clients";
                 });
     }
@@ -143,12 +134,23 @@ public class ExportTemplateController {
      */
     @PostMapping("/{templateId}/edit")
     public String updateTemplate(@PathVariable Long templateId,
-                                 @Valid @ModelAttribute ExportTemplateDto template,
+                                 @Valid @ModelAttribute("template") ExportTemplateDto template,
                                  BindingResult bindingResult,
+                                 @RequestParam(required = false) String addField,
+                                 @RequestParam(required = false) Integer removeField,
+                                 @RequestParam(required = false) String addFilter,
+                                 @RequestParam(required = false) Integer removeFilter,
+                                 Model model,
                                  RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на обновление шаблона экспорта ID: {}", templateId);
+        String dynamic = handleDynamicFields(template, addField, removeField, addFilter, removeFilter, model);
+        if (dynamic != null) {
+            model.addAttribute("templateId", templateId);
+            return dynamic;
+        }
 
         if (bindingResult.hasErrors()) {
+            model.addAttribute("templateId", templateId);
+            populateAvailableFields(model, template);
             return "export/templates/form";
         }
 
@@ -156,12 +158,12 @@ public class ExportTemplateController {
             ExportTemplateDto updated = templateService.updateTemplate(templateId, template);
             redirectAttributes.addFlashAttribute("successMessage",
                     "Шаблон '" + updated.getName() + "' успешно обновлен");
-
             return "redirect:/export/templates/" + templateId;
-
         } catch (Exception e) {
-            log.error("Ошибка обновления шаблона экспорта", e);
+            log.error("Ошибка обновления шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
+            model.addAttribute("templateId", templateId);
+            populateAvailableFields(model, template);
             return "export/templates/form";
         }
     }
@@ -173,92 +175,50 @@ public class ExportTemplateController {
     public String deleteTemplate(@PathVariable Long templateId,
                                  @RequestParam Long clientId,
                                  RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на удаление шаблона экспорта ID: {}", templateId);
-
         try {
             templateService.deleteTemplate(templateId);
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Шаблон успешно удален");
+            redirectAttributes.addFlashAttribute("successMessage", "Шаблон успешно удален");
         } catch (Exception e) {
-            log.error("Ошибка удаления шаблона экспорта", e);
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Ошибка удаления шаблона: " + e.getMessage());
+            log.error("Ошибка удаления шаблона", e);
+            redirectAttributes.addFlashAttribute("errorMessage", "Ошибка удаления шаблона: " + e.getMessage());
         }
-
         return "redirect:/export/templates/client/" + clientId;
     }
 
-    /**
-     * Клонирование шаблона
-     */
-    @PostMapping("/{templateId}/clone")
-    public String cloneTemplate(@PathVariable Long templateId,
-                                @RequestParam String newName,
-                                RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на клонирование шаблона экспорта ID: {} с именем: {}",
-                templateId, newName);
-
-        try {
-            ExportTemplateDto cloned = templateService.cloneTemplate(templateId, newName);
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Шаблон успешно клонирован");
-
-            return "redirect:/export/templates/" + cloned.getId();
-
-        } catch (Exception e) {
-            log.error("Ошибка клонирования шаблона экспорта", e);
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Ошибка клонирования шаблона: " + e.getMessage());
-            return "redirect:/export/templates/" + templateId;
+    private String handleDynamicFields(ExportTemplateDto template,
+                                       String addField,
+                                       Integer removeField,
+                                       String addFilter,
+                                       Integer removeFilter,
+                                       Model model) {
+        if (addField != null) {
+            template.getFields().add(new ExportTemplateFieldDto());
+            model.addAttribute("template", template);
+            populateAvailableFields(model, template);
+            return "export/templates/form";
         }
+        if (removeField != null && removeField >= 0 && removeField < template.getFields().size()) {
+            template.getFields().remove((int) removeField);
+            model.addAttribute("template", template);
+            populateAvailableFields(model, template);
+            return "export/templates/form";
+        }
+        if (addFilter != null) {
+            template.getFilters().add(new ExportTemplateFilterDto());
+            model.addAttribute("template", template);
+            populateAvailableFields(model, template);
+            return "export/templates/form";
+        }
+        if (removeFilter != null && removeFilter >= 0 && removeFilter < template.getFilters().size()) {
+            template.getFilters().remove((int) removeFilter);
+            model.addAttribute("template", template);
+            populateAvailableFields(model, template);
+            return "export/templates/form";
+        }
+        return null;
     }
 
-    /**
-     * API для получения полей сущности
-     */
-    @GetMapping("/api/entity-fields/{entityType}")
-    @ResponseBody
-    public List<FieldInfo> getEntityFields(@PathVariable String entityType) {
-        log.debug("Запрос полей для типа сущности: {}", entityType);
-
-        List<FieldInfo> fields = new ArrayList<>();
-
-        if ("AV_DATA".equals(entityType)) {
-            fields.add(new FieldInfo("id", "ID", "Идентификатор записи"));
-            fields.add(new FieldInfo("createdAt", "Дата создания", "Дата и время создания"));
-            fields.add(new FieldInfo("dataSource", "Источник данных", "Тип источника данных"));
-            fields.add(new FieldInfo("productId", "ID товара", "Идентификатор товара"));
-            fields.add(new FieldInfo("productName", "Название товара", "Наименование товара"));
-            fields.add(new FieldInfo("productBrand", "Бренд", "Производитель товара"));
-            fields.add(new FieldInfo("productBar", "Штрихкод", "Штриховой код товара"));
-            fields.add(new FieldInfo("productPrice", "Цена", "Цена товара"));
-            fields.add(new FieldInfo("region", "Регион", "Регион"));
-            fields.add(new FieldInfo("regionAddress", "Адрес", "Адрес в регионе"));
-            fields.add(new FieldInfo("competitorName", "Конкурент", "Название конкурента"));
-            fields.add(new FieldInfo("competitorPrice", "Цена конкурента", "Цена у конкурента"));
-            fields.add(new FieldInfo("competitorDate", "Дата", "Дата сбора данных"));
-            // Добавьте остальные поля по необходимости
-        } else if ("AV_HANDBOOK".equals(entityType)) {
-            fields.add(new FieldInfo("id", "ID", "Идентификатор записи"));
-            fields.add(new FieldInfo("handbookRetailNetworkCode", "Код сети", "Код розничной сети"));
-            fields.add(new FieldInfo("handbookRetailNetwork", "Розничная сеть", "Название сети"));
-            fields.add(new FieldInfo("handbookPhysicalAddress", "Адрес", "Физический адрес"));
-            fields.add(new FieldInfo("handbookWebSite", "Сайт", "Веб-сайт"));
-            fields.add(new FieldInfo("handbookRegionCode", "Код региона", "Код региона"));
-            fields.add(new FieldInfo("handbookRegionName", "Регион", "Название региона"));
-        }
-
-        return fields;
-    }
-
-    /**
-     * Класс для информации о поле
-     */
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    public static class FieldInfo {
-        private String fieldName;
-        private String displayName;
-        private String description;
+    private void populateAvailableFields(Model model, ExportTemplateDto template) {
+        model.addAttribute("availableFields", fieldService.getFields(template.getEntityType()));
     }
 }

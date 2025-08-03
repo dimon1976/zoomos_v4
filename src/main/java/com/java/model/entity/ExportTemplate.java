@@ -10,19 +10,24 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "export_templates")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString(exclude = {"client", "fields", "filters"})
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class ExportTemplate {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
     private Long id;
 
     @Column(name = "name", nullable = false)
@@ -89,7 +94,8 @@ public class ExportTemplate {
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
-    private List<ExportTemplateFilter> filters = new ArrayList<>();
+//    private List<ExportTemplateFilter> filters = new ArrayList<>();
+    private Set<ExportTemplateFilter> filters = new HashSet<>();
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

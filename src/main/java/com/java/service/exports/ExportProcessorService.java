@@ -68,7 +68,10 @@ public class ExportProcessorService {
                     request.getDateTo(),
                     request.getAdditionalFilters()
             );
-
+            log.debug("После загрузки получено {} строк", data.size());
+            if (!data.isEmpty()) {
+                log.debug("Пример загруженной строки: {}", data.get(0));
+            }
             session.setTotalRows((long) data.size());
 
             // Подсчитываем отфильтрованные записи
@@ -107,6 +110,10 @@ public class ExportProcessorService {
             }
 
             List<Map<String, Object>> processedData = strategy.processData(data, template, context);
+            log.debug("После применения стратегии осталось {} строк", processedData.size());
+            if (!processedData.isEmpty()) {
+                log.debug("Пример строки после стратегии: {}", processedData.get(0));
+            }
 
             // Подсчитываем модифицированные записи
             session.setModifiedRows((long) (data.size() - processedData.size()));

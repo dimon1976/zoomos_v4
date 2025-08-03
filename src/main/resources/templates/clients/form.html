@@ -1,152 +1,207 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/main :: html(
-        title=${client.id != null ? 'Редактирование клиента - Обработка файлов' : 'Новый клиент - Обработка файлов'},
-        content=~{::section},
-        scripts=~{::script},
-        styles=~{::style},
-        pageTitle=${client.id != null ? 'Редактирование клиента' : 'Создание нового клиента'},
-        pageActions=~{::.page-actions}
-      )}">
+      th:replace="~{layout/main :: html(${template.id != null ? 'Редактирование шаблона экспорта' : 'Новый шаблон экспорта'}, ~{::section}, ~{::script}, ~{::style}, ${template.id != null ? 'Редактирование шаблона' : 'Новый шаблон'}, ~{::.page-actions})}">
 <head>
-    <title th:text="${client.id != null ? 'Редактирование клиента - Обработка файлов' : 'Новый клиент - Обработка файлов'}">Клиент - Обработка файлов</title>
-    <style>
-        .required-field::after {
-            content: "*";
-            color: red;
-            margin-left: 3px;
-        }
-        .form-section {
-            background-color: #f8f9fa;
-            border-radius: 0.5rem;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .form-section-title {
-            margin-bottom: 1.5rem;
-            color: #495057;
-            border-bottom: 1px solid #dee2e6;
-            padding-bottom: 0.5rem;
-        }
-        .form-feedback {
-            font-size: 0.875rem;
-            margin-top: 0.25rem;
-        }
-        .card-form {
-            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-            border: none;
-            border-radius: 0.5rem;
-        }
-    </style>
+    <title th:text="${template.id != null ? 'Редактирование шаблона экспорта' : 'Новый шаблон экспорта'}">Шаблон экспорта</title>
+    <style></style>
 </head>
 <body>
-<!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="${client.id != null ? '/clients/' + client.id : '/clients'}" class="btn btn-secondary">
+    <a th:href="${template.id != null} ? @{/export/templates/{id}(id=${template.id})} : @{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
         <i class="fas fa-arrow-left me-1"></i>Назад
     </a>
 </div>
 
 <section>
-    <div class="card card-form">
-        <div class="card-body">
-            <form th:action="${client.id != null ? '/clients/' + client.id + '/edit' : '/clients/create'}"
-                  th:object="${client}" method="post" class="needs-validation" novalidate>
-
-                <!-- Скрытые поля -->
-                <input type="hidden" th:field="*{id}" />
-
-                <!-- Основная информация -->
-                <div class="form-section">
-                    <h4 class="form-section-title">Основная информация</h4>
-                    <div class="row g-3">
-                        <!-- Имя клиента -->
-                        <div class="col-md-12">
-                            <label for="name" class="form-label required-field">Имя клиента</label>
-                            <input type="text" class="form-control" id="name" th:field="*{name}"
-                                   th:classappend="${#fields.hasErrors('name')} ? 'is-invalid'" required>
-                            <div class="invalid-feedback" th:if="${#fields.hasErrors('name')}" th:errors="*{name}">
-                                Пожалуйста, введите имя клиента.
-                            </div>
-                            <div class="form-text text-muted">
-                                Укажите полное имя клиента или название организации
-                            </div>
-                        </div>
-
-                        <!-- Описание -->
-                        <div class="col-12">
-                            <label for="description" class="form-label">Описание</label>
-                            <textarea class="form-control" id="description" th:field="*{description}" rows="3"
-                                      placeholder="Краткое описание клиента или дополнительная информация"></textarea>
-                        </div>
+    <form th:action="${template.id != null} ? @{/export/templates/{id}/edit(id=${template.id})} : @{/export/templates/create}"
+          th:object="${template}" method="post">
+        <input type="hidden" th:field="*{id}"/>
+        <input type="hidden" th:field="*{clientId}"/>
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Основные параметры</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="name" class="form-label required-field">Название шаблона</label>
+                        <input type="text" id="name" class="form-control" th:field="*{name}" required>
                     </div>
-                </div>
-
-                <!-- Контактная информация -->
-                <div class="form-section">
-                    <h4 class="form-section-title">Контактная информация</h4>
-                    <div class="row g-3">
-                        <!-- Контактный email -->
-                        <div class="col-md-6">
-                            <label for="contactEmail" class="form-label">Email</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fas fa-envelope"></i></span>
-                                <input type="email" class="form-control" id="contactEmail" th:field="*{contactEmail}"
-                                       th:classappend="${#fields.hasErrors('contactEmail')} ? 'is-invalid'"
-                                       placeholder="email@example.com">
-                                <div class="invalid-feedback" th:if="${#fields.hasErrors('contactEmail')}" th:errors="*{contactEmail}">
-                                    Пожалуйста, введите корректный email.
+                    <div class="col-md-6">
+                        <label for="entityType" class="form-label required-field">Тип сущности</label>
+                        <select id="entityType" class="form-select" th:field="*{entityType}" required>
+                            <option value="">-- Выберите тип --</option>
+                            <option th:each="type : ${T(com.java.model.enums.EntityType).values()}"
+                                    th:value="${type}" th:text="${type.displayName}">Тип</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="fileFormat" class="form-label required-field">Формат файла</label>
+                        <select id="fileFormat" class="form-select" th:field="*{fileFormat}" required>
+                            <option value="CSV">CSV</option>
+                            <option value="XLSX">XLSX</option>
+                            <option value="XLS">XLS</option>
+                            <option value="TXT">TXT</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <div id="csvSettings" class="row g-3 mt-0">
+                            <div class="col-md-4">
+                                <label for="csvEncoding" class="form-label">Кодировка</label>
+                                <select id="csvEncoding" class="form-select" th:field="*{csvEncoding}">
+                                    <option value="UTF-8">UTF-8</option>
+                                    <option value="Windows-1251">Windows-1251</option>
+                                    <option value="ISO-8859-1">ISO-8859-1</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="csvDelimiter" class="form-label">Разделитель</label>
+                                <select id="csvDelimiter" class="form-select" th:field="*{csvDelimiter}">
+                                    <option value=";">; (точка с запятой)</option>
+                                    <option value=",">, (запятая)</option>
+                                    <option value="\t">Tab</option>
+                                    <option value="|">|</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="csvQuoteChar" class="form-label">Символ кавычек</label>
+                                <input type="text" id="csvQuoteChar" class="form-control" th:field="*{csvQuoteChar}"/>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" type="checkbox" th:field="*{csvIncludeHeader}">
+                                    <label class="form-check-label">Заголовок</label>
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Контактный телефон -->
-                        <div class="col-md-6">
-                            <label for="contactPhone" class="form-label">Телефон</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fas fa-phone"></i></span>
-                                <input type="text" class="form-control" id="contactPhone" th:field="*{contactPhone}"
-                                       placeholder="+7 (XXX) XXX-XX-XX">
+                        <div id="xlsxSettings" class="row g-3 mt-0">
+                            <div class="col-md-6">
+                                <label for="xlsxSheetName" class="form-label">Имя листа</label>
+                                <input type="text" id="xlsxSheetName" class="form-control" th:field="*{xlsxSheetName}"/>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-center">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" type="checkbox" th:field="*{xlsxAutoSizeColumns}">
+                                    <label class="form-check-label">Автоширина</label>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    <div class="col-md-6">
+                        <label for="maxRowsPerFile" class="form-label">Макс. строк в файле</label>
+                        <input type="number" id="maxRowsPerFile" class="form-control" th:field="*{maxRowsPerFile}" min="0">
+                    </div>
+                    <div class="col-12">
+                        <label for="description" class="form-label">Описание</label>
+                        <textarea id="description" class="form-control" th:field="*{description}" rows="2"></textarea>
+                    </div>
                 </div>
-
-                <!-- Кнопки действий -->
-                <div class="d-flex justify-content-between mt-4">
-                    <a th:href="${client.id != null ? '/clients/' + client.id : '/clients'}" class="btn btn-outline-secondary">
-                        <i class="fas fa-times me-1"></i>Отмена
-                    </a>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save me-1"></i>
-                        <span th:text="${client.id != null ? 'Сохранить изменения' : 'Создать клиента'}">Сохранить</span>
-                    </button>
-                </div>
-            </form>
+            </div>
         </div>
-    </div>
-</section>
 
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Поля</h5>
+                <button type="submit" name="addField" class="btn btn-sm btn-secondary">Добавить поле</button>
+            </div>
+            <div class="card-body">
+                <div th:if="${#lists.isEmpty(template.fields)}" class="text-center text-muted">Полей нет</div>
+                <div th:each="field, iterStat : *{fields}" class="row g-3 mb-3">
+                    <input type="hidden" th:field="*{fields[__${iterStat.index}__].id}" />
+                    <div class="col-md-4">
+                        <label class="form-label required-field">Поле сущности</label>
+                        <select class="form-select" th:field="*{fields[__${iterStat.index}__].entityFieldName}" required>
+                            <option value="">-- Поле --</option>
+                            <option th:each="f : ${availableFields}" th:value="${f}" th:text="${f}"></option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label required-field">Колонка экспорта</label>
+                        <input type="text" class="form-control" th:field="*{fields[__${iterStat.index}__].exportColumnName}" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label required-field">Порядок</label>
+                        <input type="number" class="form-control" th:field="*{fields[__${iterStat.index}__].fieldOrder}" required>
+                    </div>
+                    <div class="col-md-1 d-flex align-items-center">
+                        <div class="form-check mt-4">
+                            <input class="form-check-input" type="checkbox" th:field="*{fields[__${iterStat.index}__].isIncluded}">
+                            <label class="form-check-label">Вкл.</label>
+                        </div>
+                    </div>
+                    <div class="col-md-1 d-flex align-items-center">
+                        <button type="submit" name="removeField" th:value="${iterStat.index}" class="btn btn-sm btn-danger mt-4">&times;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Фильтры</h5>
+                <button type="submit" name="addFilter" class="btn btn-sm btn-secondary">Добавить фильтр</button>
+            </div>
+            <div class="card-body">
+                <div th:if="${#lists.isEmpty(template.filters)}" class="text-center text-muted">Фильтров нет</div>
+                <div th:each="filter, iterStat : *{filters}" class="row g-3 mb-3">
+                    <input type="hidden" th:field="*{filters[__${iterStat.index}__].id}" />
+                    <div class="col-md-4">
+                        <label class="form-label required-field">Поле</label>
+                        <select class="form-select" th:field="*{filters[__${iterStat.index}__].fieldName}" required>
+                            <option value="">-- Поле --</option>
+                            <option th:each="f : ${availableFields}" th:value="${f}" th:text="${f}"></option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label required-field">Тип</label>
+                        <select class="form-select" th:field="*{filters[__${iterStat.index}__].filterType}" required>
+                            <option value="">-- Тип --</option>
+                            <option th:each="type : ${T(com.java.model.enums.FilterType).values()}"
+                                    th:value="${type}" th:text="${type.displayName}">Тип</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label required-field">Значение</label>
+                        <input type="text" class="form-control" th:field="*{filters[__${iterStat.index}__].filterValue}" required>
+                    </div>
+                    <div class="col-md-1 d-flex align-items-center">
+                        <div class="form-check mt-4">
+                            <input class="form-check-input" type="checkbox" th:field="*{filters[__${iterStat.index}__].isActive}">
+                            <label class="form-check-label">Вкл.</label>
+                        </div>
+                    </div>
+                    <div class="col-md-1 d-flex align-items-center">
+                        <button type="submit" name="removeFilter" th:value="${iterStat.index}" class="btn btn-sm btn-danger mt-4">&times;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-end">
+            <button type="submit" class="btn btn-primary">
+                <span th:text="${template.id != null ? 'Сохранить' : 'Создать'}">Сохранить</span>
+            </button>
+        </div>
+    </form>
+</section>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Валидация формы на стороне клиента
-        const forms = document.querySelectorAll('.needs-validation');
-        Array.from(forms).forEach(form => {
-            form.addEventListener('submit', event => {
-                if (!form.checkValidity()) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                }
-                form.classList.add('was-validated');
-            }, false);
-        });
+        const formatSelect = document.getElementById('fileFormat');
+        const csvSettings = document.getElementById('csvSettings');
+        const xlsxSettings = document.getElementById('xlsxSettings');
 
-        // Плавный скроллинг к полям с ошибками
-        const invalidFields = document.querySelectorAll('.is-invalid');
-        if (invalidFields.length > 0) {
-            invalidFields[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-            invalidFields[0].focus();
+        function toggleSettings() {
+            const format = formatSelect.value;
+            if (csvSettings) {
+                csvSettings.classList.toggle('d-none', format !== 'CSV');
+            }
+            if (xlsxSettings) {
+                xlsxSettings.classList.toggle('d-none', format !== 'XLSX');
+            }
         }
+
+        formatSelect.addEventListener('change', toggleSettings);
+        toggleSettings();
     });
 </script>
 </body>

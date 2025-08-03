@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Запуск экспорта',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Экспорт',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Запуск экспорта</title>
+    <style></style>
+</head>
+<body>
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-file-export me-2"></i>Запуск экспорта
+            </h5>
+        </div>
+        <div class="card-body">
+            <form th:action="@{/export/client/{id}/start(id=${clientId})}" method="post">
+                <div class="mb-3">
+                    <label for="templateId" class="form-label">Шаблон</label>
+                    <select id="templateId" name="templateId" class="form-select" required>
+                        <option th:each="tmpl : ${templates}"
+                                th:value="${tmpl.id}"
+                                th:text="${tmpl.name}">Template</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="operationIds" class="form-label">ID операций (через запятую)</label>
+                    <input type="text" id="operationIds" name="operationIds" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-play me-1"></i>Начать экспорт
+                </button>
+            </form>
+        </div>
+    </div>
+</section>
+<script></script>
+</body>
+</html>
