@@ -22,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.Collections;
+
 /**
  * Главный сервис для управления экспортом
  */
@@ -74,12 +76,12 @@ public class ExportService {
         fileOperation = fileOperationRepository.save(fileOperation);
 
         // Создаем сессию экспорта
+        var operationIds = request.getOperationIds() == null ? Collections.<Long>emptyList() : request.getOperationIds();
         ExportSession session = ExportSession.builder()
                 .fileOperation(fileOperation)
                 .template(template)
-                .sourceOperationIds((request.getOperationIds() != null && !request.getOperationIds().isEmpty())
-                        ? objectMapper.valueToTree(request.getOperationIds()).toString()
-                        : null)
+                // Храним всегда JSON-массив, даже если список пуст, чтобы избежать NULL в БД
+                .sourceOperationIds(objectMapper.valueToTree(operationIds).toString())
                 .dateFilterFrom(request.getDateFrom())
                 .dateFilterTo(request.getDateTo())
                 .appliedFilters(request.getAdditionalFilters() != null ?
