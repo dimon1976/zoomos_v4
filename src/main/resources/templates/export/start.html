@@ -62,8 +62,7 @@
                                 </td>
                                 <td th:text="${op.id}">1</td>
                                 <td th:text="${op.fileName}">file.csv</td>
-                                <td th:text="${#temporals.format(op.startedAt, 'dd.MM.yyyy HH:mm')}">01.01.2024 00:00
-                                </td>
+                                <td th:text="${#temporals.format(op.startedAt, 'dd.MM.yyyy HH:mm')}">01.01.2024 00:00</td>
                             </tr>
                             </tbody>
                         </table>
@@ -77,15 +76,17 @@
 
                 <div id="filtersContainer" class="mb-3">
                     <div th:each="tmpl : ${templates}"
-                         th:attr="data-template-id=${tmpl.id},data-next-index=${#lists.size(tmpl.filters)}"
+                         th:attr="data-template-id=${tmpl.id},data-next-index=${#lists.size(tmpl.filters)},data-fields=''"
                          class="template-filters d-none">
                         <div class="filters">
                             <div class="filter-row mb-2" th:each="filter, iterStat : ${tmpl.filters}">
                                 <div class="row g-2">
                                     <div class="col-md-3">
-                                        <input type="text" class="form-control"
-                                               th:name="${'additionalFilters[' + iterStat.index + '].fieldName'}"
-                                               th:value="${filter.fieldName}" placeholder="Поле"/>
+                                        <select class="form-select"
+                                                th:name="${'additionalFilters[' + iterStat.index + '].fieldName'}"
+                                                th:attr="data-selected=${filter.fieldName}">
+                                            <option value="">-- Поле --</option>
+                                        </select>
                                     </div>
                                     <div class="col-md-3">
                                         <select class="form-select"
@@ -117,8 +118,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2"
-                                onclick="addFilterRow(this)">
+                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addFilterRow(this)">
                             Добавить фильтр
                         </button>
                     </div>
@@ -132,7 +132,7 @@
     </div>
 </section>
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('DOMContentLoaded', function() {
         const templateSelect = document.getElementById('templateId');
         const filtersBlocks = document.querySelectorAll('.template-filters');
         const exportAll = document.getElementById('exportAll');
@@ -155,7 +155,41 @@
         function addFilterRow(button) {
             const block = button.closest('.template-filters');
             const index = parseInt(block.dataset.nextIndex || '0');
-            const rowHtml = `<div class="filter-row mb-2"><div class="row g-2"><div class="col-md-3"><input type="text" class="form-control" name="additionalFilters[${index}].fieldName" placeholder="Поле"></div><div class="col-md-3"><select class="form-select" name="additionalFilters[${index}].filterType"><option value="EQUALS">Равно</option><option value="NOT_EQUALS">Не равно</option><option value="CONTAINS">Содержит</option><option value="STARTS_WITH">Начинается с</option><option value="ENDS_WITH">Заканчивается на</option><option value="GREATER_THAN">Больше</option><option value="LESS_THAN">Меньше</option><option value="BETWEEN">Между</option><option value="IN">Входит в список</option><option value="IS_NULL">Пусто</option><option value="IS_NOT_NULL">Не пусто</option></select></div><div class="col-md-4"><input type="text" class="form-control" name="additionalFilters[${index}].filterValue" placeholder="Значение"></div><div class="col-md-2"><button type="button" class="btn btn-danger btn-sm" onclick="removeFilterRow(this)"><i class="fas fa-trash"></i></button></div></div></div>`;
+            const fields = (block.dataset.fields || '').split(',');
+            const options = fields.map(f => `<option value="${f}">${f}</option>`).join('');
+            const rowHtml = `
+                <div class="filter-row mb-2">
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <select class="form-select" name="additionalFilters[${index}].fieldName">
+                                <option value="">-- Поле --</option>${options}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select" name="additionalFilters[${index}].filterType">
+                                <option value="EQUALS">Равно</option>
+                                <option value="NOT_EQUALS">Не равно</option>
+                                <option value="CONTAINS">Содержит</option>
+                                <option value="STARTS_WITH">Начинается с</option>
+                                <option value="ENDS_WITH">Заканчивается на</option>
+                                <option value="GREATER_THAN">Больше</option>
+                                <option value="LESS_THAN">Меньше</option>
+                                <option value="BETWEEN">Между</option>
+                                <option value="IN">Входит в список</option>
+                                <option value="IS_NULL">Пусто</option>
+                                <option value="IS_NOT_NULL">Не пусто</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" name="additionalFilters[${index}].filterValue" placeholder="Значение">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-danger btn-sm" onclick="removeFilterRow(this)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
             block.querySelector('.filters').insertAdjacentHTML('beforeend', rowHtml);
             block.dataset.nextIndex = index + 1;
         }
@@ -169,6 +203,23 @@
         window.addFilterRow = addFilterRow;
         window.removeFilterRow = removeFilterRow;
 
+        function loadTemplateFields(templateId) {
+            if (!templateId) return;
+            fetch(`/export/template/${templateId}/fields`)
+                .then(res => res.json())
+                .then(fields => {
+                    const block = document.querySelector(`.template-filters[data-template-id="${templateId}"]`);
+                    if (!block) return;
+                    block.dataset.fields = fields.join(',');
+                    const options = fields.map(f => `<option value="${f}">${f}</option>`).join('');
+                    block.querySelectorAll('select[name$=".fieldName"]').forEach(sel => {
+                        const current = sel.dataset.selected || sel.value;
+                        sel.innerHTML = `<option value="">-- Поле --</option>` + options;
+                        sel.value = current;
+                    });
+                });
+        }
+
         function updateFilters() {
             filtersBlocks.forEach(block => {
                 const active = block.getAttribute('data-template-id') === templateSelect.value;
@@ -176,6 +227,7 @@
                 block.querySelectorAll('input, select, button').forEach(el => el.disabled = !active);
                 if (active) {
                     updateIndexes(block);
+                    loadTemplateFields(block.getAttribute('data-template-id'));
                 }
             });
         }

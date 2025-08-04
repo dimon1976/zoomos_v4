@@ -7,6 +7,7 @@ import com.java.model.Client;
 import com.java.model.FileOperation;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
+import com.java.service.EntityFieldService;
 import com.java.service.exports.ExportService;
 import com.java.service.exports.ExportTemplateService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Контроллер для операций экспорта
@@ -36,6 +38,7 @@ public class ExportController {
     private final ExportService exportService;
     private final FileOperationRepository fileOperationRepository;
     private final ExportSessionRepository sessionRepository;
+    private final EntityFieldService fieldService;
 
     /**
      * Страница запуска экспорта для клиента
@@ -54,6 +57,17 @@ public class ExportController {
         model.addAttribute("recentOperations", recentOperations);
         model.addAttribute("request", new ExportRequestDto());
         return "export/start";
+    }
+
+    /**
+     * Возвращает список полей для шаблона
+     */
+    @GetMapping("/template/{templateId}/fields")
+    @ResponseBody
+    public List<String> getTemplateFields(@PathVariable Long templateId) {
+        return templateService.getTemplate(templateId)
+                .map(t -> fieldService.getFields(t.getEntityType()))
+                .orElseGet(ArrayList::new);
     }
 
     /**
@@ -81,7 +95,9 @@ public class ExportController {
                 }
             }
 
-            request.setOperationIds(ops.isEmpty() ? null : ops);
+            // Even when exporting the entire table, keep an empty list instead of null
+            // to avoid null value issues in subsequent processing
+            request.setOperationIds(ops);
 
             ExportSessionDto session = exportService.startExport(request, clientId);
 
