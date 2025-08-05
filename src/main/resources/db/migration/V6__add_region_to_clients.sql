@@ -1,0 +1,2 @@
+ALTER TABLE clients ADD COLUMN region_code VARCHAR(10);
+ALTER TABLE clients ADD COLUMN region_name VARCHAR(255);

@@ -42,6 +42,11 @@
                     <input type="text" id="operationIds" name="operationIds" class="form-control">
                 </div>
 
+                <div class="mb-3">
+                    <label for="maxReportAgeDays" class="form-label">Макс. давность отчёта (дней)</label>
+                    <input type="number" id="maxReportAgeDays" class="form-control" th:field="*{maxReportAgeDays}" min="1">
+                </div>
+
                 <div class="mb-3" th:if="${!#lists.isEmpty(recentOperations)}">
                     <label class="form-label">Последние операции</label>
                     <div class="table-responsive">

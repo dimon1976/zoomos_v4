@@ -6,8 +6,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 
 /**
@@ -21,6 +23,8 @@ public class TaskReportExportStrategy implements ExportStrategy {
 
     private final JdbcTemplate jdbcTemplate;
     private final DefaultExportStrategy defaultStrategy;
+
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     @Override
     public String getName() {
@@ -48,11 +52,16 @@ public class TaskReportExportStrategy implements ExportStrategy {
             throw new IllegalArgumentException("Не указаны операции задания и отчета");
         }
 
+        String clientRegionCode = (String) context.get("clientRegionCode");
+        int maxReportAgeDays = context.get("maxReportAgeDays") != null
+                ? ((Integer) context.get("maxReportAgeDays"))
+                : 3;
+
         // 1. Загружаем данные задания
         List<Map<String, Object>> taskData = loadTaskData(taskOperationId);
         log.debug("Загружено {} записей из задания", taskData.size());
 
-        // 2. Создаем индекс задания по ключевым полям (например, productId)
+        // 2. Создаем индекс задания по номеру задания
         Map<String, Map<String, Object>> taskIndex = createTaskIndex(taskData);
 
         // 3. Обрабатываем данные отчета
@@ -61,20 +70,20 @@ public class TaskReportExportStrategy implements ExportStrategy {
 
         for (Map<String, Object> reportRow : data) {
             String key = getRowKey(reportRow);
-            processedKeys.add(key);
 
             Map<String, Object> taskRow = taskIndex.get(key);
 
             if (taskRow != null) {
-                // Запись есть в задании - обрабатываем
-                Map<String, Object> processedRow = processReportRow(reportRow, taskRow, template);
-
-                // Дополняем данными из справочника если необходимо
-                enrichWithHandbookData(processedRow);
-
-                processedData.add(processedRow);
+                Object retailerCode = taskRow.get("product_additional4");
+                if (retailerCode != null && !retailerCode.toString().isBlank()) {
+                    processedKeys.add(key);
+                    Map<String, Object> processedRow = processReportRow(reportRow, taskRow, maxReportAgeDays);
+                    enrichWithHandbookData(processedRow, clientRegionCode);
+                    processedData.add(processedRow);
+                } else {
+                    log.debug("Пропущена запись отчета без кода сети: {}", key);
+                }
             } else {
-                // Записи нет в задании - пропускаем или помечаем
                 log.debug("Пропущена запись отчета, отсутствующая в задании: {}", key);
             }
         }
@@ -82,9 +91,13 @@ public class TaskReportExportStrategy implements ExportStrategy {
         // 4. Добавляем записи из задания, которых нет в отчете
         for (Map.Entry<String, Map<String, Object>> entry : taskIndex.entrySet()) {
             if (!processedKeys.contains(entry.getKey())) {
-                Map<String, Object> missingRow = createMissingReportRow(entry.getValue(), template);
-                processedData.add(missingRow);
-                log.debug("Добавлена отсутствующая запись из задания: {}", entry.getKey());
+                Map<String, Object> taskRow = entry.getValue();
+                Object retailerCode = taskRow.get("product_additional4");
+                if (retailerCode != null && !retailerCode.toString().isBlank()) {
+                    Map<String, Object> missingRow = createMissingReportRow(taskRow, template);
+                    processedData.add(missingRow);
+                    log.debug("Добавлена отсутствующая запись из задания: {}", entry.getKey());
+                }
             }
         }
 
@@ -118,9 +131,8 @@ public class TaskReportExportStrategy implements ExportStrategy {
      * Получает ключ записи для сопоставления
      */
     private String getRowKey(Map<String, Object> row) {
-        // Используем productId как ключ
-        Object productId = row.get("product_id");
-        return productId != null ? productId.toString() : "";
+        Object taskNumber = row.get("product_additional1");
+        return taskNumber != null ? taskNumber.toString() : "";
     }
 
     /**
@@ -129,57 +141,74 @@ public class TaskReportExportStrategy implements ExportStrategy {
     private Map<String, Object> processReportRow(
             Map<String, Object> reportRow,
             Map<String, Object> taskRow,
-            ExportTemplate template) {
+            int maxReportAgeDays) {
 
         Map<String, Object> processedRow = new HashMap<>(reportRow);
 
-        // Применяем правила модификации
-        // Например, проверяем и корректируем цены
-        Object reportPrice = reportRow.get("competitor_price");
-        Object taskPrice = taskRow.get("product_price");
+        processedRow.put("product_additional1", taskRow.get("product_additional1"));
+        processedRow.put("product_additional4", taskRow.get("product_additional4"));
 
-        if (reportPrice != null && taskPrice != null) {
+        String dateStr = (String) processedRow.get("competitor_date");
+        if (dateStr == null) {
+            processedRow.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
+        } else {
             try {
-                double repPrice = Double.parseDouble(reportPrice.toString());
-                double tskPrice = Double.parseDouble(taskPrice.toString());
-
-                // Пример правила: если разница больше 50%, помечаем
-                if (Math.abs(repPrice - tskPrice) / tskPrice > 0.5) {
-                    processedRow.put("price_deviation_flag", "HIGH");
+                LocalDate date = LocalDate.parse(dateStr, DATE_FORMAT);
+                LocalDate minDate = LocalDate.now().minusDays(maxReportAgeDays - 1L);
+                if (date.isBefore(minDate)) {
+                    processedRow.put("competitor_date", minDate.format(DATE_FORMAT));
                 }
-            } catch (NumberFormatException e) {
-                log.warn("Ошибка сравнения цен", e);
+            } catch (DateTimeParseException e) {
+                log.warn("Некорректная дата отчета: {}", dateStr);
             }
         }
-
-        // Корректируем даты
-        if (processedRow.get("competitor_date") == null) {
-            processedRow.put("competitor_date", LocalDateTime.now().format(
-                    DateTimeFormatter.ofPattern("dd.MM.yyyy")
-            ));
-        }
-
         return processedRow;
     }
 
     /**
      * Дополняет данными из справочника
      */
-    private void enrichWithHandbookData(Map<String, Object> row) {
-        String competitorName = (String) row.get("competitor_name");
+    private void enrichWithHandbookData(Map<String, Object> row, String clientRegionCode) {
+        String competitorUrl = (String) row.get("competitor_url");
+        if (competitorUrl == null || !competitorUrl.contains("market.yandex.ru")) {
+            return;
+        }
 
-        if (competitorName != null) {
-            String sql = "SELECT * FROM av_handbook WHERE handbook_retail_network = ? LIMIT 1";
-            List<Map<String, Object>> handbooks = jdbcTemplate.queryForList(sql, competitorName);
+        boolean need = isBlank(row.get("product_additional4")) ||
+                isBlank(row.get("competitor_name")) ||
+                isBlank(row.get("region")) ||
+                isBlank(row.get("region_address"));
 
-            if (!handbooks.isEmpty()) {
-                Map<String, Object> handbook = handbooks.get(0);
+        if (!need) {
+            return;
+        }
+        String normalizedRegion = normalizeRegionCode(clientRegionCode);
+        String altRegion = null;
+        if (normalizedRegion != null) {
+            altRegion = normalizedRegion.length() == 2 ? "0" + normalizedRegion
+                    : (normalizedRegion.length() == 3 && normalizedRegion.startsWith("0")
+                    ? normalizedRegion.substring(1) : null);
+        }
 
-                // Добавляем данные из справочника
-                row.put("region", handbook.get("handbook_region_name"));
-                row.put("region_address", handbook.get("handbook_physical_address"));
-                row.put("price_zone", handbook.get("handbook_price_zone_code"));
-            }
+        List<Map<String, Object>> handbooks;
+        if (normalizedRegion != null && altRegion != null) {
+            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? AND handbook_region_code IN (?, ?) LIMIT 1";
+            handbooks = jdbcTemplate.queryForList(sql, "market.yandex.ru", normalizedRegion, altRegion);
+        } else if (normalizedRegion != null) {
+            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? AND handbook_region_code = ? LIMIT 1";
+            handbooks = jdbcTemplate.queryForList(sql, "market.yandex.ru", normalizedRegion);
+        } else {
+            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? LIMIT 1";
+            handbooks = jdbcTemplate.queryForList(sql, "market.yandex.ru");
+        }
+
+        if (!handbooks.isEmpty()) {
+            Map<String, Object> handbook = handbooks.get(0);
+            row.putIfAbsent("product_additional4", handbook.get("handbook_retail_network_code"));
+            row.putIfAbsent("competitor_name", handbook.get("handbook_retail_network"));
+            row.putIfAbsent("region", handbook.get("handbook_region_code"));
+            row.putIfAbsent("region_address", handbook.get("handbook_region_name"));
+
         }
     }
 
@@ -193,16 +222,26 @@ public class TaskReportExportStrategy implements ExportStrategy {
         Map<String, Object> row = new HashMap<>();
 
         // Копируем основные поля из задания
-        row.put("product_id", taskRow.get("product_id"));
+        row.put("product_additional1", taskRow.get("product_additional1"));
+        row.put("product_additional4", taskRow.get("product_additional4"));
         row.put("product_name", taskRow.get("product_name"));
         row.put("product_brand", taskRow.get("product_brand"));
         row.put("product_price", taskRow.get("product_price"));
 
-        // Помечаем как отсутствующий в отчете
+
         row.put("competitor_stock_status", "НЕТ В НАЛИЧИИ");
         row.put("competitor_price", null);
         row.put("report_status", "MISSING");
 
         return row;
+    }
+
+    private boolean isBlank(Object value) {
+        return value == null || value.toString().trim().isEmpty();
+    }
+
+    private String normalizeRegionCode(String code) {
+        if (code == null) return null;
+        return code.startsWith("0") ? code.substring(1) : code;
     }
 }

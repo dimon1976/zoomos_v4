@@ -27,6 +27,10 @@ public class ClientDto {
 
     private String contactPhone;
 
+    private String regionCode;
+
+    private String regionName;
+
     // Количество файловых операций (для отображения в списке)
     private Integer fileOperationsCount;
 }

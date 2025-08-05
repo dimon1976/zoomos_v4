@@ -102,6 +102,10 @@ public class ExportProcessorService {
             Map<String, Object> context = new HashMap<>();
             context.put("operationIds", request.getOperationIds());
             context.put("session", session);
+            context.put("maxReportAgeDays", request.getMaxReportAgeDays());
+            if (session.getFileOperation() != null && session.getFileOperation().getClient() != null) {
+                context.put("clientRegionCode", session.getFileOperation().getClient().getRegionCode());
+            }
 
             // Для стратегии TASK_REPORT нужны дополнительные параметры
             if (template.getExportStrategy().name().equals("TASK_REPORT") &&

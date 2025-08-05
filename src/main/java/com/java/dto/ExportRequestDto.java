@@ -39,6 +39,10 @@ public class ExportRequestDto {
     private String csvDelimiter;
     private String csvEncoding;
 
+    // Максимально допустимая давность отчёта в днях
+    @Builder.Default
+    private Integer maxReportAgeDays = 3;
+
     @Builder.Default
     private Boolean asyncMode = true;
 }

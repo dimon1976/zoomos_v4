@@ -99,6 +99,10 @@
                         <i class="fas fa-envelope text-muted me-2"></i>
                         <span th:text="${client.contactEmail}">email@example.com</span>
                     </div>
+                    <div th:if="${client.regionName}" class="d-flex align-items-center mt-2 client-stats">
+                        <i class="fas fa-map-marker-alt text-muted me-2"></i>
+                        <span th:text="${client.regionName}">Регион</span>
+                    </div>
                 </div>
                 <div class="card-footer bg-transparent">
                     <div class="btn-group w-100">

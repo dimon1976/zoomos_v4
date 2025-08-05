@@ -38,6 +38,12 @@ public class Client {
     @Column(name = "contact_phone")
     private String contactPhone;
 
+    @Column(name = "region_code")
+    private String regionCode;
+
+    @Column(name = "region_name")
+    private String regionName;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
