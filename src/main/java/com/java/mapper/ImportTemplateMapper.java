@@ -31,6 +31,7 @@ public class ImportTemplateMapper {
                 .clientId(entity.getClient() != null ? entity.getClient().getId() : null)
                 .clientName(entity.getClient() != null ? entity.getClient().getName() : null)
                 .entityType(entity.getEntityType())
+                .dataSourceType(entity.getDataSourceType())
                 .duplicateStrategy(entity.getDuplicateStrategy())
                 .errorStrategy(entity.getErrorStrategy())
                 .fileType(entity.getFileType())
@@ -58,6 +59,7 @@ public class ImportTemplateMapper {
                 .description(dto.getDescription())
                 .client(client)
                 .entityType(dto.getEntityType())
+                .dataSourceType(dto.getDataSourceType())
                 .duplicateStrategy(dto.getDuplicateStrategy())
                 .errorStrategy(dto.getErrorStrategy())
                 .fileType(dto.getFileType())
@@ -87,6 +89,7 @@ public class ImportTemplateMapper {
         entity.setName(dto.getName());
         entity.setDescription(dto.getDescription());
         entity.setEntityType(dto.getEntityType());
+        entity.setDataSourceType(dto.getDataSourceType());
         entity.setDuplicateStrategy(dto.getDuplicateStrategy());
         entity.setErrorStrategy(dto.getErrorStrategy());
         entity.setFileType(dto.getFileType());

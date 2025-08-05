@@ -1,5 +1,6 @@
 package com.java.dto;
 
+import com.java.model.enums.DataSourceType;
 import com.java.model.enums.DuplicateStrategy;
 import com.java.model.enums.EntityType;
 import com.java.model.enums.ErrorStrategy;
@@ -34,6 +35,10 @@ public class ImportTemplateDto {
 
     @NotNull(message = "Тип сущности обязателен")
     private EntityType entityType;
+
+    @NotNull(message = "Источник данных обязателен")
+    @Builder.Default
+    private DataSourceType dataSourceType = DataSourceType.FILE;
 
     private DuplicateStrategy duplicateStrategy = DuplicateStrategy.ALLOW_ALL;
 

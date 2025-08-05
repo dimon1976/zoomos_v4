@@ -1,6 +1,7 @@
 package com.java.model.entity;
 
 import com.java.model.Client;
+import com.java.model.enums.DataSourceType;
 import com.java.model.enums.DuplicateStrategy;
 import com.java.model.enums.EntityType;
 import com.java.model.enums.ErrorStrategy;
@@ -45,6 +46,11 @@ public class ImportTemplate {
     @Enumerated(EnumType.STRING)
     @Column(name = "entity_type", nullable = false)
     private EntityType entityType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "data_source_type", nullable = false)
+    @Builder.Default
+    private DataSourceType dataSourceType = DataSourceType.FILE;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "duplicate_strategy", nullable = false)

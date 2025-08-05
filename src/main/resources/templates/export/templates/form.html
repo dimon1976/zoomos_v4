@@ -36,6 +36,14 @@
                         </select>
                     </div>
                     <div class="col-md-6">
+                        <label for="exportStrategy" class="form-label required-field">Стратегия экспорта</label>
+                        <select id="exportStrategy" class="form-select" th:field="*{exportStrategy}" required>
+                            <option value="">-- Выберите стратегию --</option>
+                            <option th:each="strategy : ${T(com.java.model.enums.ExportStrategy).values()}"
+                                    th:value="${strategy}" th:text="${strategy.displayName}">Стратегия</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
                         <label for="fileFormat" class="form-label required-field">Формат файла</label>
                         <select id="fileFormat" class="form-select" th:field="*{fileFormat}" required>
                             <option value="CSV">CSV</option>

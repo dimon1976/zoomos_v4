@@ -77,6 +77,14 @@
                              th:errors="*{entityType}">Ошибка</div>
                     </div>
 
+                    <div class="col-md-6">
+                        <label for="dataSourceType" class="form-label required-field">Источник данных</label>
+                        <select class="form-select" id="dataSourceType" th:field="*{dataSourceType}" required>
+                            <option th:each="type : ${T(com.java.model.enums.DataSourceType).values()}"
+                                    th:value="${type}" th:text="${type}">Источник</option>
+                        </select>
+                    </div>
+
                     <div class="col-12">
                         <label for="description" class="form-label">Описание</label>
                         <textarea class="form-control" id="description" th:field="*{description}"
