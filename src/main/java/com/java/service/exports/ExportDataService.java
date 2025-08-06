@@ -3,15 +3,20 @@ package com.java.service.exports;
 import com.java.dto.ExportTemplateFilterDto;
 import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateFilter;
+import com.java.model.enums.EntityType;
+import com.java.model.enums.ExportStrategy;
 import com.java.model.enums.FilterType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -23,6 +28,13 @@ import java.util.stream.Collectors;
 public class ExportDataService {
 
     private final JdbcTemplate jdbcTemplate;
+
+    /**
+     * Ограничение на максимальное количество записей для предотвращения
+     * переполнения памяти при экспорте больших данных
+     */
+    @Value("${export.max-rows:100000}")
+    private int maxRows;
 
     /**
      * Загружает данные для экспорта
@@ -109,8 +121,15 @@ public class ExportDataService {
             }
         }
 
-        // Добавляем сортировку
-        sql.append(" ORDER BY created_at DESC");
+        // Добавляем сортировку и ограничение
+        if (template.getExportStrategy() == ExportStrategy.TASK_REPORT
+                && template.getEntityType() == EntityType.AV_DATA) {
+            sql.append(" AND data_source = 'REPORT'");
+            log.debug("Применен фильтр data_source=REPORT для стратегии TASK_REPORT");
+        }
+
+        sql.append(" ORDER BY created_at DESC LIMIT ?");
+        params.add(maxRows);
 
         // Выполняем запрос
         String finalSql = sql.toString();
@@ -118,7 +137,10 @@ public class ExportDataService {
         log.debug("Параметры: {}", params);
 
         List<Map<String, Object>> data = jdbcTemplate.queryForList(finalSql, params.toArray());
-        log.info("Загружено {} записей", data.size());
+        log.info("Загружено {} записей (ограничение: {})", data.size(), maxRows);
+        if (data.size() >= maxRows) {
+            log.warn("Результат усечен до {} записей, добавьте фильтры для уменьшения объема данных", maxRows);
+        }
         if (!data.isEmpty()) {
             log.debug("Пример строки: ключи={}, значения={}", data.get(0).keySet(), data.get(0));
         }

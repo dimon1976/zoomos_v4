@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 
 /**
  * Стратегия экспорта Задание-Отчет
- * Сверяет данные отчета с заданием, дополняет из справочника
+ * Оставляет только строки отчета, для которых есть соответствующая запись задания
  */
 @Component("taskReportExportStrategy")
 @Slf4j
@@ -25,7 +25,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
     private final JdbcTemplate jdbcTemplate;
     private final DefaultExportStrategy defaultStrategy;
 
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     @Override
     public String getName() {
@@ -44,8 +44,12 @@ public class TaskReportExportStrategy implements ExportStrategy {
             Map<String, Object> context) {
 
         log.info("Применение стратегии Задание-Отчет");
+        log.debug("Входных записей: {}", data.size());
+        long reportRows = data.stream()
+                .filter(row -> "REPORT".equals(row.get("data_source")))
+                .count();
+        log.debug("Из них отчеты: {}", reportRows);
 
-        // Получаем ID операций
         Long taskOperationId = (Long) context.get("taskOperationId");
         String clientRegionCode = (String) context.get("clientRegionCode");
         int maxReportAgeDays = context.get("maxReportAgeDays") != null
@@ -58,8 +62,8 @@ public class TaskReportExportStrategy implements ExportStrategy {
             taskData = loadTaskData(taskOperationId);
         } else {
             Set<String> taskNumbers = data.stream()
-                    .map(this::getRowKey)
-                    .filter(key -> key != null && !key.isBlank())
+                    .map(row -> Objects.toString(row.get("product_additional1"), null))
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
 
             if (taskNumbers.isEmpty()) {
@@ -70,61 +74,50 @@ public class TaskReportExportStrategy implements ExportStrategy {
         }
         log.debug("Загружено {} записей из задания", taskData.size());
 
-        // 2. Создаем индекс задания по номеру задания
-        Map<String, Map<String, Object>> taskIndex = createTaskIndex(taskData);
+        // 2. Создаем множество допустимых комбинаций номер+код сети
+        Set<String> allowedKeys = taskData.stream()
+                .map(row -> buildKey(row.get("product_additional1"), row.get("product_additional4")))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        log.debug("Допустимых комбинаций номер+код сети: {}", allowedKeys.size());
 
-        // 3. Обрабатываем данные отчета
+        // 3. Обрабатываем строки отчета
         List<Map<String, Object>> processedData = new ArrayList<>();
-        Set<String> processedKeys = new HashSet<>();
-
+        int matched = 0;
         for (Map<String, Object> reportRow : data) {
-            String key = getRowKey(reportRow);
-
-            Map<String, Object> taskRow = taskIndex.get(key);
-
-            if (taskRow != null) {
-                Object retailerCode = taskRow.get("product_additional4");
-                if (retailerCode != null && !retailerCode.toString().isBlank()) {
-                    processedKeys.add(key);
-                    Map<String, Object> processedRow = processReportRow(reportRow, taskRow, maxReportAgeDays);
-                    enrichWithHandbookData(processedRow, clientRegionCode);
-                    processedData.add(processedRow);
-                } else {
-                    log.debug("Пропущена запись отчета без кода сети: {}", key);
-                }
-            } else {
-                log.debug("Пропущена запись отчета, отсутствующая в задании: {}", key);
+            if (!"REPORT".equals(reportRow.get("data_source"))) {
+                continue;
             }
-        }
 
-        // 4. Добавляем записи из задания, которых нет в отчете
-        for (Map.Entry<String, Map<String, Object>> entry : taskIndex.entrySet()) {
-            if (!processedKeys.contains(entry.getKey())) {
-                Map<String, Object> taskRow = entry.getValue();
-                Object retailerCode = taskRow.get("product_additional4");
-                if (retailerCode != null && !retailerCode.toString().isBlank()) {
-                    Map<String, Object> missingRow = createMissingReportRow(taskRow, template);
-                    processedData.add(missingRow);
-                    log.debug("Добавлена отсутствующая запись из задания: {}", entry.getKey());
-                }
+            String key = buildKey(reportRow.get("product_additional1"), reportRow.get("product_additional4"));
+            if (!allowedKeys.contains(key)) {
+                log.debug("Пропущена запись отчета без соответствующего задания: {}", key);
+                continue;
             }
-        }
 
-        // 5. Применяем базовую обработку полей
+            Map<String, Object> processedRow = processReportRow(reportRow, maxReportAgeDays);
+            enrichWithHandbookData(processedRow, clientRegionCode);
+            processedData.add(processedRow);
+            matched++;
+        }
+        log.debug("После сопоставления с заданиями осталось {} записей", matched);
         return defaultStrategy.processData(processedData, template, context);
     }
 
-    /**
-     * Загружает данные задания
-     */
+
+    private String buildKey(Object taskNumber, Object retailerCode) {
+        if (taskNumber == null || retailerCode == null || retailerCode.toString().isBlank()) {
+            return null;
+        }
+        return taskNumber + "|" + retailerCode;
+    }
+
+
     private List<Map<String, Object>> loadTaskData(Long operationId) {
         String sql = "SELECT * FROM av_data WHERE operation_id = ? AND data_source = 'TASK'";
         return jdbcTemplate.queryForList(sql, operationId);
     }
 
-    /**
-     * Загружает данные задания по номерам задания
-     */
     private List<Map<String, Object>> loadTaskDataByNumbers(Set<String> taskNumbers) {
         if (taskNumbers == null || taskNumbers.isEmpty()) {
             return Collections.emptyList();
@@ -134,41 +127,9 @@ public class TaskReportExportStrategy implements ExportStrategy {
         return jdbcTemplate.queryForList(sql, taskNumbers.toArray());
     }
 
-    /**
-     * Создает индекс задания по ключевым полям
-     */
-    private Map<String, Map<String, Object>> createTaskIndex(List<Map<String, Object>> taskData) {
-        Map<String, Map<String, Object>> index = new HashMap<>();
 
-        for (Map<String, Object> row : taskData) {
-            String key = getRowKey(row);
-            index.put(key, row);
-        }
-
-        return index;
-    }
-
-    /**
-     * Получает ключ записи для сопоставления
-     */
-    private String getRowKey(Map<String, Object> row) {
-        Object taskNumber = row.get("product_additional1");
-        return taskNumber != null ? taskNumber.toString() : "";
-    }
-
-    /**
-     * Обрабатывает строку отчета с учетом данных задания
-     */
-    private Map<String, Object> processReportRow(
-            Map<String, Object> reportRow,
-            Map<String, Object> taskRow,
-            int maxReportAgeDays) {
-
+    private Map<String, Object> processReportRow(Map<String, Object> reportRow, int maxReportAgeDays) {
         Map<String, Object> processedRow = new HashMap<>(reportRow);
-
-        processedRow.put("product_additional1", taskRow.get("product_additional1"));
-        processedRow.put("product_additional4", taskRow.get("product_additional4"));
-
         String dateStr = (String) processedRow.get("competitor_date");
         if (dateStr == null) {
             processedRow.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
@@ -186,9 +147,6 @@ public class TaskReportExportStrategy implements ExportStrategy {
         return processedRow;
     }
 
-    /**
-     * Дополняет данными из справочника
-     */
     private void enrichWithHandbookData(Map<String, Object> row, String clientRegionCode) {
         String competitorUrl = (String) row.get("competitor_url");
         if (competitorUrl == null || !competitorUrl.contains("market.yandex.ru")) {
@@ -231,30 +189,6 @@ public class TaskReportExportStrategy implements ExportStrategy {
             row.putIfAbsent("region_address", handbook.get("handbook_region_name"));
 
         }
-    }
-
-    /**
-     * Создает запись для товара из задания, отсутствующего в отчете
-     */
-    private Map<String, Object> createMissingReportRow(
-            Map<String, Object> taskRow,
-            ExportTemplate template) {
-
-        Map<String, Object> row = new HashMap<>();
-
-        // Копируем основные поля из задания
-        row.put("product_additional1", taskRow.get("product_additional1"));
-        row.put("product_additional4", taskRow.get("product_additional4"));
-        row.put("product_name", taskRow.get("product_name"));
-        row.put("product_brand", taskRow.get("product_brand"));
-        row.put("product_price", taskRow.get("product_price"));
-
-
-        row.put("competitor_stock_status", "НЕТ В НАЛИЧИИ");
-        row.put("competitor_price", null);
-        row.put("report_status", "MISSING");
-
-        return row;
     }
 
     private boolean isBlank(Object value) {
