@@ -88,15 +88,21 @@ public class TaskReportExportStrategy implements ExportStrategy {
             if (!"REPORT".equals(reportRow.get("data_source"))) {
                 continue;
             }
+            // перед проверкой соответствия заданию заполняем отсутствующие поля из справочника
+            Map<String, Object> workingRow = new HashMap<>(reportRow);  // Исправлено: было originalRow
+            enrichWithHandbookData(workingRow, clientRegionCode);
 
-            String key = buildKey(reportRow.get("product_additional1"), reportRow.get("product_additional4"));
+            String key = buildKey(workingRow.get("product_additional1"), workingRow.get("product_additional4"));
+            if (key == null) {
+                log.debug("Пропущена запись отчета без кода сети после обогащения: {}", workingRow);
+                continue;
+            }
             if (!allowedKeys.contains(key)) {
                 log.debug("Пропущена запись отчета без соответствующего задания: {}", key);
                 continue;
             }
 
-            Map<String, Object> processedRow = processReportRow(reportRow, maxReportAgeDays);
-            enrichWithHandbookData(processedRow, clientRegionCode);
+            Map<String, Object> processedRow = processReportRow(workingRow, maxReportAgeDays);  // Используем workingRow для консистентности
             processedData.add(processedRow);
             matched++;
         }
@@ -109,7 +115,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
         if (taskNumber == null || retailerCode == null || retailerCode.toString().isBlank()) {
             return null;
         }
-        return taskNumber + "|" + retailerCode;
+        return taskNumber.toString().trim() + "|" + retailerCode.toString().trim().toUpperCase();
     }
 
 
@@ -161,7 +167,8 @@ public class TaskReportExportStrategy implements ExportStrategy {
         if (!need) {
             return;
         }
-        String normalizedRegion = normalizeRegionCode(clientRegionCode);
+        String regionCandidate = Objects.toString(row.get("region"), clientRegionCode);
+        String normalizedRegion = normalizeRegionCode(regionCandidate);
         String altRegion = null;
         if (normalizedRegion != null) {
             altRegion = normalizedRegion.length() == 2 ? "0" + normalizedRegion
@@ -181,15 +188,35 @@ public class TaskReportExportStrategy implements ExportStrategy {
             handbooks = jdbcTemplate.queryForList(sql, "market.yandex.ru");
         }
 
-        if (!handbooks.isEmpty()) {
-            Map<String, Object> handbook = handbooks.get(0);
-            row.putIfAbsent("product_additional4", handbook.get("handbook_retail_network_code"));
-            row.putIfAbsent("competitor_name", handbook.get("handbook_retail_network"));
-            row.putIfAbsent("region", handbook.get("handbook_region_code"));
-            row.putIfAbsent("region_address", handbook.get("handbook_region_name"));
-
+        if (handbooks.isEmpty()) {
+            log.debug("Справочник market.yandex.ru для региона {} не найден", regionCandidate);
+            return;
         }
+
+        Map<String, Object> handbook = handbooks.get(0);
+        String handbookRegion = normalizeRegionCode(Objects.toString(handbook.get("handbook_region_code"), null));
+        if (normalizedRegion != null && handbookRegion != null && !handbookRegion.equals(normalizedRegion)) {
+            log.debug("Регион клиента {} не совпадает со справочником {}, запись не обогащена", normalizedRegion, handbookRegion);
+            return;
+        }
+
+
+        if (isBlank(row.get("product_additional4"))) {
+            row.put("product_additional4", handbook.get("handbook_retail_network_code"));
+        }
+        if (isBlank(row.get("competitor_name"))) {
+            row.put("competitor_name", handbook.get("handbook_retail_network"));
+        }
+        if (isBlank(row.get("region"))) {
+            row.put("region", handbook.get("handbook_region_code"));
+        }
+        if (isBlank(row.get("region_address"))) {
+            row.put("region_address", handbook.get("handbook_region_name"));
+        }
+        log.debug("Строка обогащена из справочника: {}", handbook);
+
     }
+
 
     private boolean isBlank(Object value) {
         return value == null || value.toString().trim().isEmpty();

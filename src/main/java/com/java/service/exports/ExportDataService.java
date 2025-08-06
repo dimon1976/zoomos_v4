@@ -33,7 +33,7 @@ public class ExportDataService {
      * Ограничение на максимальное количество записей для предотвращения
      * переполнения памяти при экспорте больших данных
      */
-    @Value("${export.max-rows:100000}")
+    @Value("${export.max-rows:300000}")
     private int maxRows;
 
     /**
