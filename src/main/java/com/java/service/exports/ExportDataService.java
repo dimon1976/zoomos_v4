@@ -132,8 +132,8 @@ public class ExportDataService {
     private void applyFilter(StringBuilder sql, List<Object> params,
                              String fieldName, FilterType filterType, String filterValue) {
 
-        // Преобразуем camelCase в snake_case для БД
-        String columnName = toSnakeCase(fieldName);
+        // Определяем название колонки в БД для указанного поля фильтра
+        String columnName = resolveColumnName(fieldName);
 
         switch (filterType) {
             case EQUALS:
@@ -265,6 +265,18 @@ public class ExportDataService {
             default:
                 log.warn("Неизвестный тип фильтра: {}", filterType);
         }
+    }
+
+    /**
+     * Преобразует имя поля фильтра в соответствующее имя колонки БД
+     */
+    private String resolveColumnName(String fieldName) {
+        return switch (fieldName) {
+            case "taskNumber" -> "product_additional1";
+            case "retailerCode" -> "product_additional4";
+            case "competitorUrl" -> "competitor_url";
+            default -> toSnakeCase(fieldName);
+        };
     }
 
     /**

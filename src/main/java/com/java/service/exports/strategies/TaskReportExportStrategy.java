@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Стратегия экспорта Задание-Отчет
@@ -33,7 +34,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
 
     @Override
     public List<String> getRequiredContextParams() {
-        return List.of("taskOperationId", "reportOperationId");
+        return List.of();
     }
 
     @Override
@@ -46,19 +47,27 @@ public class TaskReportExportStrategy implements ExportStrategy {
 
         // Получаем ID операций
         Long taskOperationId = (Long) context.get("taskOperationId");
-        Long reportOperationId = (Long) context.get("reportOperationId");
-
-        if (taskOperationId == null || reportOperationId == null) {
-            throw new IllegalArgumentException("Не указаны операции задания и отчета");
-        }
-
         String clientRegionCode = (String) context.get("clientRegionCode");
         int maxReportAgeDays = context.get("maxReportAgeDays") != null
                 ? ((Integer) context.get("maxReportAgeDays"))
                 : 3;
 
         // 1. Загружаем данные задания
-        List<Map<String, Object>> taskData = loadTaskData(taskOperationId);
+        List<Map<String, Object>> taskData;
+        if (taskOperationId != null) {
+            taskData = loadTaskData(taskOperationId);
+        } else {
+            Set<String> taskNumbers = data.stream()
+                    .map(this::getRowKey)
+                    .filter(key -> key != null && !key.isBlank())
+                    .collect(Collectors.toSet());
+
+            if (taskNumbers.isEmpty()) {
+                throw new IllegalArgumentException("Не указаны операции задания и отсутствуют номера заданий");
+            }
+
+            taskData = loadTaskDataByNumbers(taskNumbers);
+        }
         log.debug("Загружено {} записей из задания", taskData.size());
 
         // 2. Создаем индекс задания по номеру задания
@@ -111,6 +120,18 @@ public class TaskReportExportStrategy implements ExportStrategy {
     private List<Map<String, Object>> loadTaskData(Long operationId) {
         String sql = "SELECT * FROM av_data WHERE operation_id = ? AND data_source = 'TASK'";
         return jdbcTemplate.queryForList(sql, operationId);
+    }
+
+    /**
+     * Загружает данные задания по номерам задания
+     */
+    private List<Map<String, Object>> loadTaskDataByNumbers(Set<String> taskNumbers) {
+        if (taskNumbers == null || taskNumbers.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String placeholders = String.join(", ", Collections.nCopies(taskNumbers.size(), "?"));
+        String sql = "SELECT * FROM av_data WHERE data_source = 'TASK' AND product_additional1 IN (" + placeholders + ")";
+        return jdbcTemplate.queryForList(sql, taskNumbers.toArray());
     }
 
     /**
