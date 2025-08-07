@@ -579,9 +579,24 @@
     }
 
     function formatDateTime(dateTime) {
-        if (!dateTime) return '-';
-        const date = new Date(dateTime);
-        return date.toLocaleString('ru-RU');
+        if (!dateTime) {
+            return '-';
+        }
+
+        let millis;
+        if (typeof dateTime === 'number') {
+            // Если время передано в секундах, конвертируем в миллисекунды
+            millis = dateTime < 1e12 ? dateTime * 1000 : dateTime;
+        } else {
+            // Пытаемся распарсить строку даты
+            millis = Date.parse(dateTime);
+        }
+
+        if (isNaN(millis)) {
+            return '-';
+        }
+
+        return new Date(millis).toLocaleString('ru-RU');
     }
     /*]]*/
 </script>
