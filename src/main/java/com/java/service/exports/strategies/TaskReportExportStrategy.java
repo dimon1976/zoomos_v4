@@ -7,7 +7,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
@@ -26,6 +25,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
     private final DefaultExportStrategy defaultStrategy;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final int DEFAULT_MAX_REPORT_AGE_DAYS = 3;
 
     @Override
     public String getName() {
@@ -45,185 +45,273 @@ public class TaskReportExportStrategy implements ExportStrategy {
 
         log.info("Применение стратегии Задание-Отчет");
         log.debug("Входных записей: {}", data.size());
-        long reportRows = data.stream()
-                .filter(row -> "REPORT".equals(row.get("data_source")))
-                .count();
-        log.debug("Из них отчеты: {}", reportRows);
 
-        Long taskOperationId = (Long) context.get("taskOperationId");
+        // Получаем параметры из контекста
         String clientRegionCode = (String) context.get("clientRegionCode");
         int maxReportAgeDays = context.get("maxReportAgeDays") != null
                 ? ((Integer) context.get("maxReportAgeDays"))
-                : 3;
+                : DEFAULT_MAX_REPORT_AGE_DAYS;
 
-        // 1. Загружаем данные задания
-        List<Map<String, Object>> taskData;
-        if (taskOperationId != null) {
-            taskData = loadTaskData(taskOperationId);
-        } else {
-            Set<String> taskNumbers = data.stream()
-                    .map(row -> Objects.toString(row.get("product_additional1"), null))
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
+        // 1. Отбираем только записи с data_source = 'REPORT'
+        List<Map<String, Object>> reportData = data.stream()
+                .filter(row -> "REPORT".equals(row.get("data_source")))
+                .collect(Collectors.toList());
+        log.debug("Записей с data_source=REPORT: {}", reportData.size());
 
-            if (taskNumbers.isEmpty()) {
-                throw new IllegalArgumentException("Не указаны операции задания и отсутствуют номера заданий");
-            }
-
-            taskData = loadTaskDataByNumbers(taskNumbers);
+        if (reportData.isEmpty()) {
+            log.warn("Нет записей с data_source=REPORT");
+            return Collections.emptyList();
         }
-        log.debug("Загружено {} записей из задания", taskData.size());
 
-        // 2. Создаем множество допустимых комбинаций номер+код сети
-        Set<String> allowedKeys = taskData.stream()
-                .map(row -> buildKey(row.get("product_additional1"), row.get("product_additional4")))
+        // 2. Получаем уникальные номера заданий из отчетов
+        Set<String> taskNumbers = reportData.stream()
+                .map(row -> Objects.toString(row.get("product_additional1"), null))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        log.debug("Допустимых комбинаций номер+код сети: {}", allowedKeys.size());
+        log.debug("Уникальных номеров заданий в отчетах: {}", taskNumbers.size());
 
-        // 3. Обрабатываем строки отчета
+        if (taskNumbers.isEmpty()) {
+            log.warn("В отчетах нет номеров заданий (product_additional1)");
+            return Collections.emptyList();
+        }
+
+        // 3. Загружаем данные заданий для этих номеров
+        List<Map<String, Object>> taskData = loadTaskDataByNumbers(taskNumbers);
+        log.debug("Загружено {} записей из заданий", taskData.size());
+
+        // 4. Создаем множество допустимых комбинаций номер_задания + код_розничной_сети
+        Set<String> allowedKeys = taskData.stream()
+                .map(row -> buildKey(
+                        row.get("product_additional1"),
+                        row.get("product_additional4")))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        log.debug("Допустимых комбинаций номер+код_сети: {}", allowedKeys.size());
+
+        // 5. Фильтруем и обрабатываем строки отчета
         List<Map<String, Object>> processedData = new ArrayList<>();
         int matched = 0;
-        for (Map<String, Object> reportRow : data) {
-            if (!"REPORT".equals(reportRow.get("data_source"))) {
-                continue;
-            }
-            // перед проверкой соответствия заданию заполняем отсутствующие поля из справочника
-            Map<String, Object> workingRow = new HashMap<>(reportRow);  // Исправлено: было originalRow
-            enrichWithHandbookData(workingRow, clientRegionCode);
+        int enriched = 0;
 
-            String key = buildKey(workingRow.get("product_additional1"), workingRow.get("product_additional4"));
+        for (Map<String, Object> reportRow : reportData) {
+            // Создаем копию строки для изменений
+            Map<String, Object> workingRow = new HashMap<>(reportRow);
+
+            // 5.1. Обогащаем данными из справочника если нужно
+            if (needsEnrichment(workingRow)) {
+                boolean wasEnriched = enrichWithHandbookData(workingRow, clientRegionCode);
+                if (wasEnriched) {
+                    enriched++;
+                }
+            }
+
+            // 5.2. Проверяем соответствие заданию
+            String key = buildKey(
+                    workingRow.get("product_additional1"),
+                    workingRow.get("product_additional4"));
+
             if (key == null) {
-                log.debug("Пропущена запись отчета без кода сети после обогащения: {}", workingRow);
+                log.debug("Пропущена запись отчета без ключа: номер={}, код_сети={}",
+                        workingRow.get("product_additional1"),
+                        workingRow.get("product_additional4"));
                 continue;
             }
+
             if (!allowedKeys.contains(key)) {
                 log.debug("Пропущена запись отчета без соответствующего задания: {}", key);
                 continue;
             }
 
-            Map<String, Object> processedRow = processReportRow(workingRow, maxReportAgeDays);  // Используем workingRow для консистентности
-            processedData.add(processedRow);
+            // 5.3. Корректируем дату мониторинга
+            adjustMonitoringDate(workingRow, maxReportAgeDays);
+
+            processedData.add(workingRow);
             matched++;
         }
-        log.debug("После сопоставления с заданиями осталось {} записей", matched);
+
+        log.info("После фильтрации осталось {} записей из {} (обогащено: {})",
+                matched, reportData.size(), enriched);
+
+        // 6. Применяем стандартную обработку для форматирования полей
         return defaultStrategy.processData(processedData, template, context);
     }
 
+    /**
+     * Проверяет, нужно ли обогащение данными из справочника
+     */
+    private boolean needsEnrichment(Map<String, Object> row) {
+        String competitorUrl = Objects.toString(row.get("competitor_url"), "");
+        if (!competitorUrl.contains("market.yandex.ru")) {
+            return false;
+        }
 
+        return isBlank(row.get("product_additional4")) ||
+                isBlank(row.get("competitor_name")) ||
+                isBlank(row.get("region")) ||
+                isBlank(row.get("region_address"));
+    }
+
+    /**
+     * Обогащает строку данными из справочника
+     */
+    private boolean enrichWithHandbookData(Map<String, Object> row, String clientRegionCode) {
+        String competitorUrl = Objects.toString(row.get("competitor_url"), "");
+        if (!competitorUrl.contains("market.yandex.ru")) {
+            return false;
+        }
+
+        // Определяем код региона для поиска
+        String regionToSearch = clientRegionCode;
+        if (isBlank(regionToSearch)) {
+            // Если код региона клиента не задан, пытаемся взять из данных
+            regionToSearch = Objects.toString(row.get("region"), null);
+        }
+
+        // Ищем в справочнике
+        Map<String, Object> handbook = findHandbook("market.yandex.ru", regionToSearch);
+        if (handbook == null) {
+            log.debug("Справочник для market.yandex.ru и региона {} не найден", regionToSearch);
+            return false;
+        }
+
+        boolean wasEnriched = false;
+
+        // Заполняем пустые поля
+        if (isBlank(row.get("product_additional4"))) {
+            row.put("product_additional4", handbook.get("handbook_retail_network_code"));
+            wasEnriched = true;
+        }
+        if (isBlank(row.get("competitor_name"))) {
+            row.put("competitor_name", handbook.get("handbook_retail_network"));
+            wasEnriched = true;
+        }
+        if (isBlank(row.get("region"))) {
+            row.put("region", handbook.get("handbook_region_code"));
+            wasEnriched = true;
+        }
+        if (isBlank(row.get("region_address"))) {
+            row.put("region_address", handbook.get("handbook_physical_address"));
+            wasEnriched = true;
+        }
+
+        if (wasEnriched) {
+            log.debug("Строка обогащена из справочника для региона {}", regionToSearch);
+        }
+
+        return wasEnriched;
+    }
+
+    /**
+     * Ищет запись в справочнике
+     */
+    private Map<String, Object> findHandbook(String webSite, String regionCode) {
+        if (isBlank(regionCode)) {
+            // Если регион не указан, ищем любую запись для сайта
+            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? LIMIT 1";
+            List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, webSite);
+            return results.isEmpty() ? null : results.get(0);
+        }
+
+        // Нормализуем код региона (убираем ведущие нули)
+        String normalizedRegion = normalizeRegionCode(regionCode);
+
+        // Создаем альтернативный вариант (с/без ведущего нуля)
+        String altRegion = null;
+        if (normalizedRegion.length() == 1) {
+            altRegion = "0" + normalizedRegion;
+        } else if (normalizedRegion.length() == 2 && !normalizedRegion.startsWith("0")) {
+            altRegion = "0" + normalizedRegion;
+        }
+
+        // Ищем с учетом обоих вариантов
+        if (altRegion != null) {
+            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? " +
+                    "AND (handbook_region_code = ? OR handbook_region_code = ?) LIMIT 1";
+            List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, webSite, normalizedRegion, altRegion);
+            return results.isEmpty() ? null : results.get(0);
+        } else {
+            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? " +
+                    "AND handbook_region_code = ? LIMIT 1";
+            List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, webSite, normalizedRegion);
+            return results.isEmpty() ? null : results.get(0);
+        }
+    }
+
+    /**
+     * Корректирует дату мониторинга если она слишком старая
+     */
+    private void adjustMonitoringDate(Map<String, Object> row, int maxReportAgeDays) {
+        String dateStr = Objects.toString(row.get("competitor_date"), null);
+        if (dateStr == null) {
+            // Если даты нет, устанавливаем текущую
+            row.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
+            return;
+        }
+
+        try {
+            LocalDate date = LocalDate.parse(dateStr, DATE_FORMAT);
+            LocalDate today = LocalDate.now();
+            LocalDate minAllowedDate = today.minusDays(maxReportAgeDays - 1L);
+
+            if (date.isBefore(minAllowedDate)) {
+                // Заменяем на крайнюю допустимую дату
+                row.put("competitor_date", minAllowedDate.format(DATE_FORMAT));
+                log.debug("Дата {} заменена на {} (макс. давность {} дней)",
+                        dateStr, minAllowedDate.format(DATE_FORMAT), maxReportAgeDays);
+            }
+        } catch (DateTimeParseException e) {
+            log.warn("Некорректная дата отчета: {}, установлена текущая", dateStr);
+            row.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
+        }
+    }
+
+    /**
+     * Строит ключ из номера задания и кода розничной сети
+     */
     private String buildKey(Object taskNumber, Object retailerCode) {
-        if (taskNumber == null || retailerCode == null || retailerCode.toString().isBlank()) {
+        if (taskNumber == null || retailerCode == null) {
             return null;
         }
-        return taskNumber.toString().trim() + "|" + retailerCode.toString().trim().toUpperCase();
+
+        String taskStr = taskNumber.toString().trim();
+        String codeStr = retailerCode.toString().trim();
+
+        if (taskStr.isEmpty() || codeStr.isEmpty()) {
+            return null;
+        }
+
+        return taskStr + "|" + codeStr.toUpperCase();
     }
 
-
-    private List<Map<String, Object>> loadTaskData(Long operationId) {
-        String sql = "SELECT * FROM av_data WHERE operation_id = ? AND data_source = 'TASK'";
-        return jdbcTemplate.queryForList(sql, operationId);
-    }
-
+    /**
+     * Загружает данные заданий по номерам
+     */
     private List<Map<String, Object>> loadTaskDataByNumbers(Set<String> taskNumbers) {
         if (taskNumbers == null || taskNumbers.isEmpty()) {
             return Collections.emptyList();
         }
+
         String placeholders = String.join(", ", Collections.nCopies(taskNumbers.size(), "?"));
-        String sql = "SELECT * FROM av_data WHERE data_source = 'TASK' AND product_additional1 IN (" + placeholders + ")";
+        String sql = "SELECT * FROM av_data WHERE data_source = 'TASK' " +
+                "AND product_additional1 IN (" + placeholders + ")";
+
         return jdbcTemplate.queryForList(sql, taskNumbers.toArray());
     }
 
-
-    private Map<String, Object> processReportRow(Map<String, Object> reportRow, int maxReportAgeDays) {
-        Map<String, Object> processedRow = new HashMap<>(reportRow);
-        String dateStr = (String) processedRow.get("competitor_date");
-        if (dateStr == null) {
-            processedRow.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
-        } else {
-            try {
-                LocalDate date = LocalDate.parse(dateStr, DATE_FORMAT);
-                LocalDate minDate = LocalDate.now().minusDays(maxReportAgeDays - 1L);
-                if (date.isBefore(minDate)) {
-                    processedRow.put("competitor_date", minDate.format(DATE_FORMAT));
-                }
-            } catch (DateTimeParseException e) {
-                log.warn("Некорректная дата отчета: {}", dateStr);
-            }
-        }
-        return processedRow;
-    }
-
-    private void enrichWithHandbookData(Map<String, Object> row, String clientRegionCode) {
-        String competitorUrl = (String) row.get("competitor_url");
-        if (competitorUrl == null || !competitorUrl.contains("market.yandex.ru")) {
-            return;
-        }
-
-        boolean need = isBlank(row.get("product_additional4")) ||
-                isBlank(row.get("competitor_name")) ||
-                isBlank(row.get("region")) ||
-                isBlank(row.get("region_address"));
-
-        if (!need) {
-            return;
-        }
-        String regionCandidate = Objects.toString(row.get("region"), clientRegionCode);
-        String normalizedRegion = normalizeRegionCode(regionCandidate);
-        String altRegion = null;
-        if (normalizedRegion != null) {
-            altRegion = normalizedRegion.length() == 2 ? "0" + normalizedRegion
-                    : (normalizedRegion.length() == 3 && normalizedRegion.startsWith("0")
-                    ? normalizedRegion.substring(1) : null);
-        }
-
-        List<Map<String, Object>> handbooks;
-        if (normalizedRegion != null && altRegion != null) {
-            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? AND handbook_region_code IN (?, ?) LIMIT 1";
-            handbooks = jdbcTemplate.queryForList(sql, "market.yandex.ru", normalizedRegion, altRegion);
-        } else if (normalizedRegion != null) {
-            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? AND handbook_region_code = ? LIMIT 1";
-            handbooks = jdbcTemplate.queryForList(sql, "market.yandex.ru", normalizedRegion);
-        } else {
-            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? LIMIT 1";
-            handbooks = jdbcTemplate.queryForList(sql, "market.yandex.ru");
-        }
-
-        if (handbooks.isEmpty()) {
-            log.debug("Справочник market.yandex.ru для региона {} не найден", regionCandidate);
-            return;
-        }
-
-        Map<String, Object> handbook = handbooks.get(0);
-        String handbookRegion = normalizeRegionCode(Objects.toString(handbook.get("handbook_region_code"), null));
-        if (normalizedRegion != null && handbookRegion != null && !handbookRegion.equals(normalizedRegion)) {
-            log.debug("Регион клиента {} не совпадает со справочником {}, запись не обогащена", normalizedRegion, handbookRegion);
-            return;
-        }
-
-
-        if (isBlank(row.get("product_additional4"))) {
-            row.put("product_additional4", handbook.get("handbook_retail_network_code"));
-        }
-        if (isBlank(row.get("competitor_name"))) {
-            row.put("competitor_name", handbook.get("handbook_retail_network"));
-        }
-        if (isBlank(row.get("region"))) {
-            row.put("region", handbook.get("handbook_region_code"));
-        }
-        if (isBlank(row.get("region_address"))) {
-            row.put("region_address", handbook.get("handbook_region_name"));
-        }
-        log.debug("Строка обогащена из справочника: {}", handbook);
-
-    }
-
-
+    /**
+     * Проверяет, пустое ли значение
+     */
     private boolean isBlank(Object value) {
         return value == null || value.toString().trim().isEmpty();
     }
 
+    /**
+     * Нормализует код региона (убирает ведущие нули)
+     */
     private String normalizeRegionCode(String code) {
         if (code == null) return null;
-        return code.startsWith("0") ? code.substring(1) : code;
+        String trimmed = code.trim();
+        // Убираем ведущие нули
+        return trimmed.replaceFirst("^0+(?!$)", "");
     }
 }
