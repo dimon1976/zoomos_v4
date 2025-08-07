@@ -10,7 +10,6 @@ import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Стратегия экспорта по умолчанию - без дополнительной обработки
@@ -32,12 +31,15 @@ public class DefaultExportStrategy implements ExportStrategy {
             Map<String, Object> context) {
 
         log.debug("Применение стратегии по умолчанию для {} записей", data.size());
+        if (!data.isEmpty()) {
+            log.debug("Первая исходная строка: {}", data.get(0));
+        }
 
         // Получаем список полей для экспорта
         List<ExportTemplateField> includedFields = template.getFields().stream()
                 .filter(ExportTemplateField::getIsIncluded)
                 .sorted(Comparator.comparing(ExportTemplateField::getFieldOrder))
-                .collect(Collectors.toList());
+                .toList();
 
         // Обрабатываем каждую запись
         List<Map<String, Object>> processedData = new ArrayList<>();
@@ -48,7 +50,13 @@ public class DefaultExportStrategy implements ExportStrategy {
             for (ExportTemplateField field : includedFields) {
                 String entityFieldName = field.getEntityFieldName();
                 String exportColumnName = field.getExportColumnName();
+
+                // Пытаемся получить значение по имени поля как в шаблоне,
+                // а при отсутствии пробуем его в формате snake_case
                 Object value = row.get(entityFieldName);
+                if (value == null) {
+                    value = row.get(toSnakeCase(entityFieldName));
+                }
 
                 // Применяем форматирование если указано
                 if (value != null && field.getDataFormat() != null) {
@@ -63,7 +71,17 @@ public class DefaultExportStrategy implements ExportStrategy {
         }
 
         log.debug("Обработано {} записей", processedData.size());
+        if (!processedData.isEmpty()) {
+            log.debug("Первая обработанная строка: {}", processedData.get(0));
+        }
         return processedData;
+    }
+
+    /**
+     * Преобразует camelCase в snake_case для соответствия именам колонок БД
+     */
+    private String toSnakeCase(String value) {
+        return value.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
     }
 
     /**

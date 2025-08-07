@@ -8,7 +8,10 @@ import com.java.model.Client;
 import com.java.model.FileOperation;
 import com.java.model.entity.ExportSession;
 import com.java.model.entity.ExportTemplate;
-import com.java.repository.*;
+import com.java.repository.ClientRepository;
+import com.java.repository.ExportSessionRepository;
+import com.java.repository.ExportTemplateRepository;
+import com.java.repository.FileOperationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,9 +19,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.time.ZonedDateTime;
-import java.util.concurrent.CompletableFuture;
+import java.util.Collections;
 
 /**
  * Главный сервис для управления экспортом
@@ -72,10 +76,12 @@ public class ExportService {
         fileOperation = fileOperationRepository.save(fileOperation);
 
         // Создаем сессию экспорта
+        var operationIds = request.getOperationIds() == null ? Collections.<Long>emptyList() : request.getOperationIds();
         ExportSession session = ExportSession.builder()
                 .fileOperation(fileOperation)
                 .template(template)
-                .sourceOperationIds(objectMapper.valueToTree(request.getOperationIds()).toString())
+                // Храним всегда JSON-массив, даже если список пуст, чтобы избежать NULL в БД
+                .sourceOperationIds(objectMapper.valueToTree(operationIds).toString())
                 .dateFilterFrom(request.getDateFrom())
                 .dateFilterTo(request.getDateTo())
                 .appliedFilters(request.getAdditionalFilters() != null ?
@@ -86,9 +92,16 @@ public class ExportService {
 
         // Определяем режим обработки
         if (request.getAsyncMode() && shouldProcessAsync(request)) {
-            // Асинхронная обработка
+            // Асинхронная обработка после коммита транзакции
             log.info("Запуск асинхронного экспорта");
-            CompletableFuture<ExportSession> future = asyncExportService.startAsyncExport(session, request);
+//            CompletableFuture<ExportSession> future = asyncExportService.startAsyncExport(session, request);
+            ExportSession finalSession = session;
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    asyncExportService.startAsyncExport(finalSession, request);
+                }
+            });
 
             // Возвращаем DTO сразу, не дожидаясь завершения
             return ExportSessionMapper.toDto(session);

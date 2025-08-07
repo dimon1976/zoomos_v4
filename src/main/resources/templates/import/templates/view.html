@@ -43,6 +43,9 @@
                     <p class="mb-1"><strong>Тип сущности:</strong>
                         <span class="badge bg-secondary" th:text="${template.entityType.displayName}">Тип</span>
                     </p>
+                    <p class="mb-1"><strong>Источник данных:</strong>
+                        <span class="badge bg-secondary" th:text="${template.dataSourceType}">FILE</span>
+                    </p>
                     <p class="mb-1"><strong>Файл:</strong>
                         <span th:text="${template.fileType ?: 'Любой'}">CSV</span>
                     </p>

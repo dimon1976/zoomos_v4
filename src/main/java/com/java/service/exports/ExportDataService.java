@@ -3,14 +3,20 @@ package com.java.service.exports;
 import com.java.dto.ExportTemplateFilterDto;
 import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateFilter;
+import com.java.model.enums.EntityType;
+import com.java.model.enums.ExportStrategy;
+import com.java.model.enums.FilterType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -22,6 +28,13 @@ import java.util.stream.Collectors;
 public class ExportDataService {
 
     private final JdbcTemplate jdbcTemplate;
+
+    /**
+     * Ограничение на максимальное количество записей для предотвращения
+     * переполнения памяти при экспорте больших данных
+     */
+    @Value("${export.max-rows:300000}")
+    private int maxRows;
 
     /**
      * Загружает данные для экспорта
@@ -53,7 +66,7 @@ public class ExportDataService {
         }
 
         // Фильтр по операциям
-        if (!operationIds.isEmpty()) {
+        if (operationIds != null && !operationIds.isEmpty()) {
             sql.append(" AND operation_id IN (");
             sql.append(operationIds.stream()
                     .map(id -> "?")
@@ -75,7 +88,7 @@ public class ExportDataService {
         // Применяем фильтры из шаблона
         List<ExportTemplateFilter> activeFilters = template.getFilters().stream()
                 .filter(ExportTemplateFilter::getIsActive)
-                .collect(Collectors.toList());
+                .toList();
 
         for (ExportTemplateFilter filter : activeFilters) {
             applyFilter(sql, params, filter.getFieldName(),
@@ -108,8 +121,15 @@ public class ExportDataService {
             }
         }
 
-        // Добавляем сортировку
-        sql.append(" ORDER BY created_at DESC");
+        // Добавляем сортировку и ограничение
+        if (template.getExportStrategy() == ExportStrategy.TASK_REPORT
+                && template.getEntityType() == EntityType.AV_DATA) {
+            sql.append(" AND data_source = 'REPORT'");
+            log.debug("Применен фильтр data_source=REPORT для стратегии TASK_REPORT");
+        }
+
+        sql.append(" ORDER BY created_at DESC LIMIT ?");
+        params.add(maxRows);
 
         // Выполняем запрос
         String finalSql = sql.toString();
@@ -117,7 +137,13 @@ public class ExportDataService {
         log.debug("Параметры: {}", params);
 
         List<Map<String, Object>> data = jdbcTemplate.queryForList(finalSql, params.toArray());
-        log.info("Загружено {} записей", data.size());
+        log.info("Загружено {} записей (ограничение: {})", data.size(), maxRows);
+        if (data.size() >= maxRows) {
+            log.warn("Результат усечен до {} записей, добавьте фильтры для уменьшения объема данных", maxRows);
+        }
+        if (!data.isEmpty()) {
+            log.debug("Пример строки: ключи={}, значения={}", data.get(0).keySet(), data.get(0));
+        }
 
         return data;
     }
@@ -126,38 +152,98 @@ public class ExportDataService {
      * Применяет фильтр к SQL запросу
      */
     private void applyFilter(StringBuilder sql, List<Object> params,
-                             String fieldName, String filterType, String filterValue) {
+                             String fieldName, FilterType filterType, String filterValue) {
 
-        // Преобразуем camelCase в snake_case для БД
-        String columnName = toSnakeCase(fieldName);
+        // Определяем название колонки в БД для указанного поля фильтра
+        String columnName = resolveColumnName(fieldName);
 
-        switch (filterType.toUpperCase()) {
-            case "EQUALS":
-                sql.append(" AND ").append(columnName).append(" = ?");
-                params.add(parseFilterValue(filterValue));
+        switch (filterType) {
+            case EQUALS:
+                if (filterValue.contains(",")) {
+                    String[] values = filterValue.split(",");
+                    sql.append(" AND ").append(columnName).append(" IN (");
+                    sql.append(Arrays.stream(values)
+                            .map(v -> "?")
+                            .collect(Collectors.joining(", ")));
+                    sql.append(")");
+                    for (String value : values) {
+                        params.add(parseFilterValue(value.trim()));
+                    }
+                } else {
+                    sql.append(" AND ").append(columnName).append(" = ?");
+                    params.add(parseFilterValue(filterValue));
+                }
                 break;
 
-            case "NOT_EQUALS":
-                sql.append(" AND ").append(columnName).append(" != ?");
-                params.add(parseFilterValue(filterValue));
+            case NOT_EQUALS:
+                if (filterValue.contains(",")) {
+                    String[] values = filterValue.split(",");
+                    sql.append(" AND ").append(columnName).append(" NOT IN (");
+                    sql.append(Arrays.stream(values)
+                            .map(v -> "?")
+                            .collect(Collectors.joining(", ")));
+                    sql.append(")");
+                    for (String value : values) {
+                        params.add(parseFilterValue(value.trim()));
+                    }
+                } else {
+                    sql.append(" AND ").append(columnName).append(" != ?");
+                    params.add(parseFilterValue(filterValue));
+                }
                 break;
 
-            case "CONTAINS":
-                sql.append(" AND ").append(columnName).append(" LIKE ?");
-                params.add("%" + filterValue + "%");
+            case CONTAINS:
+                if (filterValue.contains(",")) {
+                    String[] values = filterValue.split(",");
+                    sql.append(" AND (");
+                    sql.append(Arrays.stream(values)
+                            .map(v -> columnName + " LIKE ?")
+                            .collect(Collectors.joining(" OR ")));
+                    sql.append(")");
+                    for (String value : values) {
+                        params.add("%" + value.trim() + "%");
+                    }
+                } else {
+                    sql.append(" AND ").append(columnName).append(" LIKE ?");
+                    params.add("%" + filterValue + "%");
+                }
                 break;
 
-            case "STARTS_WITH":
-                sql.append(" AND ").append(columnName).append(" LIKE ?");
-                params.add(filterValue + "%");
+            case STARTS_WITH:
+                if (filterValue.contains(",")) {
+                    String[] values = filterValue.split(",");
+                    sql.append(" AND (");
+                    sql.append(Arrays.stream(values)
+                            .map(v -> columnName + " LIKE ?")
+                            .collect(Collectors.joining(" OR ")));
+                    sql.append(")");
+                    for (String value : values) {
+                        params.add(value.trim() + "%");
+                    }
+                } else {
+                    sql.append(" AND ").append(columnName).append(" LIKE ?");
+                    params.add(filterValue + "%");
+                }
                 break;
 
-            case "ENDS_WITH":
-                sql.append(" AND ").append(columnName).append(" LIKE ?");
-                params.add("%" + filterValue);
+            case ENDS_WITH:
+                if (filterValue.contains(",")) {
+                    String[] values = filterValue.split(",");
+                    sql.append(" AND (");
+                    sql.append(Arrays.stream(values)
+                            .map(v -> columnName + " LIKE ?")
+                            .collect(Collectors.joining(" OR ")));
+                    sql.append(")");
+                    for (String value : values) {
+                        params.add("%" + value.trim());
+                    }
+                } else {
+                    sql.append(" AND ").append(columnName).append(" LIKE ?");
+                    params.add("%" + filterValue);
+                }
                 break;
 
-            case "BETWEEN":
+            case BETWEEN:
                 // Ожидаем значение в формате "value1,value2"
                 String[] values = filterValue.split(",");
                 if (values.length == 2) {
@@ -167,7 +253,7 @@ public class ExportDataService {
                 }
                 break;
 
-            case "IN":
+            case IN:
                 // Ожидаем значения через запятую
                 String[] inValues = filterValue.split(",");
                 sql.append(" AND ").append(columnName).append(" IN (");
@@ -180,20 +266,20 @@ public class ExportDataService {
                 }
                 break;
 
-            case "IS_NULL":
+            case IS_NULL:
                 sql.append(" AND ").append(columnName).append(" IS NULL");
                 break;
 
-            case "IS_NOT_NULL":
+            case IS_NOT_NULL:
                 sql.append(" AND ").append(columnName).append(" IS NOT NULL");
                 break;
 
-            case "GREATER_THAN":
+            case GREATER_THAN:
                 sql.append(" AND ").append(columnName).append(" > ?");
                 params.add(parseFilterValue(filterValue));
                 break;
 
-            case "LESS_THAN":
+            case LESS_THAN:
                 sql.append(" AND ").append(columnName).append(" < ?");
                 params.add(parseFilterValue(filterValue));
                 break;
@@ -201,6 +287,18 @@ public class ExportDataService {
             default:
                 log.warn("Неизвестный тип фильтра: {}", filterType);
         }
+    }
+
+    /**
+     * Преобразует имя поля фильтра в соответствующее имя колонки БД
+     */
+    private String resolveColumnName(String fieldName) {
+        return switch (fieldName) {
+            case "taskNumber" -> "product_additional1";
+            case "retailerCode" -> "product_additional4";
+            case "competitorUrl" -> "competitor_url";
+            default -> toSnakeCase(fieldName);
+        };
     }
 
     /**
@@ -265,7 +363,7 @@ public class ExportDataService {
         }
 
         // Применяем те же фильтры
-        if (!operationIds.isEmpty()) {
+        if (operationIds != null && !operationIds.isEmpty()) {
             sql.append(" AND operation_id IN (");
             sql.append(operationIds.stream()
                     .map(id -> "?")

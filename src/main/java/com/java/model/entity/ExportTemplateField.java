@@ -5,15 +5,18 @@ import lombok.*;
 
 @Entity
 @Table(name = "export_template_fields")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString(exclude = "template")
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class ExportTemplateField {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)

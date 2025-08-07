@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${template.name + ' - Экспорт'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${template.name},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${template.name + ' - Экспорт'}">Шаблон экспорта</title>
+    <style>
+        .field-table td, .field-table th {
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/export/templates/{id}/edit(id=${template.id})}" class="btn btn-primary me-2">
+        <i class="fas fa-edit me-1"></i>Редактировать
+    </a>
+    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteTemplateModal">
+        <i class="fas fa-trash-alt me-1"></i>Удалить
+    </button>
+</div>
+
+<section>
+    <!-- Основная информация о шаблоне -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-1"><strong>Клиент:</strong>
+                        <a th:href="@{/clients/{id}(id=${template.clientId})}" th:text="${template.clientName}">Клиент</a>
+                    </p>
+                    <p class="mb-1"><strong>Тип сущности:</strong>
+                        <span class="badge bg-secondary" th:text="${template.entityType.displayName}">Тип</span>
+                    </p>
+                    <p class="mb-1"><strong>Формат файла:</strong>
+                        <span th:text="${template.fileFormat}">CSV</span>
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <p class="mb-1"><strong>Стратегия экспорта:</strong>
+                        <span th:text="${template.exportStrategy.displayName}">DEFAULT</span>
+                    </p>
+                    <p class="mb-1"><strong>Макс. строк в файле:</strong>
+                        <span th:text="${template.maxRowsPerFile ?: '-'}">-</span>
+                    </p>
+                </div>
+            </div>
+            <div class="mt-3">
+                <p class="mb-0 text-muted">
+                    Создан: <span th:text="${#temporals.format(template.createdAt,'dd.MM.yyyy')}">01.01.2025</span>
+                    <span class="ms-3">Обновлен: <span th:text="${#temporals.format(template.updatedAt,'dd.MM.yyyy')}">01.01.2025</span></span>
+                    <span class="ms-3" th:if="${template.usageCount != null}">
+                        Использован: <span th:text="${template.usageCount}">0</span> раз
+                    </span>
+                </p>
+            </div>
+            <div class="mt-3" th:if="${template.description}">
+                <p th:text="${template.description}"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Поля шаблона -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="card-title mb-0">Поля</h6>
+        </div>
+        <div class="card-body">
+            <div th:if="${#lists.isEmpty(template.fields)}" class="text-center text-muted">Нет полей</div>
+            <div th:unless="${#lists.isEmpty(template.fields)}" class="table-responsive">
+                <table class="table table-bordered field-table">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Поле</th>
+                        <th>Колонка</th>
+                        <th>Формат</th>
+                        <th>Включено</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="field, stat : ${template.fields}">
+                        <td th:text="${stat.count}">1</td>
+                        <td th:text="${field.entityFieldName}">field</td>
+                        <td th:text="${field.exportColumnName}">column</td>
+                        <td th:text="${field.dataFormat}">-</td>
+                        <td>
+                            <i th:if="${field.isIncluded}" class="fas fa-check text-success"></i>
+                            <i th:unless="${field.isIncluded}" class="fas fa-times text-muted"></i>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры шаблона -->
+    <div class="card">
+        <div class="card-header">
+            <h6 class="card-title mb-0">Фильтры</h6>
+        </div>
+        <div class="card-body">
+            <div th:if="${#lists.isEmpty(template.filters)}" class="text-center text-muted">Нет фильтров</div>
+            <div th:unless="${#lists.isEmpty(template.filters)}" class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                    <tr>
+                        <th>Поле</th>
+                        <th>Тип</th>
+                        <th>Значение</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="filter : ${template.filters}">
+                        <td th:text="${filter.fieldName}">field</td>
+                        <td th:text="${filter.filterType}">EQUALS</td>
+                        <td th:text="${filter.filterValue}">value</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <div class="modal fade" id="deleteTemplateModal" tabindex="-1" aria-labelledby="deleteTemplateModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteTemplateModalLabel">Подтверждение удаления</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Вы уверены, что хотите удалить шаблон <strong th:text="${template.name}">Шаблон</strong>?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <form th:action="@{/export/templates/{id}/delete(id=${template.id})}" method="post">
+                        <input type="hidden" name="clientId" th:value="${template.clientId}" />
+                        <button type="submit" class="btn btn-danger">Удалить</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<script></script>
+</body>
+</html>

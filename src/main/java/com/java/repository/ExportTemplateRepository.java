@@ -25,6 +25,7 @@ public interface ExportTemplateRepository extends JpaRepository<ExportTemplate, 
     @Query("SELECT t FROM ExportTemplate t LEFT JOIN FETCH t.fields WHERE t.id = :id")
     Optional<ExportTemplate> findByIdWithFields(@Param("id") Long id);
 
-    @Query("SELECT t FROM ExportTemplate t LEFT JOIN FETCH t.fields LEFT JOIN FETCH t.filters WHERE t.id = :id")
+    //    @Query("SELECT t FROM ExportTemplate t LEFT JOIN FETCH t.fields LEFT JOIN FETCH t.filters WHERE t.id = :id")
+    @Query("SELECT DISTINCT t FROM ExportTemplate t LEFT JOIN FETCH t.fields LEFT JOIN FETCH t.filters WHERE t.id = :id")
     Optional<ExportTemplate> findByIdWithFieldsAndFilters(@Param("id") Long id);
 }

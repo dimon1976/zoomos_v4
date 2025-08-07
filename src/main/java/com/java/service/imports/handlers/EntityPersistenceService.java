@@ -1,6 +1,7 @@
 package com.java.service.imports.handlers;
 
 import com.java.model.entity.ImportSession;
+import com.java.model.enums.DataSourceType;
 import com.java.model.enums.EntityType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -88,7 +89,10 @@ public class EntityPersistenceService {
             AV_DATA_PARAMS.forEach(param -> avData.putIfAbsent(param, null));
 
 
-            avData.putIfAbsent("dataSource", "FILE"); // Источник данных
+            String dataSource = session.getTemplate() != null && session.getTemplate().getDataSourceType() != null
+                    ? session.getTemplate().getDataSourceType().name()
+                    : DataSourceType.FILE.name();
+            avData.putIfAbsent("dataSource", dataSource); // Источник данных
             avData.putIfAbsent("operationId", operationId);
             avData.putIfAbsent("clientId", clientId);
             avData.putIfAbsent("created_at", now);

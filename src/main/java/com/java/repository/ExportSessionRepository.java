@@ -32,24 +32,28 @@ public interface ExportSessionRepository extends JpaRepository<ExportSession, Lo
                                                    @Param("from") ZonedDateTime from,
                                                    @Param("to") ZonedDateTime to);
 
-    // Добавить к существующим методам:
-
     @Query("SELECT COUNT(es) FROM ExportSession es WHERE es.template.id = :templateId")
     Long countByTemplateId(@Param("templateId") Long templateId);
 
+    // Изменяем тип возвращаемого значения на Page<ExportSession>
     @Query("SELECT es FROM ExportSession es WHERE es.template.id = :templateId ORDER BY es.startedAt DESC")
-    Optional<ExportSession> findLastByTemplateId(@Param("templateId") Long templateId, Pageable pageable);
+    Page<ExportSession> findLastByTemplateId(@Param("templateId") Long templateId, Pageable pageable);
 
+    // Метод-обертка для получения Optional<ExportSession>
     default Optional<ExportSession> findLastByTemplateId(Long templateId) {
-        return findLastByTemplateId(templateId, PageRequest.of(0, 1)).stream().findFirst();
+        return findLastByTemplateId(templateId, PageRequest.of(0, 1))
+                .stream().findFirst();
     }
 
-    @Query("SELECT es.template FROM ExportSession es " +
+    // Изменяем запрос для получения последнего использованного шаблона
+    @Query("SELECT DISTINCT es.template FROM ExportSession es " +
             "WHERE es.template.client.id = :clientId " +
             "ORDER BY es.startedAt DESC")
-    Optional<ExportTemplate> findLastUsedTemplateByClientId(@Param("clientId") Long clientId, Pageable pageable);
+    Page<ExportTemplate> findLastUsedTemplatesByClientId(@Param("clientId") Long clientId, Pageable pageable);
 
+    // Метод-обертка для получения Optional<ExportTemplate>
     default Optional<ExportTemplate> findLastUsedTemplateByClientId(Long clientId) {
-        return findLastUsedTemplateByClientId(clientId, PageRequest.of(0, 1)).stream().findFirst();
+        return findLastUsedTemplatesByClientId(clientId, PageRequest.of(0, 1))
+                .stream().findFirst();
     }
 }

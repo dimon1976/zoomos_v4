@@ -88,6 +88,9 @@ public class ClientServiceImpl implements ClientService {
         client.setDescription(clientDto.getDescription());
         client.setContactEmail(clientDto.getContactEmail());
         client.setContactPhone(clientDto.getContactPhone());
+        client.setRegionCode(clientDto.getRegionCode());
+        client.setRegionName(clientDto.getRegionName());
+
 
         Client updatedClient = clientRepository.save(client);
         log.info("Updated client with id: {}", id);
@@ -136,6 +139,8 @@ public class ClientServiceImpl implements ClientService {
                 .description(client.getDescription())
                 .contactEmail(client.getContactEmail())
                 .contactPhone(client.getContactPhone())
+                .regionCode(client.getRegionCode())
+                .regionName(client.getRegionName())
                 .fileOperationsCount(fileOperationsCount)
                 .build();
     }
@@ -147,6 +152,8 @@ public class ClientServiceImpl implements ClientService {
                 .description(dto.getDescription())
                 .contactEmail(dto.getContactEmail())
                 .contactPhone(dto.getContactPhone())
+                .regionCode(dto.getRegionCode())
+                .regionName(dto.getRegionName())
                 .build();
     }
 }

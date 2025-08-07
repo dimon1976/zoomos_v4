@@ -2,7 +2,6 @@ package com.java.service.exports;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.ExportRequestDto;
-import com.java.dto.ExportTemplateFilterDto;
 import com.java.model.FileOperation;
 import com.java.model.entity.ExportSession;
 import com.java.model.entity.ExportTemplate;
@@ -20,7 +19,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -62,18 +64,21 @@ public class ExportProcessorService {
             // 1. Загружаем данные
             log.info("Загрузка данных для экспорта");
             List<Map<String, Object>> data = dataService.loadData(
-                    request.getOperationIds(),
+                    request.getOperationIds() != null ? request.getOperationIds() : Collections.emptyList(),
                     template,
                     request.getDateFrom(),
                     request.getDateTo(),
                     request.getAdditionalFilters()
             );
-
+            log.debug("После загрузки получено {} строк", data.size());
+            if (!data.isEmpty()) {
+                log.debug("Пример загруженной строки: {}", data.get(0));
+            }
             session.setTotalRows((long) data.size());
 
             // Подсчитываем отфильтрованные записи
             Long totalPossible = dataService.countData(
-                    request.getOperationIds(),
+                    request.getOperationIds() != null ? request.getOperationIds() : Collections.emptyList(),
                     template,
                     null, // без фильтра дат
                     null,
@@ -97,16 +102,24 @@ public class ExportProcessorService {
             Map<String, Object> context = new HashMap<>();
             context.put("operationIds", request.getOperationIds());
             context.put("session", session);
+            context.put("maxReportAgeDays", request.getMaxReportAgeDays());
+            if (session.getFileOperation() != null && session.getFileOperation().getClient() != null) {
+                context.put("clientRegionCode", session.getFileOperation().getClient().getRegionCode());
+            }
 
             // Для стратегии TASK_REPORT нужны дополнительные параметры
             if (template.getExportStrategy().name().equals("TASK_REPORT") &&
-                    request.getOperationIds().size() >= 2) {
+                    request.getOperationIds() != null && request.getOperationIds().size() >= 2) {
                 // Предполагаем, что первая операция - задание, вторая - отчет
                 context.put("taskOperationId", request.getOperationIds().get(0));
                 context.put("reportOperationId", request.getOperationIds().get(1));
             }
 
             List<Map<String, Object>> processedData = strategy.processData(data, template, context);
+            log.debug("После применения стратегии осталось {} строк", processedData.size());
+            if (!processedData.isEmpty()) {
+                log.debug("Пример строки после стратегии: {}", processedData.get(0));
+            }
 
             // Подсчитываем модифицированные записи
             session.setModifiedRows((long) (data.size() - processedData.size()));

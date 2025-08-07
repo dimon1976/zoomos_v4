@@ -1,6 +1,8 @@
 package com.java.dto;
 
+import com.java.model.enums.FilterType;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,8 +19,8 @@ public class ExportTemplateFilterDto {
     @NotBlank(message = "Имя поля обязательно")
     private String fieldName;
 
-    @NotBlank(message = "Тип фильтра обязателен")
-    private String filterType; // EQUALS, CONTAINS, BETWEEN, IN
+    @NotNull(message = "Тип фильтра обязателен")
+    private FilterType filterType; // EQUALS, CONTAINS, BETWEEN, IN
 
     @NotBlank(message = "Значение фильтра обязательно")
     private String filterValue;

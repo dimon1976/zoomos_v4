@@ -184,6 +184,7 @@ public class ImportTemplateService {
                 .description("Копия " + original.getDescription())
                 .client(original.getClient())
                 .entityType(original.getEntityType())
+                .dataSourceType(original.getDataSourceType())
                 .duplicateStrategy(original.getDuplicateStrategy())
                 .errorStrategy(original.getErrorStrategy())
                 .fileType(original.getFileType())

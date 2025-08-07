@@ -1,6 +1,8 @@
 package com.java.controller;
 
 import com.java.dto.ImportTemplateDto;
+import com.java.model.enums.EntityType;
+import com.java.service.EntityFieldService;
 import com.java.service.imports.ImportTemplateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ import java.util.List;
 public class ImportTemplateController {
 
     private final ImportTemplateService templateService;
+    private final EntityFieldService fieldService;
 
     /**
      * Отображение списка шаблонов клиента
@@ -50,6 +53,7 @@ public class ImportTemplateController {
 
         model.addAttribute("template", template);
         model.addAttribute("clientId", clientId);
+        populateAvailableFields(model, template);
 
         return "import/templates/form";
     }
@@ -60,10 +64,12 @@ public class ImportTemplateController {
     @PostMapping("/create")
     public String createTemplate(@Valid @ModelAttribute ImportTemplateDto template,
                                  BindingResult bindingResult,
+                                 Model model,
                                  RedirectAttributes redirectAttributes) {
         log.debug("POST запрос на создание шаблона: {}", template.getName());
 
         if (bindingResult.hasErrors()) {
+            populateAvailableFields(model, template);
             return "import/templates/form";
         }
 
@@ -77,6 +83,7 @@ public class ImportTemplateController {
         } catch (Exception e) {
             log.error("Ошибка создания шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
+            populateAvailableFields(model, template);
             return "import/templates/form";
         }
     }
@@ -115,6 +122,7 @@ public class ImportTemplateController {
                 .map(template -> {
                     model.addAttribute("template", template);
                     model.addAttribute("templateId", templateId);
+                    populateAvailableFields(model, template);
                     return "import/templates/form";
                 })
                 .orElseGet(() -> {
@@ -131,10 +139,12 @@ public class ImportTemplateController {
     public String updateTemplate(@PathVariable Long templateId,
                                  @Valid @ModelAttribute ImportTemplateDto template,
                                  BindingResult bindingResult,
+                                 Model model,
                                  RedirectAttributes redirectAttributes) {
         log.debug("POST запрос на обновление шаблона ID: {}", templateId);
 
         if (bindingResult.hasErrors()) {
+            populateAvailableFields(model, template);
             return "import/templates/form";
         }
 
@@ -148,8 +158,23 @@ public class ImportTemplateController {
         } catch (Exception e) {
             log.error("Ошибка обновления шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
+            populateAvailableFields(model, template);
             return "import/templates/form";
         }
+    }
+
+    private void populateAvailableFields(Model model, ImportTemplateDto template) {
+        model.addAttribute("availableFields", fieldService.getFields(template.getEntityType()));
+    }
+
+
+    /**
+     * Возвращает список доступных полей для заданного типа сущности
+     */
+    @GetMapping("/available-fields")
+    @ResponseBody
+    public List<String> getAvailableFields(@RequestParam EntityType entityType) {
+        return fieldService.getFields(entityType);
     }
 
     /**
