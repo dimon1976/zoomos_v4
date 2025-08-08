@@ -56,4 +56,9 @@ public interface ExportSessionRepository extends JpaRepository<ExportSession, Lo
         return findLastUsedTemplatesByClientId(clientId, PageRequest.of(0, 1))
                 .stream().findFirst();
     }
+
+    // Метод для статистики
+    @Query("SELECT es FROM ExportSession es WHERE es.template.id = :templateId " +
+            "AND es.status = 'COMPLETED' ORDER BY es.startedAt DESC")
+    List<ExportSession> findByTemplateIdOrderByStartedAtDesc(@Param("templateId") Long templateId);
 }

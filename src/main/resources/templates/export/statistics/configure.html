@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Настройка статистики - ' + ${template.name},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Настройка статистики',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Настройка статистики</title>
+    <style>
+        .field-selector {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            padding: 10px;
+        }
+        .field-checkbox {
+            margin-bottom: 5px;
+        }
+        .config-section {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions">
+    <a th:href="@{/export/templates/{id}(id=${template.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>К шаблону
+    </a>
+</div>
+
+<section>
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-chart-bar me-2"></i>
+                Настройка статистики для шаблона: <span th:text="${template.name}">Шаблон</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <form th:action="@{/export/statistics/template/{id}/configure(id=${template.id})}"
+                  method="post" th:object="${config}">
+
+                <!-- Активация статистики -->
+                <div class="config-section">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox"
+                               id="isEnabled" th:field="*{isEnabled}">
+                        <label class="form-check-label" for="isEnabled">
+                            <strong>Включить сбор статистики</strong>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="statisticsConfig">
+                    <!-- Поля для подсчета -->
+                    <div class="config-section">
+                        <h6 class="mb-3">
+                            <i class="fas fa-calculator me-2"></i>
+                            Поля для подсчета количества
+                        </h6>
+                        <div class="field-selector">
+                            <div th:each="field : ${availableFields}" class="field-checkbox">
+                                <div class="form-check">
+                                    <input class="form-check-input metric-field"
+                                           type="checkbox"
+                                           th:id="${'metric_' + field}"
+                                           th:value="${field}"
+                                           th:checked="${config.metricFields.contains(field)}">
+                                    <label class="form-check-label"
+                                           th:for="${'metric_' + field}"
+                                           th:text="${field}">Поле</label>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="metricFields" th:field="*{metricFields}">
+                    </div>
+
+                    <!-- Поле группировки -->
+                    <div class="config-section">
+                        <h6 class="mb-3">
+                            <i class="fas fa-layer-group me-2"></i>
+                            Поле для группировки
+                        </h6>
+                        <select class="form-select" th:field="*{groupByField}">
+                            <option value="">-- Выберите поле --</option>
+                            <option th:each="field : ${availableFields}"
+                                    th:value="${field}"
+                                    th:text="${field}">Поле</option>
+                        </select>
+                        <small class="text-muted">
+                            Данные будут сгруппированы по значениям этого поля
+                        </small>
+                    </div>
+
+                    <!-- Фильтрация -->
+                    <div class="config-section">
+                        <h6 class="mb-3">
+                            <i class="fas fa-filter me-2"></i>
+                            Фильтрация (опционально)
+                        </h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="filterField" class="form-label">Поле для фильтрации</label>
+                                <select class="form-select" id="filterField" th:field="*{filterField}">
+                                    <option value="">-- Не использовать --</option>
+                                    <option th:each="field : ${availableFields}"
+                                            th:value="${field}"
+                                            th:text="${field}">Поле</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="filterValuesInput" class="form-label">
+                                    Значения для фильтрации
+                                </label>
+                                <input type="text" class="form-control"
+                                       id="filterValuesInput"
+                                       placeholder="Например: В наличии, Есть">
+                                <input type="hidden" id="filterValues" th:field="*{filterValues}">
+                                <small class="text-muted">
+                                    Введите значения через запятую
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Настройки отображения -->
+                    <div class="config-section">
+                        <h6 class="mb-3">
+                            <i class="fas fa-cog me-2"></i>
+                            Настройки отображения
+                        </h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="deviationThresholdPercent" class="form-label">
+                                    Порог отклонения для выделения (%)
+                                </label>
+                                <input type="number" class="form-control"
+                                       id="deviationThresholdPercent"
+                                       th:field="*{deviationThresholdPercent}"
+                                       min="1" max="100" step="1">
+                                <small class="text-muted">
+                                    Изменения больше этого порога будут выделены цветом
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Кнопки -->
+                <div class="d-flex justify-content-between mt-4">
+                    <a th:href="@{/export/templates/{id}(id=${template.id})}"
+                       class="btn btn-secondary">
+                        <i class="fas fa-times me-1"></i>Отмена
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Сохранить настройки
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const isEnabledCheckbox = document.getElementById('isEnabled');
+        const configSection = document.getElementById('statisticsConfig');
+        const metricCheckboxes = document.querySelectorAll('.metric-field');
+        const metricFieldsInput = document.getElementById('metricFields');
+        const filterValuesInput = document.getElementById('filterValuesInput');
+        const filterValuesHidden = document.getElementById('filterValues');
+
+        // Переключение видимости настроек
+        function toggleConfig() {
+            configSection.style.display = isEnabledCheckbox.checked ? 'block' : 'none';
+        }
+
+        // Сбор выбранных метрик
+        function updateMetricFields() {
+            const selected = [];
+            metricCheckboxes.forEach(cb => {
+                if (cb.checked) {
+                    selected.push(cb.value);
+                }
+            });
+            metricFieldsInput.value = JSON.stringify(selected);
+        }
+
+        // Обработка значений фильтра
+        function updateFilterValues() {
+            const values = filterValuesInput.value
+                .split(',')
+                .map(v => v.trim())
+                .filter(v => v.length > 0);
+            filterValuesHidden.value = JSON.stringify(values);
+        }
+
+        // Инициализация
+        toggleConfig();
+        updateMetricFields();
+
+        // Установка начальных значений фильтра
+        if (filterValuesHidden.value) {
+            try {
+                const values = JSON.parse(filterValuesHidden.value);
+                filterValuesInput.value = values.join(', ');
+            } catch (e) {
+                console.error('Ошибка парсинга значений фильтра', e);
+            }
+        }
+
+        // События
+        isEnabledCheckbox.addEventListener('change', toggleConfig);
+        metricCheckboxes.forEach(cb => {
+            cb.addEventListener('change', updateMetricFields);
+        });
+        filterValuesInput.addEventListener('change', updateFilterValues);
+        filterValuesInput.addEventListener('blur', updateFilterValues);
+    });
+</script>
+</body>
+</html>
