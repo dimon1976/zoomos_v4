@@ -38,6 +38,7 @@ public class ExportProcessorService {
     private final ExportStrategyFactory strategyFactory;
     private final ExportSessionRepository sessionRepository;
     private final FileOperationRepository fileOperationRepository;
+    private final ExportStatisticsService exportStatisticsService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Флаги отмены для каждой сессии
@@ -217,7 +218,17 @@ public class ExportProcessorService {
         session.setCompletedAt(ZonedDateTime.now());
 
         sessionRepository.save(session);
-
+        // Рассчитываем статистику если настроена
+        try {
+            // Получаем bean через ApplicationContext или инжектим через конструктор
+            if (exportStatisticsService != null) {
+                exportStatisticsService.calculateStatistics(session.getId());
+                log.info("Статистика рассчитана для сессии {}", session.getId());
+            }
+        } catch (Exception e) {
+            log.error("Ошибка расчета статистики", e);
+            // Не прерываем основной процесс
+        }
         log.info("Экспорт завершен. Экспортировано: {}, Отфильтровано: {}, Модифицировано: {}",
                 session.getExportedRows(), session.getFilteredRows(), session.getModifiedRows());
     }
