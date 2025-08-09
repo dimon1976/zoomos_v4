@@ -63,8 +63,23 @@ public class ExportTemplateController {
                                  @RequestParam(required = false) Integer removeField,
                                  @RequestParam(required = false) String addFilter,
                                  @RequestParam(required = false) Integer removeFilter,
+                                 @RequestParam(required = false) List<String> statisticsCountFields,
+                                 @RequestParam(required = false) List<String> statisticsFilterFields,
                                  Model model,
                                  RedirectAttributes redirectAttributes) {
+
+        // Обрабатываем поля статистики
+        if (Boolean.TRUE.equals(template.getEnableStatistics())) {
+            template.setStatisticsCountFields(statisticsCountFields != null ? statisticsCountFields : new ArrayList<>());
+            template.setStatisticsFilterFields(statisticsFilterFields != null ? statisticsFilterFields : new ArrayList<>());
+        } else {
+            // Очищаем настройки статистики если она отключена
+            template.setEnableStatistics(false);
+            template.setStatisticsCountFields(new ArrayList<>());
+            template.setStatisticsGroupField(null);
+            template.setStatisticsFilterFields(new ArrayList<>());
+        }
+
         String dynamic = handleDynamicFields(template, addField, removeField, addFilter, removeFilter, model);
         if (dynamic != null) {
             model.addAttribute("clientId", template.getClientId());

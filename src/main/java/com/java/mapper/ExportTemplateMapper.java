@@ -1,3 +1,4 @@
+// src/main/java/com/java/mapper/ExportTemplateMapper.java
 package com.java.mapper;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -20,13 +21,6 @@ public class ExportTemplateMapper {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private ExportTemplateMapper() {
-        // Утилитный класс
-    }
-
-    /**
-     * Entity -> DTO
-     */
     public static ExportTemplateDto toDto(ExportTemplate entity) {
         if (entity == null) return null;
 
@@ -34,8 +28,8 @@ public class ExportTemplateMapper {
                 .id(entity.getId())
                 .name(entity.getName())
                 .description(entity.getDescription())
-                .clientId(entity.getClient() != null ? entity.getClient().getId() : null)
-                .clientName(entity.getClient() != null ? entity.getClient().getName() : null)
+                .clientId(entity.getClient().getId())
+                .clientName(entity.getClient().getName())
                 .entityType(entity.getEntityType())
                 .exportStrategy(entity.getExportStrategy())
                 .fileFormat(entity.getFileFormat())
@@ -47,26 +41,27 @@ public class ExportTemplateMapper {
                 .xlsxAutoSizeColumns(entity.getXlsxAutoSizeColumns())
                 .maxRowsPerFile(entity.getMaxRowsPerFile())
                 .isActive(entity.getIsActive())
-                .fields(entity.getFields() != null ?
-                        entity.getFields().stream()
-                                .map(ExportTemplateMapper::fieldToDto)
-                                .collect(Collectors.toList()) : new ArrayList<>())
-                .filters(entity.getFilters() != null ?
-                        entity.getFilters().stream()
-                                .map(ExportTemplateMapper::filterToDto)
-                                .collect(Collectors.toList()) : new ArrayList<>())
+                .fields(entity.getFields().stream()
+                        .map(ExportTemplateMapper::toFieldDto)
+                        .collect(Collectors.toList()))
+                .filters(entity.getFilters().stream()
+                        .map(ExportTemplateMapper::toFilterDto)
+                        .collect(Collectors.toList()))
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
+                // Настройки статистики
+                .enableStatistics(entity.getEnableStatistics())
+                .statisticsCountFields(parseJsonStringList(entity.getStatisticsCountFields()))
+                .statisticsGroupField(entity.getStatisticsGroupField())
+                .statisticsFilterFields(parseJsonStringList(entity.getStatisticsFilterFields()))
                 .build();
     }
 
-    /**
-     * DTO -> Entity (для создания)
-     */
     public static ExportTemplate toEntity(ExportTemplateDto dto, Client client) {
         if (dto == null) return null;
 
         ExportTemplate entity = ExportTemplate.builder()
+                .id(dto.getId())
                 .name(dto.getName())
                 .description(dto.getDescription())
                 .client(client)
@@ -81,12 +76,17 @@ public class ExportTemplateMapper {
                 .xlsxAutoSizeColumns(dto.getXlsxAutoSizeColumns())
                 .maxRowsPerFile(dto.getMaxRowsPerFile())
                 .isActive(dto.getIsActive())
+                // Настройки статистики
+                .enableStatistics(dto.getEnableStatistics())
+                .statisticsCountFields(toJsonString(dto.getStatisticsCountFields()))
+                .statisticsGroupField(dto.getStatisticsGroupField())
+                .statisticsFilterFields(toJsonString(dto.getStatisticsFilterFields()))
                 .build();
 
         // Добавляем поля
         if (dto.getFields() != null) {
             for (ExportTemplateFieldDto fieldDto : dto.getFields()) {
-                ExportTemplateField field = fieldToEntity(fieldDto);
+                ExportTemplateField field = toFieldEntity(fieldDto);
                 entity.addField(field);
             }
         }
@@ -94,7 +94,7 @@ public class ExportTemplateMapper {
         // Добавляем фильтры
         if (dto.getFilters() != null) {
             for (ExportTemplateFilterDto filterDto : dto.getFilters()) {
-                ExportTemplateFilter filter = filterToEntity(filterDto);
+                ExportTemplateFilter filter = toFilterEntity(filterDto);
                 entity.addFilter(filter);
             }
         }
@@ -102,9 +102,6 @@ public class ExportTemplateMapper {
         return entity;
     }
 
-    /**
-     * Обновление Entity из DTO
-     */
     public static void updateEntity(ExportTemplate entity, ExportTemplateDto dto) {
         if (entity == null || dto == null) return;
 
@@ -122,11 +119,17 @@ public class ExportTemplateMapper {
         entity.setMaxRowsPerFile(dto.getMaxRowsPerFile());
         entity.setIsActive(dto.getIsActive());
 
+        // Обновляем настройки статистики
+        entity.setEnableStatistics(dto.getEnableStatistics());
+        entity.setStatisticsCountFields(toJsonString(dto.getStatisticsCountFields()));
+        entity.setStatisticsGroupField(dto.getStatisticsGroupField());
+        entity.setStatisticsFilterFields(toJsonString(dto.getStatisticsFilterFields()));
+
         // Обновляем поля
         entity.getFields().clear();
         if (dto.getFields() != null) {
             for (ExportTemplateFieldDto fieldDto : dto.getFields()) {
-                ExportTemplateField field = fieldToEntity(fieldDto);
+                ExportTemplateField field = toFieldEntity(fieldDto);
                 entity.addField(field);
             }
         }
@@ -135,18 +138,21 @@ public class ExportTemplateMapper {
         entity.getFilters().clear();
         if (dto.getFilters() != null) {
             for (ExportTemplateFilterDto filterDto : dto.getFilters()) {
-                ExportTemplateFilter filter = filterToEntity(filterDto);
+                ExportTemplateFilter filter = toFilterEntity(filterDto);
                 entity.addFilter(filter);
             }
         }
     }
 
-    /**
-     * Field Entity -> DTO
-     */
-    public static ExportTemplateFieldDto fieldToDto(ExportTemplateField entity) {
-        if (entity == null) return null;
+    public static List<ExportTemplateDto> toDtoList(List<ExportTemplate> entities) {
+        if (entities == null) return new ArrayList<>();
+        return entities.stream()
+                .map(ExportTemplateMapper::toDto)
+                .collect(Collectors.toList());
+    }
 
+    // Вспомогательные методы для полей
+    private static ExportTemplateFieldDto toFieldDto(ExportTemplateField entity) {
         return ExportTemplateFieldDto.builder()
                 .id(entity.getId())
                 .entityFieldName(entity.getEntityFieldName())
@@ -158,13 +164,9 @@ public class ExportTemplateMapper {
                 .build();
     }
 
-    /**
-     * Field DTO -> Entity
-     */
-    public static ExportTemplateField fieldToEntity(ExportTemplateFieldDto dto) {
-        if (dto == null) return null;
-
+    private static ExportTemplateField toFieldEntity(ExportTemplateFieldDto dto) {
         return ExportTemplateField.builder()
+                .id(dto.getId())
                 .entityFieldName(dto.getEntityFieldName())
                 .exportColumnName(dto.getExportColumnName())
                 .fieldOrder(dto.getFieldOrder())
@@ -174,12 +176,8 @@ public class ExportTemplateMapper {
                 .build();
     }
 
-    /**
-     * Filter Entity -> DTO
-     */
-    public static ExportTemplateFilterDto filterToDto(ExportTemplateFilter entity) {
-        if (entity == null) return null;
-
+    // Вспомогательные методы для фильтров
+    private static ExportTemplateFilterDto toFilterDto(ExportTemplateFilter entity) {
         return ExportTemplateFilterDto.builder()
                 .id(entity.getId())
                 .fieldName(entity.getFieldName())
@@ -189,13 +187,9 @@ public class ExportTemplateMapper {
                 .build();
     }
 
-    /**
-     * Filter DTO -> Entity
-     */
-    public static ExportTemplateFilter filterToEntity(ExportTemplateFilterDto dto) {
-        if (dto == null) return null;
-
+    private static ExportTemplateFilter toFilterEntity(ExportTemplateFilterDto dto) {
         return ExportTemplateFilter.builder()
+                .id(dto.getId())
                 .fieldName(dto.getFieldName())
                 .filterType(dto.getFilterType())
                 .filterValue(dto.getFilterValue())
@@ -203,12 +197,28 @@ public class ExportTemplateMapper {
                 .build();
     }
 
-    /**
-     * Список Entity -> список DTO
-     */
-    public static List<ExportTemplateDto> toDtoList(List<ExportTemplate> entities) {
-        return entities.stream()
-                .map(ExportTemplateMapper::toDto)
-                .collect(Collectors.toList());
+    // Вспомогательные методы для JSON
+    private static List<String> parseJsonStringList(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            log.error("Ошибка парсинга JSON списка: {}", json, e);
+            return new ArrayList<>();
+        }
+    }
+
+    private static String toJsonString(List<String> list) {
+        if (list == null || list.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(list);
+        } catch (Exception e) {
+            log.error("Ошибка преобразования списка в JSON: {}", list, e);
+            return null;
+        }
     }
 }

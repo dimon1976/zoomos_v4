@@ -105,6 +105,20 @@ public class ExportTemplate {
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt;
 
+    // Настройки статистики
+    @Column(name = "enable_statistics")
+    @Builder.Default
+    private Boolean enableStatistics = false;
+
+    @Column(name = "statistics_count_fields", columnDefinition = "TEXT")
+    private String statisticsCountFields; // JSON массив полей для подсчета
+
+    @Column(name = "statistics_group_field")
+    private String statisticsGroupField; // Поле для группировки
+
+    @Column(name = "statistics_filter_fields", columnDefinition = "TEXT")
+    private String statisticsFilterFields; // JSON массив полей для фильтрации
+
     // Вспомогательные методы
     public void addField(ExportTemplateField field) {
         fields.add(field);
