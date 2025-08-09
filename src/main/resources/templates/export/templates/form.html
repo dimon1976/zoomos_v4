@@ -185,6 +185,102 @@
             </div>
         </div>
 
+        <!-- Настройки статистики -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="enableStatistics"
+                           th:field="*{enableStatistics}" onchange="toggleStatisticsSettings()">
+                    <label class="form-check-label" for="enableStatistics">
+                        <h5 class="mb-0">Включить статистику для этого шаблона</h5>
+                    </label>
+                </div>
+                <small class="text-muted">Позволяет сравнивать результаты экспортов и отслеживать изменения</small>
+            </div>
+            <div class="card-body" id="statisticsSettings" style="display: none;">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Настройки статистики</strong> позволяют создавать сводные таблицы для анализа данных.
+                    Выберите поля для подсчета, группировки и фильтрации.
+                </div>
+
+                <div class="row">
+                    <!-- Поля для подсчета -->
+                    <div class="col-md-4">
+                        <label class="form-label">Поля для подсчета</label>
+                        <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                            <div th:each="field : ${availableFields}" class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       name="statisticsCountFields" th:value="${field}"
+                                       th:id="${'countField_' + field}">
+                                <label class="form-check-label" th:for="${'countField_' + field}" th:text="${field}">
+                                    Поле
+                                </label>
+                            </div>
+                        </div>
+                        <small class="text-muted">Поля, для которых будет подсчитываться количество непустых значений</small>
+                    </div>
+
+                    <!-- Поле для группировки -->
+                    <div class="col-md-4">
+                        <label for="statisticsGroupField" class="form-label">Поле для группировки</label>
+                        <select class="form-select" id="statisticsGroupField" name="statisticsGroupField">
+                            <option value="">-- Выберите поле --</option>
+                            <option th:each="field : ${availableFields}" th:value="${field}" th:text="${field}">
+                                Поле
+                            </option>
+                        </select>
+                        <small class="text-muted">Данные будут сгруппированы по значениям этого поля</small>
+
+                        <div class="mt-3">
+                            <label class="form-label">Пример группировки:</label>
+                            <div class="bg-light p-2 rounded">
+                                <small class="text-muted">
+                                    При выборе поля "product_additional4" данные будут сгруппированы по значениям
+                                    типа: "OZON", "Wildberries", "Yandex.Market" и т.д.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Поля для фильтрации -->
+                    <div class="col-md-4">
+                        <label class="form-label">Поля для фильтрации</label>
+                        <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                            <div th:each="field : ${availableFields}" class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       name="statisticsFilterFields" th:value="${field}"
+                                       th:id="${'filterField_' + field}">
+                                <label class="form-check-label" th:for="${'filterField_' + field}" th:text="${field}">
+                                    Поле
+                                </label>
+                            </div>
+                        </div>
+                        <small class="text-muted">Поля, которые можно использовать для фильтрации при анализе</small>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="bg-light p-3 rounded">
+                            <h6>Пример настройки:</h6>
+                            <ul class="mb-0">
+                                <li><strong>Поля для подсчета:</strong> competitor_price, competitorPromotionalPrice</li>
+                                <li><strong>Группировка:</strong> product_additional4 (коды магазинов)</li>
+                                <li><strong>Фильтрация:</strong> competitorStockStatus (статус товара)</li>
+                            </ul>
+                            <p class="mt-2 mb-0">
+                                <small class="text-muted">
+                                    Результат: таблица с количеством цен по каждому магазину,
+                                    с возможностью фильтрации по статусу товара
+                                </small>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="text-end">
             <button type="submit" class="btn btn-primary">
                 <span th:text="${template.id != null ? 'Сохранить' : 'Создать'}">Сохранить</span>

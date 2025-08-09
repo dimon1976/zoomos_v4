@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Анализ статистики',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Анализ статистики',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Анализ статистики</title>
+    <style>
+        .export-card {
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+        .export-card:hover {
+            background-color: #f8f9fa;
+        }
+        .export-card.selected {
+            border-color: #007bff;
+            background-color: #e7f1ff;
+        }
+        .settings-panel {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .preview-results {
+            background-color: #e8f4e8;
+            border: 1px solid #28a745;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions">
+    <a th:href="@{/statistics/settings}" class="btn btn-outline-secondary me-2">
+        <i class="fas fa-cog me-1"></i>Настройки
+    </a>
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <form id="statisticsForm" th:action="@{/statistics/analyze}" method="post">
+
+        <!-- Выбор шаблона -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-export me-2"></i>Выберите шаблон экспорта
+                </h5>
+            </div>
+            <div class="card-body">
+                <div th:if="${#lists.isEmpty(templates)}" class="text-center py-3">
+                    <div class="text-muted">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Нет шаблонов с включенной статистикой
+                    </div>
+                    <a th:href="@{/export/templates/client/{clientId}(clientId=${clientId})}"
+                       class="btn btn-primary mt-3">
+                        <i class="fas fa-plus me-1"></i>Создать шаблон
+                    </a>
+                </div>
+
+                <div th:unless="${#lists.isEmpty(templates)}" class="row">
+                    <div th:each="template : ${templates}" class="col-md-6 mb-3">
+                        <div class="card template-card"
+                             onclick="selectTemplate(this, [[${template.id}]])">
+                            <div class="card-body">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio"
+                                           name="templateId" th:value="${template.id}"
+                                           th:id="${'template' + template.id}"
+                                           required>
+                                    <label class="form-check-label w-100"
+                                           th:for="${'template' + template.id}">
+                                        <h6 th:text="${template.name}">Название шаблона</h6>
+                                        <p class="text-muted mb-1" th:text="${template.description}">
+                                            Описание
+                                        </p>
+                                        <small>
+                                            <span class="badge bg-secondary me-1"
+                                                  th:text="${template.entityType.displayName}">Тип</span>
+                                            <span class="badge bg-info"
+                                                  th:text="${template.exportStrategy.displayName}">
+                                                Стратегия
+                                            </span>
+                                        </small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Выбор операций экспорта -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list me-2"></i>Выберите операции для сравнения
+                    </h5>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="selectAllOperations">
+                        <label class="form-check-label" for="selectAllOperations">
+                            Выбрать все
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div th:if="${#lists.isEmpty(recentExports)}" class="text-center py-3">
+                    <div class="text-muted">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Нет операций экспорта для анализа
+                    </div>
+                </div>
+
+                <div th:unless="${#lists.isEmpty(recentExports)}" class="row">
+                    <div th:each="export : ${recentExports}" class="col-md-6 col-lg-4 mb-3">
+                        <div class="card export-card h-100"
+                             onclick="toggleExportSelection(this, [[${export.id}]])">
+                            <div class="card-body">
+                                <div class="form-check">
+                                    <input class="form-check-input operation-checkbox" type="checkbox"
+                                           name="exportSessionIds" th:value="${export.id}"
+                                           th:id="${'export' + export.id}">
+                                    <label class="form-check-label w-100"
+                                           th:for="${'export' + export.id}">
+                                        <h6 class="mb-1">
+                                            Экспорт #<span th:text="${export.id}">1</span>
+                                        </h6>
+                                        <p class="text-muted mb-1" th:text="${export.template.name}">
+                                            Шаблон
+                                        </p>
+                                        <small class="text-muted">
+                                            <i class="fas fa-calendar me-1"></i>
+                                            <span th:text="${#temporals.format(export.startedAt, 'dd.MM.yyyy HH:mm')}">
+                                                01.01.2025 10:00
+                                            </span>
+                                        </small>
+                                        <br>
+                                        <small>
+                                            <span class="badge bg-success me-1"
+                                                  th:text="${export.exportedRows + ' записей'}">100 записей</span>
+                                            <span class="badge"
+                                                  th:classappend="${export.status.name() == 'COMPLETED' ? 'bg-success' : 'bg-secondary'}"
+                                                  th:text="${export.status.displayName}">Завершено</span>
+                                        </small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-3" th:if="${!#lists.isEmpty(recentExports)}">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Подсказка:</strong> Если не выберете операции, будут проанализированы все доступные экспорты.
+                    Операции сравниваются по дате (новые слева, старые справа).
+                </div>
+            </div>
+        </div>
+
+        <!-- Настройки анализа -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-sliders-h me-2"></i>Настройки анализа
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="settings-panel">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="warningPercentage" class="form-label">
+                                Процент предупреждения (%)
+                            </label>
+                            <input type="number" class="form-control" id="warningPercentage"
+                                   name="warningPercentage" th:value="${warningPercentage}"
+                                   min="1" max="100" placeholder="10">
+                            <small class="text-muted">Желтое выделение при превышении</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="criticalPercentage" class="form-label">
+                                Критический процент (%)
+                            </label>
+                            <input type="number" class="form-control" id="criticalPercentage"
+                                   name="criticalPercentage" th:value="${criticalPercentage}"
+                                   min="1" max="100" placeholder="20">
+                            <small class="text-muted">Красное выделение при превышении</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Дополнительные фильтры</label>
+                            <div class="input-group">
+                                <select class="form-select" id="filterField">
+                                    <option value="">-- Поле фильтра --</option>
+                                    <option value="competitorStockStatus">Статус товара</option>
+                                </select>
+                                <input type="text" class="form-control" id="filterValue"
+                                       placeholder="Значение">
+                                <button type="button" class="btn btn-outline-secondary"
+                                        onclick="addFilter()">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <div id="appliedFilters" class="mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Предварительный просмотр -->
+        <div id="previewSection" class="card mb-4" style="display: none;">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-eye me-2"></i>Предварительный просмотр
+                </h6>
+            </div>
+            <div class="card-body">
+                <div id="previewResults"></div>
+            </div>
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="d-flex justify-content-between">
+            <button type="button" class="btn btn-outline-primary" onclick="previewStatistics()">
+                <i class="fas fa-eye me-1"></i>Предварительный просмотр
+            </button>
+            <div>
+                <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary me-2">
+                    <i class="fas fa-times me-1"></i>Отмена
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-chart-line me-1"></i>Анализировать статистику
+                </button>
+            </div>
+        </div>
+
+        <!-- Скрытые поля для фильтров -->
+        <input type="hidden" name="additionalFilters" id="additionalFiltersInput">
+    </form>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectAllCheckbox = document.getElementById('selectAllOperations');
+        const operationCheckboxes = document.querySelectorAll('.operation-checkbox');
+
+        // Обработчик "Выбрать все"
+        selectAllCheckbox.addEventListener('change', function() {
+            operationCheckboxes.forEach(cb => {
+                cb.checked = this.checked;
+                updateCardSelection(cb);
+            });
+        });
+
+        // Обработчики для индивидуальных чекбоксов
+        operationCheckboxes.forEach(cb => {
+            cb.addEventListener('change', function() {
+                updateCardSelection(this);
+                updateSelectAllState();
+            });
+        });
+    });
+
+    function selectTemplate(card, templateId) {
+        document.querySelectorAll('.template-card').forEach(c => {
+            c.classList.remove('selected');
+        });
+        card.classList.add('selected');
+        document.getElementById('template' + templateId).checked = true;
+    }
+
+    function toggleExportSelection(card, exportId) {
+        const checkbox = document.getElementById('export' + exportId);
+        checkbox.checked = !checkbox.checked;
+        updateCardSelection(checkbox);
+        updateSelectAllState();
+    }
+
+    function updateCardSelection(checkbox) {
+        const card = checkbox.closest('.export-card');
+        if (checkbox.checked) {
+            card.classList.add('selected');
+        } else {
+            card.classList.remove('selected');
+        }
+    }
+
+    function updateSelectAllState() {
+        const operationCheckboxes = document.querySelectorAll('.operation-checkbox');
+        const checkedCount = document.querySelectorAll('.operation-checkbox:checked').length;
+        const selectAllCheckbox = document.getElementById('selectAllOperations');
+
+        if (checkedCount === 0) {
+            selectAllCheckbox.indeterminate = false;
+            selectAllCheckbox.checked = false;
+        } else if (checkedCount === operationCheckboxes.length) {
+            selectAllCheckbox.indeterminate = false;
+            selectAllCheckbox.checked = true;
+        } else {
+            selectAllCheckbox.indeterminate = true;
+        }
+    }
+
+    let appliedFilters = {};
+
+    function addFilter() {
+        const field = document.getElementById('filterField').value;
+        const value = document.getElementById('filterValue').value;
+
+        if (!field || !value) {
+            alert('Выберите поле и введите значение');
+            return;
+        }
+
+        appliedFilters[field] = value;
+        updateFiltersDisplay();
+
+        // Очищаем поля
+        document.getElementById('filterField').value = '';
+        document.getElementById('filterValue').value = '';
+    }
+
+    function removeFilter(field) {
+        delete appliedFilters[field];
+        updateFiltersDisplay();
+    }
+
+    function updateFiltersDisplay() {
+        const container = document.getElementById('appliedFilters');
+        const input = document.getElementById('additionalFiltersInput');
+
+        if (Object.keys(appliedFilters).length === 0) {
+            container.innerHTML = '';
+            input.value = '';
+            return;
+        }
+
+        const filtersHtml = Object.entries(appliedFilters).map(([field, value]) => `
+            <span class="badge bg-primary me-1">
+                ${field}: ${value}
+                <button type="button" class="btn-close btn-close-white ms-1"
+                        onclick="removeFilter('${field}')" style="font-size: 0.7em;"></button>
+            </span>
+        `).join('');
+
+        container.innerHTML = filtersHtml;
+        input.value = JSON.stringify(appliedFilters);
+    }
+
+    function previewStatistics() {
+        const formData = new FormData(document.getElementById('statisticsForm'));
+        const data = Object.fromEntries(formData.entries());
+
+        // Собираем выбранные операции
+        const selectedOperations = Array.from(document.querySelectorAll('.operation-checkbox:checked'))
+            .map(cb => cb.value);
+
+        const requestData = {
+            templateId: data.templateId,
+            exportSessionIds: selectedOperations,
+            warningPercentage: data.warningPercentage || null,
+            criticalPercentage: data.criticalPercentage || null,
+            additionalFilters: appliedFilters
+        };
+
+        fetch('/statistics/preview', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        })
+            .then(response => response.json())
+            .then(data => {
+                showPreviewResults(data);
+            })
+            .catch(error => {
+                console.error('Ошибка предварительного просмотра:', error);
+                alert('Ошибка получения предварительного просмотра');
+            });
+    }
+
+    function showPreviewResults(data) {
+        const section = document.getElementById('previewSection');
+        const results = document.getElementById('previewResults');
+
+        if (data.success && data.hasData) {
+            results.innerHTML = `
+                <div class="preview-results">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="h4 text-primary">${data.totalGroups}</div>
+                            <small class="text-muted">Групп данных</small>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h4 text-info">${data.totalOperations}</div>
+                            <small class="text-muted">Операций</small>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h4 text-danger">${data.criticalChanges}</div>
+                            <small class="text-muted">Критических изменений</small>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="h4 text-success">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <small class="text-muted">Готово к анализу</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            results.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    ${data.error || 'Нет данных для анализа. Проверьте выбранные операции и шаблон.'}
+                </div>
+            `;
+        }
+
+        section.style.display = 'block';
+    }
+</script>
+</body>
+</html>
