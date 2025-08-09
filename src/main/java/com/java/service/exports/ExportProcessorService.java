@@ -1,6 +1,5 @@
 package com.java.service.exports;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.ExportRequestDto;
 import com.java.model.FileOperation;
 import com.java.model.entity.ExportSession;
@@ -10,6 +9,7 @@ import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.service.exports.strategies.ExportStrategy;
 import com.java.service.exports.strategies.ExportStrategyFactory;
+import com.java.service.statistics.StatisticsCalculationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,9 +36,10 @@ public class ExportProcessorService {
     private final ExportDataService dataService;
     private final FileGeneratorService fileGeneratorService;
     private final ExportStrategyFactory strategyFactory;
+    private final StatisticsCalculationService statisticsService;
     private final ExportSessionRepository sessionRepository;
     private final FileOperationRepository fileOperationRepository;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+
 
     // Флаги отмены для каждой сессии
     private final Map<Long, AtomicBoolean> cancellationFlags = new HashMap<>();
@@ -124,6 +125,14 @@ public class ExportProcessorService {
             // Подсчитываем модифицированные записи
             session.setModifiedRows((long) (data.size() - processedData.size()));
             session.setExportedRows((long) processedData.size());
+
+            // Сохраняем статистику если включена
+            try {
+                statisticsService.calculateAndSaveStatistics(session, processedData);
+            } catch (Exception e) {
+                log.error("Ошибка сохранения статистики, продолжаем экспорт", e);
+                // Не прерываем экспорт из-за ошибки статистики
+            }
 
             // Проверяем отмену
             if (cancelled.get()) {

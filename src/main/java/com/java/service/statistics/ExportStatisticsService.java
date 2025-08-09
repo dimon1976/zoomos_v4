@@ -1,19 +1,21 @@
-// src/main/java/com/java/service/statistics/ExportStatisticsService.java
 package com.java.service.statistics;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.java.dto.*;
+import com.java.dto.StatisticsComparisonDto;
+import com.java.dto.StatisticsRequestDto;
 import com.java.model.entity.ExportSession;
+import com.java.model.entity.ExportStatistics;
 import com.java.model.entity.ExportTemplate;
 import com.java.repository.ExportSessionRepository;
+import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,11 +23,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ExportStatisticsService {
 
-    private final JdbcTemplate jdbcTemplate;
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
+    private final ExportStatisticsRepository statisticsRepository;
     private final StatisticsSettingsService settingsService;
-    private final ObjectMapper objectMapper;
 
     /**
      * Вычисляет статистику для выбранных операций экспорта
@@ -37,139 +38,109 @@ public class ExportStatisticsService {
         ExportTemplate template = templateRepository.findByIdWithFieldsAndFilters(request.getTemplateId())
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
 
-        ExportStatisticsSettingsDto settings = parseStatisticsSettings(template);
-        if (!Boolean.TRUE.equals(settings.getEnableStatistics())) {
+        if (!Boolean.TRUE.equals(template.getEnableStatistics())) {
             throw new IllegalArgumentException("Статистика не включена для данного шаблона");
         }
 
         // Получаем сессии экспорта
         List<ExportSession> sessions = getExportSessions(request.getExportSessionIds(), template);
 
-        // Вычисляем статистику для каждой сессии
-        Map<String, List<StatisticsResultDto>> statisticsByGroup = new HashMap<>();
-
-        for (ExportSession session : sessions) {
-            List<StatisticsResultDto> sessionStats = calculateSessionStatistics(session, settings, request.getAdditionalFilters());
-
-            // Группируем по значению группировки
-            for (StatisticsResultDto stat : sessionStats) {
-                statisticsByGroup.computeIfAbsent(stat.getGroupFieldValue(), k -> new ArrayList<>()).add(stat);
-            }
+        if (sessions.isEmpty()) {
+            log.warn("Нет сессий для анализа");
+            return new ArrayList<>();
         }
+
+        // Получаем ID сессий
+        List<Long> sessionIds = sessions.stream()
+                .map(ExportSession::getId)
+                .collect(Collectors.toList());
+
+        // Загружаем статистику из БД
+        List<ExportStatistics> statistics = statisticsRepository.findBySessionIds(sessionIds);
+
+        if (statistics.isEmpty()) {
+            log.warn("Нет сохраненной статистики для выбранных сессий");
+            return new ArrayList<>();
+        }
+
+        // Группируем статистику по группам и сессиям
+        Map<String, Map<Long, List<ExportStatistics>>> groupedStats = statistics.stream()
+                .collect(Collectors.groupingBy(
+                        ExportStatistics::getGroupFieldValue,
+                        Collectors.groupingBy(ExportStatistics::getExportSessionId)
+                ));
+
+        // Создаем карту сессий для быстрого доступа
+        Map<Long, ExportSession> sessionMap = sessions.stream()
+                .collect(Collectors.toMap(ExportSession::getId, s -> s));
 
         // Создаем сравнительную статистику
-        return createComparison(statisticsByGroup, request);
-    }
-
-    /**
-     * Получает статистику для одной сессии экспорта
-     */
-    private List<StatisticsResultDto> calculateSessionStatistics(
-            ExportSession session,
-            ExportStatisticsSettingsDto settings,
-            Map<String, String> additionalFilters) {
-
-        log.debug("Расчет статистики для сессии: {}", session.getId());
-
-        // Определяем таблицу для запроса на основе типа сущности
-        String tableName = getTableName(session.getTemplate().getEntityType());
-
-        // Получаем операции-источники
-        List<Long> sourceOperationIds = parseSourceOperationIds(session.getSourceOperationIds());
-
-        // Строим SQL запрос
-        String sql = buildStatisticsQuery(tableName, settings, sourceOperationIds, additionalFilters);
-
-        // Выполняем запрос
-        List<Map<String, Object>> rawResults = jdbcTemplate.queryForList(sql, sourceOperationIds.toArray());
-
-        // Преобразуем результаты
-        return rawResults.stream()
-                .map(row -> convertToStatisticsResult(row, session, settings))
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Строит SQL запрос для подсчета статистики
-     */
-    private String buildStatisticsQuery(String tableName, ExportStatisticsSettingsDto settings,
-                                        List<Long> sourceOperationIds, Map<String, String> additionalFilters) {
-
-        StringBuilder sql = new StringBuilder();
-        sql.append("SELECT ");
-        sql.append(toSnakeCase(settings.getGroupField())).append(" as group_value, ");
-
-        // Добавляем COUNT для каждого поля
-        for (String countField : settings.getCountFields()) {
-            String snakeField = toSnakeCase(countField);
-            sql.append("COUNT(CASE WHEN ").append(snakeField).append(" IS NOT NULL AND ")
-                    .append(snakeField).append(" != '' THEN 1 END) as ").append(snakeField).append("_count, ");
-        }
-
-        // Убираем последнюю запятую
-        sql.setLength(sql.length() - 2);
-        sql.append(" FROM ").append(tableName);
-        sql.append(" WHERE 1=1");
-
-        // Фильтр по операциям-источникам
-        if (!sourceOperationIds.isEmpty()) {
-            sql.append(" AND operation_id IN (");
-            sql.append(sourceOperationIds.stream().map(id -> "?").collect(Collectors.joining(", ")));
-            sql.append(")");
-        }
-
-        // Применяем дополнительные фильтры
-        if (additionalFilters != null) {
-            for (Map.Entry<String, String> filter : additionalFilters.entrySet()) {
-                sql.append(" AND ").append(toSnakeCase(filter.getKey())).append(" = '").append(filter.getValue()).append("'");
-            }
-        }
-
-        // Группировка
-        sql.append(" GROUP BY ").append(toSnakeCase(settings.getGroupField()));
-        sql.append(" ORDER BY ").append(toSnakeCase(settings.getGroupField()));
-
-        log.debug("Построенный SQL: {}", sql.toString());
-        return sql.toString();
-    }
-
-    /**
-     * Создает сравнительную статистику
-     */
-    private List<StatisticsComparisonDto> createComparison(
-            Map<String, List<StatisticsResultDto>> statisticsByGroup,
-            StatisticsRequestDto request) {
-
         List<StatisticsComparisonDto> comparisons = new ArrayList<>();
 
-        for (Map.Entry<String, List<StatisticsResultDto>> entry : statisticsByGroup.entrySet()) {
-            String groupValue = entry.getKey();
-            List<StatisticsResultDto> groupStats = entry.getValue();
+        for (Map.Entry<String, Map<Long, List<ExportStatistics>>> groupEntry : groupedStats.entrySet()) {
+            String groupValue = groupEntry.getKey();
+            Map<Long, List<ExportStatistics>> sessionStats = groupEntry.getValue();
 
-            // Сортируем по дате (новые первыми)
-            groupStats.sort((a, b) -> b.getExportDate().compareTo(a.getExportDate()));
+            // Создаем список операций для группы
+            List<StatisticsComparisonDto.OperationStatistics> operations = new ArrayList<>();
 
-            // Создаем статистику по операциям
-            List<StatisticsComparisonDto.OperationStatistics> operationStats = new ArrayList<>();
+            // Сортируем сессии по дате (новые первыми)
+            List<Long> sortedSessionIds = sessionStats.keySet().stream()
+                    .sorted((id1, id2) -> {
+                        ExportSession s1 = sessionMap.get(id1);
+                        ExportSession s2 = sessionMap.get(id2);
+                        return s2.getStartedAt().compareTo(s1.getStartedAt());
+                    })
+                    .toList();
 
-            for (int i = 0; i < groupStats.size(); i++) {
-                StatisticsResultDto current = groupStats.get(i);
-                StatisticsResultDto previous = i + 1 < groupStats.size() ? groupStats.get(i + 1) : null;
+            for (int i = 0; i < sortedSessionIds.size(); i++) {
+                Long sessionId = sortedSessionIds.get(i);
+                ExportSession session = sessionMap.get(sessionId);
+                List<ExportStatistics> sessionStatsList = sessionStats.get(sessionId);
 
-                Map<String, StatisticsComparisonDto.MetricValue> metrics = calculateMetrics(current, previous, request);
+                // Собираем метрики для сессии
+                Map<String, Long> currentMetrics = sessionStatsList.stream()
+                        .collect(Collectors.toMap(
+                                ExportStatistics::getCountFieldName,
+                                ExportStatistics::getCountValue,
+                                (v1, v2) -> v1 // При дубликатах берем первое
+                        ));
 
-                operationStats.add(StatisticsComparisonDto.OperationStatistics.builder()
-                        .exportSessionId(current.getExportSessionId())
-                        .operationName(current.getExportSessionName())
-                        .exportDate(current.getExportDate())
+                // Получаем предыдущие метрики если есть
+                Map<String, Long> previousMetrics = null;
+                if (i + 1 < sortedSessionIds.size()) {
+                    Long prevSessionId = sortedSessionIds.get(i + 1);
+                    List<ExportStatistics> prevStats = sessionStats.get(prevSessionId);
+                    previousMetrics = prevStats.stream()
+                            .collect(Collectors.toMap(
+                                    ExportStatistics::getCountFieldName,
+                                    ExportStatistics::getCountValue,
+                                    (v1, v2) -> v1
+                            ));
+                }
+
+                // Вычисляем метрики с отклонениями
+                Map<String, StatisticsComparisonDto.MetricValue> metrics =
+                        calculateMetrics(currentMetrics, previousMetrics, request);
+
+                operations.add(StatisticsComparisonDto.OperationStatistics.builder()
+                        .exportSessionId(sessionId)
+                        .operationName("Экспорт #" + sessionId)
+                        .exportDate(session.getStartedAt())
                         .metrics(metrics)
                         .build());
             }
 
             comparisons.add(StatisticsComparisonDto.builder()
                     .groupFieldValue(groupValue)
-                    .operations(operationStats)
+                    .operations(operations)
                     .build());
+        }
+
+        // Применяем дополнительные фильтры если указаны
+        if (request.getAdditionalFilters() != null && !request.getAdditionalFilters().isEmpty()) {
+            log.debug("Применение дополнительных фильтров: {}", request.getAdditionalFilters());
+            // Фильтры можно применить здесь при необходимости
         }
 
         return comparisons;
@@ -179,31 +150,34 @@ public class ExportStatisticsService {
      * Вычисляет метрики с отклонениями
      */
     private Map<String, StatisticsComparisonDto.MetricValue> calculateMetrics(
-            StatisticsResultDto current,
-            StatisticsResultDto previous,
+            Map<String, Long> currentMetrics,
+            Map<String, Long> previousMetrics,
             StatisticsRequestDto request) {
 
-        Map<String, StatisticsComparisonDto.MetricValue> metrics = new HashMap<>();
+        Map<String, StatisticsComparisonDto.MetricValue> result = new HashMap<>();
 
-        for (Map.Entry<String, Long> entry : current.getCountValues().entrySet()) {
+        for (Map.Entry<String, Long> entry : currentMetrics.entrySet()) {
             String fieldName = entry.getKey();
             Long currentValue = entry.getValue();
-            Long previousValue = previous != null ? previous.getCountValues().get(fieldName) : null;
+            Long previousValue = previousMetrics != null ? previousMetrics.get(fieldName) : null;
 
             StatisticsComparisonDto.MetricValue metric = calculateMetricValue(
-                    currentValue, previousValue, request.getWarningPercentage(), request.getCriticalPercentage());
+                    currentValue, previousValue,
+                    request.getWarningPercentage(),
+                    request.getCriticalPercentage());
 
-            metrics.put(fieldName, metric);
+            result.put(fieldName, metric);
         }
 
-        return metrics;
+        return result;
     }
 
     /**
      * Вычисляет значение метрики с отклонением
      */
     private StatisticsComparisonDto.MetricValue calculateMetricValue(
-            Long currentValue, Long previousValue, Integer warningPercentage, Integer criticalPercentage) {
+            Long currentValue, Long previousValue,
+            Integer warningPercentage, Integer criticalPercentage) {
 
         StatisticsComparisonDto.MetricValue.MetricValueBuilder metricBuilder =
                 StatisticsComparisonDto.MetricValue.builder()
@@ -243,7 +217,7 @@ public class ExportStatisticsService {
     }
 
     /**
-     * Определяет уровень предупреждения на основе процента отклонения
+     * Определяет уровень предупреждения
      */
     private StatisticsComparisonDto.AlertLevel determineAlertLevel(
             double absChangePercentage, Integer warningPercentage, Integer criticalPercentage) {
@@ -260,85 +234,19 @@ public class ExportStatisticsService {
         }
     }
 
-    // Вспомогательные методы
-
+    /**
+     * Получает сессии экспорта
+     */
     private List<ExportSession> getExportSessions(List<Long> sessionIds, ExportTemplate template) {
-        if (sessionIds.isEmpty()) {
-            // Если не выбраны конкретные сессии, берем все для данного шаблона
-            return sessionRepository.findByTemplate(template, org.springframework.data.domain.Pageable.unpaged())
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            // Если не выбраны конкретные сессии, берем последние для шаблона
+            return sessionRepository.findByTemplate(template,
+                            org.springframework.data.domain.PageRequest.of(0, settingsService.getMaxOperations(),
+                                    org.springframework.data.domain.Sort.by(
+                                            org.springframework.data.domain.Sort.Direction.DESC, "startedAt")))
                     .getContent();
         } else {
             return sessionRepository.findAllById(sessionIds);
         }
-    }
-
-    private ExportStatisticsSettingsDto parseStatisticsSettings(ExportTemplate template) {
-        try {
-            return ExportStatisticsSettingsDto.builder()
-                    .enableStatistics(Boolean.TRUE.equals(template.getEnableStatistics()))
-                    .countFields(parseJsonList(template.getStatisticsCountFields()))
-                    .groupField(template.getStatisticsGroupField())
-                    .filterFields(parseJsonList(template.getStatisticsFilterFields()))
-                    .build();
-        } catch (Exception e) {
-            log.error("Ошибка парсинга настроек статистики для шаблона ID: {}", template.getId(), e);
-            return ExportStatisticsSettingsDto.builder().enableStatistics(false).build();
-        }
-    }
-
-    private List<String> parseJsonList(String json) {
-        if (json == null || json.trim().isEmpty()) {
-            return new ArrayList<>();
-        }
-        try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            log.error("Ошибка парсинга JSON списка: {}", json, e);
-            return new ArrayList<>();
-        }
-    }
-
-    private List<Long> parseSourceOperationIds(String sourceOperationIds) {
-        if (sourceOperationIds == null || sourceOperationIds.trim().isEmpty()) {
-            return new ArrayList<>();
-        }
-        try {
-            return objectMapper.readValue(sourceOperationIds, new TypeReference<List<Long>>() {});
-        } catch (Exception e) {
-            log.error("Ошибка парсинга операций-источников: {}", sourceOperationIds, e);
-            return new ArrayList<>();
-        }
-    }
-
-    private String getTableName(com.java.model.enums.EntityType entityType) {
-        return switch (entityType) {
-            case AV_DATA -> "av_data";
-            case AV_HANDBOOK -> "av_handbook";
-        };
-    }
-
-    private StatisticsResultDto convertToStatisticsResult(Map<String, Object> row, ExportSession session,
-                                                          ExportStatisticsSettingsDto settings) {
-        String groupValue = (String) row.get("group_value");
-        Map<String, Long> countValues = new HashMap<>();
-
-        for (String countField : settings.getCountFields()) {
-            String snakeField = toSnakeCase(countField) + "_count";
-            Long count = ((Number) row.get(snakeField)).longValue();
-            countValues.put(countField, count);
-        }
-
-        return StatisticsResultDto.builder()
-                .exportSessionId(session.getId())
-                .exportSessionName("Экспорт " + session.getId())
-                .exportDate(session.getStartedAt())
-                .groupFieldValue(groupValue)
-                .countValues(countValues)
-                .build();
-    }
-
-    private String toSnakeCase(String value) {
-        if (value == null) return null;
-        return value.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
     }
 }
