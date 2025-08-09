@@ -9,6 +9,7 @@ import com.java.repository.ExportStatisticsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
@@ -28,7 +29,7 @@ public class StatisticsCalculationService {
     /**
      * Рассчитывает и сохраняет статистику для экспортированных данных
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void calculateAndSaveStatistics(
             ExportSession session,
             List<Map<String, Object>> exportedData) {
@@ -101,6 +102,8 @@ public class StatisticsCalculationService {
         // Сохраняем все записи
         if (!statisticsToSave.isEmpty()) {
             statisticsRepository.saveAll(statisticsToSave);
+            // явно сбрасываем изменения, чтобы гарантировать запись
+            statisticsRepository.flush();
             log.info("Сохранено {} записей статистики для сессии {}",
                     statisticsToSave.size(), session.getId());
         } else {
