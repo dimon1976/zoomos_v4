@@ -259,9 +259,7 @@
                                         <i th:class="${metricValue.changeType.name() == 'UP' ? 'fas fa-arrow-up' :
                                                      metricValue.changeType.name() == 'DOWN' ? 'fas fa-arrow-down' :
                                                      'fas fa-minus'}"></i>
-                                        <span th:text="${#numbers.formatDecimal(Math.abs(metricValue.changePercentage), 1, 1)} + '%'">
-                                            5.0%
-                                        </span>
+                                        <span th:text="${#numbers.formatDecimal(T(java.lang.Math).abs(metricValue.changePercentage), 1, 1)} + '%'"></span>
                                     </span>
                             </div>
                         </td>

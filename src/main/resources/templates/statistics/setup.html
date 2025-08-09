@@ -248,7 +248,7 @@
         </div>
 
         <!-- Скрытые поля для фильтров -->
-        <input type="hidden" name="additionalFilters" id="additionalFiltersInput">
+        <div id="additionalFiltersContainer"></div>
     </form>
 </section>
 
@@ -340,11 +340,12 @@
 
     function updateFiltersDisplay() {
         const container = document.getElementById('appliedFilters');
-        const input = document.getElementById('additionalFiltersInput');
+        const inputsContainer = document.getElementById('additionalFiltersContainer');
+
+        container.innerHTML = '';
+        inputsContainer.innerHTML = '';
 
         if (Object.keys(appliedFilters).length === 0) {
-            container.innerHTML = '';
-            input.value = '';
             return;
         }
 
@@ -357,7 +358,13 @@
         `).join('');
 
         container.innerHTML = filtersHtml;
-        input.value = JSON.stringify(appliedFilters);
+        Object.entries(appliedFilters).forEach(([field, value]) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = `additionalFilters[${field}]`;
+            input.value = value;
+            inputsContainer.appendChild(input);
+        });
     }
 
     function previewStatistics() {

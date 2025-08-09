@@ -289,6 +289,14 @@
     </form>
 </section>
 <script>
+    function toggleStatisticsSettings() {
+        const checkbox = document.getElementById('enableStatistics');
+        const settings = document.getElementById('statisticsSettings');
+        if (checkbox && settings) {
+            settings.style.display = checkbox.checked ? 'block' : 'none';
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         const formatSelect = document.getElementById('fileFormat');
         const csvSettings = document.getElementById('csvSettings');
@@ -306,6 +314,7 @@
 
         formatSelect.addEventListener('change', toggleSettings);
         toggleSettings();
+        toggleStatisticsSettings();
     });
 </script>
 </body>
