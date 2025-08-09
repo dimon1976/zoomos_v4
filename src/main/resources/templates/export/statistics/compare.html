@@ -222,7 +222,7 @@
               <td class="group-header" th:text="${row.groupValue}">Значение</td>
               <td th:each="metric : ${row.metrics}"
                   class="value-cell"
-                  th:classappend="${getChangeClass(metric.changeType, metric.changePercent, config.deviationThresholdPercent)}">
+                  th:classappend="${T(com.java.util.ExportStatisticsUtils).getChangeClass(metric.changeType, metric.changePercent, config.deviationThresholdPercent)}">
                 <span th:text="${metric.count}">0</span>
                 <span th:if="${metric.changePercent != null}"
                       class="change-indicator">
@@ -243,7 +243,7 @@
             <tr class="table-secondary">
               <td><strong>Итого</strong></td>
               <td th:each="op : ${statistics.operations}" class="text-center">
-                <strong th:text="${getTotal(statistics.rows, op.sessionId)}">0</strong>
+                <strong th:text="${T(com.java.util.ExportStatisticsUtils).getTotal(statistics.rows, op.sessionId)}">0</strong>
               </td>
             </tr>
             </tfoot>
@@ -274,61 +274,8 @@
     alert('Функция экспорта в разработке');
   }
 
-  // Вспомогательная функция для определения CSS класса
-  function getChangeClass(changeType, changePercent, threshold) {
-    const stats = /*[[${statistics}]]*/ null;
-    if (!stats) return '';
 
-    // Эта логика будет обработана на сервере через Thymeleaf
-    return '';
-  }
-
-  // Вспомогательная функция для подсчета итогов
-  function getTotal(rows, sessionId) {
-    const stats = /*[[${statistics}]]*/ null;
-    if (!stats) return 0;
-
-    // Эта логика будет обработана на сервере через Thymeleaf
-    return 0;
-  }
   /*]]>*/
 </script>
-
-<!-- Thymeleaf функции -->
-<th:block th:fragment="functions">
-  <script th:inline="javascript">
-    /*[# th:utext="${
-        #strings.concat(
-            'function getChangeClass(changeType, changePercent, threshold) {',
-            '  if (!changeType) return \"no-change\";',
-            '  if (changeType == \"NO_CHANGE\" || changeType == \"NO_DATA\") return \"no-change\";',
-            '  const absPercent = Math.abs(changePercent || 0);',
-            '  if (changeType == \"INCREASE\") {',
-            '    return absPercent >= threshold ? \"significant-increase\" : \"increase\";',
-            '  }',
-            '  if (changeType == \"DECREASE\") {',
-            '    return absPercent >= threshold ? \"significant-decrease\" : \"decrease\";',
-            '  }',
-            '  return \"no-change\";',
-            '}'
-        )
-    }" ]*/
-  </script>
-
-  <script th:inline="javascript">
-    /*[# th:utext="${
-        #strings.concat(
-            'function getTotal(rows, sessionId) {',
-            '  let total = 0;',
-            '  rows.forEach(row => {',
-            '    const metric = row.metrics.find(m => m.sessionId == sessionId);',
-            '    if (metric) total += metric.count;',
-            '  });',
-            '  return total;',
-            '}'
-        )
-    }" ]*/
-  </script>
-</th:block>
 </body>
 </html>

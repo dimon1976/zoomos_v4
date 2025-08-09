@@ -1,8 +1,12 @@
 package com.java.controller;
 
+import com.java.dto.ExportSessionDto;
+import com.java.mapper.ExportSessionMapper;
 import com.java.model.Client;
 import com.java.model.FileOperation;
+import com.java.model.entity.ExportSession;
 import com.java.repository.ClientRepository;
+import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +28,7 @@ public class OperationsRestController {
 
     private final FileOperationRepository fileOperationRepository;
     private final ClientRepository clientRepository;
+    private final ExportSessionRepository sessionRepository;
 
     /**
      * Получение списка операций клиента
@@ -43,6 +48,24 @@ public class OperationsRestController {
 
         return operations.stream()
                 .map(this::toDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns last export sessions for a client.
+     *
+     * @param clientId client identifier
+     * @param limit    max number of sessions to return
+     * @return list of export session DTOs
+     */
+    @GetMapping("/clients/{clientId}/export-operations")
+    public List<ExportSessionDto> getClientExportOperations(@PathVariable Long clientId,
+                                                            @RequestParam(defaultValue = "50") int limit) {
+        log.debug("Запрос операций экспорта для клиента ID: {}", clientId);
+        PageRequest pageRequest = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "startedAt"));
+        List<ExportSession> sessions = sessionRepository.findByClientId(clientId, pageRequest).getContent();
+        return sessions.stream()
+                .map(ExportSessionMapper::toDto)
                 .collect(Collectors.toList());
     }
 
