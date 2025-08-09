@@ -29,6 +29,11 @@
     <a th:href="@{/export/client/{id}(id=${clientId})}" class="btn btn-secondary me-2">
         <i class="fas fa-arrow-left me-1"></i>Назад к экспорту
     </a>
+    <a th:if="${session.status.name() == 'COMPLETED'}"
+       th:href="@{/export/statistics/compare(templateId=${session.templateId},sessionIds=${session.id})}"
+       class="btn btn-info me-2">
+        <i class="fas fa-chart-bar me-1"></i>Статистика
+    </a>
     <a th:if="${session.status.name() == 'COMPLETED' && session.resultFilePath != null}"
        th:href="@{/export/download/{id}(id=${session.id})}"
        class="btn btn-success">

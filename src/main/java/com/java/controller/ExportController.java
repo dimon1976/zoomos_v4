@@ -3,8 +3,10 @@ package com.java.controller;
 import com.java.dto.ExportRequestDto;
 import com.java.dto.ExportSessionDto;
 import com.java.dto.ExportTemplateDto;
+import com.java.mapper.ExportSessionMapper;
 import com.java.model.Client;
 import com.java.model.FileOperation;
+import com.java.model.entity.ExportSession;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.service.EntityFieldService;
@@ -12,6 +14,7 @@ import com.java.service.exports.ExportService;
 import com.java.service.exports.ExportTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -52,10 +55,24 @@ public class ExportController {
         List<FileOperation> recentOperations = fileOperationRepository
                 .findRecentImportOperations(client, PageRequest.of(0, 20));
 
+        // Получаем историю экспортов
+        Page<ExportSession> exportSessions = sessionRepository
+                .findByClientId(clientId, PageRequest.of(0, 10));
+
+        List<ExportSessionDto> exportHistory = exportSessions.stream()
+                .map(session -> {
+                    ExportSessionDto dto = ExportSessionMapper.toDto(session);
+                    dto.setTemplateId(session.getTemplate().getId());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+
         model.addAttribute("templates", templates);
         model.addAttribute("clientId", clientId);
         model.addAttribute("recentOperations", recentOperations);
+        model.addAttribute("exportHistory", exportHistory);
         model.addAttribute("request", new ExportRequestDto());
+
         return "export/start";
     }
 

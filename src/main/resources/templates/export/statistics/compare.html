@@ -79,6 +79,17 @@
   </style>
 </head>
 <body>
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a th:href="@{/}">Главная</a></li>
+    <li class="breadcrumb-item"><a th:href="@{/clients}">Клиенты</a></li>
+    <li class="breadcrumb-item">
+      <a th:href="@{/export/templates/{id}(id=${templateId})}"
+         th:text="${config.templateName ?: 'Шаблон'}">Шаблон</a>
+    </li>
+    <li class="breadcrumb-item active">Статистика</li>
+  </ol>
+</nav>
 <div class="page-actions">
   <button class="btn btn-primary" onclick="exportToExcel()">
     <i class="fas fa-file-excel me-1"></i>Экспорт в Excel
@@ -114,17 +125,17 @@
           <div class="mb-3">
             <label class="form-label">Выберите операции для сравнения</label>
             <div class="operation-selector">
-              <div th:each="session : ${availableSessions}" class="form-check">
+              <div th:each="sess : ${availableSessions}" class="form-check">
                 <input class="form-check-input operation-checkbox"
                        type="checkbox"
-                       th:id="${'session_' + session.id}"
-                       th:value="${session.id}"
-                       th:checked="${selectedSessionIds.contains(session.id)}">
+                       th:id="${'session_' + sess.id}"
+                       th:value="${sess.id}"
+                       th:checked="${selectedSessionIds.contains(sess.id)}">
                 <label class="form-check-label"
-                       th:for="${'session_' + session.id}">
-                  <span th:text="${session.fileOperation.fileName}">Файл</span>
+                       th:for="${'session_' + sess.id}">
+                  <span th:text="${sess.fileOperation.fileName}">Файл</span>
                   <small class="text-muted">
-                    (<span th:text="${#temporals.format(session.startedAt, 'dd.MM.yyyy HH:mm')}">Дата</span>)
+                    (<span th:text="${#temporals.format(sess.startedAt, 'dd.MM.yyyy HH:mm')}">Дата</span>)
                   </small>
                 </label>
               </div>

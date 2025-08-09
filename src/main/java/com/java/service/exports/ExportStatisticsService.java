@@ -162,16 +162,20 @@ public class ExportStatisticsService {
         Map<String, Map<String, Long>> result = new HashMap<>();
 
         for (Map<String, Object> row : data) {
-            String groupValue = Objects.toString(row.get(groupByField), "NULL");
-
-            if ("NULL".equals(groupValue) || groupValue.trim().isEmpty()) {
-                continue; // Пропускаем NULL значения
+            // Получаем значение для группировки
+            Object groupValueObj = row.get(groupByField);
+            if (groupValueObj == null || groupValueObj.toString().trim().isEmpty()) {
+                continue; // Пропускаем NULL и пустые значения группировки
             }
 
+            String groupValue = groupValueObj.toString().trim();
             Map<String, Long> groupMetrics = result.computeIfAbsent(groupValue, k -> new HashMap<>());
 
+            // Подсчитываем только непустые значения в метрических полях
             for (String metricField : metricFields) {
                 Object value = row.get(metricField);
+
+                // Считаем только если значение не null и не пустая строка
                 if (value != null && !value.toString().trim().isEmpty()) {
                     String metricKey = metricField + "_count";
                     groupMetrics.merge(metricKey, 1L, Long::sum);
@@ -179,6 +183,7 @@ public class ExportStatisticsService {
             }
         }
 
+        log.info("Рассчитано метрик для {} групп", result.size());
         return result;
     }
 

@@ -7,7 +7,9 @@ import com.java.dto.ExportTemplateFilterDto;
 import com.java.model.enums.EntityType;
 import com.java.model.enums.ExportStrategy;
 import com.java.model.enums.FilterType;
+import com.java.repository.ExportSessionRepository;
 import com.java.service.EntityFieldService;
+import com.java.service.exports.ExportStatisticsService;
 import com.java.service.exports.ExportTemplateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,8 @@ public class ExportTemplateController {
 
     private final ExportTemplateService templateService;
     private final EntityFieldService fieldService;
+    private final ExportStatisticsService statisticsService;
+    private final ExportSessionRepository sessionRepository;
 
     /**
      * Форма создания шаблона
@@ -101,6 +105,15 @@ public class ExportTemplateController {
         return templateService.getTemplate(templateId)
                 .map(t -> {
                     model.addAttribute("template", t);
+
+                    // Добавляем информацию о статистике
+                    statisticsService.getStatisticsConfig(templateId)
+                            .ifPresent(config -> model.addAttribute("statisticsConfig", config));
+
+                    // Добавляем количество операций экспорта
+                    Long exportSessionsCount = sessionRepository.countByTemplateId(templateId);
+                    model.addAttribute("exportSessionsCount", exportSessionsCount);
+
                     return "export/templates/view";
                 })
                 .orElseGet(() -> {

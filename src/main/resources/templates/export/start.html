@@ -47,30 +47,80 @@
                     <input type="number" id="maxReportAgeDays" class="form-control" th:field="*{maxReportAgeDays}" min="1">
                 </div>
 
-                <div class="mb-3" th:if="${!#lists.isEmpty(recentOperations)}">
-                    <label class="form-label">Последние операции</label>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                            <tr>
-                                <th></th>
-                                <th>ID</th>
-                                <th>Файл</th>
-                                <th>Загружено</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            <tr th:each="op : ${recentOperations}">
-                                <td>
-                                    <input class="form-check-input" type="checkbox" name="selectedOperationIds"
-                                           th:value="${op.id}">
-                                </td>
-                                <td th:text="${op.id}">1</td>
-                                <td th:text="${op.fileName}">file.csv</td>
-                                <td th:text="${#temporals.format(op.startedAt, 'dd.MM.yyyy HH:mm')}">01.01.2024 00:00</td>
-                            </tr>
-                            </tbody>
-                        </table>
+                <div class="card mt-5" th:if="${!#lists.isEmpty(exportHistory)}">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-history me-2"></i>История экспортов
+                        </h5>
+                        <button type="button" class="btn btn-sm btn-primary"
+                                onclick="showStatisticsModal()">
+                            <i class="fas fa-chart-bar me-1"></i>Сравнить статистику
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group">
+                            <div th:each="export : ${exportHistory}"
+                                 class="list-group-item export-history-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="form-check">
+                                        <input class="form-check-input export-checkbox" type="checkbox"
+                                               th:value="${export.id}"
+                                               th:id="${'export_' + export.id}">
+                                        <label class="form-check-label"
+                                               th:for="${'export_' + export.id}">
+                                            <h6 class="mb-1" th:text="${export.fileName}">export.csv</h6>
+                                            <p class="mb-0">
+                                                <small class="text-muted">
+                                                    <span th:text="${export.templateName}">Шаблон</span> •
+                                                    <span th:text="${#temporals.format(export.startedAt, 'dd.MM.yyyy HH:mm')}">
+                                        01.01.2025
+                                    </span> •
+                                                    <span th:text="${export.exportedRows + ' записей'}">100 записей</span>
+                                                </small>
+                                            </p>
+                                        </label>
+                                    </div>
+                                    <div>
+                        <span class="badge"
+                              th:classappend="${export.status.name() == 'COMPLETED' ? 'bg-success' :
+                                             export.status.name() == 'FAILED' ? 'bg-danger' :
+                                             'bg-warning'}"
+                              th:text="${export.status.displayName}">Завершено</span>
+                                        <a th:href="@{/export/status/{id}(id=${export.id})}"
+                                           class="btn btn-sm btn-outline-primary ms-2">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Модальное окно для выбора операций для статистики -->
+                <div class="modal fade" id="statisticsModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Выбор операций для статистики</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Выберите операции для сравнения статистики:</p>
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    Если не выбрать операции, будут показаны все доступные
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                    Отмена
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="goToStatistics()">
+                                    <i class="fas fa-chart-bar me-1"></i>Перейти к статистике
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -249,6 +299,32 @@
         updateFilters();
         toggleOperations();
     });
+    function showStatisticsModal() {
+        const modal = new bootstrap.Modal(document.getElementById('statisticsModal'));
+        modal.show();
+    }
+
+    function goToStatistics() {
+        const selectedIds = [];
+        document.querySelectorAll('.export-checkbox:checked').forEach(cb => {
+            selectedIds.push(cb.value);
+        });
+
+        // Получаем ID шаблона из первой операции
+        const templateId = /*[[${exportHistory[0]?.templateId}]]*/ null;
+
+        if (!templateId) {
+            alert('Не удалось определить шаблон');
+            return;
+        }
+
+        let url = `/export/statistics/compare?templateId=${templateId}`;
+        if (selectedIds.length > 0) {
+            url += '&sessionIds=' + selectedIds.join(',');
+        }
+
+        window.location.href = url;
+    }
 </script>
 </body>
 </html>

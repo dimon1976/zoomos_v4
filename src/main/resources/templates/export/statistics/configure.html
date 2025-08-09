@@ -205,6 +205,17 @@
 
         // Инициализация
         toggleConfig();
+        // Установка начальных значений метрик
+        if (metricFieldsInput.value) {
+            try {
+                const savedFields = JSON.parse(metricFieldsInput.value);
+                metricCheckboxes.forEach(cb => {
+                    cb.checked = savedFields.includes(cb.value);
+                });
+            } catch (e) {
+                console.error('Ошибка парсинга сохраненных полей', e);
+            }
+        }
         updateMetricFields();
 
         // Установка начальных значений фильтра

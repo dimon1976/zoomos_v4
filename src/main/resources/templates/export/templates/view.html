@@ -66,6 +66,74 @@
             </div>
         </div>
     </div>
+    <!-- Статистика -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="card-title mb-0">
+                <i class="fas fa-chart-bar me-2"></i>Статистика
+            </h6>
+            <div>
+                <a th:href="@{/export/statistics/template/{id}/configure(id=${template.id})}"
+                   class="btn btn-sm btn-outline-primary me-2">
+                    <i class="fas fa-cog me-1"></i>Настроить
+                </a>
+                <a th:href="@{/export/statistics/compare(templateId=${template.id})}"
+                   class="btn btn-sm btn-primary"
+                   th:if="${exportSessionsCount > 0}">
+                    <i class="fas fa-chart-line me-1"></i>Смотреть статистику
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <div th:if="${statisticsConfig != null && statisticsConfig.isEnabled}">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Статус:</strong>
+                            <span class="badge bg-success">Включена</span>
+                        </p>
+                        <p class="mb-1"><strong>Группировка по:</strong>
+                            <code th:text="${statisticsConfig.groupByField ?: 'Не настроено'}">поле</code>
+                        </p>
+                        <p class="mb-1"><strong>Порог отклонения:</strong>
+                            <span th:text="${statisticsConfig.deviationThresholdPercent + '%'}">10%</span>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Поля для подсчета:</strong></p>
+                        <div th:if="${!#lists.isEmpty(statisticsConfig.metricFields)}">
+                            <code th:each="field : ${statisticsConfig.metricFields}"
+                                  th:text="${field}" class="d-block small">поле</code>
+                        </div>
+                        <span th:unless="${!#lists.isEmpty(statisticsConfig.metricFields)}"
+                              class="text-muted">Не выбраны</span>
+                    </div>
+                </div>
+            </div>
+            <div th:unless="${statisticsConfig != null && statisticsConfig.isEnabled}">
+                <p class="text-muted mb-2">
+                    Статистика позволяет сравнивать операции экспорта, отслеживать изменения количества записей
+                    и выявлять отклонения.
+                </p>
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Статистика не настроена. Нажмите "Настроить" для активации.
+                </div>
+            </div>
+
+            <div th:if="${exportSessionsCount > 0}" class="mt-3">
+                <small class="text-success">
+                    <i class="fas fa-check-circle me-1"></i>
+                    Доступно <span th:text="${exportSessionsCount}">0</span> операций для анализа
+                </small>
+            </div>
+            <div th:unless="${exportSessionsCount > 0}" class="mt-3">
+                <small class="text-warning">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Выполните экспорт для начала сбора статистики
+                </small>
+            </div>
+        </div>
+    </div>
 
     <!-- Поля шаблона -->
     <div class="card mb-4">
