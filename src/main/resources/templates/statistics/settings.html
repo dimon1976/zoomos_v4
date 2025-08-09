@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Настройки статистики',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Настройки статистики',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Настройки статистики</title>
+    <style>
+        .settings-card {
+            transition: all 0.2s ease;
+        }
+        .settings-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .setting-description {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .current-value {
+            font-weight: 600;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions">
+    <a href="javascript:history.back()" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</div>
+
+<section>
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>
+        <strong>Глобальные настройки статистики</strong> применяются ко всем анализам,
+        если не переопределены в конкретном запросе.
+    </div>
+
+    <form th:action="@{/statistics/settings/update}" method="post">
+        <div class="row">
+            <!-- Процент предупреждения -->
+            <div class="col-md-4 mb-4">
+                <div class="card settings-card h-100">
+                    <div class="card-header bg-warning text-dark">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Порог предупреждения
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="deviation_percentage_warning" class="form-label">Процент отклонения</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="deviation_percentage_warning"
+                                       name="deviation_percentage_warning"
+                                       th:value="${settings['deviation_percentage_warning']}"
+                                       min="1" max="100" required>
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                        <div class="setting-description">
+                            При превышении этого процента отклонения ячейки будут выделяться желтым цветом.
+                            <br><br>
+                            <strong>Текущее значение:</strong>
+                            <span class="current-value" th:text="${settings['deviation_percentage_warning']} + '%'">10%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Критический процент -->
+            <div class="col-md-4 mb-4">
+                <div class="card settings-card h-100">
+                    <div class="card-header bg-danger text-white">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-times-circle me-2"></i>Критический порог
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="deviation_percentage_critical" class="form-label">Процент отклонения</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="deviation_percentage_critical"
+                                       name="deviation_percentage_critical"
+                                       th:value="${settings['deviation_percentage_critical']}"
+                                       min="1" max="100" required>
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                        <div class="setting-description">
+                            При превышении этого процента отклонения ячейки будут выделяться красным цветом.
+                            <br><br>
+                            <strong>Текущее значение:</strong>
+                            <span class="current-value" th:text="${settings['deviation_percentage_critical']} + '%'">20%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Максимальное количество операций -->
+            <div class="col-md-4 mb-4">
+                <div class="card settings-card h-100">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-list-ol me-2"></i>Лимит операций
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="statistics_max_operations" class="form-label">Максимальное количество</label>
+                            <input type="number" class="form-control" id="statistics_max_operations"
+                                   name="statistics_max_operations"
+                                   th:value="${settings['statistics_max_operations']}"
+                                   min="2" max="50" required>
+                        </div>
+                        <div class="setting-description">
+                            Максимальное количество операций экспорта, которые можно сравнивать одновременно.
+                            <br><br>
+                            <strong>Текущее значение:</strong>
+                            <span class="current-value" th:text="${settings['statistics_max_operations']}">10</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Примеры настроек -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-lightbulb me-2"></i>Рекомендуемые настройки
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h6>Консервативные</h6>
+                        <ul>
+                            <li>Предупреждение: <strong>5%</strong></li>
+                            <li>Критическое: <strong>10%</strong></li>
+                            <li>Макс. операций: <strong>5</strong></li>
+                        </ul>
+                        <small class="text-muted">Для чувствительных к изменениям данных</small>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Стандартные</h6>
+                        <ul>
+                            <li>Предупреждение: <strong>10%</strong></li>
+                            <li>Критическое: <strong>20%</strong></li>
+                            <li>Макс. операций: <strong>10</strong></li>
+                        </ul>
+                        <small class="text-muted">Оптимальный баланс чувствительности</small>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Либеральные</h6>
+                        <ul>
+                            <li>Предупреждение: <strong>20%</strong></li>
+                            <li>Критическое: <strong>30%</strong></li>
+                            <li>Макс. операций: <strong>20</strong></li>
+                        </ul>
+                        <small class="text-muted">Для данных с естественными колебаниями</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="d-flex justify-content-between">
+            <div>
+                <button type="button" class="btn btn-outline-secondary me-2" onclick="resetToDefaults()">
+                    <i class="fas fa-undo me-1"></i>Сбросить к умолчанию
+                </button>
+                <button type="button" class="btn btn-outline-info" onclick="applyPreset('standard')">
+                    <i class="fas fa-magic me-1"></i>Применить стандартные
+                </button>
+            </div>
+            <div>
+                <button type="button" class="btn btn-secondary me-2" onclick="previewChanges()">
+                    <i class="fas fa-eye me-1"></i>Предварительный просмотр
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save me-1"></i>Сохранить настройки
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- Справочная информация -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h6 class="card-title mb-0">
+                <i class="fas fa-question-circle me-2"></i>Справочная информация
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Как работают пороги отклонений:</h6>
+                    <ul>
+                        <li><strong>0% - порог предупреждения:</strong> нормальные значения (белый фон)</li>
+                        <li><strong>Порог предупреждения - критический порог:</strong> требует внимания (желтый фон)</li>
+                        <li><strong>Свыше критического порога:</strong> критическое изменение (красный фон)</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>Примеры:</h6>
+                    <div class="bg-light p-2 rounded">
+                        <small>
+                            При настройках 10%/20%:<br>
+                            • Изменение на 5% → обычное<br>
+                            • Изменение на 15% → предупреждение<br>
+                            • Изменение на 25% → критическое
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    function resetToDefaults() {
+        if (confirm('Сбросить все настройки к значениям по умолчанию?')) {
+            document.getElementById('deviation_percentage_warning').value = '10';
+            document.getElementById('deviation_percentage_critical').value = '20';
+            document.getElementById('statistics_max_operations').value = '10';
+        }
+    }
+
+    function applyPreset(presetName) {
+        const presets = {
+            conservative: { warning: 5, critical: 10, maxOps: 5 },
+            standard: { warning: 10, critical: 20, maxOps: 10 },
+            liberal: { warning: 20, critical: 30, maxOps: 20 }
+        };
+
+        const preset = presets[presetName];
+        if (preset && confirm(`Применить ${presetName} настройки?`)) {
+            document.getElementById('deviation_percentage_warning').value = preset.warning;
+            document.getElementById('deviation_percentage_critical').value = preset.critical;
+            document.getElementById('statistics_max_operations').value = preset.maxOps;
+        }
+    }
+
+    function previewChanges() {
+        const warning = document.getElementById('deviation_percentage_warning').value;
+        const critical = document.getElementById('deviation_percentage_critical').value;
+        const maxOps = document.getElementById('statistics_max_operations').value;
+
+        alert(`Предварительный просмотр настроек:
+Предупреждение: ${warning}%
+Критическое: ${critical}%
+Макс. операций: ${maxOps}
+
+Эти настройки будут применяться ко всем новым анализам статистики.`);
+    }
+
+    // Валидация формы
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const warning = parseInt(document.getElementById('deviation_percentage_warning').value);
+        const critical = parseInt(document.getElementById('deviation_percentage_critical').value);
+
+        if (warning >= critical) {
+            e.preventDefault();
+            alert('Порог предупреждения должен быть меньше критического порога');
+            return false;
+        }
+    });
+
+    // Автообновление текущих значений при изменении
+    document.querySelectorAll('input[type="number"]').forEach(input => {
+        input.addEventListener('input', function() {
+            const currentValueSpan = this.closest('.card-body').querySelector('.current-value');
+            if (currentValueSpan) {
+                const suffix = this.name.includes('percentage') ? '%' : '';
+                currentValueSpan.textContent = this.value + suffix;
+            }
+        });
+    });
+</script>
+</body>
+</html>

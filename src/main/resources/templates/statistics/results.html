@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Результаты статистики',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Результаты статистики',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Результаты статистики</title>
+    <style>
+        .statistics-table {
+            font-size: 0.9rem;
+        }
+        .statistics-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            text-align: center;
+            vertical-align: middle;
+            border: 1px solid #dee2e6;
+        }
+        .statistics-table td {
+            text-align: center;
+            vertical-align: middle;
+            border: 1px solid #dee2e6;
+            position: relative;
+        }
+        .metric-value {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        .metric-change {
+            font-size: 0.8rem;
+            margin-top: 2px;
+        }
+        .change-up {
+            color: #28a745;
+        }
+        .change-down {
+            color: #dc3545;
+        }
+        .change-stable {
+            color: #6c757d;
+        }
+        .alert-normal {
+            background-color: #ffffff;
+        }
+        .alert-warning {
+            background-color: #fff3cd !important;
+            border-color: #ffeaa7 !important;
+        }
+        .alert-critical {
+            background-color: #f8d7da !important;
+            border-color: #f1aeb5 !important;
+        }
+        .group-header {
+            background-color: #e9ecef;
+            font-weight: bold;
+        }
+        .operation-header {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            min-width: 120px;
+            max-width: 120px;
+        }
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+        .metric-card {
+            transition: transform 0.2s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+        }
+        .settings-panel {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .legend {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            border: 1px solid #dee2e6;
+        }
+        .export-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions">
+    <button type="button" class="btn btn-outline-secondary me-2" onclick="toggleSettings()">
+        <i class="fas fa-cog me-1"></i>Настройки
+    </button>
+    <button type="button" class="btn btn-outline-success me-2" onclick="exportToExcel()">
+        <i class="fas fa-file-excel me-1"></i>Экспорт в Excel
+    </button>
+    <a th:href="@{/statistics/client/{id}(id=${clientId})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</div>
+
+<section>
+    <!-- Панель настроек (скрытая по умолчанию) -->
+    <div id="settingsPanel" class="settings-panel" style="display: none;">
+        <div class="row align-items-center">
+            <div class="col-md-3">
+                <label class="form-label">Предупреждение (%):</label>
+                <input type="number" id="warningThreshold" class="form-control"
+                       th:value="${warningPercentage}" min="1" max="100"
+                       onchange="updateThresholds()">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Критическое (%):</label>
+                <input type="number" id="criticalThreshold" class="form-control"
+                       th:value="${criticalPercentage}" min="1" max="100"
+                       onchange="updateThresholds()">
+            </div>
+            <div class="col-md-4">
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #fff3cd;"></div>
+                        <span>Предупреждение</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #f8d7da;"></div>
+                        <span>Критическое</span>
+                    </div>
+                    <div class="legend-item">
+                        <i class="fas fa-arrow-up change-up"></i>
+                        <span>Рост</span>
+                    </div>
+                    <div class="legend-item">
+                        <i class="fas fa-arrow-down change-down"></i>
+                        <span>Падение</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-primary btn-sm" onclick="applyThresholds()">
+                    <i class="fas fa-check me-1"></i>Применить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Сводная информация -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card summary-card metric-card">
+                <div class="card-body text-center">
+                    <div class="h4" th:text="${#lists.size(comparison)}">0</div>
+                    <div>Групп данных</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white metric-card">
+                <div class="card-body text-center">
+                    <div class="h4" id="totalOperationsCount">0</div>
+                    <div>Операций</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white metric-card">
+                <div class="card-body text-center">
+                    <div class="h4" id="warningChangesCount">0</div>
+                    <div>Предупреждений</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white metric-card">
+                <div class="card-body text-center">
+                    <div class="h4" id="criticalChangesCount">0</div>
+                    <div>Критических</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица статистики -->
+    <div th:if="${#lists.isEmpty(comparison)}" class="text-center py-5">
+        <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+        <h3>Нет данных для отображения</h3>
+        <p class="text-muted">Проверьте выбранные операции и настройки фильтров</p>
+    </div>
+
+    <div th:unless="${#lists.isEmpty(comparison)}" class="table-responsive">
+        <table class="table table-bordered statistics-table">
+            <thead>
+            <tr>
+                <th rowspan="2" style="width: 200px;">Группа</th>
+                <th rowspan="2" style="width: 150px;">Метрика</th>
+                <th th:each="operation : ${comparison[0].operations}"
+                    class="operation-header">
+                    <div>
+                        <div th:text="'Экспорт #' + ${operation.exportSessionId}">Экспорт #1</div>
+                        <small th:text="${#temporals.format(operation.exportDate, 'dd.MM HH:mm')}">
+                            01.01 10:00
+                        </small>
+                    </div>
+                </th>
+            </tr>
+            <tr>
+                <th th:each="operation : ${comparison[0].operations}" class="text-muted">
+                    <small th:text="${operation.operationName}">Операция</small>
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            <!-- Перебираем группы -->
+            <th:block th:each="group : ${comparison}">
+                <!-- Определяем количество метрик для rowspan -->
+                <th:block th:with="metricsCount=${#lists.size(group.operations[0].metrics)}">
+                    <!-- Перебираем метрики в группе -->
+                    <tr th:each="metric, metricStat : ${group.operations[0].metrics}">
+                        <!-- Название группы только в первой строке -->
+                        <td th:if="${metricStat.first}"
+                            th:rowspan="${metricsCount}"
+                            class="group-header"
+                            th:text="${group.groupFieldValue}">
+                            Группа
+                        </td>
+
+                        <!-- Название метрики -->
+                        <td class="fw-bold" th:text="${metric.key}">Метрика</td>
+
+                        <!-- Значения метрики по операциям -->
+                        <td th:each="operation : ${group.operations}"
+                            th:with="metricValue=${operation.metrics[metric.key]}"
+                            th:classappend="${'alert-' + metricValue.alertLevel.name().toLowerCase()}">
+
+                            <div class="metric-value" th:text="${metricValue.currentValue}">100</div>
+
+                            <div th:if="${metricValue.previousValue != null}" class="metric-change">
+                                    <span th:classappend="${'change-' + metricValue.changeType.name().toLowerCase()}">
+                                        <i th:class="${metricValue.changeType.name() == 'UP' ? 'fas fa-arrow-up' :
+                                                     metricValue.changeType.name() == 'DOWN' ? 'fas fa-arrow-down' :
+                                                     'fas fa-minus'}"></i>
+                                        <span th:text="${#numbers.formatDecimal(T(java.lang.Math).abs(metricValue.changePercentage), 1, 1)} + '%'"></span>
+                                    </span>
+                            </div>
+                        </td>
+                    </tr>
+                </th:block>
+            </th:block>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Детальная информация (аккордеон) -->
+    <div th:unless="${#lists.isEmpty(comparison)}" class="mt-4">
+        <h5>Детальная информация</h5>
+        <div class="accordion" id="detailsAccordion">
+            <div th:each="group, groupStat : ${comparison}" class="accordion-item">
+                <h2 class="accordion-header" th:id="'heading' + ${groupStat.index}">
+                    <button class="accordion-button collapsed" type="button"
+                            data-bs-toggle="collapse"
+                            th:data-bs-target="'#collapse' + ${groupStat.index}"
+                            th:aria-controls="'collapse' + ${groupStat.index}">
+                        <strong th:text="${group.groupFieldValue}">Группа</strong>
+                        <span class="ms-auto me-3">
+                            <small class="text-muted" th:text="${#lists.size(group.operations)} + ' операций'">
+                                3 операции
+                            </small>
+                        </span>
+                    </button>
+                </h2>
+                <div th:id="'collapse' + ${groupStat.index}"
+                     class="accordion-collapse collapse"
+                     th:aria-labelledby="'heading' + ${groupStat.index}">
+                    <div class="accordion-body">
+                        <div class="row">
+                            <div th:each="operation : ${group.operations}" class="col-md-4 mb-3">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">
+                                            Экспорт #<span th:text="${operation.exportSessionId}">1</span>
+                                        </h6>
+                                        <small class="text-muted"
+                                               th:text="${#temporals.format(operation.exportDate, 'dd.MM.yyyy HH:mm')}">
+                                            01.01.2025 10:00
+                                        </small>
+                                    </div>
+                                    <div class="card-body">
+                                        <div th:each="metric : ${operation.metrics}" class="mb-2">
+                                            <div class="d-flex justify-content-between">
+                                                <span th:text="${metric.key}">Метрика:</span>
+                                                <strong th:text="${metric.value.currentValue}">100</strong>
+                                            </div>
+                                            <div th:if="${metric.value.previousValue != null}"
+                                                 class="text-muted small">
+                                                Изменение:
+                                                <span th:classappend="${'change-' + metric.value.changeType.name().toLowerCase()}"
+                                                      th:text="${#numbers.formatDecimal(metric.value.changePercentage, 1, 1)} + '%'">
+                                                    +5.0%
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Плавающая кнопка экспорта -->
+<button type="button" class="btn btn-success export-button rounded-circle"
+        onclick="exportToExcel()" title="Экспорт в Excel">
+    <i class="fas fa-file-excel fa-lg"></i>
+</button>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    const statisticsData = /*[[${comparison}]]*/ [];
+    let currentWarningThreshold = /*[[${warningPercentage}]]*/ 10;
+    let currentCriticalThreshold = /*[[${criticalPercentage}]]*/ 20;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        updateSummaryCounters();
+    });
+
+    function toggleSettings() {
+        const panel = document.getElementById('settingsPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function updateThresholds() {
+        const warning = document.getElementById('warningThreshold').value;
+        const critical = document.getElementById('criticalThreshold').value;
+
+        if (parseInt(warning) >= parseInt(critical)) {
+            alert('Процент предупреждения должен быть меньше критического');
+            document.getElementById('warningThreshold').value = currentWarningThreshold;
+            document.getElementById('criticalThreshold').value = currentCriticalThreshold;
+        }
+    }
+
+    function applyThresholds() {
+        const warning = parseInt(document.getElementById('warningThreshold').value);
+        const critical = parseInt(document.getElementById('criticalThreshold').value);
+
+        if (warning >= critical) {
+            alert('Процент предупреждения должен быть меньше критического');
+            return;
+        }
+
+        currentWarningThreshold = warning;
+        currentCriticalThreshold = critical;
+
+        // Перекрашиваем ячейки с новыми порогами
+        recalculateAlertLevels();
+        updateSummaryCounters();
+
+        // Показываем уведомление
+        showNotification('Пороги отклонений обновлены', 'success');
+    }
+
+    function recalculateAlertLevels() {
+        const cells = document.querySelectorAll('.statistics-table td[class*="alert-"]');
+
+        cells.forEach(cell => {
+            // Убираем старые классы
+            cell.classList.remove('alert-normal', 'alert-warning', 'alert-critical');
+
+            // Находим значение изменения
+            const changeElement = cell.querySelector('.metric-change span');
+            if (changeElement) {
+                const changeText = changeElement.textContent;
+                const changeValue = parseFloat(changeText.replace('%', ''));
+
+                if (Math.abs(changeValue) >= currentCriticalThreshold) {
+                    cell.classList.add('alert-critical');
+                } else if (Math.abs(changeValue) >= currentWarningThreshold) {
+                    cell.classList.add('alert-warning');
+                } else {
+                    cell.classList.add('alert-normal');
+                }
+            } else {
+                cell.classList.add('alert-normal');
+            }
+        });
+    }
+
+    function updateSummaryCounters() {
+        const warningCells = document.querySelectorAll('.alert-warning').length;
+        const criticalCells = document.querySelectorAll('.alert-critical').length;
+        const totalOperations = statisticsData.length > 0 ? statisticsData[0].operations.length : 0;
+
+        document.getElementById('totalOperationsCount').textContent = totalOperations;
+        document.getElementById('warningChangesCount').textContent = warningCells;
+        document.getElementById('criticalChangesCount').textContent = criticalCells;
+    }
+
+    function exportToExcel() {
+        // Создаем временную форму для скачивания
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/statistics/export/excel';
+        form.style.display = 'none';
+
+        // Добавляем данные статистики
+        const dataInput = document.createElement('input');
+        dataInput.name = 'statisticsData';
+        dataInput.value = JSON.stringify(statisticsData);
+        form.appendChild(dataInput);
+
+        // Добавляем настройки
+        const settingsInput = document.createElement('input');
+        settingsInput.name = 'settings';
+        settingsInput.value = JSON.stringify({
+            warningThreshold: currentWarningThreshold,
+            criticalThreshold: currentCriticalThreshold
+        });
+        form.appendChild(settingsInput);
+
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+
+        showNotification('Экспорт в Excel запущен', 'info');
+    }
+
+    function showNotification(message, type) {
+        // Создаем временное уведомление
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        alert.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+        `;
+
+        document.body.appendChild(alert);
+
+        // Автоматически убираем через 5 секунд
+        setTimeout(() => {
+            if (alert.parentElement) {
+                alert.remove();
+            }
+        }, 5000);
+    }
+
+    // Добавляем подсветку при наведении на строки таблицы
+    document.addEventListener('DOMContentLoaded', function() {
+        const rows = document.querySelectorAll('.statistics-table tbody tr');
+        rows.forEach(row => {
+            row.addEventListener('mouseenter', function() {
+                this.style.backgroundColor = '#f5f5f5';
+            });
+            row.addEventListener('mouseleave', function() {
+                this.style.backgroundColor = '';
+            });
+        });
+    });
+    /*]]>*/
+</script>
+</body>
+</html>

@@ -78,4 +78,16 @@ public class ExportTemplateDto {
     // Статистика использования
     private Long usageCount;
     private ZonedDateTime lastUsedAt;
+
+    // Настройки статистики
+    @Builder.Default
+    private Boolean enableStatistics = false;
+
+    @Builder.Default
+    private List<String> statisticsCountFields = new ArrayList<>(); // Поля для подсчета
+
+    private String statisticsGroupField; // Поле для группировки
+
+    @Builder.Default
+    private List<String> statisticsFilterFields = new ArrayList<>(); // Поля для фильтрации
 }
