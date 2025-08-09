@@ -208,6 +208,7 @@
             <thead>
             <tr>
               <th th:text="${config.groupByField}">Группа</th>
+              <th>Поле</th>
               <th th:each="op : ${statistics.operations}" class="text-center">
                 <div th:text="${op.fileName}">Файл</div>
                 <small class="text-muted"
@@ -220,6 +221,7 @@
             <tbody>
             <tr th:each="row : ${statistics.rows}">
               <td class="group-header" th:text="${row.groupValue}">Значение</td>
+              <td class="group-header" th:text="${row.metricField}">Поле</td>
               <td th:each="metric : ${row.metrics}"
                   class="value-cell"
                   th:classappend="${T(com.java.util.ExportStatisticsUtils).getChangeClass(metric.changeType, metric.changePercent, config.deviationThresholdPercent)}">
@@ -241,7 +243,7 @@
             </tbody>
             <tfoot>
             <tr class="table-secondary">
-              <td><strong>Итого</strong></td>
+              <td colspan="2"><strong>Итого</strong></td>
               <td th:each="op : ${statistics.operations}" class="text-center">
                 <strong th:text="${T(com.java.util.ExportStatisticsUtils).getTotal(statistics.rows, op.sessionId)}">0</strong>
               </td>

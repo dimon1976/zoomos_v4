@@ -47,6 +47,7 @@ public class ExportStatisticsDto {
     @AllArgsConstructor
     public static class StatisticsRow {
         private String groupValue;
+        private String metricField;
         private List<MetricValue> metrics;
 
         @Data

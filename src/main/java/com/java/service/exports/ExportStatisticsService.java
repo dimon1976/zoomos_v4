@@ -35,7 +35,7 @@ public class ExportStatisticsService {
     private final ExportStatisticsCacheRepository cacheRepository;
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
-    private final JdbcTemplate jdbcTemplate;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -98,6 +98,7 @@ public class ExportStatisticsService {
 
         // Загружаем данные из файла экспорта
         List<Map<String, Object>> data = loadExportData(session.getResultFilePath());
+        log.debug("Для сессии {} загружено {} строк данных", exportSessionId, data.size());
 
         if (data.isEmpty()) {
             log.warn("Нет данных для расчета статистики");
@@ -119,7 +120,7 @@ public class ExportStatisticsService {
     /**
      * Сравнивает статистику между операциями экспорта
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public ExportStatisticsDto compareExports(List<Long> sessionIds, Long templateId, boolean applyFilter) {
         log.info("Сравнение экспортов: {}", sessionIds);
 
@@ -141,13 +142,39 @@ public class ExportStatisticsService {
 
         // Загружаем кэш
         List<ExportStatisticsCache> cacheData = cacheRepository.findByExportSessionIds(sessionIds);
+        log.debug("Загружено {} записей кэша статистики", cacheData.size());
+
+        // При отсутствии данных в кэше для каких-либо сессий пересчитываем статистику
+        Set<Long> cachedSessionIds = cacheData.stream()
+                .map(cache -> cache.getExportSession().getId())
+                .collect(Collectors.toSet());
+        List<Long> missingSessionIds = sessionIds.stream()
+                .filter(id -> !cachedSessionIds.contains(id))
+                .collect(Collectors.toList());
+        if (!missingSessionIds.isEmpty()) {
+            log.info("Отсутствует статистика в кэше для сессий: {}", missingSessionIds);
+        } else {
+            log.debug("Кэш содержит статистику для всех сессий");
+        }
+        for (Long missingId : missingSessionIds) {
+            // пересчитываем статистику и сохраняем в кэш
+            calculateStatistics(missingId);
+        }
+
+        if (!missingSessionIds.isEmpty()) {
+            cacheData = cacheRepository.findByExportSessionIds(sessionIds);
+            log.debug("После пересчета загружено {} записей кэша", cacheData.size());
+        }
+
 
         // Если нужно применить фильтр и его еще нет в кэше
         if (applyFilter && config.getFilterField() != null) {
+            log.debug("Применение фильтра '{}'", config.getFilterField());
             cacheData = applyFilterToCache(cacheData, config);
         }
 
         // Формируем результат
+        log.debug("Формирование результата сравнения из {} записей", cacheData.size());
         return buildComparisonResult(cacheData, sessionIds, config);
     }
 
@@ -221,7 +248,7 @@ public class ExportStatisticsService {
 
                 data.add(row);
             }
-
+            log.debug("Загружено {} строк из файла {}", data.size(), filePath);
             return data;
 
         } catch (IOException e) {
@@ -247,6 +274,7 @@ public class ExportStatisticsService {
                     .filterApplied(filterApplied)
                     .build();
 
+            log.debug("Сохранение в кэш: группа='{}', метрики={}", entry.getKey(), entry.getValue());
             cacheRepository.save(cache);
         }
     }
@@ -260,6 +288,7 @@ public class ExportStatisticsService {
 
         // Здесь нужно перезагрузить и отфильтровать данные
         // Для упрощения возвращаем как есть
+        log.warn("Фильтрация кэша пока не реализована - возвращаем исходные данные");
         return cacheData;
     }
 
@@ -275,6 +304,7 @@ public class ExportStatisticsService {
         List<ExportOperationInfo> operations = sessionIds.stream()
                 .map(id -> sessionRepository.findById(id).orElse(null))
                 .filter(Objects::nonNull)
+                .sorted((a, b) -> b.getStartedAt().compareTo(a.getStartedAt()))
                 .map(session -> ExportOperationInfo.builder()
                         .sessionId(session.getId())
                         .fileName(session.getFileOperation().getFileName())
@@ -282,62 +312,70 @@ public class ExportStatisticsService {
                         .totalRows(session.getExportedRows())
                         .build())
                 .collect(Collectors.toList());
+        log.debug("Подготовлено {} операций для сравнения", operations.size());
 
-        // Группируем данные
-        Map<String, List<ExportStatisticsCache>> groupedData = cacheData.stream()
-                .collect(Collectors.groupingBy(ExportStatisticsCache::getGroupValue));
-
-        // Формируем строки статистики
-        List<StatisticsRow> rows = new ArrayList<>();
-
-        for (Map.Entry<String, List<ExportStatisticsCache>> entry : groupedData.entrySet()) {
-            StatisticsRow row = StatisticsRow.builder()
-                    .groupValue(entry.getKey())
-                    .metrics(new ArrayList<>())
-                    .build();
-
-            // Сортируем по дате убывания
-            List<ExportStatisticsCache> sortedCache = entry.getValue().stream()
-                    .sorted((a, b) -> b.getExportSession().getStartedAt()
-                            .compareTo(a.getExportSession().getStartedAt()))
-                    .collect(Collectors.toList());
-
-            Long previousCount = null;
-
-            for (ExportStatisticsCache cache : sortedCache) {
-                Map<String, Long> metrics = parseJsonMap(cache.getMetrics());
-
-                // Берем первую метрику для упрощения
-                Long count = metrics.values().stream().findFirst().orElse(0L);
-
-                StatisticsRow.MetricValue metricValue = StatisticsRow.MetricValue.builder()
-                        .sessionId(cache.getExportSession().getId())
-                        .count(count)
-                        .build();
-
-                // Рассчитываем изменение
-                if (previousCount != null) {
-                    double change = ((double)(previousCount - count) / previousCount) * 100;
-                    metricValue.setChangePercent(change);
-
-                    if (Math.abs(change) < 0.01) {
-                        metricValue.setChangeType(ChangeType.NO_CHANGE);
-                    } else if (change > 0) {
-                        metricValue.setChangeType(ChangeType.DECREASE);
-                    } else {
-                        metricValue.setChangeType(ChangeType.INCREASE);
-                    }
-                } else {
-                    metricValue.setChangeType(ChangeType.NO_DATA);
-                }
-
-                row.getMetrics().add(metricValue);
-                previousCount = count;
-            }
-
-            rows.add(row);
+        // Преобразуем данные: groupValue -> sessionId -> metrics map
+        Map<String, Map<Long, Map<String, Long>>> groupedData = new HashMap<>();
+        for (ExportStatisticsCache cache : cacheData) {
+            Map<String, Long> metrics = parseJsonMap(cache.getMetrics());
+            groupedData
+                    .computeIfAbsent(cache.getGroupValue(), k -> new HashMap<>())
+                    .put(cache.getExportSession().getId(), metrics);
         }
 
+        // Формируем строки статистики по каждому полю
+        List<StatisticsRow> rows = new ArrayList<>();
+
+        for (Map.Entry<String, Map<Long, Map<String, Long>>> entry : groupedData.entrySet()) {
+            String groupValue = entry.getKey();
+            Map<Long, Map<String, Long>> sessionMetrics = entry.getValue();
+
+            for (String metricField : Optional.ofNullable(config.getMetricFields()).orElse(Collections.emptyList())) {
+                StatisticsRow row = StatisticsRow.builder()
+                        .groupValue(groupValue)
+                        .metricField(metricField)
+                        .metrics(new ArrayList<>())
+                        .build();
+
+                Long previousCount = null;
+
+                for (ExportOperationInfo op : operations) {
+                    Map<String, Long> metrics = sessionMetrics.get(op.getSessionId());
+                    Long count = 0L;
+                    if (metrics != null) {
+                        count = metrics.getOrDefault(metricField + "_count", 0L);
+                    }
+
+                    StatisticsRow.MetricValue metricValue = StatisticsRow.MetricValue.builder()
+                            .sessionId(op.getSessionId())
+                            .count(count)
+                            .build();
+
+                    if (previousCount != null) {
+                        double change = ((double) (previousCount - count) / previousCount) * 100;
+                        metricValue.setChangePercent(change);
+
+                        if (Math.abs(change) < 0.01) {
+                            metricValue.setChangeType(ChangeType.NO_CHANGE);
+                        } else if (change > 0) {
+                            metricValue.setChangeType(ChangeType.DECREASE);
+                        } else {
+                            metricValue.setChangeType(ChangeType.INCREASE);
+                        }
+                    } else {
+                        metricValue.setChangeType(ChangeType.NO_DATA);
+                    }
+                    row.getMetrics().add(metricValue);
+                    previousCount = count;
+                }
+                rows.add(row);
+            }
+        }
+        // Сортируем строки для стабильного отображения
+        rows.sort(Comparator.comparing(StatisticsRow::getGroupValue)
+                .thenComparing(StatisticsRow::getMetricField));
+
+        log.debug("Сформировано {} строк статистики", rows.size());
         return ExportStatisticsDto.builder()
                 .operations(operations)
                 .rows(rows)
@@ -364,7 +402,8 @@ public class ExportStatisticsService {
             return Collections.emptyList();
         }
         try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {
+            });
         } catch (Exception e) {
             log.error("Ошибка парсинга JSON массива", e);
             return Collections.emptyList();
@@ -376,7 +415,8 @@ public class ExportStatisticsService {
             return Collections.emptyMap();
         }
         try {
-            return objectMapper.readValue(json, new TypeReference<Map<String, Long>>() {});
+            return objectMapper.readValue(json, new TypeReference<Map<String, Long>>() {
+            });
         } catch (Exception e) {
             log.error("Ошибка парсинга JSON map", e);
             return Collections.emptyMap();
