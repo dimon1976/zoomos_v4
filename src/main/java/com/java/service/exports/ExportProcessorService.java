@@ -38,6 +38,7 @@ public class ExportProcessorService {
     private final ExportStrategyFactory strategyFactory;
     private final ExportSessionRepository sessionRepository;
     private final FileOperationRepository fileOperationRepository;
+    private final ExportStatisticsWriterService statisticsWriterService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Флаги отмены для каждой сессии
@@ -129,6 +130,15 @@ public class ExportProcessorService {
             if (cancelled.get()) {
                 handleCancellation(session);
                 return;
+            }
+
+            // 2.5. Сохраняем статистику по экспортированным данным
+            log.info("Сохранение статистики экспорта");
+            try {
+                statisticsWriterService.saveExportStatistics(session, template, processedData);
+            } catch (Exception e) {
+                log.error("Ошибка сохранения статистики экспорта", e);
+                // Не прерываем экспорт из-за ошибки статистики
             }
 
             // 3. Генерируем файл
