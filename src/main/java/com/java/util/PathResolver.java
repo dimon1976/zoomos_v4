@@ -123,6 +123,18 @@ public class PathResolver {
      * Перемещает файл из временной директории в директорию экспорта
      */
     public Path moveFromTempToExport(Path tempFilePath, String prefix) throws IOException {
+        return moveFromTempToExport(tempFilePath, prefix, true);
+    }
+
+    /**
+     * Перемещает файл из временной директории в директорию экспорта
+     *
+     * @param tempFilePath путь к временному файлу
+     * @param fileName     исходное имя файла или префикс
+     * @param addUuid      добавлять ли UUID к имени файла
+     */
+    public Path moveFromTempToExport(Path tempFilePath, String fileName, boolean addUuid) throws IOException {
+
         // Создаем директорию для экспорта, если не существует
         Path exportDirPath = getAbsoluteExportDir();
         Files.createDirectories(exportDirPath);
@@ -132,11 +144,18 @@ public class PathResolver {
             throw new IOException("Временный файл не существует: " + tempFilePath.toAbsolutePath());
         }
 
-        // Генерируем уникальное имя файла
-        String filename = prefix + "_" + UUID.randomUUID() +
-                getFileExtension(tempFilePath.getFileName().toString());
+        String extension = getFileExtension(tempFilePath.getFileName().toString());
+        String finalName;
 
-        Path targetPath = exportDirPath.resolve(filename);
+        if (addUuid) {
+            String prefix = removeExtension(fileName);
+            finalName = prefix + "_" + UUID.randomUUID() + extension;
+        } else {
+            // Если расширения нет, добавляем его
+            finalName = fileName.endsWith(extension) ? fileName : fileName + extension;
+        }
+
+        Path targetPath = exportDirPath.resolve(finalName);
 
         // Перемещаем файл
         Files.move(tempFilePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
@@ -288,6 +307,15 @@ public class PathResolver {
     public boolean isDirectoryWritable(Path dirPath) {
         return Files.isWritable(dirPath);
     }
+
+    /**
+     * Удаляет расширение из имени файла
+     */
+    private String removeExtension(String filename) {
+        int lastDotIndex = filename.lastIndexOf('.');
+        return lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
+    }
+
 
     /**
      * Получает расширение файла
