@@ -119,6 +119,29 @@ public class ExportTemplate {
     @Column(name = "statistics_filter_fields", columnDefinition = "TEXT")
     private String statisticsFilterFields; // JSON массив полей для фильтрации
 
+
+    // Настройки именования файлов
+    @Column(name = "filename_template")
+    private String filenameTemplate;
+
+    @Column(name = "include_client_name")
+    @Builder.Default
+    private Boolean includeClientName = true;
+
+    @Column(name = "include_export_type")
+    @Builder.Default
+    private Boolean includeExportType = false;
+
+    @Column(name = "include_task_number")
+    @Builder.Default
+    private Boolean includeTaskNumber = false;
+
+    @Column(name = "export_type_label")
+    private String exportTypeLabel;
+
+    @Column(name = "operation_name_source")
+    private String operationNameSource;
+
     // Вспомогательные методы
     public void addField(ExportTemplateField field) {
         fields.add(field);
