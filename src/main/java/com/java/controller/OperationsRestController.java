@@ -3,7 +3,9 @@ package com.java.controller;
 import com.java.model.Client;
 import com.java.model.FileOperation;
 import com.java.repository.ClientRepository;
+import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
+import com.java.repository.ImportSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -24,6 +26,8 @@ public class OperationsRestController {
 
     private final FileOperationRepository fileOperationRepository;
     private final ClientRepository clientRepository;
+    private final ImportSessionRepository importSessionRepository;
+    private final ExportSessionRepository exportSessionRepository;
 
     /**
      * Получение списка операций клиента
@@ -56,6 +60,24 @@ public class OperationsRestController {
         return fileOperationRepository.findById(operationId)
                 .map(this::toDto)
                 .orElseThrow(() -> new IllegalArgumentException("Операция не найдена"));
+    }
+
+    /**
+     * Удаление операции и связанных данных
+     */
+    @DeleteMapping("/operations/{operationId}")
+    public void deleteOperation(@PathVariable Long operationId) {
+        log.debug("Удаление операции ID: {}", operationId);
+
+        if (!fileOperationRepository.existsById(operationId)) {
+            throw new IllegalArgumentException("Операция не найдена");
+        }
+
+        importSessionRepository.findByFileOperationId(operationId)
+                .ifPresent(importSessionRepository::delete);
+        exportSessionRepository.findByFileOperationId(operationId)
+                .ifPresent(exportSessionRepository::delete);
+        fileOperationRepository.deleteById(operationId);
     }
 
     /**

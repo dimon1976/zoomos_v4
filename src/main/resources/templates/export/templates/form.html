@@ -211,7 +211,8 @@
                         <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
                             <div th:each="field : ${availableFields}" class="form-check">
                                 <input class="form-check-input" type="checkbox"
-                                       name="statisticsCountFields" th:value="${field}"
+                                       th:field="*{statisticsCountFields}"
+                                       th:value="${field}"
                                        th:id="${'countField_' + field}">
                                 <label class="form-check-label" th:for="${'countField_' + field}" th:text="${field}">
                                     Поле
@@ -224,7 +225,7 @@
                     <!-- Поле для группировки -->
                     <div class="col-md-4">
                         <label for="statisticsGroupField" class="form-label">Поле для группировки</label>
-                        <select class="form-select" id="statisticsGroupField" name="statisticsGroupField">
+                        <select class="form-select" id="statisticsGroupField" th:field="*{statisticsGroupField}">
                             <option value="">-- Выберите поле --</option>
                             <option th:each="field : ${availableFields}" th:value="${field}" th:text="${field}">
                                 Поле
@@ -249,7 +250,8 @@
                         <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
                             <div th:each="field : ${availableFields}" class="form-check">
                                 <input class="form-check-input" type="checkbox"
-                                       name="statisticsFilterFields" th:value="${field}"
+                                       th:field="*{statisticsFilterFields}"
+                                       th:value="${field}"
                                        th:id="${'filterField_' + field}">
                                 <label class="form-check-label" th:for="${'filterField_' + field}" th:text="${field}">
                                     Поле

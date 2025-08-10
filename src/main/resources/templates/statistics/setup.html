@@ -241,6 +241,7 @@
                 <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary me-2">
                     <i class="fas fa-times me-1"></i>Отмена
                 </a>
+                <input type="hidden" name="clientId" th:value="${clientId}">
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-chart-line me-1"></i>Анализировать статистику
                 </button>

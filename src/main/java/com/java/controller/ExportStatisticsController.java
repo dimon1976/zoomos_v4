@@ -75,6 +75,7 @@ public class ExportStatisticsController {
     @PostMapping("/analyze")
     public String analyzeStatistics(@ModelAttribute StatisticsRequestDto request,
                                     RedirectAttributes redirectAttributes,
+                                    Long clientId,
                                     Model model) {
         log.debug("POST запрос на анализ статистики: {}", request);
 
@@ -85,11 +86,12 @@ public class ExportStatisticsController {
             if (comparison.isEmpty()) {
                 redirectAttributes.addFlashAttribute("warningMessage",
                         "Нет данных для анализа статистики");
-                return "redirect:/statistics/client/" + request.getTemplateId(); // Временно
+                return "redirect:/statistics/client/" + request.getTemplateId();
             }
 
             // Добавляем данные в модель
             model.addAttribute("comparison", comparison);
+            model.addAttribute("clientId", clientId);
             model.addAttribute("request", request);
             model.addAttribute("warningPercentage",
                     request.getWarningPercentage() != null ? request.getWarningPercentage() : settingsService.getWarningPercentage());
@@ -100,18 +102,6 @@ public class ExportStatisticsController {
 
         } catch (Exception e) {
             log.error("Ошибка анализа статистики", e);
-
-            // Находим clientId через templateId
-            Long clientId = null;
-            try {
-                var template = templateRepository.findById(request.getTemplateId());
-                if (template.isPresent()) {
-                    clientId = template.get().getClient().getId();
-                }
-            } catch (Exception ex) {
-                log.error("Не удалось найти клиента по templateId", ex);
-            }
-
             redirectAttributes.addFlashAttribute("errorMessage",
                     "Ошибка анализа статистики: " + e.getMessage());
 
