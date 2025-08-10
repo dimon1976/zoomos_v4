@@ -5,7 +5,9 @@ import com.java.dto.StatisticsComparisonDto;
 import com.java.dto.StatisticsRequestDto;
 import com.java.model.entity.ExportSession;
 import com.java.repository.ExportSessionRepository;
+import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
+import com.java.service.exports.ExportStatisticsWriterService;
 import com.java.service.statistics.ExportStatisticsService;
 import com.java.service.statistics.StatisticsSettingsService;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,7 @@ public class ExportStatisticsController {
     private final StatisticsSettingsService settingsService;
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
+    private final ExportStatisticsRepository statisticsRepository;
 
     /**
      * Страница выбора операций для анализа статистики
@@ -191,6 +194,35 @@ public class ExportStatisticsController {
     }
 
     /**
+     * Получает сохранённую статистику для сессии экспорта
+     */
+    @GetMapping("/session/{sessionId}/saved")
+    @ResponseBody
+    public Map<String, Object> getSavedStatistics(@PathVariable Long sessionId) {
+        log.debug("GET запрос на получение сохранённой статистики для сессии ID: {}", sessionId);
+
+        try {
+            var statistics = statisticsRepository.findByExportSessionId(sessionId);
+
+            return Map.of(
+                    "success", true,
+                    "sessionId", sessionId,
+                    "count", statistics.size(),
+                    "hasStatistics", !statistics.isEmpty(),
+                    "message", statistics.isEmpty() ?
+                            "Нет сохранённой статистики для данной сессии" :
+                            "Найдено " + statistics.size() + " записей статистики"
+            );
+        } catch (Exception e) {
+            log.error("Ошибка получения сохранённой статистики", e);
+            return Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            );
+        }
+    }
+
+    /**
      * AJAX endpoint для предварительного просмотра статистики
      */
     @PostMapping("/preview")
@@ -229,4 +261,5 @@ public class ExportStatisticsController {
             );
         }
     }
+
 }

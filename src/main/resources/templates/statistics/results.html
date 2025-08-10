@@ -11,100 +11,87 @@
 <head>
     <title>Результаты статистики</title>
     <style>
-        .statistics-table {
-            font-size: 0.9rem;
+        :root {
+            /* Цвета Bootstrap-совместимой палитры */
+            --bs-gray-100: #f8f9fa;
+            --bs-gray-200: #e9ecef;
+            --bs-gray-300: #dee2e6;
+            --bs-gray-600: #6c757d;
+            --bs-warning-bg: #fff3cd; /* предупреждение */
+            --bs-warning-text: #664d03;
+            --bs-danger-bg: #f8d7da;   /* критическое */
+            --bs-danger-text: #842029;
         }
+
+        /* ===== Таблица статистики ===== */
+        .statistics-table { font-size: 0.9rem; }
+
         .statistics-table th {
-            background-color: #f8f9fa;
+            background-color: var(--bs-gray-100);
             font-weight: 600;
             text-align: center;
             vertical-align: middle;
-            border: 1px solid #dee2e6;
+            border: 1px solid var(--bs-gray-300);
         }
+
         .statistics-table td {
             text-align: center;
             vertical-align: middle;
-            border: 1px solid #dee2e6;
-            position: relative;
+            border: 1px solid var(--bs-gray-300);
         }
-        .metric-value {
-            font-weight: 600;
-            font-size: 1.1rem;
+
+        .statistics-table tbody tr { border-top: 1px solid var(--bs-gray-300); }
+        .statistics-table tbody tr:hover { background-color: #f5f5f5; }
+
+        /* Ячейка группы */
+        .statistics-table td[rowspan] {
+            background-color: var(--bs-gray-200) !important;
+            border-right: 2px solid var(--bs-gray-300) !important;
         }
-        .metric-change {
-            font-size: 0.8rem;
-            margin-top: 2px;
-        }
-        .change-up {
-            color: #28a745;
-        }
-        .change-down {
-            color: #dc3545;
-        }
-        .change-stable {
-            color: #6c757d;
-        }
-        .alert-normal {
-            background-color: #ffffff;
-        }
-        .alert-warning {
-            background-color: #fff3cd !important;
-            border-color: #ffeaa7 !important;
-        }
-        .alert-critical {
-            background-color: #f8d7da !important;
-            border-color: #f1aeb5 !important;
-        }
-        .group-header {
-            background-color: #e9ecef;
+        .statistics-table .group-header {
+            background-color: var(--bs-gray-200);
             font-weight: bold;
+            vertical-align: middle !important;
+            text-align: left;
+            padding: 10px;
         }
-        .operation-header {
-            writing-mode: vertical-rl;
-            text-orientation: mixed;
-            min-width: 120px;
-            max-width: 120px;
-        }
-        .summary-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-        }
-        .metric-card {
-            transition: transform 0.2s ease;
-        }
-        .metric-card:hover {
-            transform: translateY(-2px);
-        }
-        .settings-panel {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        .legend {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            font-size: 0.9rem;
-        }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        .legend-color {
-            width: 16px;
-            height: 16px;
-            border-radius: 3px;
-            border: 1px solid #dee2e6;
-        }
-        .export-button {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 1000;
-        }
+        /* Визуальное начало группы (JS добавляет .group-start на строку) */
+        .statistics-table tbody tr.group-start { border-top: 2px solid var(--bs-gray-600); }
+
+        /* Метрика всегда во 2-й колонке */
+        .statistics-table tbody tr td:nth-child(2) { background-color: var(--bs-gray-100); }
+
+        .align-middle { vertical-align: middle !important; }
+
+        /* Карточки/панели */
+        .summary-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; }
+        .metric-card { transition: transform 0.2s ease; }
+        .metric-card:hover { transform: translateY(-2px); }
+
+        .settings-panel { background-color: var(--bs-gray-100); border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+
+        /* Легенда */
+        .legend { display: flex; gap: 15px; align-items: center; font-size: 0.9rem; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-color { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--bs-gray-300); }
+
+        /* Состояния метрик (унифицированы под легенду) */
+        .metric-value { font-weight: 600; font-size: 1.1rem; }
+        .metric-change { font-size: 0.8rem; margin-top: 2px; }
+        .change-up   { color: #28a745; }
+        .change-down { color: #dc3545; }
+
+        .metric-stable { background-color: var(--bs-gray-100) !important; color: #6c757d; }
+        .metric-increase-warning,
+        .metric-decrease-warning { background-color: var(--bs-warning-bg) !important; color: var(--bs-warning-text); }
+        .metric-increase-critical,
+        .metric-decrease-critical { background-color: var(--bs-danger-bg) !important; color: var(--bs-danger-text); }
+
+        /* Вертикальные заголовки операций */
+        .operation-header { writing-mode: vertical-rl; text-orientation: mixed; min-width: 120px; max-width: 120px; }
+
+        /* Плавающая кнопка экспорта */
+        .export-button { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
     </style>
 </head>
 <body>
@@ -121,8 +108,8 @@
 </div>
 
 <section>
-    <!-- Панель настроек (скрытая по умолчанию) -->
-    <div id="settingsPanel" class="settings-panel" style="display: none;">
+    <!-- Панель настроек (скрыта классом d-none) -->
+    <div id="settingsPanel" class="settings-panel d-none">
         <div class="row align-items-center">
             <div class="col-md-3">
                 <label class="form-label">Предупреждение (%):</label>
@@ -139,11 +126,11 @@
             <div class="col-md-4">
                 <div class="legend">
                     <div class="legend-item">
-                        <div class="legend-color" style="background-color: #fff3cd;"></div>
+                        <div class="legend-color" style="background-color: var(--bs-warning-bg);"></div>
                         <span>Предупреждение</span>
                     </div>
                     <div class="legend-item">
-                        <div class="legend-color" style="background-color: #f8d7da;"></div>
+                        <div class="legend-color" style="background-color: var(--bs-danger-bg);"></div>
                         <span>Критическое</span>
                     </div>
                     <div class="legend-item">
@@ -200,13 +187,14 @@
         </div>
     </div>
 
-    <!-- Таблица статистики -->
+    <!-- Пустое состояние -->
     <div th:if="${#lists.isEmpty(comparison)}" class="text-center py-5">
         <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
         <h3>Нет данных для отображения</h3>
         <p class="text-muted">Проверьте выбранные операции и настройки фильтров</p>
     </div>
 
+    <!-- Таблица статистики -->
     <div th:unless="${#lists.isEmpty(comparison)}" class="table-responsive">
         <table class="table table-bordered statistics-table">
             <thead>
@@ -230,40 +218,59 @@
             </tr>
             </thead>
             <tbody>
-            <!-- Перебираем группы -->
             <th:block th:each="group : ${comparison}">
-                <!-- Определяем количество метрик для rowspan -->
-                <th:block th:with="metricsCount=${#lists.size(group.operations[0].metrics)}">
-                    <!-- Перебираем метрики в группе -->
-                    <tr th:each="metric, metricStat : ${group.operations[0].metrics}">
-                        <!-- Название группы только в первой строке -->
-                        <td th:if="${metricStat.first}"
-                            th:rowspan="${metricsCount}"
-                            class="group-header"
-                            th:text="${group.groupFieldValue}">
-                            Группа
-                        </td>
+                <th:block th:if="${!#lists.isEmpty(group.operations)}">
+                    <th:block th:with="metricsMap=${group.operations[0].metrics}">
+                        <!-- Итерируемся по метрикам -->
+                        <tr th:each="metric, iterStat : ${metricsMap}">
+                            <!-- Ячейка группы в первой строке (rowspan = кол-во метрик) -->
+                            <td th:if="${iterStat.first}"
+                                th:rowspan="${metricsMap.size()}"
+                                class="group-header"
+                                th:text="${group.groupFieldValue}">Группа
+                            </td>
 
-                        <!-- Название метрики -->
-                        <td class="fw-bold" th:text="${metric.key}">Метрика</td>
+                            <!-- Название метрики -->
+                            <td class="fw-bold" th:text="${metric.key}">metricName</td>
 
-                        <!-- Значения метрики по операциям -->
-                        <td th:each="operation : ${group.operations}"
-                            th:with="metricValue=${operation.metrics[metric.key]}"
-                            th:classappend="${'alert-' + metricValue.alertLevel.name().toLowerCase()}">
+                            <!-- Значения метрик по операциям -->
+                            <td th:each="colOperation : ${comparison[0].operations}">
+                                <!-- Находим соответствующую операцию текущей группы -->
+                                <th:block th:each="groupOp : ${group.operations}">
+                                    <th:block th:if="${groupOp.exportSessionId == colOperation.exportSessionId}">
+                                        <th:block th:with="metricValue=${groupOp.metrics[metric.key]}">
+                                            <div th:class="${metricValue == null ? 'metric-stable' :
+                                                (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-increase-warning'  :
+                                                (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-increase-critical' :
+                                                (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-decrease-warning'  :
+                                                (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-decrease-critical' :
+                                                'metric-stable'}">
 
-                            <div class="metric-value" th:text="${metricValue.currentValue}">100</div>
+                                                <div class="metric-value"
+                                                     th:text="${metricValue != null ? metricValue.currentValue : '-'}">-
+                                                </div>
 
-                            <div th:if="${metricValue.previousValue != null}" class="metric-change">
-                                    <span th:classappend="${'change-' + metricValue.changeType.name().toLowerCase()}">
-                                        <i th:class="${metricValue.changeType.name() == 'UP' ? 'fas fa-arrow-up' :
-                                                     metricValue.changeType.name() == 'DOWN' ? 'fas fa-arrow-down' :
-                                                     'fas fa-minus'}"></i>
-                                        <span th:text="${#numbers.formatDecimal(T(java.lang.Math).abs(metricValue.changePercentage), 1, 1)} + '%'"></span>
-                                    </span>
-                            </div>
-                        </td>
-                    </tr>
+                                                <div th:if="${metricValue != null and metricValue.previousValue != null}"
+                                                     class="metric-change">
+                                                    <!--
+                                                      ВАЖНО: data-change содержит числовое значение с точкой (для JS),
+                                                      текст может быть локализован (запятая, знак и пр.)
+                                                    -->
+                                                    <span th:attr="data-change=${metricValue.changePercentage}"
+                                                          th:classappend="${'change-' + metricValue.changeType.name().toLowerCase()}">
+                                                        <i th:class="${metricValue.changeType.name() == 'UP' ? 'fas fa-arrow-up' :
+                                                                       metricValue.changeType.name() == 'DOWN' ? 'fas fa-arrow-down' :
+                                                                       'fas fa-minus'}"></i>
+                                                        <span th:text="${#strings.concat(#numbers.formatDecimal(T(java.lang.Math).abs(metricValue.changePercentage), 1, 1), '%')}">0.0%</span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </th:block>
+                                    </th:block>
+                                </th:block>
+                            </td>
+                        </tr>
+                    </th:block>
                 </th:block>
             </th:block>
             </tbody>
@@ -282,9 +289,7 @@
                             th:aria-controls="'collapse' + ${groupStat.index}">
                         <strong th:text="${group.groupFieldValue}">Группа</strong>
                         <span class="ms-auto me-3">
-                            <small class="text-muted" th:text="${#lists.size(group.operations)} + ' операций'">
-                                3 операции
-                            </small>
+                            <small class="text-muted" th:text="${#lists.size(group.operations)} + ' операций'">3 операции</small>
                         </span>
                     </button>
                 </h2>
@@ -296,13 +301,9 @@
                             <div th:each="operation : ${group.operations}" class="col-md-4 mb-3">
                                 <div class="card">
                                     <div class="card-header">
-                                        <h6 class="mb-0">
-                                            Экспорт #<span th:text="${operation.exportSessionId}">1</span>
-                                        </h6>
+                                        <h6 class="mb-0">Экспорт #<span th:text="${operation.exportSessionId}">1</span></h6>
                                         <small class="text-muted"
-                                               th:text="${#temporals.format(operation.exportDate, 'dd.MM.yyyy HH:mm')}">
-                                            01.01.2025 10:00
-                                        </small>
+                                               th:text="${#temporals.format(operation.exportDate, 'dd.MM.yyyy HH:mm')}">01.01.2025 10:00</small>
                                     </div>
                                     <div class="card-body">
                                         <div th:each="metric : ${operation.metrics}" class="mb-2">
@@ -310,13 +311,10 @@
                                                 <span th:text="${metric.key}">Метрика:</span>
                                                 <strong th:text="${metric.value.currentValue}">100</strong>
                                             </div>
-                                            <div th:if="${metric.value.previousValue != null}"
-                                                 class="text-muted small">
+                                            <div th:if="${metric.value.previousValue != null}" class="text-muted small">
                                                 Изменение:
                                                 <span th:classappend="${'change-' + metric.value.changeType.name().toLowerCase()}"
-                                                      th:text="${#numbers.formatDecimal(metric.value.changePercentage, 1, 1)} + '%'">
-                                                    +5.0%
-                                                </span>
+                                                      th:text="${#numbers.formatDecimal(metric.value.changePercentage, 1, 1)} + '%'">+5.0%</span>
                                             </div>
                                         </div>
                                     </div>
@@ -342,29 +340,37 @@
     let currentWarningThreshold = /*[[${warningPercentage}]]*/ 10;
     let currentCriticalThreshold = /*[[${criticalPercentage}]]*/ 20;
 
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', () => {
+        addGroupStartClass();
         updateSummaryCounters();
     });
 
     function toggleSettings() {
         const panel = document.getElementById('settingsPanel');
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        panel.classList.toggle('d-none');
+    }
+
+    function validateThresholdValue(val, fallback) {
+        const n = Number.parseInt(String(val), 10);
+        return Number.isFinite(n) ? Math.min(100, Math.max(1, n)) : fallback;
     }
 
     function updateThresholds() {
-        const warning = document.getElementById('warningThreshold').value;
-        const critical = document.getElementById('criticalThreshold').value;
+        const warningEl = document.getElementById('warningThreshold');
+        const criticalEl = document.getElementById('criticalThreshold');
+        const warning = validateThresholdValue(warningEl.value, currentWarningThreshold);
+        const critical = validateThresholdValue(criticalEl.value, currentCriticalThreshold);
 
-        if (parseInt(warning) >= parseInt(critical)) {
+        if (warning >= critical) {
             alert('Процент предупреждения должен быть меньше критического');
-            document.getElementById('warningThreshold').value = currentWarningThreshold;
-            document.getElementById('criticalThreshold').value = currentCriticalThreshold;
+            warningEl.value = currentWarningThreshold;
+            criticalEl.value = currentCriticalThreshold;
         }
     }
 
     function applyThresholds() {
-        const warning = parseInt(document.getElementById('warningThreshold').value);
-        const critical = parseInt(document.getElementById('criticalThreshold').value);
+        const warning = validateThresholdValue(document.getElementById('warningThreshold').value, currentWarningThreshold);
+        const critical = validateThresholdValue(document.getElementById('criticalThreshold').value, currentCriticalThreshold);
 
         if (warning >= critical) {
             alert('Процент предупреждения должен быть меньше критического');
@@ -374,64 +380,69 @@
         currentWarningThreshold = warning;
         currentCriticalThreshold = critical;
 
-        // Перекрашиваем ячейки с новыми порогами
         recalculateAlertLevels();
         updateSummaryCounters();
-
-        // Показываем уведомление
         showNotification('Пороги отклонений обновлены', 'success');
     }
 
     function recalculateAlertLevels() {
-        const cells = document.querySelectorAll('.statistics-table td[class*="alert-"]');
-
+        const cells = document.querySelectorAll('.statistics-table tbody td');
         cells.forEach(cell => {
-            // Убираем старые классы
-            cell.classList.remove('alert-normal', 'alert-warning', 'alert-critical');
+            cell.classList.remove(
+                'metric-increase-warning','metric-increase-critical',
+                'metric-decrease-warning','metric-decrease-critical',
+                'metric-stable'
+            );
 
-            // Находим значение изменения
-            const changeElement = cell.querySelector('.metric-change span');
-            if (changeElement) {
-                const changeText = changeElement.textContent;
-                const changeValue = parseFloat(changeText.replace('%', ''));
+            const changeWrapper = cell.querySelector('.metric-change span');
+            if (!changeWrapper) { cell.classList.add('metric-stable'); return; }
 
-                if (Math.abs(changeValue) >= currentCriticalThreshold) {
-                    cell.classList.add('alert-critical');
-                } else if (Math.abs(changeValue) >= currentWarningThreshold) {
-                    cell.classList.add('alert-warning');
-                } else {
-                    cell.classList.add('alert-normal');
-                }
+            // Берём числовое значение из data-change, чтобы не зависеть от локали
+            const raw = changeWrapper.getAttribute('data-change');
+            const val = raw === null ? NaN : Number(raw);
+            if (!Number.isFinite(val) || val === 0) { cell.classList.add('metric-stable'); return; }
+
+            const abs = Math.abs(val);
+            const isUp = val > 0;
+
+            if (abs >= currentCriticalThreshold) {
+                cell.classList.add(isUp ? 'metric-increase-critical' : 'metric-decrease-critical');
+            } else if (abs >= currentWarningThreshold) {
+                cell.classList.add(isUp ? 'metric-increase-warning' : 'metric-decrease-warning');
             } else {
-                cell.classList.add('alert-normal');
+                cell.classList.add('metric-stable');
             }
         });
     }
 
     function updateSummaryCounters() {
-        const warningCells = document.querySelectorAll('.alert-warning').length;
-        const criticalCells = document.querySelectorAll('.alert-critical').length;
-        const totalOperations = statisticsData.length > 0 ? statisticsData[0].operations.length : 0;
+        const warningCells = document.querySelectorAll('.metric-increase-warning, .metric-decrease-warning').length;
+        const criticalCells = document.querySelectorAll('.metric-increase-critical, .metric-decrease-critical').length;
+        const fromData = statisticsData && statisticsData[0] && Array.isArray(statisticsData[0].operations)
+            ? statisticsData[0].operations.length
+            : null;
+        const fromDom = document.querySelectorAll('thead .operation-header').length;
+        const totalOperations = fromData ?? fromDom;
 
-        document.getElementById('totalOperationsCount').textContent = totalOperations;
-        document.getElementById('warningChangesCount').textContent = warningCells;
-        document.getElementById('criticalChangesCount').textContent = criticalCells;
+        const totalEl = document.getElementById('totalOperationsCount');
+        if (totalEl) totalEl.textContent = String(totalOperations);
+        const warnEl = document.getElementById('warningChangesCount');
+        if (warnEl) warnEl.textContent = String(warningCells);
+        const critEl = document.getElementById('criticalChangesCount');
+        if (critEl) critEl.textContent = String(criticalCells);
     }
 
     function exportToExcel() {
-        // Создаем временную форму для скачивания
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = '/statistics/export/excel';
         form.style.display = 'none';
 
-        // Добавляем данные статистики
         const dataInput = document.createElement('input');
         dataInput.name = 'statisticsData';
-        dataInput.value = JSON.stringify(statisticsData);
+        try { dataInput.value = JSON.stringify(statisticsData); } catch (_) { dataInput.value = '[]'; }
         form.appendChild(dataInput);
 
-        // Добавляем настройки
         const settingsInput = document.createElement('input');
         settingsInput.name = 'settings';
         settingsInput.value = JSON.stringify({
@@ -442,43 +453,29 @@
 
         document.body.appendChild(form);
         form.submit();
-        document.body.removeChild(form);
+        form.remove();
 
         showNotification('Экспорт в Excel запущен', 'info');
     }
 
     function showNotification(message, type) {
-        // Создаем временное уведомление
         const alert = document.createElement('div');
         alert.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
         alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        alert.setAttribute('role', 'alert');
         alert.innerHTML = `
             ${message}
-            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+            <button type="button" class="btn-close" aria-label="Закрыть" onclick="this.parentElement.remove()"></button>
         `;
-
         document.body.appendChild(alert);
-
-        // Автоматически убираем через 5 секунд
-        setTimeout(() => {
-            if (alert.parentElement) {
-                alert.remove();
-            }
-        }, 5000);
+        setTimeout(() => { if (alert.parentElement) alert.remove(); }, 5000);
     }
 
-    // Добавляем подсветку при наведении на строки таблицы
-    document.addEventListener('DOMContentLoaded', function() {
-        const rows = document.querySelectorAll('.statistics-table tbody tr');
-        rows.forEach(row => {
-            row.addEventListener('mouseenter', function() {
-                this.style.backgroundColor = '#f5f5f5';
-            });
-            row.addEventListener('mouseleave', function() {
-                this.style.backgroundColor = '';
-            });
+    function addGroupStartClass() {
+        document.querySelectorAll('.statistics-table tbody tr').forEach(tr => {
+            if (tr.querySelector('td[rowspan]')) tr.classList.add('group-start');
         });
-    });
+    }
     /*]]>*/
 </script>
 </body>
