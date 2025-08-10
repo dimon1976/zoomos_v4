@@ -118,18 +118,18 @@
                     <input type="hidden" th:field="*{fields[__${iterStat.index}__].id}" />
                     <div class="col-md-4">
                         <label class="form-label required-field">Поле сущности</label>
-                        <select class="form-select" th:field="*{fields[__${iterStat.index}__].entityFieldName}" required>
+                        <select class="form-select" th:field="*{fields[__${iterStat.index}__].entityFieldName}">
                             <option value="">-- Поле --</option>
                             <option th:each="f : ${availableFields}" th:value="${f}" th:text="${f}"></option>
                         </select>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label required-field">Колонка экспорта</label>
-                        <input type="text" class="form-control" th:field="*{fields[__${iterStat.index}__].exportColumnName}" required>
+                        <input type="text" class="form-control" th:field="*{fields[__${iterStat.index}__].exportColumnName}">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label required-field">Порядок</label>
-                        <input type="number" class="form-control" th:field="*{fields[__${iterStat.index}__].fieldOrder}" required>
+                        <input type="number" class="form-control" th:field="*{fields[__${iterStat.index}__].fieldOrder}">
                     </div>
                     <div class="col-md-1 d-flex align-items-center">
                         <div class="form-check mt-4">
