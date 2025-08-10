@@ -492,12 +492,37 @@
                 <td>${formatDateTime(op.startedAt)}</td>
                 <td>${op.recordCount || '-'}</td>
                 <td>
-                    <a href="/import/status/${op.id}" class="btn btn-sm btn-outline-primary">
+                    <a href="/import/status/${op.id}" class="btn btn-sm btn-outline-primary me-1">
                         <i class="fas fa-eye me-1"></i>Детали
                     </a>
+                    <button type="button" class="btn btn-sm btn-outline-danger"
+                            onclick="deleteOperation(${op.id})">
+                        <i class="fas fa-trash-alt me-1"></i>Удалить
+                    </button>
                 </td>
             </tr>
         `).join('');
+    }
+
+    function deleteOperation(operationId) {
+        if (!confirm('Вы действительно хотите удалить эту операцию?')) {
+            return;
+        }
+        if (!confirm('Все связанные данные будут удалены безвозвратно. Продолжить?')) {
+            return;
+        }
+
+        fetch(`/api/operations/${operationId}`, { method: 'DELETE' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка удаления');
+                }
+                loadOperations();
+            })
+            .catch(error => {
+                console.error('Ошибка удаления операции:', error);
+                alert('Не удалось удалить операцию');
+            });
     }
 
     function displaySelectedFiles(files) {
