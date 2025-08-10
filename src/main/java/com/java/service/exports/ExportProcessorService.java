@@ -221,7 +221,7 @@ public class ExportProcessorService {
 
         // Дата и время
         fileName.append("_").append(ZonedDateTime.now().format(
-                DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")));
+                DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")));
 
         // Расширение
         String extension = "CSV".equalsIgnoreCase(template.getFileFormat()) ? ".csv" : ".xlsx";
@@ -241,10 +241,10 @@ public class ExportProcessorService {
                 template.getClient().getName().replaceAll("[^a-zA-Z0-9а-яА-Я]", "_"));
 
         template_str = template_str.replace("{date}",
-                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")));
+                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
 
         template_str = template_str.replace("{time}",
-                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("HHmmss")));
+                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("HH-mm-ss")));
 
         if (template.getExportTypeLabel() != null) {
             template_str = template_str.replace("{type}",
