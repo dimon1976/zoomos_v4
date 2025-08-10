@@ -143,7 +143,9 @@ public class FileGeneratorService {
         }
 
         // Перемещаем во временную директорию экспорта
-        return pathResolver.moveFromTempToExport(tempFile, fileName);
+        boolean hasTemplate = template.getFilenameTemplate() != null
+                && !template.getFilenameTemplate().trim().isEmpty();
+        return pathResolver.moveFromTempToExport(tempFile, fileName, !hasTemplate);
     }
 
     /**
@@ -219,7 +221,9 @@ public class FileGeneratorService {
             workbook.write(fos);
         }
 
-        return pathResolver.moveFromTempToExport(tempFile, fileName);
+        boolean hasTemplate = template.getFilenameTemplate() != null
+                && !template.getFilenameTemplate().trim().isEmpty();
+        return pathResolver.moveFromTempToExport(tempFile, fileName, !hasTemplate);
     }
 
 

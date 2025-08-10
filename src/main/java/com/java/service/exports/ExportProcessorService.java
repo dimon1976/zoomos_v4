@@ -11,6 +11,7 @@ import com.java.service.exports.strategies.ExportStrategy;
 import com.java.service.exports.strategies.ExportStrategyFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,11 +19,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * Сервис обработки процесса экспорта
@@ -38,6 +37,7 @@ public class ExportProcessorService {
     private final ExportSessionRepository sessionRepository;
     private final FileOperationRepository fileOperationRepository;
     private final ExportStatisticsWriterService statisticsWriterService;
+    private final JdbcTemplate jdbcTemplate;
 
     // Флаги отмены для каждой сессии
     private final Map<Long, AtomicBoolean> cancellationFlags = new HashMap<>();
@@ -69,6 +69,16 @@ public class ExportProcessorService {
                     request.getDateTo(),
                     request.getAdditionalFilters()
             );
+            if ((request.getOperationIds() == null || request.getOperationIds().isEmpty()) && !data.isEmpty()) {
+                List<Long> loadedIds = data.stream()
+                        .map(row -> row.get("operation_id"))
+                        .filter(Objects::nonNull)
+                        .map(val -> ((Number) val).longValue())
+                        .distinct()
+                        .collect(Collectors.toList());
+                request.setOperationIds(loadedIds);
+                log.debug("Operation IDs получены из данных: {}", loadedIds);
+            }
             log.debug("После загрузки получено {} строк", data.size());
             if (!data.isEmpty()) {
                 log.debug("Пример загруженной строки: {}", data.get(0));
@@ -221,7 +231,7 @@ public class ExportProcessorService {
 
         // Дата и время
         fileName.append("_").append(ZonedDateTime.now().format(
-                DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")));
+                DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")));
 
         // Расширение
         String extension = "CSV".equalsIgnoreCase(template.getFileFormat()) ? ".csv" : ".xlsx";
@@ -241,10 +251,10 @@ public class ExportProcessorService {
                 template.getClient().getName().replaceAll("[^a-zA-Z0-9а-яА-Я]", "_"));
 
         template_str = template_str.replace("{date}",
-                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")));
+                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
 
         template_str = template_str.replace("{time}",
-                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("HHmmss")));
+                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("HH-mm-ss")));
 
         if (template.getExportTypeLabel() != null) {
             template_str = template_str.replace("{type}",
@@ -269,9 +279,31 @@ public class ExportProcessorService {
      * Извлекает номер задания из данных операции
      */
     private String extractTaskNumber(ExportRequestDto request) {
-        // Логика извлечения номера задания из операций
-        // Может потребоваться дополнительный запрос к БД
-        return null; // Временно
+        log.debug("extractTaskNumber: operationIds={}, filters={}, dateFrom={}, dateTo={}",
+                request.getOperationIds(), request.getAdditionalFilters(),
+                request.getDateFrom(), request.getDateTo());
+        if (request.getOperationIds() == null || request.getOperationIds().isEmpty()) {
+            log.debug("Отсутствуют operationIds в запросе, номер задания не извлечен");
+            return null;
+        }
+
+        try {
+            Long operationId = request.getOperationIds().get(0);
+            log.debug("Попытка получить product_additional1 для operationId={}", operationId);
+            String sql = "SELECT product_additional1 FROM av_data WHERE operation_id = ? LIMIT 1";
+            String taskNumber = jdbcTemplate.query(sql, ps -> ps.setLong(1, operationId), rs -> {
+                if (rs.next()) {
+                    Object value = rs.getObject("product_additional1");
+                    return value != null ? value.toString() : null;
+                }
+                return null;
+            });
+            log.debug("Результат извлечения номера задания: {}", taskNumber);
+            return taskNumber;
+        } catch (Exception e) {
+            log.warn("Не удалось извлечь номер задания для операций {}", request.getOperationIds(), e);
+            return null;
+        }
     }
 
     /**
