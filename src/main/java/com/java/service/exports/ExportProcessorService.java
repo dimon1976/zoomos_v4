@@ -1,6 +1,5 @@
 package com.java.service.exports;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.ExportRequestDto;
 import com.java.model.FileOperation;
 import com.java.model.entity.ExportSession;
@@ -38,7 +37,7 @@ public class ExportProcessorService {
     private final ExportStrategyFactory strategyFactory;
     private final ExportSessionRepository sessionRepository;
     private final FileOperationRepository fileOperationRepository;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ExportStatisticsWriterService statisticsWriterService;
 
     // Флаги отмены для каждой сессии
     private final Map<Long, AtomicBoolean> cancellationFlags = new HashMap<>();
@@ -131,6 +130,15 @@ public class ExportProcessorService {
                 return;
             }
 
+            // 2.5. Сохраняем статистику по экспортированным данным
+            log.info("Сохранение статистики экспорта");
+            try {
+                statisticsWriterService.saveExportStatistics(session, template, processedData);
+            } catch (Exception e) {
+                log.error("Ошибка сохранения статистики экспорта", e);
+                // Не прерываем экспорт из-за ошибки статистики
+            }
+
             // 3. Генерируем файл
             log.info("Генерация файла экспорта");
             String fileName = generateFileName(template, request);
@@ -181,15 +189,38 @@ public class ExportProcessorService {
     private String generateFileName(ExportTemplate template, ExportRequestDto request) {
         StringBuilder fileName = new StringBuilder();
 
-        // Префикс
-        fileName.append("export_");
+        // Если есть кастомный шаблон, используем его
+        if (template.getFilenameTemplate() != null && !template.getFilenameTemplate().trim().isEmpty()) {
+            return generateCustomFileName(template, request);
+        }
 
-        // Имя шаблона (безопасное для файловой системы)
-        fileName.append(template.getName().replaceAll("[^a-zA-Z0-9а-яА-Я]", "_"));
-        fileName.append("_");
+        // Стандартная генерация
+        fileName.append("export");
+
+        // Имя клиента
+        if (Boolean.TRUE.equals(template.getIncludeClientName())) {
+            String clientName = template.getClient().getName()
+                    .replaceAll("[^a-zA-Z0-9а-яА-Я]", "_");
+            fileName.append("_").append(clientName);
+        }
+
+        // Тип экспорта
+        if (Boolean.TRUE.equals(template.getIncludeExportType()) &&
+                template.getExportTypeLabel() != null) {
+            fileName.append("_").append(template.getExportTypeLabel()
+                    .replaceAll("[^a-zA-Z0-9а-яА-Я]", "_"));
+        }
+
+        // Номер задания
+        if (Boolean.TRUE.equals(template.getIncludeTaskNumber())) {
+            String taskNumber = extractTaskNumber(request);
+            if (taskNumber != null) {
+                fileName.append("_").append(taskNumber);
+            }
+        }
 
         // Дата и время
-        fileName.append(ZonedDateTime.now().format(
+        fileName.append("_").append(ZonedDateTime.now().format(
                 DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")));
 
         // Расширение
@@ -197,6 +228,50 @@ public class ExportProcessorService {
         fileName.append(extension);
 
         return fileName.toString();
+    }
+
+    /**
+     * Генерирует имя файла по кастомному шаблону
+     */
+    private String generateCustomFileName(ExportTemplate template, ExportRequestDto request) {
+        String template_str = template.getFilenameTemplate();
+
+        // Заменяем плейсхолдеры
+        template_str = template_str.replace("{client}",
+                template.getClient().getName().replaceAll("[^a-zA-Z0-9а-яА-Я]", "_"));
+
+        template_str = template_str.replace("{date}",
+                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")));
+
+        template_str = template_str.replace("{time}",
+                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("HHmmss")));
+
+        if (template.getExportTypeLabel() != null) {
+            template_str = template_str.replace("{type}",
+                    template.getExportTypeLabel().replaceAll("[^a-zA-Z0-9а-яА-Я]", "_"));
+        }
+
+        String taskNumber = extractTaskNumber(request);
+        if (taskNumber != null) {
+            template_str = template_str.replace("{task}", taskNumber);
+        }
+
+        // Добавляем расширение если его нет
+        if (!template_str.contains(".")) {
+            String extension = "CSV".equalsIgnoreCase(template.getFileFormat()) ? ".csv" : ".xlsx";
+            template_str += extension;
+        }
+
+        return template_str;
+    }
+
+    /**
+     * Извлекает номер задания из данных операции
+     */
+    private String extractTaskNumber(ExportRequestDto request) {
+        // Логика извлечения номера задания из операций
+        // Может потребоваться дополнительный запрос к БД
+        return null; // Временно
     }
 
     /**

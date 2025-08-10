@@ -151,7 +151,7 @@ public class DataTransformationService {
             }
         }
 
-        log.warn("Значение не найдено для поля '{}' (columnName='{}', columnIndex={})",
+        log.debug("Значение не найдено для поля '{}' (columnName='{}', columnIndex={})",
                 field.getEntityFieldName(), field.getColumnName(), field.getColumnIndex());
 
         // Логируем доступные ключи для отладки

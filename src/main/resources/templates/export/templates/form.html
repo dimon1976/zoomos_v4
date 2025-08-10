@@ -281,6 +281,61 @@
             </div>
         </div>
 
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Настройки именования файлов</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label for="filenameTemplate" class="form-label">Шаблон имени файла</label>
+                        <input type="text" id="filenameTemplate" class="form-control"
+                               th:field="*{filenameTemplate}"
+                               placeholder="Например: {client}_{type}_{task}_{date}_{time}">
+                        <small class="form-text text-muted">
+                            Доступные плейсхолдеры: {client}, {date}, {time}, {type}, {task}
+                        </small>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" th:field="*{includeClientName}">
+                            <label class="form-check-label">Включать имя клиента</label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" th:field="*{includeExportType}">
+                            <label class="form-check-label">Включать тип экспорта</label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" th:field="*{includeTaskNumber}">
+                            <label class="form-check-label">Включать номер задания</label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="exportTypeLabel" class="form-label">Метка типа экспорта</label>
+                        <input type="text" id="exportTypeLabel" class="form-control"
+                               th:field="*{exportTypeLabel}" placeholder="Например: Report">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="operationNameSource" class="form-label">Источник названия для статистики</label>
+                        <select class="form-select" th:field="*{operationNameSource}">
+                            <option value="">По умолчанию (ID экспорта)</option>
+                            <option value="TASK_NUMBER">Номер задания</option>
+                            <option value="FILE_NAME">Имя файла</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="text-end">
             <button type="submit" class="btn btn-primary">
                 <span th:text="${template.id != null ? 'Сохранить' : 'Создать'}">Сохранить</span>
