@@ -62,6 +62,8 @@ public class ExportStatisticsWriterService {
         log.info("Сохранение статистики для сессии ID: {}, поле группировки: {}, полей для подсчета: {}",
                 session.getId(), groupField, countFields.size());
         log.debug("Маппинг полей: {}", fieldMapping);
+        log.debug("Доступные поля в первой строке данных: {}",
+                exportedData.isEmpty() ? "нет данных" : exportedData.get(0).keySet());
 
         // Удаляем старую статистику для этой сессии (если есть)
         statisticsRepository.deleteByExportSessionId(session.getId());
@@ -141,8 +143,7 @@ public class ExportStatisticsWriterService {
             return exportColumnName;
         }
 
-        // Если не найдено в маппинге, возвращаем исходное название
-        // (на случай, если поле не настроено в шаблоне, но используется в статистике)
+        // Если не найдено в маппинге, пробуем найти в данных по исходному названию
         log.warn("Поле '{}' не найдено в маппинге шаблона, используется исходное название", entityFieldName);
         return entityFieldName;
     }
@@ -187,6 +188,22 @@ public class ExportStatisticsWriterService {
      * Подсчитывает количество непустых значений для указанного поля
      */
     private long countNonEmptyValues(List<Map<String, Object>> rows, String fieldName) {
+        log.debug("Подсчет значений для поля '{}' в {} строках", fieldName, rows.size());
+        if (!rows.isEmpty()) {
+            log.debug("Поле '{}' существует в данных: {}", fieldName, rows.get(0).containsKey(fieldName));
+        }
+        if (rows.isEmpty()) {
+            return 0L;
+        }
+
+        // Проверяем, есть ли такое поле в данных
+        boolean fieldExists = rows.get(0).containsKey(fieldName);
+        if (!fieldExists) {
+            log.warn("Поле '{}' не найдено в экспортных данных. Доступные поля: {}",
+                    fieldName, rows.get(0).keySet());
+            return 0L;
+        }
+
         return rows.stream()
                 .map(row -> row.get(fieldName))
                 .filter(this::isNotEmpty)

@@ -98,7 +98,7 @@ public class ExportStatisticsService {
 
                             operationStats.add(StatisticsComparisonDto.OperationStatistics.builder()
                                     .exportSessionId(session.getId())
-                                    .operationName("Экспорт " + session.getId())
+                                    .operationName(generateOperationName(session, session.getTemplate()))
                                     .exportDate(session.getStartedAt())
                                     .metrics(metrics)
                                     .build());
@@ -114,6 +114,64 @@ public class ExportStatisticsService {
         }
 
         return comparisons;
+    }
+
+    /**
+     * Генерирует название операции для отображения в статистике
+     */
+    private String generateOperationName(ExportSession session, ExportTemplate template) {
+        String nameSource = template.getOperationNameSource();
+
+        if ("TASK_NUMBER".equals(nameSource)) {
+            // Извлекаем номер задания из данных операции
+            String taskNumber = extractTaskNumberFromSession(session);
+            return taskNumber != null ? taskNumber : "Экспорт " + session.getId();
+        } else if ("FILE_NAME".equals(nameSource)) {
+            // Используем имя файла
+            String fileName = session.getFileOperation().getFileName();
+            return fileName != null ? fileName.replace(".csv", "").replace(".xlsx", "") : "Экспорт " + session.getId();
+        } else {
+            // По умолчанию
+            return "Экспорт " + session.getId();
+        }
+    }
+
+    /**
+     * Извлекает номер задания из операций-источников сессии экспорта
+     */
+    private String extractTaskNumberFromSession(ExportSession session) {
+        try {
+            // Парсим список операций-источников
+            List<Long> sourceOperationIds = parseSourceOperationIds(session.getSourceOperationIds());
+            if (sourceOperationIds.isEmpty()) {
+                return null;
+            }
+
+            // Берем первую операцию и ищем в ней номер задания
+            // Это требует дополнительного запроса к БД
+            // Пока возвращаем null, можно доработать позже
+            return null;
+        } catch (Exception e) {
+            log.error("Ошибка извлечения номера задания из сессии {}", session.getId(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Парсит JSON строку с ID операций-источников
+     */
+    private List<Long> parseSourceOperationIds(String sourceOperationIds) {
+        if (sourceOperationIds == null || sourceOperationIds.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(sourceOperationIds, new com.fasterxml.jackson.core.type.TypeReference<List<Long>>() {});
+        } catch (Exception e) {
+            log.error("Ошибка парсинга операций-источников: {}", sourceOperationIds, e);
+            return Collections.emptyList();
+        }
     }
 
     /**

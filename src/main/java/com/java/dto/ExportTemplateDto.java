@@ -90,4 +90,20 @@ public class ExportTemplateDto {
 
     @Builder.Default
     private List<String> statisticsFilterFields = new ArrayList<>(); // Поля для фильтрации
+
+    // Настройки именования файлов
+    private String filenameTemplate;
+
+    @Builder.Default
+    private Boolean includeClientName = true;
+
+    @Builder.Default
+    private Boolean includeExportType = false;
+
+    @Builder.Default
+    private Boolean includeTaskNumber = false;
+
+    private String exportTypeLabel;
+
+    private String operationNameSource; // FILE_NAME, TASK_NUMBER, CUSTOM
 }

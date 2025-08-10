@@ -54,6 +54,13 @@ public class ExportTemplateMapper {
                 .statisticsCountFields(parseJsonStringList(entity.getStatisticsCountFields()))
                 .statisticsGroupField(entity.getStatisticsGroupField())
                 .statisticsFilterFields(parseJsonStringList(entity.getStatisticsFilterFields()))
+                // Настройки именования файлов
+                .filenameTemplate(entity.getFilenameTemplate())
+                .includeClientName(entity.getIncludeClientName())
+                .includeExportType(entity.getIncludeExportType())
+                .includeTaskNumber(entity.getIncludeTaskNumber())
+                .exportTypeLabel(entity.getExportTypeLabel())
+                .operationNameSource(entity.getOperationNameSource())
                 .build();
     }
 
@@ -81,6 +88,13 @@ public class ExportTemplateMapper {
                 .statisticsCountFields(toJsonString(dto.getStatisticsCountFields()))
                 .statisticsGroupField(dto.getStatisticsGroupField())
                 .statisticsFilterFields(toJsonString(dto.getStatisticsFilterFields()))
+                // Настройки именования файлов
+                .filenameTemplate(dto.getFilenameTemplate())
+                .includeClientName(dto.getIncludeClientName())
+                .includeExportType(dto.getIncludeExportType())
+                .includeTaskNumber(dto.getIncludeTaskNumber())
+                .exportTypeLabel(dto.getExportTypeLabel())
+                .operationNameSource(dto.getOperationNameSource())
                 .build();
 
         // Добавляем поля
@@ -124,6 +138,15 @@ public class ExportTemplateMapper {
         entity.setStatisticsCountFields(toJsonString(dto.getStatisticsCountFields()));
         entity.setStatisticsGroupField(dto.getStatisticsGroupField());
         entity.setStatisticsFilterFields(toJsonString(dto.getStatisticsFilterFields()));
+
+        // Обновляем настройки именования файлов
+        entity.setFilenameTemplate(dto.getFilenameTemplate());
+        entity.setIncludeClientName(dto.getIncludeClientName());
+        entity.setIncludeExportType(dto.getIncludeExportType());
+        entity.setIncludeTaskNumber(dto.getIncludeTaskNumber());
+        entity.setExportTypeLabel(dto.getExportTypeLabel());
+        entity.setOperationNameSource(dto.getOperationNameSource());
+
 
         // Обновляем поля
         entity.getFields().clear();
