@@ -44,6 +44,14 @@ public final class ErrorMessages {
     public static final String OPERATION_TIMEOUT = "Превышено время выполнения операции";
     public static final String CONCURRENT_MODIFICATION = "Данные были изменены другим пользователем";
 
+    // Добавляем новые константы для экспорта
+    public static final String EXPORT_FAILED = "Ошибка экспорта данных";
+    public static final String EXPORT_FORMAT_NOT_SUPPORTED = "Формат экспорта не поддерживается";
+    public static final String EXPORT_SIZE_EXCEEDED = "Превышен максимальный размер экспорта";
+    public static final String EXPORT_GENERATION_FAILED = "Ошибка генерации файла экспорта";
+    public static final String CHARSET_NOT_SUPPORTED = "Кодировка не поддерживается";
+    public static final String EXCEL_CELL_LIMIT_EXCEEDED = "Превышен лимит размера ячейки Excel";
+
     /**
      * Форматирует сообщение об ошибке с параметрами
      */
