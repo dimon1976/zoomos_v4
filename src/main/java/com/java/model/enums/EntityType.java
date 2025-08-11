@@ -1,8 +1,11 @@
 package com.java.model.enums;
 
+import lombok.Getter;
+
+@Getter
 public enum EntityType {
-    AV_DATA("Азбука данные"),
-    AV_HANDBOOK("Азбука справочник");
+    AV_DATA("Data"),
+    AV_HANDBOOK("AvHandbook");
 
     private final String displayName;
 
@@ -10,8 +13,4 @@ public enum EntityType {
         this.displayName = displayName;
     }
 
-    public String getDisplayName() {
-        return displayName;
-    }
 }
-

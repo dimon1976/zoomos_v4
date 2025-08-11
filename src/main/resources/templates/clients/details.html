@@ -417,6 +417,9 @@
         if (window.location.hash === '#operations') {
             const tab = new bootstrap.Tab(document.getElementById('overview-tab'));
             tab.show();
+        } else if (window.location.hash === '#templates') {
+            const tab = new bootstrap.Tab(document.getElementById('templates-tab'));
+            tab.show();
         }
 
         // Автообновление операций каждые 5 секунд если есть активные операции
