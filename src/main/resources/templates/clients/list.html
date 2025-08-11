@@ -94,11 +94,6 @@
                         <span th:text="${client.fileOperationsCount != null ? client.fileOperationsCount : 0}">0</span>
                         <span class="ms-1">файловых операций</span>
                     </div>
-
-                    <div th:if="${client.contactEmail}" class="d-flex align-items-center mt-2 client-stats">
-                        <i class="fas fa-envelope text-muted me-2"></i>
-                        <span th:text="${client.contactEmail}">email@example.com</span>
-                    </div>
                     <div th:if="${client.regionName}" class="d-flex align-items-center mt-2 client-stats">
                         <i class="fas fa-map-marker-alt text-muted me-2"></i>
                         <span th:text="${client.regionName}">Регион</span>

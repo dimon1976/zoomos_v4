@@ -42,12 +42,6 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
-                    <p class="mb-1"><strong>Email:</strong>
-                        <span th:text="${client.contactEmail != null && !client.contactEmail.isEmpty() ? client.contactEmail : 'Не указан'}">email@example.com</span>
-                    </p>
-                    <p class="mb-1"><strong>Телефон:</strong>
-                        <span th:text="${client.contactPhone != null && !client.contactPhone.isEmpty() ? client.contactPhone : 'Не указан'}">+1234567890</span>
-                    </p>
                     <p class="mb-1"><strong>Код региона:</strong>
                         <span th:text="${client.regionCode != null && !client.regionCode.isEmpty() ? client.regionCode : 'Не указан'}">77</span>
                     </p>
