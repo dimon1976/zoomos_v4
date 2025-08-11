@@ -32,12 +32,6 @@ public class Client {
     @Column(name = "description")
     private String description;
 
-    @Column(name = "contact_email")
-    private String contactEmail;
-
-    @Column(name = "contact_phone")
-    private String contactPhone;
-
     @Column(name = "region_code")
     private String regionCode;
 
@@ -54,15 +48,4 @@ public class Client {
 
     @OneToMany(mappedBy = "client", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<FileOperation> fileOperations = new ArrayList<>();
-
-    // Вспомогательные методы для установки отношений
-    public void addFileOperation(FileOperation fileOperation) {
-        fileOperations.add(fileOperation);
-        fileOperation.setClient(this);
-    }
-
-    public void removeFileOperation(FileOperation fileOperation) {
-        fileOperations.remove(fileOperation);
-        fileOperation.setClient(null);
-    }
 }
