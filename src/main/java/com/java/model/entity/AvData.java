@@ -77,13 +77,13 @@ public class AvData {
     @Column(length = 400)
     private String competitorName;
 
-    private String competitorPrice;
-    private String competitorPromotionalPrice;
+    private Double competitorPrice;
+    private Double competitorPromotionalPrice;
     private String competitorTime;
     private String competitorDate;
     private LocalDateTime competitorLocalDateTime;
     private String competitorStockStatus;
-    private String competitorAdditionalPrice;
+    private Double competitorAdditionalPrice;
 
     @Column(length = 1000)
     private String competitorCommentary;
