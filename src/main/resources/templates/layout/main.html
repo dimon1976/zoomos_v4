@@ -13,6 +13,7 @@
 
     <!-- Custom CSS -->
     <link th:href="@{/css/styles.css}" rel="stylesheet">
+    <link th:href="@{/css/navigation.css}" rel="stylesheet">
 
     <!-- Дополнительные стили для конкретных страниц -->
     <th:block th:replace="${styles}"><!-- Стили будут здесь --></th:block>
@@ -40,20 +41,18 @@
                             <i class="fas fa-users me-1"></i>Клиенты
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" th:href="@{/utils}">
-                            <i class="fas fa-tools me-1"></i>Утилиты
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cog me-1"></i>Настройки
                         </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" th:href="@{/stats}">
-                            <i class="fas fa-chart-line me-1"></i>Статистика
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" th:href="@{/stats}">
-                            <i class="fas fa-chart-bar me-1"></i>Отчеты
-                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" th:href="@{/statistics/settings}">
+                                <i class="fas fa-chart-line me-2"></i>Статистика
+                            </a></li>
+                            <li><a class="dropdown-item" th:href="@{/utils}">
+                                <i class="fas fa-tools me-2"></i>Утилиты
+                            </a></li>
+                        </ul>
                     </li>
                 </ul>
             </div>
