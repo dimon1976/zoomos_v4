@@ -7,10 +7,11 @@
 </head>
 <body>
 <div class="page-actions">
-    <a th:href="@{/export/templates/client/{clientId}/create(clientId=${clientId})}" class="btn btn-primary">
+    <a th:href="@{/export/templates/client/{clientId}/create(clientId=${clientId})}"
+       class="btn btn-primary btn-primary-action">
         <i class="fas fa-plus me-1"></i>Создать шаблон
     </a>
-    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary btn-back">
         <i class="fas fa-arrow-left me-1"></i>К клиенту
     </a>
 </div>

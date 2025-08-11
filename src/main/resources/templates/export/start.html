@@ -14,7 +14,7 @@
 </head>
 <body>
 <div class="page-actions">
-    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary btn-back">
         <i class="fas fa-arrow-left me-1"></i>К клиенту
     </a>
 </div>
@@ -129,7 +129,7 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary btn-primary-action">
                     <i class="fas fa-play me-1"></i>Начать экспорт
                 </button>
             </form>
