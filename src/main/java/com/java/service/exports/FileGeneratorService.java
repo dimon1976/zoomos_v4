@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
 public class FileGeneratorService {
 
     private final PathResolver pathResolver;
+    private static final String DEFAULT_FONT_NAME = "Calibri";
 
     @Value("${export.xlsx.max-rows:1048576}")
     private int xlsxMaxRows;
@@ -279,8 +280,10 @@ public class FileGeneratorService {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
         font.setBold(true);
+        font.setFontName(DEFAULT_FONT_NAME);
+        font.setFontHeightInPoints((short) 10);
         style.setFont(font);
-        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
         style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         style.setBorderBottom(BorderStyle.THIN);
         style.setBorderTop(BorderStyle.THIN);
