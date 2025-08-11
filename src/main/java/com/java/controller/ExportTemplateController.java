@@ -8,6 +8,7 @@ import com.java.model.enums.EntityType;
 import com.java.model.enums.ExportStrategy;
 import com.java.model.enums.FilterType;
 import com.java.service.EntityFieldService;
+import com.java.service.client.ClientService;
 import com.java.service.exports.ExportTemplateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class ExportTemplateController {
 
     private final ExportTemplateService templateService;
     private final EntityFieldService fieldService;
+    private final ClientService clientService;
 
     /**
      * Форма создания шаблона
@@ -40,6 +42,7 @@ public class ExportTemplateController {
     public String listTemplates(@PathVariable Long clientId, Model model) {
         model.addAttribute("templates", templateService.getClientTemplates(clientId));
         model.addAttribute("clientId", clientId);
+        model.addAttribute("clients", clientService.getAllClients());
         return "export/templates/list";
     }
 
@@ -116,6 +119,7 @@ public class ExportTemplateController {
         return templateService.getTemplate(templateId)
                 .map(t -> {
                     model.addAttribute("template", t);
+                    model.addAttribute("clients", clientService.getAllClients());
                     return "export/templates/view";
                 })
                 .orElseGet(() -> {
@@ -198,6 +202,29 @@ public class ExportTemplateController {
             redirectAttributes.addFlashAttribute("errorMessage", "Ошибка удаления шаблона: " + e.getMessage());
         }
         return "redirect:/export/templates/client/" + clientId;
+    }
+
+
+    /**
+     * Клонирование шаблона
+     */
+    @PostMapping("/{templateId}/clone")
+    public String cloneTemplate(@PathVariable Long templateId,
+                                @RequestParam String newName,
+                                @RequestParam Long clientId,
+                                RedirectAttributes redirectAttributes) {
+        log.debug("POST запрос на клонирование шаблона ID: {} с именем: {} для клиента {}",
+                templateId, newName, clientId);
+
+        try {
+            ExportTemplateDto cloned = templateService.cloneTemplate(templateId, newName, clientId);
+            redirectAttributes.addFlashAttribute("successMessage", "Шаблон успешно клонирован");
+            return "redirect:/export/templates/" + cloned.getId();
+        } catch (Exception e) {
+            log.error("Ошибка клонирования шаблона", e);
+            redirectAttributes.addFlashAttribute("errorMessage", "Ошибка клонирования шаблона: " + e.getMessage());
+            return "redirect:/export/templates/" + templateId;
+        }
     }
 
     private String handleDynamicFields(ExportTemplateDto template,

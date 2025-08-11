@@ -3,6 +3,7 @@ package com.java.controller;
 import com.java.dto.ImportTemplateDto;
 import com.java.model.enums.EntityType;
 import com.java.service.EntityFieldService;
+import com.java.service.client.ClientService;
 import com.java.service.imports.ImportTemplateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class ImportTemplateController {
 
     private final ImportTemplateService templateService;
     private final EntityFieldService fieldService;
+    private final ClientService clientService;
 
     /**
      * Отображение списка шаблонов клиента
@@ -37,6 +39,7 @@ public class ImportTemplateController {
         List<ImportTemplateDto> templates = templateService.getClientTemplates(clientId);
         model.addAttribute("templates", templates);
         model.addAttribute("clientId", clientId);
+        model.addAttribute("clients", clientService.getAllClients());
 
         return "import/templates/list";
     }
@@ -100,6 +103,7 @@ public class ImportTemplateController {
         return templateService.getTemplate(templateId)
                 .map(template -> {
                     model.addAttribute("template", template);
+                    model.addAttribute("clients", clientService.getAllClients());
                     return "import/templates/view";
                 })
                 .orElseGet(() -> {
@@ -205,12 +209,13 @@ public class ImportTemplateController {
     @PostMapping("/{templateId}/clone")
     public String cloneTemplate(@PathVariable Long templateId,
                                 @RequestParam String newName,
+                                @RequestParam Long clientId,
                                 RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на клонирование шаблона ID: {} с именем: {}",
-                templateId, newName);
+        log.debug("POST запрос на клонирование шаблона ID: {} с именем: {} для клиента {}",
+                templateId, newName, clientId);
 
         try {
-            ImportTemplateDto cloned = templateService.cloneTemplate(templateId, newName);
+            ImportTemplateDto cloned = templateService.cloneTemplate(templateId, newName, clientId);
             redirectAttributes.addFlashAttribute("successMessage",
                     "Шаблон успешно клонирован");
 

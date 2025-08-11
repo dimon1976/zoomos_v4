@@ -167,55 +167,34 @@ public class ImportTemplateService {
      * Клонирует существующий шаблон
      */
     @Transactional
-    public ImportTemplateDto cloneTemplate(Long templateId, String newName) {
-        log.info("Клонирование шаблона ID: {} с новым именем: {}", templateId, newName);
+    public ImportTemplateDto cloneTemplate(Long templateId, String newName, Long clientId) {
+        log.info("Клонирование шаблона ID: {} с новым именем: {} для клиента {}", templateId, newName, clientId);
 
         ImportTemplate original = templateRepository.findByIdWithFields(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
 
+        Long targetClientId = clientId != null ? clientId : original.getClient().getId();
+        Client targetClient = clientRepository.findById(targetClientId)
+                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+
         // Проверяем уникальность нового имени
-        if (templateRepository.existsByNameAndClient(newName, original.getClient())) {
+        if (templateRepository.existsByNameAndClient(newName, targetClient)) {
             throw new IllegalArgumentException("Шаблон с таким именем уже существует");
         }
 
-        // Создаем копию
-        ImportTemplate clone = ImportTemplate.builder()
-                .name(newName)
-                .description("Копия " + original.getDescription())
-                .client(original.getClient())
-                .entityType(original.getEntityType())
-                .dataSourceType(original.getDataSourceType())
-                .duplicateStrategy(original.getDuplicateStrategy())
-                .errorStrategy(original.getErrorStrategy())
-                .fileType(original.getFileType())
-                .delimiter(original.getDelimiter())
-                .encoding(original.getEncoding())
-                .skipHeaderRows(original.getSkipHeaderRows())
-                .isActive(true)
-                .build();
-
-        // Копируем поля
-        for (ImportTemplateField originalField : original.getFields()) {
-            ImportTemplateField clonedField = ImportTemplateField.builder()
-                    .columnName(originalField.getColumnName())
-                    .columnIndex(originalField.getColumnIndex())
-                    .entityFieldName(originalField.getEntityFieldName())
-                    .fieldType(originalField.getFieldType())
-                    .isRequired(originalField.getIsRequired())
-                    .isUnique(originalField.getIsUnique())
-                    .defaultValue(originalField.getDefaultValue())
-                    .dateFormat(originalField.getDateFormat())
-                    .transformationRule(originalField.getTransformationRule())
-                    .validationRegex(originalField.getValidationRegex())
-                    .validationMessage(originalField.getValidationMessage())
-                    .build();
-            clone.addField(clonedField);
+        ImportTemplateDto dto = ImportTemplateMapper.toDto(original);
+        dto.setId(null);
+        dto.setName(newName);
+        dto.setClientId(targetClientId);
+        dto.setClientName(null);
+        dto.setCreatedAt(null);
+        dto.setUpdatedAt(null);
+        dto.setIsActive(true);
+        if (dto.getFields() != null) {
+            dto.getFields().forEach(field -> field.setId(null));
         }
 
-        clone = templateRepository.save(clone);
-        log.info("Шаблон клонирован с новым ID: {}", clone.getId());
-
-        return ImportTemplateMapper.toDto(clone);
+        return createTemplate(dto);
     }
 
     /**
