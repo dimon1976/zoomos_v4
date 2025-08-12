@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 @Service
 @Slf4j
@@ -30,7 +31,8 @@ public class FileGeneratorService {
     private boolean enableAutoFormatSwitch;
 
     @Transactional(readOnly = true)
-    public Path generateFile(List<Map<String, Object>> data,
+    public Path generateFile(Stream<Map<String, Object>> data,
+                             long dataSize,
                              ExportTemplate template,
                              String fileName) throws FileOperationException {
 
@@ -38,14 +40,14 @@ public class FileGeneratorService {
         long startTime = System.currentTimeMillis();
 
         log.info("Starting file generation. OperationId: {}, Format: {}, Records: {}, FileName: {}",
-                operationId, template.getFileFormat(), data.size(), fileName);
+                operationId, template.getFileFormat(), dataSize, fileName);
 
         try {
             // Валидация входных данных
             validateInputs(data, template, fileName, operationId);
 
             // Определение формата с учетом ограничений
-            String format = determineFormat(data, template, operationId);
+            String format = determineFormat(dataSize, template, operationId);
 
             // Поиск подходящего генератора
             FileGenerator generator = findGenerator(format, operationId);
@@ -76,7 +78,7 @@ public class FileGeneratorService {
         }
     }
 
-    private void validateInputs(List<Map<String, Object>> data,
+    private void validateInputs(Stream<Map<String, Object>> data,
                                 ExportTemplate template,
                                 String fileName,
                                 String operationId) {
@@ -131,16 +133,16 @@ public class FileGeneratorService {
         log.debug("Input validation passed. OperationId: {}", operationId);
     }
 
-    private String determineFormat(List<Map<String, Object>> data,
+    private String determineFormat(long dataSize,
                                    ExportTemplate template,
                                    String operationId) {
         String format = template.getFileFormat().toUpperCase();
 
         // Автоматическое переключение на CSV при превышении лимита XLSX
-        if ("XLSX".equals(format) && data.size() > xlsxMaxRows) {
+        if ("XLSX".equals(format) && dataSize > xlsxMaxRows) {
             if (enableAutoFormatSwitch) {
                 log.warn("Data size {} exceeds XLSX limit {}, switching to CSV. OperationId: {}",
-                        data.size(), xlsxMaxRows, operationId);
+                        dataSize, xlsxMaxRows, operationId);
                 template.setFileFormat("CSV");
                 return "CSV";
             } else {
@@ -148,10 +150,10 @@ public class FileGeneratorService {
                 throw new ImportQuotaExceededException(
                         ErrorMessages.format(
                                 "Data size %d exceeds XLSX maximum of %d rows",
-                                data.size(), xlsxMaxRows
+                                dataSize, xlsxMaxRows
                         ),
                         xlsxMaxRows,
-                        data.size()
+                        (int) dataSize
                 );
             }
         }

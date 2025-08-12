@@ -36,10 +36,16 @@ public class ExportService {
     private final ExportSessionRepository sessionRepository;
     private final FileOperationRepository fileOperationRepository;
     private final ClientRepository clientRepository;
+    private final ExportDataService dataService;
     private final ExportProcessorService processorService;
     private final AsyncExportService asyncExportService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * Минимальное количество строк, при превышении которого экспорт
+     * будет выполняться асинхронно. Значение можно переопределить
+     * через свойство <code>export.async.threshold-rows</code>.
+     */
     @Value("${export.async.threshold-rows:10000}")
     private int asyncThresholdRows;
 
@@ -91,7 +97,7 @@ public class ExportService {
         session = sessionRepository.save(session);
 
         // Определяем режим обработки
-        if (request.getAsyncMode() && shouldProcessAsync(request)) {
+        if (request.getAsyncMode() && shouldProcessAsync(request, template)) {
             // Асинхронная обработка после коммита транзакции
             log.info("Запуск асинхронного экспорта");
 //            CompletableFuture<ExportSession> future = asyncExportService.startAsyncExport(session, request);
@@ -117,12 +123,22 @@ public class ExportService {
     }
 
     /**
-     * Определяет, нужна ли асинхронная обработка
+     * Определяет, требуется ли асинхронная обработка экспорта.
+     * Выполняет предварительный подсчет записей и сравнивает результат
+     * с пороговым значением {@link #asyncThresholdRows}.
+     *
+     * @return {@code true}, если предполагаемое количество строк превышает порог
      */
-    private boolean shouldProcessAsync(ExportRequestDto request) {
-        // Можно добавить логику определения на основе предполагаемого объема данных
-        // Пока используем простое правило - всегда асинхронно
-        return true;
+    private boolean shouldProcessAsync(ExportRequestDto request, ExportTemplate template) {
+        Long estimatedRows = dataService.countData(
+                request.getOperationIds() != null ? request.getOperationIds() : Collections.emptyList(),
+                template,
+                request.getDateFrom(),
+                request.getDateTo(),
+                request.getAdditionalFilters()
+        );
+        log.debug("Оценочное количество строк для экспорта: {}", estimatedRows);
+        return estimatedRows != null && estimatedRows > asyncThresholdRows;
     }
 
     /**

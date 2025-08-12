@@ -432,7 +432,42 @@ public class ExportDataService {
         }
 
         // Фильтры из шаблона и дополнительные
-        // ... (аналогично методу loadData)
+        List<ExportTemplateFilter> activeFilters = template.getFilters().stream()
+                .filter(ExportTemplateFilter::getIsActive)
+                .toList();
+
+        for (ExportTemplateFilter filter : activeFilters) {
+            applyFilter(sql, params, filter.getFieldName(),
+                    filter.getFilterType(), filter.getFilterValue());
+        }
+
+        if (additionalFilters != null) {
+            Map<String, ExportTemplateFilterDto> filterMap = additionalFilters.stream()
+                    .collect(Collectors.toMap(
+                            ExportTemplateFilterDto::getFieldName,
+                            f -> f,
+                            (f1, f2) -> f2
+                    ));
+
+            for (ExportTemplateFilter templateFilter : activeFilters) {
+                if (filterMap.containsKey(templateFilter.getFieldName())) {
+                    ExportTemplateFilterDto overrideFilter = filterMap.get(templateFilter.getFieldName());
+                    applyFilter(sql, params, overrideFilter.getFieldName(),
+                            overrideFilter.getFilterType(), overrideFilter.getFilterValue());
+                    filterMap.remove(templateFilter.getFieldName());
+                }
+            }
+
+            for (ExportTemplateFilterDto filter : filterMap.values()) {
+                applyFilter(sql, params, filter.getFieldName(),
+                        filter.getFilterType(), filter.getFilterValue());
+            }
+        }
+
+        if (template.getExportStrategy() == ExportStrategy.TASK_REPORT
+                && template.getEntityType() == EntityType.AV_DATA) {
+            sql.append(" AND data_source = 'REPORT'");
+        }
 
         return jdbcTemplate.queryForObject(sql.toString(), params.toArray(), Long.class);
     }

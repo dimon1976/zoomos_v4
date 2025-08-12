@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Component
 @Slf4j
@@ -34,13 +35,13 @@ public class CsvFileGenerator implements FileGenerator {
     private int batchSize;
 
     @Override
-    public Path generate(List<Map<String, Object>> data,
+    public Path generate(Stream<Map<String, Object>> data,
                          ExportTemplate template,
                          String fileName) throws FileOperationException {
 
         String operationId = UUID.randomUUID().toString();
-        log.info("Starting CSV generation. OperationId: {}, FileName: {}, Records: {}",
-                operationId, fileName, data.size());
+        log.info("Starting CSV generation. OperationId: {}, FileName: {}",
+                operationId, fileName);
 
         try {
             validateInputs(data, template, fileName);
@@ -68,7 +69,7 @@ public class CsvFileGenerator implements FileGenerator {
     }
 
     private void writeCsvFile(Path tempFile,
-                              List<Map<String, Object>> data,
+                              Stream<Map<String, Object>> data,
                               ExportTemplate template,
                               String fileName,
                               String operationId) throws FileOperationException {
@@ -143,21 +144,23 @@ public class CsvFileGenerator implements FileGenerator {
     }
 
     private void writeDataBatch(CSVWriter csvWriter,
-                                List<Map<String, Object>> data,
+                                Stream<Map<String, Object>> data,
                                 List<ExportTemplateField> fields,
                                 List<String> headers,
                                 String fileName) throws IOException {
-        if (data.isEmpty()) {
+        Iterator<Map<String, Object>> iterator = data.iterator();
+        if (!iterator.hasNext()) {
             log.warn("No data to write for file: {}", fileName);
             return;
         }
 
         List<String[]> batch = new ArrayList<>();
         int processed = 0;
-        long rowNumber = 1; // Начинаем с 1, так как 0 - это заголовки
+        long rowNumber = 1; // 1 for header row
 
         try {
-            for (Map<String, Object> row : data) {
+            while (iterator.hasNext()) {
+                Map<String, Object> row = iterator.next();
                 rowNumber++;
                 String[] values = extractRowValues(row, fields, headers, rowNumber, fileName);
                 batch.add(values);
@@ -170,7 +173,6 @@ public class CsvFileGenerator implements FileGenerator {
                 }
             }
 
-            // Записываем остаток
             if (!batch.isEmpty()) {
                 csvWriter.writeAll(batch);
                 log.debug("Written final batch of {} rows", batch.size());
@@ -215,7 +217,7 @@ public class CsvFileGenerator implements FileGenerator {
         return "CSV".equalsIgnoreCase(format);
     }
 
-    private void validateInputs(List<Map<String, Object>> data,
+    private void validateInputs(Stream<Map<String, Object>> data,
                                 ExportTemplate template,
                                 String fileName) {
         if (data == null) {
