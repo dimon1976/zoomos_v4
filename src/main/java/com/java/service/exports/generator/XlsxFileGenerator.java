@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Component
 @Slf4j
@@ -40,20 +41,22 @@ public class XlsxFileGenerator implements FileGenerator {
     private int xlsxMaxRows;
 
     @Override
-    public Path generate(List<Map<String, Object>> data,
+    public Path generate(Stream<Map<String, Object>> data,
                          ExportTemplate template,
                          String fileName) throws FileOperationException {
 
+        List<Map<String, Object>> dataList = data.toList();
+
         String operationId = UUID.randomUUID().toString();
         log.info("Starting XLSX generation. OperationId: {}, FileName: {}, Records: {}",
-                operationId, fileName, data.size());
+                operationId, fileName, dataList.size());
 
         try {
-            validateInputs(data, template, fileName);
-            checkDataSizeLimit(data.size(), fileName);
+            validateInputs(dataList, template, fileName);
+            checkDataSizeLimit(dataList.size(), fileName);
 
             Path tempFile = pathResolver.createTempFile("export_", ".xlsx");
-            writeXlsxFile(tempFile, data, template, fileName, operationId);
+            writeXlsxFile(tempFile, dataList, template, fileName, operationId);
 
             Path resultPath = moveToExportDirectory(tempFile, fileName, template);
             log.info("XLSX generation completed. OperationId: {}, Path: {}", operationId, resultPath);
