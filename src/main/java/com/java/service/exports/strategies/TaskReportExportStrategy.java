@@ -60,7 +60,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
             log.debug("Пример первой записи отчета:");
             Map<String, Object> firstRow = reportData.get(0);
             log.debug("  product_additional1: {}", firstRow.get("product_additional1"));
-            log.debug("  product_additional4: {}", firstRow.get("product_additional4"));
+            log.debug("  competitor_additional: {}", firstRow.get("competitor_additional"));
             log.debug("  competitor_name: {}", firstRow.get("competitor_name"));
             log.debug("  competitor_url: {}", firstRow.get("competitor_url"));
         }
@@ -90,7 +90,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
             Set<String> reportKeys = reportData.stream()
                     .map(row -> {
                         String taskNum = Objects.toString(row.get("product_additional1"), null);
-                        String networkCode = Objects.toString(row.get("product_additional4"), null);
+                        String networkCode = Objects.toString(row.get("competitor_additional"), null);
                         return buildKey(taskNum, networkCode);
                     })
                     .filter(Objects::nonNull)
@@ -127,13 +127,13 @@ public class TaskReportExportStrategy implements ExportStrategy {
             // 5.2. Проверяем соответствие заданию (строгое соответствие)
             String key = buildKey(
                     workingRow.get("product_additional1"),
-                    workingRow.get("product_additional4"));
+                    workingRow.get("competitor_additional"));
 
             if (key == null) {
                 skippedWithoutKey++;
                 TaskNetworkKey logKey = new TaskNetworkKey(
                         Objects.toString(workingRow.get("product_additional1"), null),
-                        Objects.toString(workingRow.get("product_additional4"), null)
+                        Objects.toString(workingRow.get("competitor_additional"), null)
                 );
                 missingKeyCounts.merge(logKey, 1, Integer::sum);
                 continue;
@@ -178,7 +178,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
             return false;
         }
 
-        return isBlank(row.get("product_additional4")) ||
+        return isBlank(row.get("competitor_additional")) ||
                 isBlank(row.get("competitor_name")) ||
                 isBlank(row.get("region")) ||
                 isBlank(row.get("region_address"));
@@ -211,10 +211,10 @@ public class TaskReportExportStrategy implements ExportStrategy {
         boolean wasEnriched = false;
 
         // Заполняем пустые поля
-        if (isBlank(row.get("product_additional4"))) {
+        if (isBlank(row.get("competitor_additional"))) {
             Object newCode = handbook.get("handbook_retail_network_code");
-            row.put("product_additional4", newCode);
-            log.debug("Обогащен код сети: {} -> {}", row.get("product_additional4"), newCode);
+            row.put("competitor_additional", newCode);
+            log.debug("Обогащен код сети: {} -> {}", row.get("competitor_additional"), newCode);
             wasEnriched = true;
         }
         if (isBlank(row.get("competitor_name"))) {
@@ -342,7 +342,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
         for (int i = 0; i < numbers.size(); i += batchSize) {
             List<String> batch = numbers.subList(i, Math.min(i + batchSize, numbers.size()));
             String placeholders = String.join(", ", Collections.nCopies(batch.size(), "?"));
-            String sql = "SELECT product_additional1, product_additional4 FROM av_data WHERE data_source = 'TASK' " +
+            String sql = "SELECT product_additional1, competitor_additional FROM av_data WHERE data_source = 'TASK' " +
                     "AND product_additional1 IN (" + placeholders + ")";
 
             log.debug("SQL для поиска заданий: {}", sql);
@@ -350,7 +350,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
 
             jdbcTemplate.query(sql, batch.toArray(), rs -> {
                 String taskNum = rs.getString("product_additional1");
-                String networkCode = rs.getString("product_additional4");
+                String networkCode = rs.getString("competitor_additional");
                 log.debug("Найдена запись задания: taskNum='{}', networkCode='{}'", taskNum, networkCode);
 
                 String key = buildKey(taskNum, networkCode);
