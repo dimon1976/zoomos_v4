@@ -218,17 +218,15 @@ public class ImportTemplateService {
         ImportTemplate template = templateRepository.findByIdWithFields(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
 
-        // Очищаем старые поля
-        template.getFields().clear();
+        // Валидируем поля (метод может удалить пустые элементы из списка)
+        validationService.validateTemplateFields(fields, template.getEntityType());
 
-        // Добавляем новые
+        // Очищаем старые поля и добавляем проверенные
+        template.getFields().clear();
         for (ImportTemplateFieldDto fieldDto : fields) {
             ImportTemplateField field = ImportTemplateMapper.fieldToEntity(fieldDto);
             template.addField(field);
         }
-
-        // Валидируем поля
-        validationService.validateTemplateFields(fields, template.getEntityType());
 
         template = templateRepository.save(template);
         log.info("Поля шаблона обновлены");
