@@ -12,10 +12,6 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Стратегия экспорта Задание-Отчет.
- * Оставляет только строки отчета, для которых есть соответствующая запись задания
- */
 @Component("taskReportExportStrategy")
 @Slf4j
 @RequiredArgsConstructor
@@ -35,11 +31,6 @@ public class TaskReportExportStrategy implements ExportStrategy {
     }
 
     @Override
-    public List<String> getRequiredContextParams() {
-        return List.of();
-    }
-
-    @Override
     public List<Map<String, Object>> processData(
             List<Map<String, Object>> data,
             ExportTemplate template,
@@ -48,7 +39,6 @@ public class TaskReportExportStrategy implements ExportStrategy {
         log.info("Применение стратегии Задание-Отчет");
         log.debug("Входных записей: {}", data.size());
 
-        // Получаем параметры из контекста
         String clientRegionCode = (String) context.get("clientRegionCode");
         int maxReportAgeDays = context.get("maxReportAgeDays") != null
                 ? ((Integer) context.get("maxReportAgeDays"))
@@ -65,12 +55,23 @@ public class TaskReportExportStrategy implements ExportStrategy {
             return Collections.emptyList();
         }
 
+        // Логируем первые несколько записей отчета
+        if (log.isDebugEnabled() && !reportData.isEmpty()) {
+            log.debug("Пример первой записи отчета:");
+            Map<String, Object> firstRow = reportData.get(0);
+            log.debug("  product_additional1: {}", firstRow.get("product_additional1"));
+            log.debug("  product_additional4: {}", firstRow.get("product_additional4"));
+            log.debug("  competitor_name: {}", firstRow.get("competitor_name"));
+            log.debug("  competitor_url: {}", firstRow.get("competitor_url"));
+        }
+
         // 2. Получаем уникальные номера заданий из отчетов
         Set<String> taskNumbers = reportData.stream()
                 .map(row -> Objects.toString(row.get("product_additional1"), null))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         log.debug("Уникальных номеров заданий в отчетах: {}", taskNumbers.size());
+        log.debug("Номера заданий: {}", taskNumbers);
 
         if (taskNumbers.isEmpty()) {
             log.warn("В отчетах нет номеров заданий (product_additional1)");
@@ -80,6 +81,30 @@ public class TaskReportExportStrategy implements ExportStrategy {
         // 3. Загружаем допустимые комбинации номер_задания + код_розничной_сети
         Set<String> allowedKeys = loadAllowedTaskKeys(taskNumbers);
         log.debug("Допустимых комбинаций номер+код_сети из заданий: {}", allowedKeys.size());
+        if (log.isDebugEnabled()) {
+            log.debug("Допустимые ключи: {}", allowedKeys);
+        }
+
+        // 4. Анализируем какие ключи ожидаются в отчетах
+        if (log.isDebugEnabled()) {
+            Set<String> reportKeys = reportData.stream()
+                    .map(row -> {
+                        String taskNum = Objects.toString(row.get("product_additional1"), null);
+                        String networkCode = Objects.toString(row.get("product_additional4"), null);
+                        return buildKey(taskNum, networkCode);
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            log.debug("Уникальных ключей в отчетах: {}", reportKeys.size());
+            log.debug("Ключи отчетов: {}", reportKeys);
+
+            // Показываем какие ключи отчетов не найдены в заданиях
+            Set<String> missingKeys = new HashSet<>(reportKeys);
+            missingKeys.removeAll(allowedKeys);
+            if (!missingKeys.isEmpty()) {
+                log.debug("Ключи отчетов, не найденные в заданиях: {}", missingKeys);
+            }
+        }
 
         // 5. Фильтруем и обрабатываем строки отчета
         List<Map<String, Object>> processedData = new ArrayList<>();
@@ -89,10 +114,9 @@ public class TaskReportExportStrategy implements ExportStrategy {
         Map<TaskNetworkKey, Integer> missingKeyCounts = new HashMap<>();
 
         for (Map<String, Object> reportRow : reportData) {
-            // Создаем копию строки для изменений
             Map<String, Object> workingRow = new HashMap<>(reportRow);
 
-            // 5.1. Обогащаем данными из справочника если нужно
+            // 5.1. Обогащаем данными из справочника если нужно (только для market.yandex.ru)
             if (needsEnrichment(workingRow)) {
                 boolean wasEnriched = enrichWithHandbookData(workingRow, clientRegionCode);
                 if (wasEnriched) {
@@ -100,7 +124,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
                 }
             }
 
-            // 5.2. Проверяем соответствие заданию
+            // 5.2. Проверяем соответствие заданию (строгое соответствие)
             String key = buildKey(
                     workingRow.get("product_additional1"),
                     workingRow.get("product_additional4"));
@@ -116,7 +140,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
             }
 
             if (!allowedKeys.contains(key)) {
-                log.debug("Пропущена запись отчета без соответствующего задания: {}", key);
+                log.debug("Пропущена запись отчета без соответствующего задания: ключ={}", key);
                 continue;
             }
 
@@ -146,7 +170,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
     }
 
     /**
-     * Проверяет, нужно ли обогащение данными из справочника
+     * Проверяет, нужно ли обогащение данными из справочника (только для market.yandex.ru)
      */
     private boolean needsEnrichment(Map<String, Object> row) {
         String competitorUrl = Objects.toString(row.get("competitor_url"), "");
@@ -172,9 +196,10 @@ public class TaskReportExportStrategy implements ExportStrategy {
         // Определяем код региона для поиска
         String regionToSearch = clientRegionCode;
         if (isBlank(regionToSearch)) {
-            // Если код региона клиента не задан, пытаемся взять из данных
             regionToSearch = Objects.toString(row.get("region"), null);
         }
+
+        log.debug("Попытка обогащения для market.yandex.ru, регион: {}", regionToSearch);
 
         // Ищем в справочнике
         Map<String, Object> handbook = findHandbook("market.yandex.ru", regionToSearch);
@@ -187,7 +212,9 @@ public class TaskReportExportStrategy implements ExportStrategy {
 
         // Заполняем пустые поля
         if (isBlank(row.get("product_additional4"))) {
-            row.put("product_additional4", handbook.get("handbook_retail_network_code"));
+            Object newCode = handbook.get("handbook_retail_network_code");
+            row.put("product_additional4", newCode);
+            log.debug("Обогащен код сети: {} -> {}", row.get("product_additional4"), newCode);
             wasEnriched = true;
         }
         if (isBlank(row.get("competitor_name"))) {
@@ -214,17 +241,17 @@ public class TaskReportExportStrategy implements ExportStrategy {
      * Ищет запись в справочнике
      */
     private Map<String, Object> findHandbook(String webSite, String regionCode) {
+        log.debug("Поиск в справочнике: webSite={}, regionCode={}", webSite, regionCode);
+
         if (isBlank(regionCode)) {
-            // Если регион не указан, ищем любую запись для сайта
             String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? LIMIT 1";
+            log.debug("SQL без региона: {}, параметр: {}", sql, webSite);
             List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, webSite);
+            log.debug("Найдено записей без региона: {}", results.size());
             return results.isEmpty() ? null : results.get(0);
         }
 
-        // Нормализуем код региона (убираем ведущие нули)
         String normalizedRegion = normalizeRegionCode(regionCode);
-
-        // Создаем альтернативный вариант (с/без ведущего нуля)
         String altRegion = null;
         if (normalizedRegion.length() == 1) {
             altRegion = "0" + normalizedRegion;
@@ -232,16 +259,20 @@ public class TaskReportExportStrategy implements ExportStrategy {
             altRegion = "0" + normalizedRegion;
         }
 
-        // Ищем с учетом обоих вариантов
         if (altRegion != null) {
             String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? " +
                     "AND (handbook_region_code = ? OR handbook_region_code = ?) LIMIT 1";
+            log.debug("SQL с альтернативным регионом: {}, параметры: {}, {}, {}",
+                    sql, webSite, normalizedRegion, altRegion);
             List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, webSite, normalizedRegion, altRegion);
+            log.debug("Найдено записей с альтернативным регионом: {}", results.size());
             return results.isEmpty() ? null : results.get(0);
         } else {
             String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? " +
                     "AND handbook_region_code = ? LIMIT 1";
+            log.debug("SQL с точным регионом: {}, параметры: {}, {}", sql, webSite, normalizedRegion);
             List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, webSite, normalizedRegion);
+            log.debug("Найдено записей с точным регионом: {}", results.size());
             return results.isEmpty() ? null : results.get(0);
         }
     }
@@ -252,7 +283,6 @@ public class TaskReportExportStrategy implements ExportStrategy {
     private void adjustMonitoringDate(Map<String, Object> row, int maxReportAgeDays) {
         String dateStr = Objects.toString(row.get("competitor_date"), null);
         if (dateStr == null) {
-            // Если даты нет, устанавливаем текущую
             row.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
             return;
         }
@@ -263,7 +293,6 @@ public class TaskReportExportStrategy implements ExportStrategy {
             LocalDate minAllowedDate = today.minusDays(maxReportAgeDays - 1L);
 
             if (date.isBefore(minAllowedDate)) {
-                // Заменяем на крайнюю допустимую дату
                 row.put("competitor_date", minAllowedDate.format(DATE_FORMAT));
                 log.debug("Дата {} заменена на {} (макс. давность {} дней)",
                         dateStr, minAllowedDate.format(DATE_FORMAT), maxReportAgeDays);
@@ -279,6 +308,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
      */
     private String buildKey(Object taskNumber, Object retailerCode) {
         if (taskNumber == null || retailerCode == null) {
+            log.trace("buildKey: null параметр - taskNumber={}, retailerCode={}", taskNumber, retailerCode);
             return null;
         }
 
@@ -286,17 +316,22 @@ public class TaskReportExportStrategy implements ExportStrategy {
         String codeStr = retailerCode.toString().trim();
 
         if (taskStr.isEmpty() || codeStr.isEmpty()) {
+            log.trace("buildKey: пустой параметр - taskStr='{}', codeStr='{}'", taskStr, codeStr);
             return null;
         }
 
-        return taskStr + "|" + codeStr.toUpperCase();
+        String key = taskStr + "|" + codeStr.toUpperCase();
+        log.trace("buildKey: сформирован ключ '{}'", key);
+        return key;
     }
 
     /**
      * Загружает данные заданий по номерам
      */
     private Set<String> loadAllowedTaskKeys(Set<String> taskNumbers) {
+        log.debug("=== Загрузка допустимых ключей для заданий ===");
         if (taskNumbers == null || taskNumbers.isEmpty()) {
+            log.debug("Пустой список номеров заданий");
             return Collections.emptySet();
         }
 
@@ -310,12 +345,40 @@ public class TaskReportExportStrategy implements ExportStrategy {
             String sql = "SELECT product_additional1, product_additional4 FROM av_data WHERE data_source = 'TASK' " +
                     "AND product_additional1 IN (" + placeholders + ")";
 
+            log.debug("SQL для поиска заданий: {}", sql);
+            log.debug("Параметры поиска: {}", batch);
+
             jdbcTemplate.query(sql, batch.toArray(), rs -> {
-                String key = buildKey(rs.getString("product_additional1"), rs.getString("product_additional4"));
+                String taskNum = rs.getString("product_additional1");
+                String networkCode = rs.getString("product_additional4");
+                log.debug("Найдена запись задания: taskNum='{}', networkCode='{}'", taskNum, networkCode);
+
+                String key = buildKey(taskNum, networkCode);
                 if (key != null) {
                     allowed.add(key);
+                    log.debug("Добавлен допустимый ключ: '{}'", key);
+                } else {
+                    log.debug("Пропущена запись задания с null ключом: taskNum='{}', networkCode='{}'",
+                            taskNum, networkCode);
                 }
             });
+        }
+
+        log.debug("=== Итого загружено {} допустимых ключей ===", allowed.size());
+        if (allowed.isEmpty()) {
+            log.warn("ВНИМАНИЕ: Не найдено ни одного задания с data_source='TASK' для номеров: {}", taskNumbers);
+
+            // Дополнительная диагностика - проверим что вообще есть в таблице
+            String countSql = "SELECT COUNT(*) FROM av_data WHERE data_source = 'TASK'";
+            Integer totalTasks = jdbcTemplate.queryForObject(countSql, Integer.class);
+            log.debug("Всего записей с data_source='TASK' в таблице: {}", totalTasks);
+
+            if (totalTasks != null && totalTasks > 0) {
+                // Посмотрим какие номера заданий есть в таблице
+                String sampleSql = "SELECT DISTINCT product_additional1 FROM av_data WHERE data_source = 'TASK' LIMIT 10";
+                List<String> sampleTaskNumbers = jdbcTemplate.queryForList(sampleSql, String.class);
+                log.debug("Примеры номеров заданий в таблице: {}", sampleTaskNumbers);
+            }
         }
 
         return allowed;
@@ -334,7 +397,6 @@ public class TaskReportExportStrategy implements ExportStrategy {
     private String normalizeRegionCode(String code) {
         if (code == null) return null;
         String trimmed = code.trim();
-        // Убираем ведущие нули
         return trimmed.replaceFirst("^0+(?!$)", "");
     }
 }
