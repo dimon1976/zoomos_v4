@@ -13,7 +13,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Стратегия экспорта Задание-Отчет
+ * Стратегия экспорта Задание-Отчет.
  * Оставляет только строки отчета, для которых есть соответствующая запись задания
  */
 @Component("taskReportExportStrategy")
@@ -75,18 +75,9 @@ public class TaskReportExportStrategy implements ExportStrategy {
             return Collections.emptyList();
         }
 
-        // 3. Загружаем данные заданий для этих номеров
-        List<Map<String, Object>> taskData = loadTaskDataByNumbers(taskNumbers);
-        log.debug("Загружено {} записей из заданий", taskData.size());
-
-        // 4. Создаем множество допустимых комбинаций номер_задания + код_розничной_сети
-        Set<String> allowedKeys = taskData.stream()
-                .map(row -> buildKey(
-                        row.get("product_additional1"),
-                        row.get("product_additional4")))
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        log.debug("Допустимых комбинаций номер+код_сети: {}", allowedKeys.size());
+        // 3. Загружаем допустимые комбинации номер_задания + код_розничной_сети
+        Set<String> allowedKeys = loadAllowedTaskKeys(taskNumbers);
+        log.debug("Допустимых комбинаций номер+код_сети из заданий: {}", allowedKeys.size());
 
         // 5. Фильтруем и обрабатываем строки отчета
         List<Map<String, Object>> processedData = new ArrayList<>();
@@ -286,16 +277,30 @@ public class TaskReportExportStrategy implements ExportStrategy {
     /**
      * Загружает данные заданий по номерам
      */
-    private List<Map<String, Object>> loadTaskDataByNumbers(Set<String> taskNumbers) {
+    private Set<String> loadAllowedTaskKeys(Set<String> taskNumbers) {
         if (taskNumbers == null || taskNumbers.isEmpty()) {
-            return Collections.emptyList();
+            return Collections.emptySet();
         }
 
-        String placeholders = String.join(", ", Collections.nCopies(taskNumbers.size(), "?"));
-        String sql = "SELECT * FROM av_data WHERE data_source = 'TASK' " +
-                "AND product_additional1 IN (" + placeholders + ")";
+        Set<String> allowed = new HashSet<>();
+        List<String> numbers = new ArrayList<>(taskNumbers);
+        int batchSize = 1000;
 
-        return jdbcTemplate.queryForList(sql, taskNumbers.toArray());
+        for (int i = 0; i < numbers.size(); i += batchSize) {
+            List<String> batch = numbers.subList(i, Math.min(i + batchSize, numbers.size()));
+            String placeholders = String.join(", ", Collections.nCopies(batch.size(), "?"));
+            String sql = "SELECT product_additional1, product_additional4 FROM av_data WHERE data_source = 'TASK' " +
+                    "AND product_additional1 IN (" + placeholders + ")";
+
+            jdbcTemplate.query(sql, batch.toArray(), rs -> {
+                String key = buildKey(rs.getString("product_additional1"), rs.getString("product_additional4"));
+                if (key != null) {
+                    allowed.add(key);
+                }
+            });
+        }
+
+        return allowed;
     }
 
     /**
