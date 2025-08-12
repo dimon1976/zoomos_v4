@@ -27,6 +27,8 @@ public class TaskReportExportStrategy implements ExportStrategy {
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final int DEFAULT_MAX_REPORT_AGE_DAYS = 3;
 
+    private record TaskNetworkKey(String number, String network) {}
+
     @Override
     public String getName() {
         return "TASK_REPORT";
@@ -83,6 +85,8 @@ public class TaskReportExportStrategy implements ExportStrategy {
         List<Map<String, Object>> processedData = new ArrayList<>();
         int matched = 0;
         int enriched = 0;
+        int skippedWithoutKey = 0;
+        Map<TaskNetworkKey, Integer> missingKeyCounts = new HashMap<>();
 
         for (Map<String, Object> reportRow : reportData) {
             // Создаем копию строки для изменений
@@ -102,9 +106,12 @@ public class TaskReportExportStrategy implements ExportStrategy {
                     workingRow.get("product_additional4"));
 
             if (key == null) {
-                log.debug("Пропущена запись отчета без ключа: номер={}, код_сети={}",
-                        workingRow.get("product_additional1"),
-                        workingRow.get("product_additional4"));
+                skippedWithoutKey++;
+                TaskNetworkKey logKey = new TaskNetworkKey(
+                        Objects.toString(workingRow.get("product_additional1"), null),
+                        Objects.toString(workingRow.get("product_additional4"), null)
+                );
+                missingKeyCounts.merge(logKey, 1, Integer::sum);
                 continue;
             }
 
@@ -120,8 +127,19 @@ public class TaskReportExportStrategy implements ExportStrategy {
             matched++;
         }
 
-        log.info("После фильтрации осталось {} записей из {} (обогащено: {})",
-                matched, reportData.size(), enriched);
+        if (!missingKeyCounts.isEmpty()) {
+            String summary = missingKeyCounts.entrySet().stream()
+                    .map(e -> String.format(
+                            "номер=%s, код_сети=%s, пропущено: %d",
+                            e.getKey().number(),
+                            e.getKey().network(),
+                            e.getValue()))
+                    .collect(Collectors.joining("; "));
+            log.debug("Пропущенные записи отчета без ключа: {}", summary);
+        }
+
+        log.info("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {})",
+                matched, reportData.size(), enriched, skippedWithoutKey);
 
         // 6. Применяем стандартную обработку для форматирования полей
         return defaultStrategy.processData(processedData, template, context);
