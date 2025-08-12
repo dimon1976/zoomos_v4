@@ -1,0 +1,129 @@
+/* Стандартизация page-actions */
+.page-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.page-actions .btn {
+    white-space: nowrap;
+}
+
+/* Стандартные классы кнопок */
+.btn-back {
+    /* Всегда серая кнопка назад */
+}
+
+.btn-primary-action {
+    /* Основное действие на странице */
+}
+
+.btn-secondary-action {
+    /* Дополнительное действие */
+}
+
+/* Unified tab styling */
+.nav-tabs .nav-link {
+    color: #6c757d;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    padding: 0.75rem 1rem;
+    transition: all 0.2s ease;
+}
+
+.nav-tabs .nav-link:hover {
+    color: #007bff;
+    border-bottom-color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.nav-tabs .nav-link.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+    background-color: #fff;
+    font-weight: 500;
+}
+
+/* Template cards styling */
+.template-card {
+    transition: all 0.2s ease;
+    border: 1px solid #dee2e6;
+}
+
+.template-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    border-color: #007bff;
+}
+
+.template-card.selected {
+    border-color: #007bff;
+    background-color: #e7f1ff;
+}
+
+/* File upload area styling */
+.file-upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: 0.5rem;
+    padding: 2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.file-upload-area:hover {
+    border-color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.file-upload-area.drag-over {
+    border-color: #28a745;
+    background-color: #e8f5e9;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .page-actions {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .page-actions .btn {
+        margin-bottom: 0.25rem;
+    }
+
+    .nav-tabs {
+        flex-wrap: wrap;
+    }
+
+    .nav-tabs .nav-link {
+        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+    }
+}
+
+/* Loading spinner for template lists */
+.template-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    color: #6c757d;
+}
+
+.template-item {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.template-item:last-child {
+    border-bottom: none;
+}
+
+.template-item:hover {
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
+}

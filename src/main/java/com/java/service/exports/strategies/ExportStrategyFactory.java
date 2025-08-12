@@ -27,6 +27,10 @@ public class ExportStrategyFactory {
                 applicationContext.getBean("defaultExportStrategy",
                         com.java.service.exports.strategies.ExportStrategy.class));
 
+        strategies.put(ExportStrategy.SIMPLE_REPORT,
+                applicationContext.getBean("simpleReportExportStrategy",
+                        com.java.service.exports.strategies.ExportStrategy.class));
+
         strategies.put(ExportStrategy.TASK_REPORT,
                 applicationContext.getBean("taskReportExportStrategy",
                         com.java.service.exports.strategies.ExportStrategy.class));

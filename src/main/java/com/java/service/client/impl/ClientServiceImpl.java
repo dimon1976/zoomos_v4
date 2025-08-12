@@ -86,8 +86,6 @@ public class ClientServiceImpl implements ClientService {
         // Обновление полей
         client.setName(clientDto.getName());
         client.setDescription(clientDto.getDescription());
-        client.setContactEmail(clientDto.getContactEmail());
-        client.setContactPhone(clientDto.getContactPhone());
         client.setRegionCode(clientDto.getRegionCode());
         client.setRegionName(clientDto.getRegionName());
 
@@ -137,8 +135,6 @@ public class ClientServiceImpl implements ClientService {
                 .id(client.getId())
                 .name(client.getName())
                 .description(client.getDescription())
-                .contactEmail(client.getContactEmail())
-                .contactPhone(client.getContactPhone())
                 .regionCode(client.getRegionCode())
                 .regionName(client.getRegionName())
                 .fileOperationsCount(fileOperationsCount)
@@ -150,8 +146,6 @@ public class ClientServiceImpl implements ClientService {
         return Client.builder()
                 .name(dto.getName())
                 .description(dto.getDescription())
-                .contactEmail(dto.getContactEmail())
-                .contactPhone(dto.getContactPhone())
                 .regionCode(dto.getRegionCode())
                 .regionName(dto.getRegionName())
                 .build();

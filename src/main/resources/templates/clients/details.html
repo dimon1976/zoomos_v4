@@ -20,32 +20,20 @@
         .operation-row:hover {
             background-color: #f8f9fa;
         }
-        .file-upload-area {
-            border: 2px dashed #dee2e6;
-            border-radius: 0.5rem;
-            padding: 2rem;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-        .file-upload-area:hover {
-            border-color: #007bff;
-            background-color: #f8f9fa;
-        }
-        .file-upload-area.drag-over {
-            border-color: #28a745;
-            background-color: #e8f5e9;
-        }
     </style>
 </head>
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/clients/{id}/edit(id=${client.id})}" class="btn btn-primary me-2">
+    <a th:href="@{/clients/{id}/edit(id=${client.id})}" class="btn btn-primary btn-primary-action">
         <i class="fas fa-edit me-1"></i>Редактировать
     </a>
-    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteClientModal">
+    <button type="button" class="btn btn-danger btn-secondary-action" data-bs-toggle="modal" data-bs-target="#deleteClientModal">
         <i class="fas fa-trash-alt me-1"></i>Удалить
     </button>
+    <a th:href="@{/clients}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К списку
+    </a>
 </div>
 
 <section>
@@ -54,12 +42,6 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
-                    <p class="mb-1"><strong>Email:</strong>
-                        <span th:text="${client.contactEmail != null && !client.contactEmail.isEmpty() ? client.contactEmail : 'Не указан'}">email@example.com</span>
-                    </p>
-                    <p class="mb-1"><strong>Телефон:</strong>
-                        <span th:text="${client.contactPhone != null && !client.contactPhone.isEmpty() ? client.contactPhone : 'Не указан'}">+1234567890</span>
-                    </p>
                     <p class="mb-1"><strong>Код региона:</strong>
                         <span th:text="${client.regionCode != null && !client.regionCode.isEmpty() ? client.regionCode : 'Не указан'}">77</span>
                     </p>
@@ -80,37 +62,37 @@
         </div>
     </div>
 
-    <!-- Вкладки с операциями -->
+    <!-- Вкладки -->
     <ul class="nav nav-tabs" id="clientTabs" role="tablist">
         <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="operations-tab" data-bs-toggle="tab" data-bs-target="#operations"
-                    type="button" role="tab" aria-controls="operations" aria-selected="true">
-                <i class="fas fa-history me-1"></i>Операции
+            <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview"
+                    type="button" role="tab" aria-controls="overview" aria-selected="true">
+                <i class="fas fa-chart-line me-1"></i>Обзор
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import"
                     type="button" role="tab" aria-controls="import" aria-selected="false">
-                <i class="fas fa-file-import me-1"></i>Импорт файлов
+                <i class="fas fa-file-import me-1"></i>Импорт
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="export-tab" data-bs-toggle="tab" data-bs-target="#export"
                     type="button" role="tab" aria-controls="export" aria-selected="false">
-                <i class="fas fa-file-export me-1"></i>Экспорт данных
+                <i class="fas fa-file-export me-1"></i>Экспорт
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates"
                     type="button" role="tab" aria-controls="templates" aria-selected="false">
-                <i class="fas fa-cog me-1"></i>Шаблоны импорта
+                <i class="fas fa-cogs me-1"></i>Шаблоны
             </button>
         </li>
     </ul>
 
     <div class="tab-content" id="clientTabsContent">
-        <!-- Вкладка операций -->
-        <div class="tab-pane fade show active" id="operations" role="tabpanel" aria-labelledby="operations-tab">
+        <!-- Вкладка обзора (бывшие операции) -->
+        <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
             <div class="card">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
@@ -118,6 +100,47 @@
                     </h5>
                 </div>
                 <div class="card-body">
+                    <form id="operationsFilter" class="row g-3 mb-3" onsubmit="return false;">
+                        <div class="col-md-3">
+                            <label for="filterType" class="form-label">Тип операции</label>
+                            <select id="filterType" class="form-select">
+                                <option value="">Все</option>
+                                <option value="IMPORT">Импорт</option>
+                                <option value="EXPORT">Экспорт</option>
+                                <option value="PROCESS">Обработка</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="filterStatus" class="form-label">Статус</label>
+                            <select id="filterStatus" class="form-select">
+                                <option value="">Все</option>
+                                <option value="PENDING">Ожидание</option>
+                                <option value="PROCESSING">В процессе</option>
+                                <option value="COMPLETED">Завершено</option>
+                                <option value="FAILED">Ошибка</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filterFrom" class="form-label">Дата с</label>
+                            <input type="date" id="filterFrom" class="form-control"/>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filterTo" class="form-label">Дата по</label>
+                            <input type="date" id="filterTo" class="form-control"/>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filterSize" class="form-label">На странице</label>
+                            <select id="filterSize" class="form-select">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 align-self-end">
+                            <button type="button" class="btn btn-primary" onclick="applyOperationFilters()">Применить</button>
+                        </div>
+                    </form>
                     <div class="table-responsive">
                         <table class="table table-hover" id="operationsTable">
                             <thead>
@@ -140,219 +163,222 @@
                     <div id="noOperations" class="text-center text-muted py-4" style="display: none;">
                         Нет операций для отображения
                     </div>
+                    <div id="operationsPagination" class="mt-3"></div>
                 </div>
             </div>
         </div>
 
-        <!-- Вкладка импорта файлов -->
+        <!-- Вкладка импорта - упрощенная -->
         <div class="tab-pane fade" id="import" role="tabpanel" aria-labelledby="import-tab">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-file-import me-2"></i>Импорт файлов
-                    </h5>
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-file-import me-2"></i>Быстрый импорт файлов
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form th:action="@{/import/{clientId}/upload(clientId=${client.id})}"
+                                  method="post" enctype="multipart/form-data" id="quickImportForm">
+
+                                <div class="file-upload-area" id="fileUploadArea">
+                                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                    <h5>Перетащите файлы сюда или нажмите для выбора</h5>
+                                    <p class="text-muted">Поддерживаемые форматы: CSV, Excel (XLS, XLSX), TXT</p>
+                                    <input type="file" class="form-control d-none" id="files" name="files"
+                                           multiple required accept=".csv,.xlsx,.xls,.txt">
+                                    <button type="button" class="btn btn-primary mt-3" onclick="document.getElementById('files').click()">
+                                        <i class="fas fa-folder-open me-1"></i>Выбрать файлы
+                                    </button>
+                                </div>
+
+                                <div id="selectedFiles" class="mt-4"></div>
+
+                                <div class="mt-3" id="uploadActions" style="display: none;">
+                                    <button type="submit" class="btn btn-success" id="uploadBtn">
+                                        <i class="fas fa-upload me-1"></i>Загрузить и анализировать
+                                    </button>
+                                    <button type="button" class="btn btn-secondary ms-2" onclick="clearFiles()">
+                                        <i class="fas fa-times me-1"></i>Очистить
+                                    </button>
+                                </div>
+                            </form>
+
+                            <div class="mt-4">
+                                <h6>Как это работает:</h6>
+                                <ol>
+                                    <li>Выберите один или несколько файлов для импорта</li>
+                                    <li>Система проанализирует структуру файлов</li>
+                                    <li>Выберите подходящий шаблон импорта</li>
+                                    <li>Запустите процесс импорта</li>
+                                </ol>
+                            </div>
+
+                            <div class="alert alert-info mt-3">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Совет:</strong> Вы можете загрузить несколько файлов одновременно.
+                                Максимальный размер каждого файла: 600 МБ.
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <form th:action="@{/import/{clientId}/upload(clientId=${client.id})}"
-                          method="post" enctype="multipart/form-data" id="importForm">
-
-                        <div class="file-upload-area" id="fileUploadArea">
-                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
-                            <h5>Перетащите файлы сюда или нажмите для выбора</h5>
-                            <p class="text-muted">Поддерживаемые форматы: CSV, Excel (XLS, XLSX), TXT</p>
-                            <input type="file" class="form-control d-none" id="files" name="files"
-                                   multiple required accept=".csv,.xlsx,.xls,.txt">
-                            <button type="button" class="btn btn-primary mt-3" onclick="document.getElementById('files').click()">
-                                <i class="fas fa-folder-open me-1"></i>Выбрать файлы
-                            </button>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="fas fa-cog me-2"></i>Управление шаблонами
+                            </h6>
+                            <p class="card-text small">Настройте шаблоны для автоматического импорта данных</p>
+                            <a th:href="@{/import/templates/client/{clientId}(clientId=${client.id})}"
+                               class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-cog me-1"></i>Настроить шаблоны
+                            </a>
                         </div>
-
-                        <div id="selectedFiles" class="mt-4"></div>
-
-                        <div class="mt-3" id="uploadActions" style="display: none;">
-                            <button type="submit" class="btn btn-success" id="uploadBtn">
-                                <i class="fas fa-upload me-1"></i>Загрузить и анализировать
-                            </button>
-                            <button type="button" class="btn btn-secondary ms-2" onclick="clearFiles()">
-                                <i class="fas fa-times me-1"></i>Очистить
-                            </button>
-                        </div>
-                    </form>
-
-                    <div class="mt-4">
-                        <h6>Как это работает:</h6>
-                        <ol>
-                            <li>Выберите один или несколько файлов для импорта</li>
-                            <li>Система проанализирует структуру файлов</li>
-                            <li>Выберите подходящий шаблон импорта</li>
-                            <li>Запустите процесс импорта</li>
-                        </ol>
                     </div>
 
-                    <div class="alert alert-info mt-3">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Совет:</strong> Вы можете загрузить несколько файлов одновременно.
-                        Максимальный размер каждого файла: 600 МБ.
+                    <div class="card mt-3">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="fas fa-info-circle me-2"></i>Возможности
+                            </h6>
+                            <ul class="small mb-0">
+                                <li>Автоматическое определение кодировки</li>
+                                <li>Поддержка CSV, Excel (XLS, XLSX)</li>
+                                <li>Валидация данных перед импортом</li>
+                                <li>Обработка больших файлов</li>
+                                <li>Детальные отчеты об ошибках</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Вкладка экспорта данных -->
+        <!-- Вкладка экспорта - унифицированная с импортом -->
         <div class="tab-pane fade" id="export" role="tabpanel" aria-labelledby="export-tab">
-            <div class="card">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-file-export me-2"></i>Экспорт данных
-                        </h5>
-                        <div>
-                            <a th:href="@{/export/templates/client/{clientId}(clientId=${client.id})}"
-                               class="btn btn-outline-primary btn-sm me-2">
-                                <i class="fas fa-cog me-1"></i>Шаблоны экспорта
-                            </a>
-                            <a th:href="@{/export/client/{clientId}(clientId=${client.id})}"
-                               class="btn btn-primary btn-sm">
-                                <i class="fas fa-file-export me-1"></i>Экспортировать
-                            </a>
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-file-export me-2"></i>Быстрый экспорт данных
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Экспорт позволяет выгружать данные из базы в файлы CSV или Excel с применением фильтров и стратегий обработки.</p>
+
+                            <div class="d-grid gap-2 d-md-flex">
+                                <a th:href="@{/export/client/{clientId}(clientId=${client.id})}"
+                                   class="btn btn-primary">
+                                    <i class="fas fa-file-export me-1"></i>Начать экспорт
+                                </a>
+                                <a th:href="@{/statistics/client/{id}(id=${client.id})}"
+                                   class="btn btn-success">
+                                    <i class="fas fa-chart-line me-1"></i>Анализ статистики
+                                </a>
+                            </div>
+
+                            <div class="alert alert-info mt-3">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Возможности экспорта:</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li>Выбор операций импорта для экспорта</li>
+                                    <li>Применение фильтров по датам и полям</li>
+                                    <li>Использование стратегий обработки данных</li>
+                                    <li>Настройка формата и параметров файла</li>
+                                    <li>Сохранение шаблонов для повторного использования</li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="card-body">
-                    <p class="card-text">
-                        Экспорт позволяет выгружать данные из базы в файлы CSV или Excel с применением фильтров и стратегий обработки.
-                    </p>
-
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Возможности экспорта:</strong>
-                        <ul class="mb-0 mt-2">
-                            <li>Выбор операций импорта для экспорта</li>
-                            <li>Применение фильтров по датам и полям</li>
-                            <li>Использование стратегий обработки данных</li>
-                            <li>Настройка формата и параметров файла</li>
-                            <li>Сохранение шаблонов для повторного использования</li>
-                        </ul>
-                    </div>
-
-                    <div class="row mt-4">
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6 class="card-title">
-                                        <i class="fas fa-filter text-primary me-2"></i>Фильтрация
-                                    </h6>
-                                    <ul class="mb-0">
-                                        <li>По датам создания</li>
-                                        <li>По любым полям данных</li>
-                                        <li>По операциям импорта</li>
-                                        <li>Комбинированные фильтры</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6 class="card-title">
-                                        <i class="fas fa-cogs text-success me-2"></i>Стратегии
-                                    </h6>
-                                    <ul class="mb-0">
-                                        <li>Экспорт без изменений</li>
-                                        <li>Сверка задание-отчет</li>
-                                        <li>Дополнение из справочника</li>
-                                        <li>Пользовательские правила</li>
-                                    </ul>
-                                </div>
-                            </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="fas fa-cog me-2"></i>Управление шаблонами
+                            </h6>
+                            <p class="card-text small">Настройте шаблоны для автоматического экспорта данных</p>
+                            <a th:href="@{/export/templates/client/{clientId}(clientId=${client.id})}"
+                               class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-cog me-1"></i>Настроить шаблоны
+                            </a>
                         </div>
                     </div>
 
-                    <div class="text-center py-4 d-flex justify-content-center gap-2">
-                        <a th:href="@{/export/client/{id}(id=${client.id})}" class="btn btn-primary">
-                            <i class="fas fa-play me-1"></i>Начать экспорт
-                        </a>
-                        <a th:href="@{/statistics/client/{id}(id=${client.id})}" class="btn btn-success">
-                            <i class="fas fa-chart-line me-1"></i>Анализ статистики
-                        </a>
-                        <a th:href="@{/export/templates/client/{id}(id=${client.id})}" class="btn btn-outline-secondary">
-                            <i class="fas fa-list me-1"></i>Шаблоны экспорта
-                        </a>
+                    <div class="card mt-3">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="fas fa-cogs me-2"></i>Стратегии
+                            </h6>
+                            <ul class="small mb-0">
+                                <li>Экспорт без изменений</li>
+                                <li>Сверка задание-отчет</li>
+                                <li>Дополнение из справочника</li>
+                                <li>Пользовательские правила</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Вкладка шаблонов импорта -->
+        <!-- Новая вкладка шаблонов - объединенная -->
         <div class="tab-pane fade" id="templates" role="tabpanel" aria-labelledby="templates-tab">
-            <div class="card">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-file-import me-2"></i>Шаблоны импорта
-                        </h5>
-                        <a th:href="@{/import/templates/client/{clientId}(clientId=${client.id})}"
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-cog me-1"></i>Управление шаблонами
-                        </a>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="fas fa-file-import me-2"></i>Шаблоны импорта
+                            </h6>
+                            <a th:href="@{/import/templates/client/{clientId}/create(clientId=${client.id})}"
+                               class="btn btn-sm btn-success">
+                                <i class="fas fa-plus me-1"></i>Создать
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <div id="importTemplatesList">
+                                <div class="template-loading">
+                                    <div class="spinner-border spinner-border-sm me-2"></div>
+                                    Загрузка...
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <a th:href="@{/import/templates/client/{clientId}(clientId=${client.id})}"
+                                   class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-list me-1"></i>Все шаблоны
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="card-body">
-                    <p class="card-text">
-                        Шаблоны импорта позволяют настроить соответствие между колонками файла и полями в базе данных.
-                    </p>
-
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Как это работает:</strong>
-                        <ol class="mb-0 mt-2">
-                            <li>Создайте шаблон импорта с настройками маппинга полей</li>
-                            <li>Загрузите файл CSV или Excel</li>
-                            <li>Выберите подходящий шаблон</li>
-                            <li>Система автоматически импортирует данные согласно настройкам</li>
-                        </ol>
-                    </div>
-
-                    <div class="row mt-4">
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6 class="card-title">
-                                        <i class="fas fa-check-circle text-success me-2"></i>Преимущества
-                                    </h6>
-                                    <ul class="mb-0">
-                                        <li>Автоматическое определение кодировки</li>
-                                        <li>Поддержка CSV, Excel (XLS, XLSX)</li>
-                                        <li>Валидация данных перед импортом</li>
-                                        <li>Обработка больших файлов</li>
-                                        <li>Детальные отчеты об ошибках</li>
-                                    </ul>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="fas fa-file-export me-2"></i>Шаблоны экспорта
+                            </h6>
+                            <a th:href="@{/export/templates/client/{clientId}/create(clientId=${client.id})}"
+                               class="btn btn-sm btn-success">
+                                <i class="fas fa-plus me-1"></i>Создать
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <div id="exportTemplatesList">
+                                <div class="template-loading">
+                                    <div class="spinner-border spinner-border-sm me-2"></div>
+                                    Загрузка...
                                 </div>
                             </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6 class="card-title">
-                                        <i class="fas fa-cogs text-primary me-2"></i>Возможности
-                                    </h6>
-                                    <ul class="mb-0">
-                                        <li>Настройка обработки дубликатов</li>
-                                        <li>Стратегии обработки ошибок</li>
-                                        <li>Трансформация данных</li>
-                                        <li>Значения по умолчанию</li>
-                                        <li>Валидация по регулярным выражениям</li>
-                                    </ul>
-                                </div>
+                            <div class="mt-3">
+                                <a th:href="@{/export/templates/client/{clientId}(clientId=${client.id})}"
+                                   class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-list me-1"></i>Все шаблоны
+                                </a>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="mt-4 text-center">
-                        <a th:href="@{/import/templates/client/{clientId}/create(clientId=${client.id})}"
-                           class="btn btn-success">
-                            <i class="fas fa-plus me-1"></i>Создать первый шаблон
-                        </a>
                     </div>
                 </div>
             </div>
@@ -425,7 +451,10 @@
 
         // Обработка якоря в URL для переключения на нужную вкладку
         if (window.location.hash === '#operations') {
-            const tab = new bootstrap.Tab(document.getElementById('operations-tab'));
+            const tab = new bootstrap.Tab(document.getElementById('overview-tab'));
+            tab.show();
+        } else if (window.location.hash === '#templates') {
+            const tab = new bootstrap.Tab(document.getElementById('templates-tab'));
             tab.show();
         }
 
@@ -438,20 +467,40 @@
     });
 
     let hasActiveOperations = false;
+    let currentPage = 0;
 
-    function loadOperations() {
+    function applyOperationFilters() {
+        currentPage = 0;
+        loadOperations();
+    }
+
+    function loadOperations(page = currentPage) {
         const clientId = /*[[${client.id}]]*/ 0;
+        const params = new URLSearchParams();
+        params.append('page', page);
+        params.append('size', document.getElementById('filterSize').value);
 
-        fetch(`/api/clients/${clientId}/operations`)
+        const type = document.getElementById('filterType').value;
+        if (type) params.append('operationType', type);
+        const status = document.getElementById('filterStatus').value;
+        if (status) params.append('status', status);
+        const from = document.getElementById('filterFrom').value;
+        if (from) params.append('from', from);
+        const to = document.getElementById('filterTo').value;
+        if (to) params.append('to', to);
+
+        fetch(`/api/clients/${clientId}/operations?` + params.toString())
             .then(response => response.json())
-            .then(operations => {
-                displayOperations(operations);
+            .then(pageData => {
+                currentPage = pageData.page;
+                displayOperations(pageData.operations);
+                updatePagination(pageData);
             })
             .catch(error => {
                 console.error('Ошибка загрузки операций:', error);
-                // Показываем заглушку если API еще не реализован
                 document.getElementById('noOperations').style.display = 'block';
                 document.querySelector('#operationsTable tbody').innerHTML = '';
+                document.getElementById('operationsPagination').innerHTML = '';
             });
     }
 
@@ -504,6 +553,35 @@
         `).join('');
     }
 
+    function updatePagination(pageData) {
+        const container = document.getElementById('operationsPagination');
+        if (!pageData || pageData.totalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+        const prevDisabled = pageData.page === 0 ? 'disabled' : '';
+        const nextDisabled = pageData.page >= pageData.totalPages - 1 ? 'disabled' : '';
+        container.innerHTML = `
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item ${prevDisabled}">
+                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.page - 1}); return false;">Предыдущая</a>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">${pageData.page + 1} / ${pageData.totalPages}</span>
+                    </li>
+                    <li class="page-item ${nextDisabled}">
+                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.page + 1}); return false;">Следующая</a>
+                    </li>
+                </ul>
+            </nav>`;
+    }
+
+    function changeOperationsPage(page) {
+        if (page < 0) return;
+        loadOperations(page);
+    }
+
     function deleteOperation(operationId) {
         if (!confirm('Вы действительно хотите удалить эту операцию?')) {
             return;
@@ -543,7 +621,6 @@
             const size = file.size / 1048576; // в МБ
             totalSize += size;
 
-            // Проверяем размер файла
             const sizeClass = size > 600 ? 'text-danger' : 'text-success';
             const sizeWarning = size > 600 ? ' (превышен лимит!)' : '';
 
@@ -567,6 +644,86 @@
         document.getElementById('selectedFiles').innerHTML = '';
         document.getElementById('uploadActions').style.display = 'none';
     }
+
+    // Загрузка списков шаблонов для вкладки "Шаблоны"
+    function loadTemplatesList() {
+        const clientId = /*[[${client.id}]]*/ 0;
+
+        // Загружаем шаблоны импорта
+        fetch(`/api/import/templates/client/${clientId}/summary`)
+            .then(response => response.json())
+            .then(templates => {
+                displayImportTemplates(templates);
+            })
+            .catch(error => {
+                document.getElementById('importTemplatesList').innerHTML =
+                    '<div class="text-muted">Ошибка загрузки шаблонов</div>';
+            });
+
+        // Загружаем шаблоны экспорта
+        fetch(`/api/export/templates/client/${clientId}/summary`)
+            .then(response => response.json())
+            .then(templates => {
+                displayExportTemplates(templates);
+            })
+            .catch(error => {
+                document.getElementById('exportTemplatesList').innerHTML =
+                    '<div class="text-muted">Ошибка загрузки шаблонов</div>';
+            });
+    }
+
+    function displayImportTemplates(templates) {
+        const container = document.getElementById('importTemplatesList');
+        if (templates.length === 0) {
+            container.innerHTML = '<div class="text-muted">Нет шаблонов</div>';
+            return;
+        }
+
+        const html = templates.slice(0, 3).map(template => `
+            <div class="template-item d-flex justify-content-between align-items-center">
+                <div>
+                    <a href="/import/templates/${template.id}" class="text-decoration-none">
+                        <strong>${template.name}</strong>
+                    </a>
+                    <br><small class="text-muted">${template.entityType}</small>
+                </div>
+                <a href="/import/templates/${template.id}/edit" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-edit"></i>
+                </a>
+            </div>
+        `).join('');
+
+        container.innerHTML = html;
+    }
+
+    function displayExportTemplates(templates) {
+        const container = document.getElementById('exportTemplatesList');
+        if (templates.length === 0) {
+            container.innerHTML = '<div class="text-muted">Нет шаблонов</div>';
+            return;
+        }
+
+        const html = templates.slice(0, 3).map(template => `
+            <div class="template-item d-flex justify-content-between align-items-center">
+                <div>
+                    <a href="/export/templates/${template.id}" class="text-decoration-none">
+                        <strong>${template.name}</strong>
+                    </a>
+                    <br><small class="text-muted">${template.entityType}</small>
+                </div>
+                <a href="/export/templates/${template.id}/edit" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-edit"></i>
+                </a>
+            </div>
+        `).join('');
+
+        container.innerHTML = html;
+    }
+
+    // Загружаем при переключении на вкладку шаблонов
+    document.getElementById('templates-tab').addEventListener('shown.bs.tab', function() {
+        loadTemplatesList();
+    });
 
     function getOperationIcon(type) {
         switch(type) {
@@ -613,10 +770,8 @@
 
         let millis;
         if (typeof dateTime === 'number') {
-            // Если время передано в секундах, конвертируем в миллисекунды
             millis = dateTime < 1e12 ? dateTime * 1000 : dateTime;
         } else {
-            // Пытаемся распарсить строку даты
             millis = Date.parse(dateTime);
         }
 

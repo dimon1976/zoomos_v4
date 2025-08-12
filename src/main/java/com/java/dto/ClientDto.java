@@ -22,11 +22,6 @@ public class ClientDto {
 
     private String description;
 
-    @Email(message = "Неверный формат email")
-    private String contactEmail;
-
-    private String contactPhone;
-
     private String regionCode;
 
     private String regionName;

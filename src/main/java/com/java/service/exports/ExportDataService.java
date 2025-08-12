@@ -3,13 +3,16 @@ package com.java.service.exports;
 import com.java.dto.ExportTemplateFilterDto;
 import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateFilter;
+import com.java.model.entity.ExportTemplateField;
 import com.java.model.enums.EntityType;
 import com.java.model.enums.ExportStrategy;
 import com.java.model.enums.FilterType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.ColumnMapRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
@@ -37,6 +40,12 @@ public class ExportDataService {
     private int maxRows;
 
     /**
+     * Размер чанка при потоковой выгрузке
+     */
+    @Value("${export.chunk-size:10000}")
+    private int chunkSize;
+
+    /**
      * Загружает данные для экспорта
      */
     public List<Map<String, Object>> loadData(
@@ -49,16 +58,32 @@ public class ExportDataService {
         log.info("Загрузка данных для экспорта: операции {}, шаблон {}",
                 operationIds, template.getName());
 
+        // Определяем нужные колонки
+        List<String> columns = template.getFields().stream()
+                .filter(f -> Boolean.TRUE.equals(f.getIsIncluded()))
+                .map(ExportTemplateField::getEntityFieldName)
+                .map(this::resolveColumnName)
+                .collect(Collectors.toCollection(ArrayList::new));
+        if (!columns.contains("operation_id")) {
+            columns.add("operation_id");
+        }
+        if (template.getExportStrategy() == ExportStrategy.TASK_REPORT
+                && template.getEntityType() == EntityType.AV_DATA
+                && !columns.contains("data_source")) {
+            columns.add("data_source");
+        }
+        String columnList = columns.isEmpty() ? "*" : String.join(", ", columns);
+
         // Строим SQL запрос
         StringBuilder sql = new StringBuilder();
         List<Object> params = new ArrayList<>();
 
         switch (template.getEntityType()) {
             case AV_DATA:
-                sql.append("SELECT * FROM av_data WHERE 1=1");
+                sql.append("SELECT ").append(columnList).append(" FROM av_data WHERE 1=1");
                 break;
             case AV_HANDBOOK:
-                sql.append("SELECT * FROM av_handbook WHERE 1=1");
+                sql.append("SELECT ").append(columnList).append(" FROM av_handbook WHERE 1=1");
                 break;
             default:
                 throw new IllegalArgumentException("Неподдерживаемый тип сущности: " +
@@ -121,22 +146,47 @@ public class ExportDataService {
             }
         }
 
-        // Добавляем сортировку и ограничение
+        // Добавляем сортировку
         if (template.getExportStrategy() == ExportStrategy.TASK_REPORT
                 && template.getEntityType() == EntityType.AV_DATA) {
             sql.append(" AND data_source = 'REPORT'");
             log.debug("Применен фильтр data_source=REPORT для стратегии TASK_REPORT");
         }
 
-        sql.append(" ORDER BY created_at DESC LIMIT ?");
-        params.add(maxRows);
+        sql.append(" ORDER BY created_at DESC");
 
-        // Выполняем запрос
-        String finalSql = sql.toString();
-        log.debug("SQL запрос: {}", finalSql);
+        String baseSql = sql.toString();
+        log.debug("SQL запрос: {}", baseSql);
         log.debug("Параметры: {}", params);
 
-        List<Map<String, Object>> data = jdbcTemplate.queryForList(finalSql, params.toArray());
+        List<Map<String, Object>> data = new ArrayList<>();
+        ColumnMapRowMapper rowMapper = new ColumnMapRowMapper();
+        int offset = 0;
+        boolean more = true;
+        while (more && data.size() < maxRows) {
+            int limit = Math.min(chunkSize, maxRows - data.size());
+            String pagedSql = baseSql + " LIMIT ? OFFSET ?";
+            List<Object> pagedParams = new ArrayList<>(params);
+            pagedParams.add(limit);
+            pagedParams.add(offset);
+
+            int before = data.size();
+            RowCallbackHandler handler = new RowCallbackHandler() {
+                int rowNum = 0;
+
+                @Override
+                public void processRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+                    data.add(rowMapper.mapRow(rs, rowNum++));
+                }
+            };
+
+            jdbcTemplate.query(pagedSql, pagedParams.toArray(), handler);
+
+            int fetched = data.size() - before;
+            more = fetched == limit;
+            offset += limit;
+        }
+
         log.info("Загружено {} записей (ограничение: {})", data.size(), maxRows);
         if (data.size() >= maxRows) {
             log.warn("Результат усечен до {} записей, добавьте фильтры для уменьшения объема данных", maxRows);
@@ -382,7 +432,42 @@ public class ExportDataService {
         }
 
         // Фильтры из шаблона и дополнительные
-        // ... (аналогично методу loadData)
+        List<ExportTemplateFilter> activeFilters = template.getFilters().stream()
+                .filter(ExportTemplateFilter::getIsActive)
+                .toList();
+
+        for (ExportTemplateFilter filter : activeFilters) {
+            applyFilter(sql, params, filter.getFieldName(),
+                    filter.getFilterType(), filter.getFilterValue());
+        }
+
+        if (additionalFilters != null) {
+            Map<String, ExportTemplateFilterDto> filterMap = additionalFilters.stream()
+                    .collect(Collectors.toMap(
+                            ExportTemplateFilterDto::getFieldName,
+                            f -> f,
+                            (f1, f2) -> f2
+                    ));
+
+            for (ExportTemplateFilter templateFilter : activeFilters) {
+                if (filterMap.containsKey(templateFilter.getFieldName())) {
+                    ExportTemplateFilterDto overrideFilter = filterMap.get(templateFilter.getFieldName());
+                    applyFilter(sql, params, overrideFilter.getFieldName(),
+                            overrideFilter.getFilterType(), overrideFilter.getFilterValue());
+                    filterMap.remove(templateFilter.getFieldName());
+                }
+            }
+
+            for (ExportTemplateFilterDto filter : filterMap.values()) {
+                applyFilter(sql, params, filter.getFieldName(),
+                        filter.getFilterType(), filter.getFilterValue());
+            }
+        }
+
+        if (template.getExportStrategy() == ExportStrategy.TASK_REPORT
+                && template.getEntityType() == EntityType.AV_DATA) {
+            sql.append(" AND data_source = 'REPORT'");
+        }
 
         return jdbcTemplate.queryForObject(sql.toString(), params.toArray(), Long.class);
     }

@@ -164,7 +164,11 @@ public class ExportProcessorService {
                 template.setCsvEncoding(request.getCsvEncoding());
             }
 
-            Path filePath = fileGeneratorService.generateFile(processedData, template, fileName);
+            Path filePath = fileGeneratorService.generateFile(
+                    processedData.stream(),
+                    processedData.size(),
+                    template,
+                    fileName);
 
             // Обновляем информацию о файле
             session.setResultFilePath(filePath.toString());
