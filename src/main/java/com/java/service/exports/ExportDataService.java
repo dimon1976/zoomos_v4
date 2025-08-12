@@ -67,6 +67,11 @@ public class ExportDataService {
         if (!columns.contains("operation_id")) {
             columns.add("operation_id");
         }
+        if (template.getExportStrategy() == ExportStrategy.TASK_REPORT
+                && template.getEntityType() == EntityType.AV_DATA
+                && !columns.contains("data_source")) {
+            columns.add("data_source");
+        }
         String columnList = columns.isEmpty() ? "*" : String.join(", ", columns);
 
         // Строим SQL запрос
@@ -150,7 +155,6 @@ public class ExportDataService {
 
         sql.append(" ORDER BY created_at DESC");
 
-        // Выполняем запрос
         String baseSql = sql.toString();
         log.debug("SQL запрос: {}", baseSql);
         log.debug("Параметры: {}", params);
@@ -182,6 +186,7 @@ public class ExportDataService {
             more = fetched == limit;
             offset += limit;
         }
+
         log.info("Загружено {} записей (ограничение: {})", data.size(), maxRows);
         if (data.size() >= maxRows) {
             log.warn("Результат усечен до {} записей, добавьте фильтры для уменьшения объема данных", maxRows);
