@@ -55,14 +55,18 @@ public class TemplateValidationService {
         if (template.getEntityType() == null) {
             errors.add("Тип сущности должен быть указан");
         }
-
-        if (template.getFields() == null || template.getFields().isEmpty()) {
+        if (template.getFields() == null) {
             errors.add("Шаблон должен содержать хотя бы одно поле");
-        }
 
-        // Проверка полей
-        if (template.getFields() != null) {
-            validateTemplateFields(template.getFields(), template.getEntityType());
+        } else {
+            // Удаляем пустые поля
+            template.getFields().removeIf(this::isFieldEmpty);
+            if (template.getFields().isEmpty()) {
+                errors.add("Шаблон должен содержать хотя бы одно поле");
+            } else {
+                // Проверка полей
+                validateTemplateFields(template.getFields(), template.getEntityType());
+            }
         }
 
         // Проверка настроек CSV
@@ -77,6 +81,7 @@ public class TemplateValidationService {
         }
     }
 
+
     /**
      * Валидирует поля шаблона
      */
@@ -86,8 +91,15 @@ public class TemplateValidationService {
         Set<String> columnNames = new HashSet<>();
         Set<Integer> columnIndexes = new HashSet<>();
 
+        // Удаляем полностью пустые записи
+        fields.removeIf(this::isFieldEmpty);
+
         // Получаем допустимые поля для типа сущности
         Set<String> allowedFields = ENTITY_FIELDS.getOrDefault(entityType, new HashSet<>());
+
+        if (fields.isEmpty()) {
+            errors.add("Шаблон должен содержать хотя бы одно поле");
+        }
 
         for (int i = 0; i < fields.size(); i++) {
             ImportTemplateFieldDto field = fields.get(i);
@@ -194,6 +206,15 @@ public class TemplateValidationService {
         } catch (java.util.regex.PatternSyntaxException e) {
             errors.add(prefix + "Некорректное регулярное выражение: " + e.getMessage());
         }
+    }
+
+    /**
+     * Проверяет, что поле полностью пустое
+     */
+    private boolean isFieldEmpty(ImportTemplateFieldDto field) {
+        return (field.getEntityFieldName() == null || field.getEntityFieldName().trim().isEmpty()) &&
+                field.getColumnName() == null &&
+                field.getColumnIndex() == null;
     }
 
     /**

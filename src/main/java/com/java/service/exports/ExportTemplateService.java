@@ -150,14 +150,18 @@ public class ExportTemplateService {
      * Клонирует шаблон
      */
     @Transactional
-    public ExportTemplateDto cloneTemplate(Long templateId, String newName) {
-        log.info("Клонирование шаблона ID: {} с новым именем: {}", templateId, newName);
+    public ExportTemplateDto cloneTemplate(Long templateId, String newName, Long clientId) {
+        log.info("Клонирование шаблона ID: {} с новым именем: {} для клиента {}", templateId, newName, clientId);
 
         ExportTemplate original = templateRepository.findByIdWithFieldsAndFilters(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
 
+        Long targetClientId = clientId != null ? clientId : original.getClient().getId();
+        Client targetClient = clientRepository.findById(targetClientId)
+                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+
         // Проверяем уникальность нового имени
-        if (templateRepository.existsByNameAndClient(newName, original.getClient())) {
+        if (templateRepository.existsByNameAndClient(newName, targetClient)) {
             throw new IllegalArgumentException("Шаблон с таким именем уже существует");
         }
 
@@ -165,6 +169,8 @@ public class ExportTemplateService {
         ExportTemplateDto dto = ExportTemplateMapper.toDto(original);
         dto.setId(null);
         dto.setName(newName);
+        dto.setClientId(targetClientId);
+        dto.setClientName(null);
         dto.setCreatedAt(null);
         dto.setUpdatedAt(null);
         dto.setUsageCount(null);

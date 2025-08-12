@@ -1,8 +1,9 @@
 package com.java.model.enums;
 
 public enum ExportStrategy {
-    DEFAULT("По умолчанию"),
-    TASK_REPORT("Задание-Отчет");
+    DEFAULT("Default"),
+    SIMPLE_REPORT("Simple report"),
+    TASK_REPORT("AV report");
 
     private final String displayName;
 

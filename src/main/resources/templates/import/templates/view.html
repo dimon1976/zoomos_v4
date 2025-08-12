@@ -19,7 +19,12 @@
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/import/templates/{id}/edit(id=${template.id})}" class="btn btn-primary me-2">
+    <a th:href="@{/clients/{id}(id=${template.clientId})}"
+       class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+    <a th:href="@{/import/templates/{id}/edit(id=${template.id})}"
+       class="btn btn-primary btn-primary-action">
         <i class="fas fa-edit me-1"></i>Редактировать
     </a>
     <button type="button" class="btn btn-outline-info me-2" data-bs-toggle="modal" data-bs-target="#cloneModal"
@@ -168,6 +173,12 @@
                         <div class="mb-3">
                             <label for="newName" class="form-label">Новое название</label>
                             <input type="text" class="form-control" id="newName" name="newName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cloneClientId" class="form-label">Клиент</label>
+                            <select class="form-select" id="cloneClientId" name="clientId" required>
+                                <option th:each="client : ${clients}" th:value="${client.id}" th:text="${client.name}" th:selected="${client.id == template.clientId}"></option>
+                            </select>
                         </div>
                     </div>
                     <div class="modal-footer">

@@ -23,7 +23,7 @@ public class AsyncExportService {
     /**
      * Запускает асинхронный экспорт
      */
-    @Async("importTaskExecutor") // Используем тот же пул потоков
+    @Async("exportTaskExecutor")
     @Transactional
     public CompletableFuture<ExportSession> startAsyncExport(
             ExportSession session,

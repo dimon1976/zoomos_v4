@@ -47,10 +47,10 @@
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary me-2">
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary btn-back">
         <i class="fas fa-arrow-left me-1"></i>К клиенту
     </a>
-    <button class="btn btn-outline-primary" onclick="refreshStatus()" id="refreshBtn">
+    <button class="btn btn-outline-primary btn-secondary-action" onclick="refreshStatus()" id="refreshBtn">
         <i class="fas fa-sync-alt me-1"></i>Обновить
     </button>
 </div>

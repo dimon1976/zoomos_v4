@@ -7,10 +7,11 @@
 </head>
 <body>
 <div class="page-actions">
-    <a th:href="@{/export/templates/client/{clientId}/create(clientId=${clientId})}" class="btn btn-primary">
+    <a th:href="@{/export/templates/client/{clientId}/create(clientId=${clientId})}"
+       class="btn btn-primary btn-primary-action">
         <i class="fas fa-plus me-1"></i>Создать шаблон
     </a>
-    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary btn-back">
         <i class="fas fa-arrow-left me-1"></i>К клиенту
     </a>
 </div>
@@ -47,6 +48,13 @@
                         <a th:href="@{/export/templates/{id}/edit(id=${template.id})}" class="btn btn-sm btn-outline-secondary">
                             <i class="fas fa-edit me-1"></i>Изменить
                         </a>
+                        <button type="button" class="btn btn-sm btn-outline-info"
+                                data-bs-toggle="modal"
+                                data-bs-target="#cloneModal"
+                                th:data-template-id="${template.id}"
+                                th:data-template-name="${template.name}">
+                            <i class="fas fa-clone me-1"></i>Клонировать
+                        </button>
                     </div>
                 </div>
                 <div class="card-footer text-muted">
@@ -55,7 +63,53 @@
             </div>
         </div>
     </div>
+
+    <!-- Модальное окно клонирования -->
+    <div class="modal fade" id="cloneModal" tabindex="-1" aria-labelledby="cloneModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="cloneForm" method="post">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="cloneModalLabel">Клонирование шаблона</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Клонирование шаблона: <strong id="cloneTemplateName"></strong></p>
+                        <div class="mb-3">
+                            <label for="newName" class="form-label">Новое название</label>
+                            <input type="text" class="form-control" id="newName" name="newName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cloneClientId" class="form-label">Клиент</label>
+                            <select class="form-select" id="cloneClientId" name="clientId" required>
+                                <option th:each="client : ${clients}" th:value="${client.id}" th:text="${client.name}" th:selected="${client.id == clientId}"></option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-clone me-1"></i>Клонировать
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </section>
-<script></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const cloneModal = document.getElementById('cloneModal');
+        cloneModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const templateId = button.getAttribute('data-template-id');
+            const templateName = button.getAttribute('data-template-name');
+
+            document.getElementById('cloneTemplateName').textContent = templateName;
+            document.getElementById('cloneForm').action = '/export/templates/' + templateId + '/clone';
+            document.getElementById('newName').value = templateName + ' (копия)';
+        });
+    });
+</script>
 </body>
 </html>

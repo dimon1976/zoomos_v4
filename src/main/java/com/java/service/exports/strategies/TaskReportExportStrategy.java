@@ -13,7 +13,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Стратегия экспорта Задание-Отчет
+ * Стратегия экспорта Задание-Отчет.
  * Оставляет только строки отчета, для которых есть соответствующая запись задания
  */
 @Component("taskReportExportStrategy")
@@ -26,6 +26,8 @@ public class TaskReportExportStrategy implements ExportStrategy {
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final int DEFAULT_MAX_REPORT_AGE_DAYS = 3;
+
+    private record TaskNetworkKey(String number, String network) {}
 
     @Override
     public String getName() {
@@ -75,23 +77,16 @@ public class TaskReportExportStrategy implements ExportStrategy {
             return Collections.emptyList();
         }
 
-        // 3. Загружаем данные заданий для этих номеров
-        List<Map<String, Object>> taskData = loadTaskDataByNumbers(taskNumbers);
-        log.debug("Загружено {} записей из заданий", taskData.size());
-
-        // 4. Создаем множество допустимых комбинаций номер_задания + код_розничной_сети
-        Set<String> allowedKeys = taskData.stream()
-                .map(row -> buildKey(
-                        row.get("product_additional1"),
-                        row.get("product_additional4")))
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        log.debug("Допустимых комбинаций номер+код_сети: {}", allowedKeys.size());
+        // 3. Загружаем допустимые комбинации номер_задания + код_розничной_сети
+        Set<String> allowedKeys = loadAllowedTaskKeys(taskNumbers);
+        log.debug("Допустимых комбинаций номер+код_сети из заданий: {}", allowedKeys.size());
 
         // 5. Фильтруем и обрабатываем строки отчета
         List<Map<String, Object>> processedData = new ArrayList<>();
         int matched = 0;
         int enriched = 0;
+        int skippedWithoutKey = 0;
+        Map<TaskNetworkKey, Integer> missingKeyCounts = new HashMap<>();
 
         for (Map<String, Object> reportRow : reportData) {
             // Создаем копию строки для изменений
@@ -111,9 +106,12 @@ public class TaskReportExportStrategy implements ExportStrategy {
                     workingRow.get("product_additional4"));
 
             if (key == null) {
-                log.debug("Пропущена запись отчета без ключа: номер={}, код_сети={}",
-                        workingRow.get("product_additional1"),
-                        workingRow.get("product_additional4"));
+                skippedWithoutKey++;
+                TaskNetworkKey logKey = new TaskNetworkKey(
+                        Objects.toString(workingRow.get("product_additional1"), null),
+                        Objects.toString(workingRow.get("product_additional4"), null)
+                );
+                missingKeyCounts.merge(logKey, 1, Integer::sum);
                 continue;
             }
 
@@ -129,8 +127,19 @@ public class TaskReportExportStrategy implements ExportStrategy {
             matched++;
         }
 
-        log.info("После фильтрации осталось {} записей из {} (обогащено: {})",
-                matched, reportData.size(), enriched);
+        if (!missingKeyCounts.isEmpty()) {
+            String summary = missingKeyCounts.entrySet().stream()
+                    .map(e -> String.format(
+                            "номер=%s, код_сети=%s, пропущено: %d",
+                            e.getKey().number(),
+                            e.getKey().network(),
+                            e.getValue()))
+                    .collect(Collectors.joining("; "));
+            log.debug("Пропущенные записи отчета без ключа: {}", summary);
+        }
+
+        log.info("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {})",
+                matched, reportData.size(), enriched, skippedWithoutKey);
 
         // 6. Применяем стандартную обработку для форматирования полей
         return defaultStrategy.processData(processedData, template, context);
@@ -286,16 +295,30 @@ public class TaskReportExportStrategy implements ExportStrategy {
     /**
      * Загружает данные заданий по номерам
      */
-    private List<Map<String, Object>> loadTaskDataByNumbers(Set<String> taskNumbers) {
+    private Set<String> loadAllowedTaskKeys(Set<String> taskNumbers) {
         if (taskNumbers == null || taskNumbers.isEmpty()) {
-            return Collections.emptyList();
+            return Collections.emptySet();
         }
 
-        String placeholders = String.join(", ", Collections.nCopies(taskNumbers.size(), "?"));
-        String sql = "SELECT * FROM av_data WHERE data_source = 'TASK' " +
-                "AND product_additional1 IN (" + placeholders + ")";
+        Set<String> allowed = new HashSet<>();
+        List<String> numbers = new ArrayList<>(taskNumbers);
+        int batchSize = 1000;
 
-        return jdbcTemplate.queryForList(sql, taskNumbers.toArray());
+        for (int i = 0; i < numbers.size(); i += batchSize) {
+            List<String> batch = numbers.subList(i, Math.min(i + batchSize, numbers.size()));
+            String placeholders = String.join(", ", Collections.nCopies(batch.size(), "?"));
+            String sql = "SELECT product_additional1, product_additional4 FROM av_data WHERE data_source = 'TASK' " +
+                    "AND product_additional1 IN (" + placeholders + ")";
+
+            jdbcTemplate.query(sql, batch.toArray(), rs -> {
+                String key = buildKey(rs.getString("product_additional1"), rs.getString("product_additional4"));
+                if (key != null) {
+                    allowed.add(key);
+                }
+            });
+        }
+
+        return allowed;
     }
 
     /**
