@@ -21,6 +21,9 @@
             --bs-warning-text: #664d03;
             --bs-danger-bg: #f8d7da;   /* критическое */
             --bs-danger-text: #842029;
+            --bs-success-bg: #d1e7dd; /* положительное изменение */
+            --bs-success-strong-bg: #badbcc; /* сильный рост */
+            --bs-success-text: #0f5132;
         }
 
         /* ===== Таблица статистики ===== */
@@ -82,9 +85,9 @@
         .change-down { color: #dc3545; }
 
         .metric-stable { background-color: var(--bs-gray-100) !important; color: #6c757d; }
-        .metric-increase-warning,
+        .metric-increase-warning { background-color: var(--bs-success-bg) !important; color: var(--bs-success-text); }
+        .metric-increase-critical { background-color: var(--bs-success-strong-bg) !important; color: var(--bs-success-text); }
         .metric-decrease-warning { background-color: var(--bs-warning-bg) !important; color: var(--bs-warning-text); }
-        .metric-increase-critical,
         .metric-decrease-critical { background-color: var(--bs-danger-bg) !important; color: var(--bs-danger-text); }
 
         /* Вертикальные заголовки операций */
@@ -125,21 +128,17 @@
             </div>
             <div class="col-md-4">
                 <div class="legend">
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: var(--bs-warning-bg);"></div>
-                        <span>Предупреждение</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: var(--bs-danger-bg);"></div>
+                    <div class="legend-color" style="background-color: var(--bs-success-bg);"></div>
+                    <span>Рост</span>
                         <span>Критическое</span>
                     </div>
                     <div class="legend-item">
-                        <i class="fas fa-arrow-up change-up"></i>
-                        <span>Рост</span>
+                        <div class="legend-color" style="background-color: var(--bs-warning-bg);"></div>
+                        <span>Падение (предупреждение)</span>
                     </div>
                     <div class="legend-item">
-                        <i class="fas fa-arrow-down change-down"></i>
-                        <span>Падение</span>
+                        <div class="legend-color" style="background-color: var(--bs-danger-bg);"></div>
+                        <span>Падение (критическое)</span>
                     </div>
                 </div>
             </div>
