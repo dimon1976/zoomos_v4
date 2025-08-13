@@ -82,8 +82,6 @@ public class ImportProcessorService {
             updateSessionStatus(session, ImportStatus.PROCESSING);
 
             // Получаем метаданные файла
-//            FileMetadata metadata = metadataRepository.findByImportSession(session)
-//                    .orElseThrow(() -> new RuntimeException("Метаданные файла не найдены"));
             FileMetadata metadata = metadataRepository.findByImportSession(session)
                     .orElse(session.getFileMetadata());
             if (metadata == null) {
