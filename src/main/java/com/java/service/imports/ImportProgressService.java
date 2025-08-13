@@ -124,21 +124,38 @@ public class ImportProgressService {
                 .processedRows(session.getProcessedRows())
                 .successRows(session.getSuccessRows())
                 .errorRows(session.getErrorRows())
-                .progressPercentage(Math.min(session.getProgressPercentage(), 100))
+                .progressPercentage(calculateProgressPercentage(session)) // Новый метод
                 .isCompleted(isCompleted(session.getStatus()))
                 .timestamp(System.currentTimeMillis())
                 .updateType("PROGRESS")
                 .build();
 
-        // Вычисляем текущую операцию
         dto.setCurrentOperation(getCurrentOperation(session));
 
-        // Вычисляем оставшееся время
         if (session.getStatus() == ImportStatus.PROCESSING) {
             dto.setEstimatedTimeRemaining(calculateRemainingTime(session));
         }
 
         return dto;
+    }
+
+    /**
+     * Вычисляет прогресс с учетом того, что totalRows может быть оценкой
+     */
+    private Integer calculateProgressPercentage(ImportSession session) {
+        if (session.getTotalRows() == null || session.getTotalRows() == 0 ||
+                session.getProcessedRows() == null) {
+            return 0;
+        }
+
+        int baseProgress = (int) Math.min(100, (session.getProcessedRows() * 100) / session.getTotalRows());
+
+        // Если это оценка и мы близки к 100%, ограничиваем до 95%
+        if (Boolean.TRUE.equals(session.getIsEstimated()) && baseProgress > 95) {
+            return 95;
+        }
+
+        return baseProgress;
     }
 
     /**
@@ -154,8 +171,11 @@ public class ImportProgressService {
                 return "Валидация данных...";
             case PROCESSING:
                 if (session.getProcessedRows() != null && session.getTotalRows() != null) {
-                    return String.format("Обработка данных (%d из %d строк)",
-                            session.getProcessedRows(), session.getTotalRows());
+                    String progressText = String.format("Обработка данных (%d из %s строк)",
+                            session.getProcessedRows(),
+                            Boolean.TRUE.equals(session.getIsEstimated()) ?
+                                    "~" + session.getTotalRows() : session.getTotalRows());
+                    return progressText;
                 }
                 return "Обработка данных...";
             case COMPLETING:

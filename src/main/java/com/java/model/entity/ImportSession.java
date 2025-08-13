@@ -68,6 +68,9 @@ public class ImportSession {
     @Column(name = "is_cancelled")
     private Boolean isCancelled = false;
 
+    @Column(name = "is_estimated")
+    private Boolean isEstimated = false;
+
     @OneToMany(mappedBy = "importSession", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ImportError> errors = new ArrayList<>();
 

@@ -25,13 +25,14 @@ public class MemoryMonitor {
         long maxMemory = runtime.maxMemory();
         long availableMemory = maxMemory - usedMemory;
 
-        long threshold = importSettings.getMaxMemoryBytes();
+        // УЖЕСТОЧАЕМ проверку для домашнего ПК
+        long threshold = maxMemory / 2; // 50% вместо текущих настроек
 
-        if (availableMemory < threshold * 0.2) { // Если доступно менее 20% от лимита
-            log.warn("Низкий уровень доступной памяти: {} MB", availableMemory / (1024 * 1024));
+        if (availableMemory < threshold) {
+            log.warn("Низкий уровень памяти: {}MB свободно из {}MB",
+                    availableMemory / (1024 * 1024), maxMemory / (1024 * 1024));
             return false;
         }
-
         return true;
     }
 
