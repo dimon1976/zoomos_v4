@@ -37,6 +37,7 @@ public class ExportProcessorService {
     private final ExportSessionRepository sessionRepository;
     private final FileOperationRepository fileOperationRepository;
     private final ExportStatisticsWriterService statisticsWriterService;
+    private final ExportProgressService progressService;
     private final JdbcTemplate jdbcTemplate;
 
     // Флаги отмены для каждой сессии
@@ -49,19 +50,20 @@ public class ExportProcessorService {
     public void processExport(ExportSession session, ExportRequestDto request) {
         log.info("Начало обработки экспорта, сессия ID: {}", session.getId());
 
-        // Регистрируем флаг отмены
         AtomicBoolean cancelled = new AtomicBoolean(false);
         cancellationFlags.put(session.getId(), cancelled);
 
         try {
-            // Обновляем статус
+            // ✅ ОТПРАВЛЯЕМ НАЧАЛЬНОЕ ОБНОВЛЕНИЕ
             updateSessionStatus(session, ExportStatus.PROCESSING);
 
-            // Загружаем шаблон с полями и фильтрами
             ExportTemplate template = session.getTemplate();
 
             // 1. Загружаем данные
             log.info("Загрузка данных для экспорта");
+            // ✅ ОТПРАВЛЯЕМ ОБНОВЛЕНИЕ - ЗАГРУЗКА ДАННЫХ
+            progressService.sendProgressUpdate(session);
+
             List<Map<String, Object>> data = dataService.loadData(
                     request.getOperationIds() != null ? request.getOperationIds() : Collections.emptyList(),
                     template,
@@ -69,6 +71,7 @@ public class ExportProcessorService {
                     request.getDateTo(),
                     request.getAdditionalFilters()
             );
+
             if ((request.getOperationIds() == null || request.getOperationIds().isEmpty()) && !data.isEmpty()) {
                 List<Long> loadedIds = data.stream()
                         .map(row -> row.get("operation_id"))
@@ -79,25 +82,21 @@ public class ExportProcessorService {
                 request.setOperationIds(loadedIds);
                 log.debug("Operation IDs получены из данных: {}", loadedIds);
             }
+
             log.debug("После загрузки получено {} строк", data.size());
-            if (!data.isEmpty()) {
-                log.debug("Пример загруженной строки: {}", data.get(0));
-            }
             session.setTotalRows((long) data.size());
 
-            // Подсчитываем отфильтрованные записи
             Long totalPossible = dataService.countData(
                     request.getOperationIds() != null ? request.getOperationIds() : Collections.emptyList(),
                     template,
-                    null, // без фильтра дат
-                    null,
-                    null  // без дополнительных фильтров
+                    null, null, null
             );
             session.setFilteredRows(totalPossible - data.size());
 
+            // ✅ ОБНОВЛЯЕМ ПРОГРЕСС ПОСЛЕ ЗАГРУЗКИ ДАННЫХ (25%)
             sessionRepository.save(session);
+            progressService.sendProgressUpdate(session);
 
-            // Проверяем отмену
             if (cancelled.get()) {
                 handleCancellation(session);
                 return;
@@ -107,7 +106,6 @@ public class ExportProcessorService {
             log.info("Применение стратегии: {}", template.getExportStrategy());
             ExportStrategy strategy = strategyFactory.getStrategy(template.getExportStrategy());
 
-            // Подготавливаем контекст для стратегии
             Map<String, Object> context = new HashMap<>();
             context.put("operationIds", request.getOperationIds());
             context.put("session", session);
@@ -116,44 +114,45 @@ public class ExportProcessorService {
                 context.put("clientRegionCode", session.getFileOperation().getClient().getRegionCode());
             }
 
-            // Для стратегии TASK_REPORT нужны дополнительные параметры
             if (template.getExportStrategy().name().equals("TASK_REPORT") &&
                     request.getOperationIds() != null && request.getOperationIds().size() >= 2) {
-                // Предполагаем, что первая операция - задание, вторая - отчет
                 context.put("taskOperationId", request.getOperationIds().get(0));
                 context.put("reportOperationId", request.getOperationIds().get(1));
             }
 
+            // ✅ ОБНОВЛЯЕМ ПРОГРЕСС ПЕРЕД ОБРАБОТКОЙ СТРАТЕГИИ (50%)
+            progressService.sendProgressUpdate(session);
+
             List<Map<String, Object>> processedData = strategy.processData(data, template, context);
             log.debug("После применения стратегии осталось {} строк", processedData.size());
-            if (!processedData.isEmpty()) {
-                log.debug("Пример строки после стратегии: {}", processedData.get(0));
-            }
 
-            // Подсчитываем модифицированные записи
             session.setModifiedRows((long) (data.size() - processedData.size()));
             session.setExportedRows((long) processedData.size());
 
-            // Проверяем отмену
+            // ✅ ОБНОВЛЯЕМ ПРОГРЕСС ПОСЛЕ ОБРАБОТКИ СТРАТЕГИИ (70%)
+            sessionRepository.save(session);
+            progressService.sendProgressUpdate(session);
+
             if (cancelled.get()) {
                 handleCancellation(session);
                 return;
             }
 
-            // 2.5. Сохраняем статистику по экспортированным данным
+            // 2.5. Сохраняем статистику
             log.info("Сохранение статистики экспорта");
             try {
                 statisticsWriterService.saveExportStatistics(session, template, processedData);
             } catch (Exception e) {
                 log.error("Ошибка сохранения статистики экспорта", e);
-                // Не прерываем экспорт из-за ошибки статистики
             }
+
+            // ✅ ОБНОВЛЯЕМ ПРОГРЕСС ПОСЛЕ СТАТИСТИКИ (80%)
+            progressService.sendProgressUpdate(session);
 
             // 3. Генерируем файл
             log.info("Генерация файла экспорта");
             String fileName = generateFileName(template, request);
 
-            // Переопределяем параметры файла если указаны
             if (request.getFileFormat() != null) {
                 template.setFileFormat(request.getFileFormat());
             }
@@ -164,17 +163,18 @@ public class ExportProcessorService {
                 template.setCsvEncoding(request.getCsvEncoding());
             }
 
+            // ✅ ОБНОВЛЯЕМ ПРОГРЕСС ПЕРЕД ГЕНЕРАЦИЕЙ ФАЙЛА (90%)
+            progressService.sendProgressUpdate(session);
+
             Path filePath = fileGeneratorService.generateFile(
                     processedData.stream(),
                     processedData.size(),
                     template,
                     fileName);
 
-            // Обновляем информацию о файле
             session.setResultFilePath(filePath.toString());
             session.setFileSize(Files.size(filePath));
 
-            // Обновляем FileOperation
             FileOperation fileOperation = session.getFileOperation();
             fileOperation.setFileName(fileName);
             fileOperation.setResultFilePath(filePath.toString());
@@ -185,14 +185,13 @@ public class ExportProcessorService {
 
             fileOperationRepository.save(fileOperation);
 
-            // 4. Завершаем экспорт
+            // ✅ ФИНАЛЬНОЕ ОБНОВЛЕНИЕ ПРОГРЕССА (100%)
             finalizeExport(session);
 
         } catch (Exception e) {
             log.error("Ошибка обработки экспорта", e);
             handleExportError(session, e);
         } finally {
-            // Удаляем флаг отмены
             cancellationFlags.remove(session.getId());
         }
     }
@@ -316,6 +315,8 @@ public class ExportProcessorService {
     private void updateSessionStatus(ExportSession session, ExportStatus status) {
         session.setStatus(status);
         sessionRepository.save(session);
+        // ✅ ОТПРАВЛЯЕМ ОБНОВЛЕНИЕ ПРОГРЕССА ПРИ ИЗМЕНЕНИИ СТАТУСА
+        progressService.sendProgressUpdate(session);
     }
 
     /**
@@ -326,8 +327,10 @@ public class ExportProcessorService {
 
         session.setStatus(ExportStatus.COMPLETED);
         session.setCompletedAt(ZonedDateTime.now());
-
         sessionRepository.save(session);
+
+        // ✅ ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ О ЗАВЕРШЕНИИ
+        progressService.sendCompletionNotification(session);
 
         log.info("Экспорт завершен. Экспортировано: {}, Отфильтровано: {}, Модифицировано: {}",
                 session.getExportedRows(), session.getFilteredRows(), session.getModifiedRows());
@@ -342,7 +345,6 @@ public class ExportProcessorService {
         session.setStatus(ExportStatus.CANCELLED);
         session.setCompletedAt(ZonedDateTime.now());
 
-        // Удаляем частично созданный файл если есть
         if (session.getResultFilePath() != null) {
             try {
                 Files.deleteIfExists(Path.of(session.getResultFilePath()));
@@ -352,6 +354,8 @@ public class ExportProcessorService {
         }
 
         sessionRepository.save(session);
+        // ✅ ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ ОБ ОТМЕНЕ
+        progressService.sendProgressUpdate(session);
     }
 
     /**
@@ -367,6 +371,9 @@ public class ExportProcessorService {
 
         sessionRepository.save(session);
         fileOperationRepository.save(fileOperation);
+
+        // ✅ ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ ОБ ОШИБКЕ
+        progressService.sendErrorNotification(session, e.getMessage());
     }
 
     /**
