@@ -285,28 +285,39 @@
         stompClient.connect({}, function(frame) {
             console.log('Connected to WebSocket');
 
+            // ✅ ОПРЕДЕЛЯЕМ ТИП ОПЕРАЦИИ ДЛЯ ВЫБОРА ПРАВИЛЬНОГО ТОПИКА
+            var operationType = /*[[${operation.operationType.name()}]]*/ 'IMPORT';
+            var topicPath, requestPath;
+
+            if (operationType === 'IMPORT') {
+                topicPath = '/topic/import-progress/' + operationId;
+                requestPath = '/app/import/progress/' + operationId;
+            } else if (operationType === 'EXPORT') {
+                topicPath = '/topic/export-progress/' + operationId;
+                requestPath = '/app/export/progress/' + operationId;
+            } else {
+                console.warn('Неизвестный тип операции:', operationType);
+                return;
+            }
+
+            console.log('Подписываемся на топик:', topicPath);
+
             // Подписываемся на обновления прогресса
-            stompClient.subscribe('/topic/import-progress/' + operationId, function(message) {
+            stompClient.subscribe(topicPath, function(message) {
                 var progress = JSON.parse(message.body);
                 updateProgress(progress);
             });
 
             // Запрашиваем текущий статус
-            stompClient.send('/app/import/progress/' + operationId, {}, {});
+            stompClient.send(requestPath, {}, {});
         }, function(error) {
             console.error('WebSocket connection error:', error);
-            // Fallback на обычное обновление страницы
             setTimeout(refreshStatus, 5000);
         });
     }
 
     function updateProgress(progress) {
         if (!progress) return;
-
-        // Обновляем флаг оценки
-        if (progress.isEstimated !== undefined) {
-            isEstimated = progress.isEstimated;
-        }
 
         // Обновляем прогресс бар
         if (progress.progressPercentage !== undefined) {
@@ -316,15 +327,8 @@
             if (progressBar) {
                 progressBar.style.width = progress.progressPercentage + '%';
             }
-
-            // Показываем примерный прогресс если данные оценочные
-            var progressDisplayText = progress.progressPercentage + '%';
-            if (isEstimated && progress.progressPercentage < 100) {
-                progressDisplayText = '~' + progressDisplayText;
-            }
-
             if (progressText) {
-                progressText.textContent = progressDisplayText;
+                progressText.textContent = progress.progressPercentage + '%';
             }
 
             // Обновляем SVG прогресс
@@ -335,38 +339,30 @@
 
             var progressRingText = document.querySelector('.progress-ring + .fw-bold');
             if (progressRingText) {
-                progressRingText.textContent = progressDisplayText;
+                progressRingText.textContent = progress.progressPercentage + '%';
             }
         }
 
-        // Обновляем детали прогресса
-        if (progress.processedRows !== undefined && progress.totalRows !== undefined) {
-            var progressDetails = document.getElementById('progressDetails');
-            if (progressDetails) {
-                var totalDisplay = progress.totalRows;
-                if (isEstimated) {
-                    totalDisplay = '~' + totalDisplay;
-                }
-                progressDetails.textContent = progress.processedRows + ' из ' + totalDisplay + ' строк';
-            }
-        }
-
-        // Обновляем статистику
+        // Обновляем статистику (универсально для импорта и экспорта)
         if (progress.totalRows !== undefined) {
-            updateStatValue('totalRows', progress.totalRows, isEstimated);
-            // Показываем/скрываем индикатор оценки
-            var estimatedIndicator = document.getElementById('estimatedIndicator');
-            if (estimatedIndicator) {
-                estimatedIndicator.style.display = isEstimated ? 'block' : 'none';
-            }
+            updateStatValue('totalRows', progress.totalRows);
         }
 
+        // ✅ ПОДДЕРЖКА ИМПОРТА
         if (progress.processedRows !== undefined) {
             updateStatValue('processedRows', progress.processedRows);
             var remaining = (progress.totalRows || 0) - progress.processedRows;
-            updateStatValue('remainingRows', remaining, isEstimated);
+            updateStatValue('remainingRows', remaining);
         }
 
+        // ✅ ПОДДЕРЖКА ЭКСПОРТА
+        if (progress.exportedRows !== undefined) {
+            updateStatValue('processedRows', progress.exportedRows);
+            var remaining = (progress.totalRows || 0) - progress.exportedRows;
+            updateStatValue('remainingRows', remaining);
+        }
+
+        // Дополнительная статистика для импорта
         if (progress.successRows !== undefined) {
             updateStatValue('successRows', progress.successRows);
         }
