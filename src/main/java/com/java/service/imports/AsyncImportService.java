@@ -1,5 +1,6 @@
 package com.java.service.imports;
 
+import com.java.config.MemoryMonitor;
 import com.java.dto.ImportRequestDto;
 import com.java.model.Client;
 import com.java.model.FileOperation;
@@ -43,6 +44,7 @@ public class AsyncImportService {
     private final FileAnalyzerService fileAnalyzerService;
     private final ImportProcessorService processorService;
     private final ImportProgressService progressService;
+    private final MemoryMonitor memoryMonitor;
     private final PathResolver pathResolver;
 
     @Autowired
@@ -55,6 +57,12 @@ public class AsyncImportService {
     @Async("importTaskExecutor")
     @Transactional
     public CompletableFuture<ImportSession> startImport(ImportRequestDto request, Long clientId) {
+
+        if (!memoryMonitor.isMemoryAvailable()) {
+            log.warn("Недостаточно памяти для запуска импорта, отложен");
+            return CompletableFuture.failedFuture(
+                    new RuntimeException("Недостаточно памяти для импорта"));
+        }
         log.info("Запуск асинхронного импорта для клиента ID: {}", clientId);
 
         try {

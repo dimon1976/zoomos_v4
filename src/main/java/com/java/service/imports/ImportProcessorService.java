@@ -21,7 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.Reader;
+import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -126,16 +129,15 @@ public class ImportProcessorService {
                                 FileMetadata metadata, AtomicBoolean cancelled) throws Exception {
         Path filePath = Paths.get(metadata.getTempFilePath());
 
-        // Определяем общее количество строк в файле до начала обработки
-        long totalLines;
-        try (Stream<String> lines = Files.lines(filePath, Charset.forName(metadata.getDetectedEncoding()))) {
-            totalLines = lines.count();
-        }
+        // БЫСТРАЯ оценка количества строк (не загружаем весь файл в память)
+        long estimatedRows = estimateRowCount(filePath, metadata);
+        session.setTotalRows(estimatedRows);
+        session.setIsEstimated(true); // Добавим флаг что это оценка
+        sessionRepository.save(session);
 
         try (Reader reader = Files.newBufferedReader(filePath,
                 Charset.forName(metadata.getDetectedEncoding()))) {
 
-            // Создаем парсер CSV
             CSVParser parser = new CSVParserBuilder()
                     .withSeparator(metadata.getDetectedDelimiter().charAt(0))
                     .withQuoteChar(metadata.getDetectedQuoteChar() != null ?
@@ -151,25 +153,121 @@ public class ImportProcessorService {
             String[] headers = null;
             int skippedRows = 0;
 
-            // Сначала считываем строку заголовков, если она присутствует
             if (metadata.getHasHeader()) {
                 headers = csvReader.readNext();
-                skippedRows++; // учтем считанную строку
+                skippedRows++;
             }
 
-            // Далее пропускаем оставшиеся строки, указанные в шаблоне
             while (skippedRows < template.getSkipHeaderRows()) {
                 csvReader.readNext();
                 skippedRows++;
             }
-            int startRowNumber = skippedRows;
-            // Теперь мы знаем общее количество строк
-            long totalRows = totalLines - startRowNumber;
-            session.setTotalRows(totalRows);
-            sessionRepository.save(session);
 
-            // Обрабатываем данные батчами
-            processBatches(session, template, csvReader, headers, cancelled);
+            // Обработка с корректировкой прогресса
+            processBatchesWithProgressCorrection(session, template, csvReader, headers, cancelled);
+        }
+    }
+
+    /**
+     * Быстрая оценка количества строк без загрузки всего файла в память
+     */
+    private long estimateRowCount(Path filePath, FileMetadata metadata) throws IOException {
+        long fileSize = Files.size(filePath);
+
+        // Читаем только первые N строк для оценки средней длины
+        final int SAMPLE_SIZE = 100;
+        long totalSampleLength = 0;
+        int linesRead = 0;
+
+        try (BufferedReader reader = Files.newBufferedReader(filePath,
+                Charset.forName(metadata.getDetectedEncoding()))) {
+            String line;
+            while ((line = reader.readLine()) != null && linesRead < SAMPLE_SIZE) {
+                totalSampleLength += line.getBytes(metadata.getDetectedEncoding()).length + 2; // +2 для \r\n
+                linesRead++;
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        if (linesRead == 0) return 0;
+
+        long averageLineLength = totalSampleLength / linesRead;
+        long estimatedRows = fileSize / averageLineLength;
+
+        log.debug("Оценка строк: размер файла {}KB, средняя длина строки {}B, оценка {} строк",
+                fileSize / 1024, averageLineLength, estimatedRows);
+
+        return Math.max(1, estimatedRows);
+    }
+
+    private void processBatchesWithProgressCorrection(ImportSession session, ImportTemplate template,
+                                                      CSVReader csvReader, String[] headers,
+                                                      AtomicBoolean cancelled) throws Exception {
+        List<Map<String, String>> batch = new ArrayList<>();
+        String[] row;
+        AtomicLong rowNumber = new AtomicLong(template.getSkipHeaderRows());
+        long actualRowsProcessed = 0;
+        long lastProgressUpdate = 0;
+
+        while ((row = csvReader.readNext()) != null && !cancelled.get()) {
+            rowNumber.incrementAndGet();
+            actualRowsProcessed++;
+
+            // Проверяем память каждые 100 строк
+            if (actualRowsProcessed % 100 == 0 && !memoryMonitor.isMemoryAvailable()) {
+                log.warn("Недостаточно памяти, ожидание...");
+                Thread.sleep(2000);
+                System.gc();
+            }
+
+            Map<String, String> rowData = new HashMap<>();
+            for (int i = 0; i < row.length; i++) {
+                rowData.put(String.valueOf(i), row[i]);
+                if (headers != null && i < headers.length && headers[i] != null) {
+                    rowData.put(headers[i], row[i]);
+                }
+            }
+
+            batch.add(rowData);
+
+            if (batch.size() >= importSettings.getBatchSize()) {
+                processBatch(session, template, batch, rowNumber);
+                batch.clear();
+
+                // КОРРЕКТИРУЕМ оценку каждые 10 батчей
+                if (actualRowsProcessed - lastProgressUpdate > importSettings.getBatchSize() * 10) {
+                    correctTotalRowsEstimate(session, actualRowsProcessed);
+                    lastProgressUpdate = actualRowsProcessed;
+                }
+            }
+        }
+
+        if (!batch.isEmpty() && !cancelled.get()) {
+            processBatch(session, template, batch, rowNumber);
+        }
+
+        // Финальная корректировка
+        session.setTotalRows(actualRowsProcessed);
+        session.setIsEstimated(false); // Теперь точное значение
+        sessionRepository.save(session);
+    }
+
+    /**
+     * Корректирует оценку общего количества строк на основе текущего прогресса
+     */
+    private void correctTotalRowsEstimate(ImportSession session, long actualProcessed) {
+        if (session.getTotalRows() == null || session.getTotalRows() == 0) return;
+
+        long currentEstimate = session.getTotalRows();
+
+        // Если обработали больше чем оценивали, увеличиваем оценку
+        if (actualProcessed > currentEstimate * 0.8) {
+            long newEstimate = (long)(actualProcessed * 1.25); // +25% запас
+            session.setTotalRows(newEstimate);
+            sessionRepository.save(session);
+            log.debug("Скорректирована оценка строк: {} -> {} (обработано {})",
+                    currentEstimate, newEstimate, actualProcessed);
         }
     }
 
