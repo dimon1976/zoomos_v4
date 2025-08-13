@@ -536,7 +536,9 @@
                     </span>
                 </td>
                 <td>
-                    ${op.processingProgress != null ? op.processingProgress + '%': '-'}
+                    ${op.status === 'PROCESSING'
+            ? '<div class="text-center fw-bold">' + (op.processingProgress != null ? op.processingProgress : 0) + '%</div>'
+            : (op.processingProgress != null ? op.processingProgress + '%' : '-')}
                 </td>
                 <td>${formatDateTime(op.startedAt)}</td>
                 <td>${op.recordCount || '-'}</td>
