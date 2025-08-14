@@ -74,7 +74,12 @@ public class OperationsRestController {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startedAt"));
         Page<FileOperation> operationsPage = fileOperationRepository.findAll(spec, pageRequest);
 
-        List<FileOperationDto> operations = operationsPage.getContent().stream()
+        List<FileOperation> operationsList = operationsPage.getContent();
+        log.debug("Получено {} операций для клиента {}", operationsList.size(), clientId);
+        operationsList.forEach(op ->
+                log.debug("\tID: {} Статус: {} Прогресс: {}", op.getId(), op.getStatus(), op.getProcessingProgress()));
+
+        List<FileOperationDto> operations = operationsList.stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
 
