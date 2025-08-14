@@ -46,13 +46,13 @@ public class FileAnalyzerService {
     private static final char DEFAULT_ESCAPE_CHAR = '\\';
 
     /**
-     * Анализирует файл и извлекает метаданные
+     * Анализирует файл и извлекает метаданные, сохраняя его под указанным префиксом
      */
-    public FileMetadata analyzeFile(MultipartFile file) throws IOException {
+    public FileMetadata analyzeFile(MultipartFile file, String prefix) throws IOException {
         log.info("Начало анализа файла: {}", file.getOriginalFilename());
 
         // Сохраняем файл во временную директорию
-        Path tempFile = pathResolver.saveToTempFile(file, "analyze");
+        Path tempFile = pathResolver.saveToTempFile(file, prefix);
 
         try {
             return performFileAnalysis(tempFile, file.getOriginalFilename(), file.getSize());
@@ -64,10 +64,10 @@ public class FileAnalyzerService {
     }
 
     /**
-     * Анализирует уже сохраненный файл по указанному пути
+     * Анализирует файл и извлекает метаданные (используется префикс по умолчанию)
      */
-    public FileMetadata analyzeFile(Path filePath) throws IOException {
-        return analyzeFile(filePath, filePath.getFileName().toString());
+    public FileMetadata analyzeFile(MultipartFile file) throws IOException {
+        return analyzeFile(file, "analyze");
     }
 
     /**

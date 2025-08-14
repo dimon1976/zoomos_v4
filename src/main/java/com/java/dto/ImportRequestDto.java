@@ -1,5 +1,6 @@
 package com.java.dto;
 
+import com.java.model.entity.FileMetadata;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -27,6 +28,9 @@ public class ImportRequestDto {
 
     // Путь к уже сохраненному файлу
     private Path savedFilePath;
+
+    // Метаданные файла из предварительного анализа
+    private FileMetadata metadata;
 
     // Переопределение настроек шаблона
     private String delimiter;
