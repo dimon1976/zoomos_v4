@@ -44,6 +44,7 @@ public class Main {
         log.info("  Приложение '{}' запущено!", appName);
         log.info("  Профиль(и): {}", activeProfiles);
         log.info("  Web URL: http://localhost:{}", port);
+        log.info("  Дашборд: http://localhost:{}/", port);
         log.info("----------------------------------------------------------");
     }
 }
