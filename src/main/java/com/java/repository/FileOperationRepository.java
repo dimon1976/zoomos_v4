@@ -58,35 +58,66 @@ public interface FileOperationRepository extends JpaRepository<FileOperation, Lo
     Long countByStartedAtGreaterThanEqual(ZonedDateTime startDate);
 
     // Производительность
-    @Query("SELECT AVG(EXTRACT(EPOCH FROM (fo.completedAt - fo.startedAt)) / 60.0) " +
-            "FROM FileOperation fo WHERE fo.completedAt IS NOT NULL AND fo.startedAt IS NOT NULL")
+    /**
+     * Среднее время обработки (в минутах).
+     * Нативный SQL, т.к. EXTRACT(EPOCH ...) — синтаксис PostgreSQL, которого нет в JPQL.
+     */
+    @Query(value = """
+            SELECT AVG(EXTRACT(EPOCH FROM (fo.completed_at - fo.started_at)) / 60.0)
+            FROM file_operations fo
+            WHERE fo.completed_at IS NOT NULL AND fo.started_at IS NOT NULL
+            """, nativeQuery = true)
     Double getAverageProcessingTimeMinutes();
 
-    // Топ клиент по количеству операций
-    @Query("SELECT c.name FROM FileOperation fo JOIN fo.client c " +
-            "GROUP BY c.id, c.name ORDER BY COUNT(fo) DESC LIMIT 1")
+    /**
+     * Название клиента с наибольшим количеством операций.
+     * Нативный SQL с LIMIT 1 (в JPQL LIMIT не поддерживается).
+     */
+    @Query(value = """
+            SELECT c.name
+            FROM file_operations fo
+            JOIN clients c ON c.id = fo.client_id
+            GROUP BY c.id, c.name
+            ORDER BY COUNT(fo.id) DESC
+            LIMIT 1
+            """, nativeQuery = true)
     Optional<String> findTopClientByOperationCount();
 
-    // Самый используемый тип файла
-    @Query("SELECT fo.fileType FROM FileOperation fo " +
-            "GROUP BY fo.fileType ORDER BY COUNT(fo) DESC LIMIT 1")
+    /**
+     * Самый часто используемый тип файла среди операций.
+     */
+    @Query(value = """
+            SELECT fo.file_type
+            FROM file_operations fo
+            GROUP BY fo.file_type
+            ORDER BY COUNT(fo.id) DESC
+            LIMIT 1
+            """, nativeQuery = true)
     Optional<String> findMostUsedFileType();
+
+
 
     // Список уникальных типов файлов
     @Query("SELECT DISTINCT fo.fileType FROM FileOperation fo WHERE fo.fileType IS NOT NULL ORDER BY fo.fileType")
     List<String> findDistinctFileTypes();
 
     // Статистика по клиентам
-    @Query("SELECT new com.java.service.dashboard.DashboardService$ClientStatsDto(" +
-            "c.id, c.name, COUNT(fo), " +
-            "SUM(CASE WHEN fo.status = 'COMPLETED' THEN 1 ELSE 0 END), " +
-            "SUM(CASE WHEN fo.status = 'FAILED' THEN 1 ELSE 0 END), " +
-            "CASE WHEN COUNT(fo) > 0 THEN " +
-            "  CAST(SUM(CASE WHEN fo.status = 'COMPLETED' THEN 1 ELSE 0 END) AS double) / COUNT(fo) * 100 " +
-            "ELSE 0.0 END" +
-            ") " +
-            "FROM Client c LEFT JOIN c.fileOperations fo " +
-            "GROUP BY c.id, c.name " +
-            "ORDER BY COUNT(fo) DESC")
+    @Query(value = """
+            SELECT
+                c.id                                    AS clientId,
+                c.name                                  AS clientName,
+                COUNT(fo.id)                            AS totalOps,
+                SUM(CASE WHEN fo.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completedOps,
+                SUM(CASE WHEN fo.status = 'FAILED'    THEN 1 ELSE 0 END) AS failedOps,
+                CASE WHEN COUNT(fo.id) > 0
+                     THEN (SUM(CASE WHEN fo.status = 'COMPLETED' THEN 1 ELSE 0 END) * 100.0)
+                          / COUNT(fo.id)
+                     ELSE 0.0
+                END                                     AS successRate
+            FROM clients c
+            LEFT JOIN file_operations fo ON fo.client_id = c.id
+            GROUP BY c.id, c.name
+            ORDER BY COUNT(fo.id) DESC
+            """, nativeQuery = true)
     List<DashboardService.ClientStatsDto> getClientStatistics();
 }
