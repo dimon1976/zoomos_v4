@@ -74,8 +74,8 @@ public class ImportController {
             // Сохраняем файлы и анализируем их
             for (MultipartFile file : files) {
                 if (!file.isEmpty()) {
-                    Path savedPath = pathResolver.saveToTempFile(file, "import_" + clientId);
-                    var metadata = fileAnalyzerService.analyzeFile(file);
+                    var metadata = fileAnalyzerService.analyzeFile(file, "import_" + clientId);
+                    Path savedPath = Path.of(metadata.getTempFilePath());
 
                     FileInfo fileInfo = new FileInfo();
                     fileInfo.setOriginalFile(file);
@@ -128,6 +128,20 @@ public class ImportController {
     }
 
     /**
+     * Отмена анализа загруженных файлов
+     */
+    @GetMapping("/{clientId}/cancel")
+    public String cancelAnalysis(@PathVariable Long clientId,
+                                 @RequestParam("session") String sessionId) {
+        AnalysisSession session = analysisSessions.remove(sessionId);
+        if (session != null) {
+            session.getFiles().forEach(f -> pathResolver.deleteFile(f.getSavedPath()));
+        }
+        return "redirect:/clients/" + clientId;
+    }
+
+
+    /**
      * Запуск импорта файлов
      */
     @PostMapping("/{clientId}/start")
@@ -152,6 +166,7 @@ public class ImportController {
                 ImportRequestDto request = ImportRequestDto.builder()
                         .file(fileInfo.getOriginalFile())
                         .savedFilePath(fileInfo.getSavedPath())
+                        .metadata(fileInfo.getMetadata())
                         .templateId(templateId)
                         .validateOnly(validateOnly)
                         .asyncMode(asyncMode)

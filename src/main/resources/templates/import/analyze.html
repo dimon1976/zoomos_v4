@@ -39,7 +39,8 @@
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+    <a th:href="@{/import/{clientId}/cancel(clientId=${clientId},session=${sessionId})}"
+       class="btn btn-secondary">
         <i class="fas fa-arrow-left me-1"></i>Отмена
     </a>
 </div>
@@ -208,7 +209,8 @@
 
         <!-- Кнопки действий -->
         <div class="d-flex justify-content-between">
-            <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+            <a th:href="@{/import/{clientId}/cancel(clientId=${clientId},session=${sessionId})}"
+               class="btn btn-secondary">
                 <i class="fas fa-times me-1"></i>Отмена
             </a>
             <button type="submit" class="btn btn-primary" th:disabled="${#lists.isEmpty(templates)}">

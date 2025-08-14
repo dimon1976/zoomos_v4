@@ -20,6 +20,15 @@
         .operation-row:hover {
             background-color: #f8f9fa;
         }
+        /* Стили для компактного progress bar */
+        .progress-compact {
+            height: 20px;
+            border-radius: 10px;
+        }
+        .progress-compact .progress-bar {
+            line-height: 20px;
+            font-size: 11px;
+        }
     </style>
 </head>
 <body>
@@ -489,9 +498,20 @@
         const to = document.getElementById('filterTo').value;
         if (to) params.append('to', to);
 
+        console.log('Запрос операций для клиента', clientId, 'страница', page);
+
         fetch(`/api/clients/${clientId}/operations?` + params.toString())
-            .then(response => response.json())
+            .then(response => {
+                console.log('Ответ сервера по операциям статус', response.status);
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        throw new Error(text || 'Ошибка ответа сервера');
+                    });
+                }
+                return response.json();
+            })
             .then(pageData => {
+                console.log('Получены данные страницы операций', pageData);
                 currentPage = pageData.page;
                 displayOperations(pageData.operations);
                 updatePagination(pageData);
@@ -509,11 +529,15 @@
         const noOps = document.getElementById('noOperations');
 
         if (!operations || operations.length === 0) {
+            console.log('Операции не найдены для отображения');
             tbody.innerHTML = '';
             noOps.style.display = 'block';
             hasActiveOperations = false;
             return;
         }
+
+        console.debug('Загружены операции:', operations);
+        operations.forEach(op => console.debug('Операция', op.id, 'статус', op.status, 'прогресс', op.processingProgress));
 
         noOps.style.display = 'none';
         hasActiveOperations = operations.some(op =>
@@ -537,7 +561,16 @@
                 </td>
                 <td>
                     ${op.status === 'PROCESSING'
-            ? '<div class="text-center fw-bold">' + (op.processingProgress != null ? op.processingProgress : 0) + '%</div>'
+            ? `<div class="progress progress-compact">
+                             <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                  role="progressbar"
+                                  style="width: ${op.processingProgress || 0}%"
+                                  aria-valuenow="${op.processingProgress || 0}"
+                                  aria-valuemin="0"
+                                  aria-valuemax="100">
+                               <small class="text-white fw-bold">${op.processingProgress || 0}%</small>
+                             </div>
+                           </div>`
             : (op.processingProgress != null ? op.processingProgress + '%' : '-')}
                 </td>
                 <td>${formatDateTime(op.startedAt)}</td>

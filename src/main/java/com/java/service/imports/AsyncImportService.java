@@ -89,12 +89,6 @@ public class AsyncImportService {
             log.info("Сессия импорта создана с ID: {}, операция ID: {}",
                     session.getId(), fileOperation.getId());
 
-//            // ВАЖНО: Анализ и настройка метаданных
-//            setupSessionMetadata(session, request);
-//
-//            // Сохраняем обновленную сессию
-//            session = sessionRepository.save(session);
-
             // ЗАПУСКАЕМ ОБРАБОТКУ ПОСЛЕ КОММИТА ТРАНЗАКЦИИ
             ImportSession finalSession = session;
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -134,15 +128,19 @@ public class AsyncImportService {
      */
     private void setupSessionMetadata(ImportSession session, ImportRequestDto request) {
         try {
-            // Анализируем файл
-            Path tempFilePath = request.getSavedFilePath() != null
-                    ? request.getSavedFilePath()
-                    : pathResolver.saveToTempFile(request.getFile(), "import_temp");
+            FileMetadata metadata;
+            if (request.getMetadata() != null) {
+                metadata = request.getMetadata();
+            } else {
+                Path tempFilePath = request.getSavedFilePath() != null
+                        ? request.getSavedFilePath()
+                        : pathResolver.saveToTempFile(request.getFile(), "import_temp");
 
-            FileMetadata metadata = fileAnalyzerService.analyzeFile(
-                    tempFilePath,
-                    request.getFile().getOriginalFilename()
-            );
+                metadata = fileAnalyzerService.analyzeFile(
+                        tempFilePath,
+                        request.getFile().getOriginalFilename()
+                );
+            }
             metadata.setImportSession(session);
             metadata = metadataRepository.save(metadata);
             // сохраняем связь в обе стороны, чтобы корректно работала каскадная
@@ -196,6 +194,8 @@ public class AsyncImportService {
                 .fileType(file.getContentType())
                 .fileSize(file.getSize())
                 .status(FileOperation.OperationStatus.PROCESSING)
+                .processedRecords(0)
+                .processingProgress(0)
                 .startedAt(ZonedDateTime.now())
                 .createdBy("system") // TODO: получать из контекста безопасности
                 .build();

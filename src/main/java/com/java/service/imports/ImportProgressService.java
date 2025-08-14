@@ -33,7 +33,7 @@ public class ImportProgressService {
     /**
      * Отправляет обновление прогресса через WebSocket
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void sendProgressUpdate(ImportSession session) {
         log.debug("=== Отправка обновления прогресса для сессии {} ===", session.getId());
         // Ограничиваем частоту обновлений (не чаще раза в секунду)
@@ -48,20 +48,25 @@ public class ImportProgressService {
                 progress.getProcessedRows(),
                 progress.getTotalRows());
 
-        // Обновляем связанную операцию
-        FileOperation operation = session.getFileOperation();
-        operation.setProcessingProgress(progress.getProgressPercentage());
-        if (progress.getProcessedRows() != null) {
-            operation.setProcessedRecords(progress.getProcessedRows().intValue());
+        // Обновляем связанную операцию, загружая ее в новой транзакции
+        Long operationId = session.getFileOperation().getId();
+        FileOperation operation = fileOperationRepository.findById(operationId)
+                .orElse(null);
+        if (operation != null) {
+            operation.setProcessingProgress(progress.getProgressPercentage());
+            if (progress.getProcessedRows() != null) {
+                operation.setProcessedRecords(progress.getProcessedRows().intValue());
+            }
+            if (progress.getTotalRows() != null) {
+                operation.setTotalRecords(progress.getTotalRows().intValue());
+            }
+            // Сохраняем и сразу пишем в БД, чтобы прогресс был виден другим транзакциям
+            fileOperationRepository.saveAndFlush(operation);
+        } else {
+            log.warn("Не найдена операция файла для обновления прогресса, ID: {}", operationId);
         }
-        if (progress.getTotalRows() != null) {
-            operation.setTotalRecords(progress.getTotalRows().intValue());
-        }
-        // Сохраняем и сразу пишем в БД, чтобы прогресс был виден другим транзакциям
-        fileOperationRepository.saveAndFlush(operation);
 
         // Отправляем обновление через контроллер
-        Long operationId = session.getFileOperation().getId();
         log.debug("Отправка через WebSocket для операции ID: {}", operationId);
         try {
             progressController.sendProgressUpdate(operationId, progress);
@@ -75,7 +80,7 @@ public class ImportProgressService {
     /**
      * Отправляет уведомление о завершении импорта
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void sendCompletionNotification(ImportSession session) {
         ImportProgressDto progress = buildProgressDto(session);
         progress.setUpdateType("COMPLETED");
@@ -97,7 +102,7 @@ public class ImportProgressService {
     /**
      * Отправляет уведомление об ошибке
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void sendErrorNotification(ImportSession session, String errorMessage) {
         ImportProgressDto progress = buildProgressDto(session);
         progress.setUpdateType("ERROR");
