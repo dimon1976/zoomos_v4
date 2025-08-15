@@ -65,7 +65,7 @@
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <button type="button" class="btn btn-outline-primary me-2" onclick="refreshDashboard()">
+    <button type="button" id="refreshButton" class="btn btn-outline-primary me-2" onclick="refreshDashboard()">
         <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Обновить
     </button>
     <a th:href="@{/clients/create}" class="btn btn-primary">
@@ -562,7 +562,9 @@
     }
 
     function refreshDashboard() {
+        const refreshButton = document.getElementById('refreshButton');
         const refreshIcon = document.getElementById('refreshIcon');
+        refreshButton.disabled = true;
         refreshIcon.classList.add('fa-spin');
 
         // Обновляем статистику
@@ -576,10 +578,12 @@
             .then(stats => {
                 updateStats(stats);
                 loadOperations(currentPage);
+                showUpdateIndicator();
             })
             .catch(err => console.error('Ошибка обновления дашборда:', err))
             .finally(() => {
                 refreshIcon.classList.remove('fa-spin');
+                refreshButton.disabled = false;
             });
     }
 
