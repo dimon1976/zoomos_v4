@@ -8,6 +8,7 @@ import com.java.model.FileOperation;
 import com.java.repository.ClientRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.service.dashboard.DashboardService;
+import com.java.util.PathResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringBootVersion;
@@ -22,6 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.criteria.Predicate;
 import java.lang.management.ManagementFactory;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -37,6 +41,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final ClientRepository clientRepository;
     private final DashboardMapper dashboardMapper;
     private final Environment environment;
+    private final PathResolver pathResolver;
 
     @Override
     @Transactional(readOnly = true)
@@ -61,6 +66,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         // Файловая статистика
         FileStats fileStats = getFileStats();
+        DirectoryStats dirStats = getDirectorySizes();
 
         // Статистика за периоды
         PeriodStats periodStats = getPeriodStats();
@@ -81,8 +87,14 @@ public class DashboardServiceImpl implements DashboardService {
                 .exportOperations(exportOperations)
                 .processOperations(processOperations)
                 .totalFilesProcessed(fileStats.totalFiles())
-                .totalFileSizeBytes(fileStats.totalSizeBytes())
-                .totalFileSizeFormatted(fileStats.totalSizeFormatted())
+                .totalFileSizeBytes(dirStats.totalSizeBytes())
+                .totalFileSizeFormatted(dirStats.totalSizeFormatted())
+                .tempDirSizeBytes(dirStats.tempSizeBytes())
+                .tempDirSizeFormatted(dirStats.tempSizeFormatted())
+                .importDirSizeBytes(dirStats.importSizeBytes())
+                .importDirSizeFormatted(dirStats.importSizeFormatted())
+                .exportDirSizeBytes(dirStats.exportSizeBytes())
+                .exportDirSizeFormatted(dirStats.exportSizeFormatted())
                 .totalRecordsProcessed(fileStats.totalRecords())
                 .operationsToday(periodStats.today())
                 .operationsThisWeek(periodStats.thisWeek())
@@ -185,6 +197,46 @@ public class DashboardServiceImpl implements DashboardService {
         );
     }
 
+    private DirectoryStats getDirectorySizes() {
+        long tempSize = getDirectorySize(pathResolver.getAbsoluteTempDir());
+        long importSize = getDirectorySize(pathResolver.getAbsoluteImportDir());
+        long exportSize = getDirectorySize(pathResolver.getAbsoluteExportDir());
+        long total = tempSize + importSize + exportSize;
+
+        return new DirectoryStats(
+                tempSize,
+                importSize,
+                exportSize,
+                total,
+                formatFileSize(tempSize),
+                formatFileSize(importSize),
+                formatFileSize(exportSize),
+                formatFileSize(total)
+        );
+    }
+
+    private long getDirectorySize(Path path) {
+        if (path == null || !Files.exists(path)) {
+            return 0L;
+        }
+        try {
+            return Files.walk(path)
+                    .filter(Files::isRegularFile)
+                    .mapToLong(p -> {
+                        try {
+                            return Files.size(p);
+                        } catch (IOException e) {
+                            log.warn("Не удалось получить размер файла {}: {}", p, e.getMessage());
+                            return 0L;
+                        }
+                    })
+                    .sum();
+        } catch (IOException e) {
+            log.warn("Не удалось получить размер директории {}: {}", path, e.getMessage());
+            return 0L;
+        }
+    }
+
     private PeriodStats getPeriodStats() {
         ZonedDateTime now = ZonedDateTime.now();
         ZonedDateTime startOfDay = now.toLocalDate().atStartOfDay(now.getZone());
@@ -263,4 +315,8 @@ public class DashboardServiceImpl implements DashboardService {
     private record FileStats(Long totalFiles, Long totalSizeBytes, String totalSizeFormatted, Long totalRecords) {}
     private record PeriodStats(Long today, Long thisWeek, Long thisMonth) {}
     private record PerformanceStats(Double avgProcessingTime, Double successRate) {}
+    private record DirectoryStats(long tempSizeBytes, long importSizeBytes, long exportSizeBytes,
+                                  long totalSizeBytes, String tempSizeFormatted,
+                                  String importSizeFormatted, String exportSizeFormatted,
+                                  String totalSizeFormatted) {}
 }

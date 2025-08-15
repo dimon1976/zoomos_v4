@@ -83,7 +83,7 @@ public class DashboardController {
     /**
      * Принудительное обновление статистики
      */
-    @PostMapping("/refresh")
+    @GetMapping("/refresh")
     public ResponseEntity<DashboardStatsDto> refreshStats() {
         log.debug("Принудительное обновление статистики дашборда");
         DashboardStatsDto stats = dashboardService.getDashboardStats();

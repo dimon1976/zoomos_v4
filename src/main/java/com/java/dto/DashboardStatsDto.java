@@ -29,6 +29,12 @@ public class DashboardStatsDto {
     private Long totalFilesProcessed;
     private Long totalFileSizeBytes;
     private String totalFileSizeFormatted;
+    private Long tempDirSizeBytes;
+    private String tempDirSizeFormatted;
+    private Long importDirSizeBytes;
+    private String importDirSizeFormatted;
+    private Long exportDirSizeBytes;
+    private String exportDirSizeFormatted;
     private Long totalRecordsProcessed;
 
     // Статистика за период

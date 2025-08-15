@@ -39,8 +39,7 @@ public class CleanupService {
             Files.walkFileTree(tempDir, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    // Проверяем возраст файла
-                    Instant fileTime = attrs.creationTime().toInstant();
+                    Instant fileTime = attrs.lastModifiedTime().toInstant();
                     Instant cutoffTime = Instant.now().minus(24, ChronoUnit.HOURS);
 
                     if (fileTime.isBefore(cutoffTime)) {
@@ -49,6 +48,19 @@ public class CleanupService {
                             log.debug("Удален временный файл: {}", file.getFileName());
                         } catch (IOException e) {
                             log.warn("Не удалось удалить файл {}: {}", file, e.getMessage());
+                        }
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    if (!dir.equals(tempDir) && Files.isDirectory(dir)) {
+                        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
+                            if (!stream.iterator().hasNext()) {
+                                Files.delete(dir);
+                                log.debug("Удалена пустая директория: {}", dir);
+                            }
                         }
                     }
                     return FileVisitResult.CONTINUE;
@@ -79,8 +91,7 @@ public class CleanupService {
             Files.walkFileTree(importDir, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    // Проверяем возраст файла
-                    Instant fileTime = attrs.creationTime().toInstant();
+                    Instant fileTime = attrs.lastModifiedTime().toInstant();
                     Instant cutoffTime = Instant.now().minus(7, ChronoUnit.DAYS);
 
                     if (fileTime.isBefore(cutoffTime)) {
@@ -89,6 +100,19 @@ public class CleanupService {
                             log.debug("Удален старый файл импорта: {}", file.getFileName());
                         } catch (IOException e) {
                             log.warn("Не удалось удалить файл {}: {}", file, e.getMessage());
+                        }
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    if (!dir.equals(importDir) && Files.isDirectory(dir)) {
+                        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
+                            if (!stream.iterator().hasNext()) {
+                                Files.delete(dir);
+                                log.debug("Удалена пустая директория: {}", dir);
+                            }
                         }
                     }
                     return FileVisitResult.CONTINUE;
