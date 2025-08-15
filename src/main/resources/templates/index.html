@@ -605,15 +605,23 @@
 
     function formatDateTime(dateTime) {
         if (!dateTime) return '-';
-        let date;
+
+        let millis;
         if (Array.isArray(dateTime)) {
             const [y, m, d, h = 0, min = 0, s = 0] = dateTime;
-            date = new Date(Date.UTC(y, (m || 1) - 1, d || 1, h, min, s));
+            millis = Date.UTC(y, (m || 1) - 1, d || 1, h, min, s);
+        } else if (typeof dateTime === 'number') {
+            millis = dateTime < 1e12 ? dateTime * 1000 : dateTime;
+        } else if (typeof dateTime === 'string' && /^\d+$/.test(dateTime)) {
+            const num = parseInt(dateTime, 10);
+            millis = num < 1e12 ? num * 1000 : num;
         } else {
-            date = new Date(dateTime);
+            millis = Date.parse(dateTime);
         }
-        if (isNaN(date.getTime())) return '-';
-        return date.toLocaleString('ru-RU', {
+
+        if (isNaN(millis)) return '-';
+
+        return new Date(millis).toLocaleString('ru-RU', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
