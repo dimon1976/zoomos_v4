@@ -177,6 +177,11 @@
                         <span th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</span>
                     </div>
                     <small class="text-muted">Общий объем</small>
+                    <div class="file-size mt-1">
+                        <div>Temp: <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0 МБ</span></div>
+                        <div>Импорт: <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0 МБ</span></div>
+                        <div>Экспорт: <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0 МБ</span></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -371,7 +376,10 @@
         document.getElementById('failedOperations').textContent = stats.failedOperations || 0;
         document.getElementById('totalClients').textContent = stats.totalClients || 0;
         document.getElementById('totalFiles').textContent = stats.totalFilesProcessed || 0;
-        document.getElementById('totalSize').textContent = stats.totalFileSizeFormatted || '0 МБ';
+        document.querySelector('#totalSize span').textContent = stats.totalFileSizeFormatted || '0 МБ';
+        document.getElementById('tempSize').textContent = stats.tempDirSizeFormatted || '0 МБ';
+        document.getElementById('importSize').textContent = stats.importDirSizeFormatted || '0 МБ';
+        document.getElementById('exportSize').textContent = stats.exportDirSizeFormatted || '0 МБ';
 
         if (stats.systemInfo) {
             const uptimeEl = document.getElementById('uptimeDisplay');
@@ -558,12 +566,18 @@
         refreshIcon.classList.add('fa-spin');
 
         // Обновляем статистику
-        fetch('/api/dashboard/refresh', { method: 'POST' })
-            .then(response => response.json())
+        fetch('/api/dashboard/refresh')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка обновления');
+                }
+                return response.json();
+            })
             .then(stats => {
                 updateStats(stats);
                 loadOperations(currentPage);
             })
+            .catch(err => console.error('Ошибка обновления дашборда:', err))
             .finally(() => {
                 refreshIcon.classList.remove('fa-spin');
             });
@@ -591,7 +605,15 @@
 
     function formatDateTime(dateTime) {
         if (!dateTime) return '-';
-        return new Date(dateTime).toLocaleString('ru-RU', {
+        let date;
+        if (Array.isArray(dateTime)) {
+            const [y, m, d, h = 0, min = 0, s = 0] = dateTime;
+            date = new Date(Date.UTC(y, (m || 1) - 1, d || 1, h, min, s));
+        } else {
+            date = new Date(dateTime);
+        }
+        if (isNaN(date.getTime())) return '-';
+        return date.toLocaleString('ru-RU', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
