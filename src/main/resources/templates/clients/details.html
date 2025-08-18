@@ -804,8 +804,14 @@
         }
 
         let millis;
-        if (typeof dateTime === 'number') {
+        if (Array.isArray(dateTime)) {
+            const [y, m, d, h = 0, min = 0, s = 0] = dateTime;
+            millis = Date.UTC(y, (m || 1) - 1, d || 1, h, min, s);
+        } else if (typeof dateTime === 'number') {
             millis = dateTime < 1e12 ? dateTime * 1000 : dateTime;
+        } else if (typeof dateTime === 'string' && /^\d+$/.test(dateTime)) {
+            const num = parseInt(dateTime, 10);
+            millis = num < 1e12 ? num * 1000 : num;
         } else {
             millis = Date.parse(dateTime);
         }
@@ -814,7 +820,13 @@
             return '-';
         }
 
-        return new Date(millis).toLocaleString('ru-RU');
+        return new Date(millis).toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     }
     /*]]*/
 </script>
