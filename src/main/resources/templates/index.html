@@ -1,108 +1,646 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{layout/main :: html(
-        'Главная - Обработка файлов',
+        'Дашборд - Обработка файлов',
         ~{::section},
         ~{::script},
         ~{::style},
-        'Главная страница',
+        'Дашборд',
         ~{::.page-actions}
       )}">
 <head>
-    <title>Главная - Обработка файлов</title>
+    <title>Дашборд - Обработка файлов</title>
     <style>
-        .feature-icon {
-            font-size: 2rem;
-            height: 3rem;
-            width: 3rem;
-            border-radius: 0.75rem;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1rem;
+        .stats-card {
+            transition: transform 0.2s ease;
         }
-        .card-hover:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .stats-icon {
+            font-size: 2.5rem;
+            opacity: 0.8;
+        }
+        .filter-panel {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .operations-table {
+            font-size: 0.9rem;
+        }
+        .status-badge {
+            font-size: 0.8rem;
+        }
+        .system-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .file-size {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+        .progress-compact {
+            height: 15px;
+        }
+        .auto-update-indicator {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            z-index: 1000;
+            transition: opacity 0.3s ease;
+        }
+        .pulse {
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
     </style>
 </head>
 <body>
-<!-- Действия страницы (кнопки справа от заголовка) -->
+<!-- Действия страницы -->
 <div class="page-actions">
+    <button type="button" id="refreshButton" class="btn btn-outline-primary me-2" onclick="refreshDashboard()">
+        <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Обновить
+    </button>
     <a th:href="@{/clients/create}" class="btn btn-primary">
         <i class="fas fa-plus me-1"></i>Новый клиент
     </a>
 </div>
 
+<!-- Индикатор автообновления -->
+<div class="auto-update-indicator">
+    <span class="badge bg-success" id="updateIndicator" style="display: none;">
+        <i class="fas fa-wifi me-1"></i>Обновлено
+    </span>
+</div>
+
 <section>
-    <!-- Приветствие -->
-    <div class="p-5 mb-4 bg-light rounded-3">
-        <div class="container-fluid py-4">
-            <h1 class="display-5 fw-bold">Приложение для обработки файлов</h1>
-            <p class="col-md-8 fs-4">Загружайте, обрабатывайте и выгружайте данные для ваших клиентов</p>
+    <!-- Статистические карточки -->
+    <div class="row mb-4" id="statsCards">
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="h4 mb-0" id="totalOperations">
+                                <span th:text="${dashboardStats.totalOperations}">0</span>
+                            </div>
+                            <small>Всего операций</small>
+                        </div>
+                        <i class="fas fa-tasks stats-icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="h4 mb-0" id="completedOperations">
+                                <span th:text="${dashboardStats.completedOperations}">0</span>
+                            </div>
+                            <small>Завершено</small>
+                        </div>
+                        <i class="fas fa-check-circle stats-icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="h4 mb-0" id="activeOperations">
+                                <span th:text="${dashboardStats.activeOperations}">0</span>
+                            </div>
+                            <small>В процессе</small>
+                        </div>
+                        <i class="fas fa-clock stats-icon"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card bg-danger text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="h4 mb-0" id="failedOperations">
+                                <span th:text="${dashboardStats.failedOperations}">0</span>
+                            </div>
+                            <small>С ошибками</small>
+                        </div>
+                        <i class="fas fa-exclamation-triangle stats-icon"></i>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Основные функции -->
-    <h2 class="mb-4">Основные функции</h2>
-    <div class="row g-4 py-3">
+    <!-- Дополнительная статистика -->
+    <div class="row mb-4">
         <div class="col-md-4">
-            <div class="card h-100 card-hover">
+            <div class="card stats-card">
                 <div class="card-body text-center">
-                    <div class="feature-icon bg-primary text-white">
-                        <i class="fas fa-users"></i>
+                    <i class="fas fa-users text-info stats-icon"></i>
+                    <div class="h4 mt-2" id="totalClients">
+                        <span th:text="${dashboardStats.totalClients}">0</span>
                     </div>
-                    <h3 class="card-title">Клиенты</h3>
-                    <p class="card-text">Управление клиентами и их данными.</p>
-                    <a th:href="@{/clients}" class="btn btn-outline-primary mt-3">
-                        <i class="fas fa-arrow-right me-1"></i>Перейти
-                    </a>
+                    <small class="text-muted">Активных клиентов</small>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card h-100 card-hover">
+            <div class="card stats-card">
                 <div class="card-body text-center">
-                    <div class="feature-icon bg-success text-white">
-                        <i class="fas fa-file-import"></i>
+                    <i class="fas fa-file-alt text-secondary stats-icon"></i>
+                    <div class="h4 mt-2" id="totalFiles">
+                        <span th:text="${dashboardStats.totalFilesProcessed}">0</span>
                     </div>
-                    <h3 class="card-title">Обработка файлов</h3>
-                    <p class="card-text">Импорт, экспорт и преобразование данных.</p>
-                    <a th:href="@{/clients}" class="btn btn-outline-success mt-3">
-                        <i class="fas fa-file-upload me-1"></i>Начать
-                    </a>
+                    <small class="text-muted">Файлов обработано</small>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card h-100 card-hover">
+            <div class="card stats-card">
                 <div class="card-body text-center">
-                    <div class="feature-icon bg-info text-white">
-                        <i class="fas fa-tools"></i>
+                    <i class="fas fa-hdd text-primary stats-icon"></i>
+                    <div class="h4 mt-2" id="totalSize">
+                        <span th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</span>
                     </div>
-                    <h3 class="card-title">Утилиты</h3>
-                    <p class="card-text">Дополнительные инструменты для работы с данными.</p>
-                    <a th:href="@{/utils}" class="btn btn-outline-info mt-3">
-                        <i class="fas fa-cog me-1"></i>Инструменты
-                    </a>
+                    <small class="text-muted">Общий объем</small>
+                    <div class="file-size mt-1">
+                        <div>Temp: <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0 МБ</span></div>
+                        <div>Импорт: <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0 МБ</span></div>
+                        <div>Экспорт: <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0 МБ</span></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Последние операции -->
-    <h2 class="mt-5 mb-4">Последние операции</h2>
-    <div class="alert alert-info" role="alert">
-        <i class="fas fa-info-circle me-2"></i>Здесь будут отображаться последние файловые операции
+    <!-- Системная информация -->
+    <div class="card mb-4" th:if="${dashboardStats.systemInfo}">
+        <div class="card-header system-info">
+            <h6 class="card-title mb-0 text-white">
+                <i class="fas fa-server me-2"></i>Системная информация
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="row" id="systemInfo">
+                <div class="col-md-4">
+                    <small class="text-muted">Java:</small>
+                    <div th:text="${dashboardStats.systemInfo.javaVersion}">Java 17</div>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Память:</small>
+                    <div>
+                        <span th:text="${dashboardStats.systemInfo.usedMemoryMb}">512</span> /
+                        <span th:text="${dashboardStats.systemInfo.totalMemoryMb}">1024</span> МБ
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted">Время работы:</small>
+                    <div id="uptimeDisplay" th:text="${dashboardStats.systemInfo.uptimeMinutes} + ' мин'">120 мин</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Панель фильтров -->
+    <div class="filter-panel">
+        <form id="filterForm" class="row g-3">
+            <div class="col-md-3">
+                <label for="clientFilter" class="form-label">Клиент</label>
+                <select class="form-select" id="clientFilter" name="clientId">
+                    <option value="">Все клиенты</option>
+                    <option th:each="client : ${clients}"
+                            th:value="${client.id}"
+                            th:text="${client.name}">Клиент</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="operationTypeFilter" class="form-label">Тип операции</label>
+                <select class="form-select" id="operationTypeFilter" name="operationType">
+                    <option value="">Все типы</option>
+                    <option th:each="type : ${operationTypes}"
+                            th:value="${type}"
+                            th:text="${type == T(com.java.model.FileOperation$OperationType).IMPORT ? 'Импорт' :
+                                     type == T(com.java.model.FileOperation$OperationType).EXPORT ? 'Экспорт' :
+                                     'Обработка'}">Тип</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="statusFilter" class="form-label">Статус</label>
+                <select class="form-select" id="statusFilter" name="status">
+                    <option value="">Все статусы</option>
+                    <option th:each="status : ${operationStatuses}"
+                            th:value="${status}"
+                            th:text="${status == T(com.java.model.FileOperation$OperationStatus).PENDING ? 'Ожидание' :
+                                     status == T(com.java.model.FileOperation$OperationStatus).PROCESSING ? 'В процессе' :
+                                     status == T(com.java.model.FileOperation$OperationStatus).COMPLETED ? 'Завершено' :
+                                     'Ошибка'}">Статус</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="dateFromFilter" class="form-label">Дата с</label>
+                <input type="date" class="form-control" id="dateFromFilter" name="dateFrom">
+            </div>
+            <div class="col-md-2">
+                <label for="dateToFilter" class="form-label">Дата по</label>
+                <input type="date" class="form-control" id="dateToFilter" name="dateTo">
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
+                <button type="button" class="btn btn-primary w-100" onclick="applyFilters()">
+                    <i class="fas fa-filter"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Таблица операций -->
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-list me-2"></i>Последние операции
+                </h6>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                    <label class="form-check-label" for="autoRefresh">
+                        Автообновление
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover operations-table" id="operationsTable">
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Клиент</th>
+                        <th>Тип</th>
+                        <th>Файл</th>
+                        <th>Статус</th>
+                        <th>Прогресс</th>
+                        <th>Размер</th>
+                        <th>Начало</th>
+                        <th>Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody id="operationsTableBody">
+                    <!-- Данные загружаются через AJAX -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Пагинация -->
+            <nav id="paginationContainer" class="mt-3"></nav>
+
+            <!-- Состояние загрузки -->
+            <div id="loadingState" class="text-center py-3" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+
+            <!-- Пустое состояние -->
+            <div id="emptyState" class="text-center py-4" style="display: none;">
+                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                <h5>Нет операций</h5>
+                <p class="text-muted">Попробуйте изменить фильтры или создать новую операцию</p>
+            </div>
+        </div>
     </div>
 </section>
 
-<script>
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    let stompClient = null;
+    let currentPage = 0;
+    let currentFilters = {};
+    let autoRefreshEnabled = true;
+
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('Домашняя страница загружена');
+        connectWebSocket();
+        loadOperations();
+
+        // Обработчик автообновления
+        document.getElementById('autoRefresh').addEventListener('change', function() {
+            autoRefreshEnabled = this.checked;
+        });
+
+        // Установка текущей даты в фильтр "до"
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('dateToFilter').value = today;
     });
+
+    function connectWebSocket() {
+        const socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function(frame) {
+            console.log('Connected to WebSocket for dashboard');
+
+            // Подписываемся на обновления статистики
+            stompClient.subscribe('/topic/dashboard-stats', function(message) {
+                if (autoRefreshEnabled) {
+                    const stats = JSON.parse(message.body);
+                    updateStats(stats);
+                    showUpdateIndicator();
+                }
+            });
+
+        }, function(error) {
+            console.error('WebSocket connection error:', error);
+            // Повторное подключение через 5 секунд
+            setTimeout(connectWebSocket, 5000);
+        });
+    }
+
+    function updateStats(stats) {
+        document.getElementById('totalOperations').textContent = stats.totalOperations || 0;
+        document.getElementById('completedOperations').textContent = stats.completedOperations || 0;
+        document.getElementById('activeOperations').textContent = stats.activeOperations || 0;
+        document.getElementById('failedOperations').textContent = stats.failedOperations || 0;
+        document.getElementById('totalClients').textContent = stats.totalClients || 0;
+        document.getElementById('totalFiles').textContent = stats.totalFilesProcessed || 0;
+        document.querySelector('#totalSize span').textContent = stats.totalFileSizeFormatted || '0 МБ';
+        document.getElementById('tempSize').textContent = stats.tempDirSizeFormatted || '0 МБ';
+        document.getElementById('importSize').textContent = stats.importDirSizeFormatted || '0 МБ';
+        document.getElementById('exportSize').textContent = stats.exportDirSizeFormatted || '0 МБ';
+
+        if (stats.systemInfo) {
+            const uptimeEl = document.getElementById('uptimeDisplay');
+            if (uptimeEl) {
+                uptimeEl.textContent = stats.systemInfo.uptimeMinutes + ' мин';
+            }
+        }
+    }
+
+    function showUpdateIndicator() {
+        const indicator = document.getElementById('updateIndicator');
+        indicator.style.display = 'block';
+        indicator.classList.add('pulse');
+
+        setTimeout(() => {
+            indicator.classList.remove('pulse');
+            setTimeout(() => {
+                indicator.style.display = 'none';
+            }, 500);
+        }, 2000);
+    }
+
+    function applyFilters() {
+        currentPage = 0;
+        const formData = new FormData(document.getElementById('filterForm'));
+        currentFilters = Object.fromEntries(formData.entries());
+
+        // Удаляем пустые значения
+        Object.keys(currentFilters).forEach(key => {
+            if (!currentFilters[key]) {
+                delete currentFilters[key];
+            }
+        });
+
+        loadOperations();
+    }
+
+    function loadOperations(page = 0) {
+        showLoading(true);
+
+        const params = new URLSearchParams({
+            page: page,
+            size: 20,
+            ...currentFilters
+        });
+
+        fetch('/api/dashboard/operations?' + params.toString())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка загрузки операций');
+                }
+                return response.json();
+            })
+            .then(pageData => {
+                currentPage = pageData.number;
+                displayOperations(pageData.content);
+                updatePagination(pageData);
+                showLoading(false);
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки операций:', error);
+                showError();
+                showLoading(false);
+            });
+    }
+
+    function displayOperations(operations) {
+        const tbody = document.getElementById('operationsTableBody');
+        const emptyState = document.getElementById('emptyState');
+
+        if (!operations || operations.length === 0) {
+            tbody.innerHTML = '';
+            emptyState.style.display = 'block';
+            return;
+        }
+
+        emptyState.style.display = 'none';
+
+        tbody.innerHTML = operations.map(op => `
+            <tr class="operation-row">
+                <td>${op.id}</td>
+                <td>
+                    <a href="/clients/${op.clientId}" class="text-decoration-none">
+                        ${op.clientName}
+                    </a>
+                </td>
+                <td>
+                    <i class="fas fa-${getOperationIcon(op.operationType)} me-1"></i>
+                    ${op.operationTypeDisplay}
+                </td>
+                <td class="text-truncate" style="max-width: 200px;" title="${op.fileName}">
+                    ${op.fileName}
+                </td>
+                <td>
+                    <span class="badge status-badge ${getStatusClass(op.status)}">
+                        ${op.statusDisplay}
+                    </span>
+                </td>
+                <td>
+                    ${op.status === 'PROCESSING' && op.processingProgress !== null
+            ? `<div class="progress progress-compact">
+                               <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                    style="width: ${op.processingProgress}%"
+                                    title="${op.processingProgress}%">
+                               </div>
+                           </div>`
+            : (op.processingProgress !== null ? op.processingProgress + '%' : '-')}
+                </td>
+                <td class="file-size">${op.fileSizeFormatted || '-'}</td>
+                <td>${formatDateTime(op.startedAt)}</td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <a href="/import/status/${op.id}" class="btn btn-outline-primary btn-sm"
+                           title="Просмотр деталей">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <a href="/clients/${op.clientId}" class="btn btn-outline-secondary btn-sm"
+                           title="Перейти к клиенту">
+                            <i class="fas fa-user"></i>
+                        </a>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function updatePagination(pageData) {
+        const container = document.getElementById('paginationContainer');
+        if (!pageData || pageData.totalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const prevDisabled = pageData.number === 0 ? 'disabled' : '';
+        const nextDisabled = pageData.number >= pageData.totalPages - 1 ? 'disabled' : '';
+
+        container.innerHTML = `
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item ${prevDisabled}">
+                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.number - 1}); return false;">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">
+                            ${pageData.number + 1} / ${pageData.totalPages}
+                            <small class="text-muted ms-1">(${pageData.totalElements})</small>
+                        </span>
+                    </li>
+                    <li class="page-item ${nextDisabled}">
+                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.number + 1}); return false;">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        `;
+    }
+
+    function changeOperationsPage(page) {
+        if (page < 0) return;
+        loadOperations(page);
+    }
+
+    function showLoading(show) {
+        document.getElementById('loadingState').style.display = show ? 'block' : 'none';
+    }
+
+    function showError() {
+        const tbody = document.getElementById('operationsTableBody');
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="text-center text-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Ошибка загрузки данных
+                </td>
+            </tr>
+        `;
+    }
+
+    function refreshDashboard() {
+        const refreshButton = document.getElementById('refreshButton');
+        const refreshIcon = document.getElementById('refreshIcon');
+        refreshButton.disabled = true;
+        refreshIcon.classList.add('fa-spin');
+
+        // Обновляем статистику
+        fetch('/api/dashboard/refresh')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка обновления');
+                }
+                return response.json();
+            })
+            .then(stats => {
+                updateStats(stats);
+                loadOperations(currentPage);
+                showUpdateIndicator();
+            })
+            .catch(err => console.error('Ошибка обновления дашборда:', err))
+            .finally(() => {
+                refreshIcon.classList.remove('fa-spin');
+                refreshButton.disabled = false;
+            });
+    }
+
+    // Вспомогательные функции
+    function getOperationIcon(type) {
+        switch(type) {
+            case 'IMPORT': return 'file-import';
+            case 'EXPORT': return 'file-export';
+            case 'PROCESS': return 'cogs';
+            default: return 'file';
+        }
+    }
+
+    function getStatusClass(status) {
+        switch(status) {
+            case 'PENDING': return 'bg-warning';
+            case 'PROCESSING': return 'bg-info';
+            case 'COMPLETED': return 'bg-success';
+            case 'FAILED': return 'bg-danger';
+            default: return 'bg-secondary';
+        }
+    }
+
+    function formatDateTime(dateTime) {
+        if (!dateTime) return '-';
+
+        let millis;
+        if (Array.isArray(dateTime)) {
+            const [y, m, d, h = 0, min = 0, s = 0] = dateTime;
+            millis = Date.UTC(y, (m || 1) - 1, d || 1, h, min, s);
+        } else if (typeof dateTime === 'number') {
+            millis = dateTime < 1e12 ? dateTime * 1000 : dateTime;
+        } else if (typeof dateTime === 'string' && /^\d+$/.test(dateTime)) {
+            const num = parseInt(dateTime, 10);
+            millis = num < 1e12 ? num * 1000 : num;
+        } else {
+            millis = Date.parse(dateTime);
+        }
+
+        if (isNaN(millis)) return '-';
+
+        return new Date(millis).toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    // Отключение WebSocket при уходе со страницы
+    window.addEventListener('beforeunload', function() {
+        if (stompClient && stompClient.connected) {
+            stompClient.disconnect();
+        }
+    });
+    /*]]>*/
 </script>
 </body>
 </html>
