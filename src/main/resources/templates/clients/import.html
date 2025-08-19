@@ -1,0 +1,275 @@
+<!-- src/main/resources/templates/clients/import.html -->
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Импорт'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Импорт'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Импорт'}">Клиент - Импорт</title>
+    <style>
+        .file-upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 0.5rem;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .file-upload-area:hover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        .file-upload-area.drag-over {
+            border-color: #28a745;
+            background-color: #e8f5e9;
+        }
+        .template-quick-access {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}/import/templates(id=${clientId})}" class="btn btn-outline-primary me-2">
+        <i class="fas fa-cog me-1"></i>Управление шаблонами
+    </a>
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К обзору
+    </a>
+</div>
+
+<section>
+    <!-- Навигация клиента -->
+    <div th:replace="~{clients/navigation :: client-nav(${clientId}, 'import')}"></div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Быстрый импорт файлов -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-import me-2"></i>Быстрый импорт файлов
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form th:action="@{/clients/{clientId}/import/upload(clientId=${clientId})}"
+                          method="post" enctype="multipart/form-data" id="quickImportForm">
+
+                        <div class="file-upload-area" id="fileUploadArea">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <h5>Перетащите файлы сюда или нажмите для выбора</h5>
+                            <p class="text-muted">Поддерживаемые форматы: CSV, Excel (XLS, XLSX), TXT</p>
+                            <input type="file" class="form-control d-none" id="files" name="files"
+                                   multiple required accept=".csv,.xlsx,.xls,.txt">
+                            <button type="button" class="btn btn-primary mt-3" onclick="document.getElementById('files').click()">
+                                <i class="fas fa-folder-open me-1"></i>Выбрать файлы
+                            </button>
+                        </div>
+
+                        <div id="selectedFiles" class="mt-4"></div>
+
+                        <div class="mt-3" id="uploadActions" style="display: none;">
+                            <button type="submit" class="btn btn-success" id="uploadBtn">
+                                <i class="fas fa-upload me-1"></i>Загрузить и анализировать
+                            </button>
+                            <button type="button" class="btn btn-secondary ms-2" onclick="clearFiles()">
+                                <i class="fas fa-times me-1"></i>Очистить
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="mt-4">
+                        <h6>Как это работает:</h6>
+                        <ol>
+                            <li>Выберите один или несколько файлов для импорта</li>
+                            <li>Система проанализирует структуру файлов</li>
+                            <li>Выберите подходящий шаблон импорта</li>
+                            <li>Запустите процесс импорта</li>
+                        </ol>
+                    </div>
+
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Совет:</strong> Вы можете загрузить несколько файлов одновременно.
+                        Максимальный размер каждого файла: 600 МБ.
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <!-- Шаблоны импорта -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">
+                        <i class="fas fa-cog me-2"></i>Шаблоны импорта
+                    </h6>
+                    <a th:href="@{/clients/{id}/import/templates/create(id=${clientId})}"
+                       class="btn btn-sm btn-success">
+                        <i class="fas fa-plus"></i>
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="template-quick-access" id="importTemplatesList">
+                        <div class="text-center py-3">
+                            <div class="spinner-border spinner-border-sm me-2"></div>
+                            Загрузка...
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <a th:href="@{/clients/{id}/import/templates(id=${clientId})}"
+                           class="btn btn-outline-primary btn-sm w-100">
+                            <i class="fas fa-list me-1"></i>Все шаблоны
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Возможности -->
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-info-circle me-2"></i>Возможности
+                    </h6>
+                    <ul class="small mb-0">
+                        <li>Автоматическое определение кодировки</li>
+                        <li>Поддержка CSV, Excel (XLS, XLSX)</li>
+                        <li>Валидация данных перед импортом</li>
+                        <li>Обработка больших файлов</li>
+                        <li>Детальные отчеты об ошибках</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    document.addEventListener('DOMContentLoaded', function() {
+        const clientId = /*[[${clientId}]]*/ 0;
+
+        // Загружаем шаблоны импорта
+        loadImportTemplates(clientId);
+
+        // Обработка выбора файлов
+        const filesInput = document.getElementById('files');
+        if (filesInput) {
+            filesInput.addEventListener('change', function() {
+                displaySelectedFiles(this.files);
+            });
+        }
+
+        // Drag and drop
+        const uploadArea = document.getElementById('fileUploadArea');
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('drag-over');
+            });
+
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('drag-over');
+            });
+
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('drag-over');
+
+                const files = e.dataTransfer.files;
+                document.getElementById('files').files = files;
+                displaySelectedFiles(files);
+            });
+        }
+    });
+
+    function loadImportTemplates(clientId) {
+        fetch(`/api/import/templates/client/${clientId}/summary`)
+            .then(response => response.json())
+            .then(templates => {
+                displayImportTemplates(templates);
+            })
+            .catch(error => {
+                document.getElementById('importTemplatesList').innerHTML =
+                    '<div class="text-muted">Ошибка загрузки шаблонов</div>';
+            });
+    }
+
+    function displayImportTemplates(templates) {
+        const container = document.getElementById('importTemplatesList');
+        if (templates.length === 0) {
+            container.innerHTML = '<div class="text-muted">Нет шаблонов</div>';
+            return;
+        }
+
+        const html = templates.slice(0, 5).map(template => `
+            <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                <div>
+                    <a href="/clients/${clientId}/import/templates/${template.id}" class="text-decoration-none">
+                        <strong>${template.name}</strong>
+                    </a>
+                    <br><small class="text-muted">${template.entityType}</small>
+                </div>
+                <a href="/clients/${clientId}/import/templates/${template.id}/edit"
+                   class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-edit"></i>
+                </a>
+            </div>
+        `).join('');
+
+        container.innerHTML = html;
+    }
+
+    function displaySelectedFiles(files) {
+        const container = document.getElementById('selectedFiles');
+        const uploadActions = document.getElementById('uploadActions');
+
+        if (!files || files.length === 0) {
+            container.innerHTML = '';
+            uploadActions.style.display = 'none';
+            return;
+        }
+
+        let html = '<h6>Выбранные файлы:</h6><ul class="list-group">';
+        let totalSize = 0;
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const size = file.size / 1048576; // в МБ
+            totalSize += size;
+
+            const sizeClass = size > 600 ? 'text-danger' : 'text-success';
+            const sizeWarning = size > 600 ? ' (превышен лимит!)' : '';
+
+            html += `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-file me-2"></i>${file.name}</span>
+                    <span class="badge bg-secondary ${sizeClass}">${size.toFixed(2)} МБ${sizeWarning}</span>
+                </li>
+            `;
+        }
+
+        html += '</ul>';
+        html += `<p class="mt-2 text-muted">Общий размер: ${totalSize.toFixed(2)} МБ</p>`;
+
+        container.innerHTML = html;
+        uploadActions.style.display = 'block';
+    }
+
+    function clearFiles() {
+        document.getElementById('files').value = '';
+        document.getElementById('selectedFiles').innerHTML = '';
+        document.getElementById('uploadActions').style.display = 'none';
+    }
+    /*]]>*/
+</script>
+</body>
+</html>
