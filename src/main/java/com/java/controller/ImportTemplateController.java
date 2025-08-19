@@ -1,5 +1,6 @@
 package com.java.controller;
 
+import com.java.constants.UrlConstants;
 import com.java.dto.ImportTemplateDto;
 import com.java.model.enums.EntityType;
 import com.java.service.EntityFieldService;
@@ -20,7 +21,6 @@ import java.util.List;
  * Контроллер для управления шаблонами импорта
  */
 @Controller
-@RequestMapping("/import/templates")
 @RequiredArgsConstructor
 @Slf4j
 public class ImportTemplateController {
@@ -32,200 +32,228 @@ public class ImportTemplateController {
     /**
      * Отображение списка шаблонов клиента
      */
-    @GetMapping("/client/{clientId}")
-    public String listClientTemplates(@PathVariable Long clientId, Model model) {
+    @GetMapping(UrlConstants.CLIENT_IMPORT_TEMPLATES)
+    public String listClientTemplates(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET запрос на получение шаблонов клиента ID: {}", clientId);
 
-        List<ImportTemplateDto> templates = templateService.getClientTemplates(clientId);
-        model.addAttribute("templates", templates);
-        model.addAttribute("clientId", clientId);
-        model.addAttribute("clients", clientService.getAllClients());
-
-        return "import/templates/list";
+        return clientService.getClientById(clientId)
+                .map(client -> {
+                    List<ImportTemplateDto> templates = templateService.getClientTemplates(clientId);
+                    model.addAttribute("templates", templates);
+                    model.addAttribute("client", client);
+                    model.addAttribute("clientId", clientId);
+                    return "clients/import/templates/list";
+                })
+                .orElseGet(() -> {
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент не найден");
+                    return "redirect:" + UrlConstants.CLIENTS;
+                });
     }
 
     /**
      * Форма создания нового шаблона
      */
-    @GetMapping("/client/{clientId}/create")
-    public String showCreateForm(@PathVariable Long clientId, Model model) {
+    @GetMapping(UrlConstants.CLIENT_IMPORT_TEMPLATES_CREATE)
+    public String showCreateForm(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET запрос на отображение формы создания шаблона для клиента ID: {}", clientId);
 
-        ImportTemplateDto template = new ImportTemplateDto();
-        template.setClientId(clientId);
-
-        model.addAttribute("template", template);
-        model.addAttribute("clientId", clientId);
-        populateAvailableFields(model, template);
-
-        return "import/templates/form";
+        return clientService.getClientById(clientId)
+                .map(client -> {
+                    ImportTemplateDto template = new ImportTemplateDto();
+                    template.setClientId(clientId);
+                    model.addAttribute("template", template);
+                    model.addAttribute("client", client);
+                    model.addAttribute("clientId", clientId);
+                    populateAvailableFields(model, template);
+                    return "clients/import/templates/form";
+                })
+                .orElseGet(() -> {
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент не найден");
+                    return "redirect:" + UrlConstants.CLIENTS;
+                });
     }
 
     /**
      * Создание нового шаблона
      */
-    @PostMapping("/create")
-    public String createTemplate(@Valid @ModelAttribute ImportTemplateDto template,
+    @PostMapping(UrlConstants.CLIENT_IMPORT_TEMPLATES_CREATE)
+    public String createTemplate(@PathVariable Long clientId,
+                                 @Valid @ModelAttribute ImportTemplateDto template,
                                  BindingResult bindingResult,
                                  Model model,
                                  RedirectAttributes redirectAttributes) {
         log.debug("POST запрос на создание шаблона: {}", template.getName());
 
+        template.setClientId(clientId);
+
         if (bindingResult.hasErrors()) {
             populateAvailableFields(model, template);
-            return "import/templates/form";
+            model.addAttribute("clientId", clientId);
+            return "clients/import/templates/form";
         }
 
         try {
             ImportTemplateDto created = templateService.createTemplate(template);
             redirectAttributes.addFlashAttribute("successMessage",
                     "Шаблон '" + created.getName() + "' успешно создан");
-
-            return "redirect:/import/templates/" + created.getId();
-
+            return "redirect:" + UrlConstants.CLIENT_IMPORT_TEMPLATE_DETAIL
+                    .replace("{clientId}", clientId.toString())
+                    .replace("{templateId}", created.getId().toString());
         } catch (Exception e) {
             log.error("Ошибка создания шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
             populateAvailableFields(model, template);
-            return "import/templates/form";
+            model.addAttribute("clientId", clientId);
+            return "clients/import/templates/form";
         }
     }
 
     /**
      * Просмотр деталей шаблона
      */
-    @GetMapping("/{templateId}")
-    public String viewTemplate(@PathVariable Long templateId,
+    @GetMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_DETAIL)
+    public String viewTemplate(@PathVariable Long clientId,
+                               @PathVariable Long templateId,
                                Model model,
                                RedirectAttributes redirectAttributes) {
-        log.debug("GET запрос на просмотр шаблона ID: {}", templateId);
+        log.debug("GET запрос на просмотр шаблона ID: {} для клиента ID: {}", templateId, clientId);
 
         return templateService.getTemplate(templateId)
+                .filter(template -> template.getClientId().equals(clientId))
                 .map(template -> {
                     model.addAttribute("template", template);
-                    model.addAttribute("clients", clientService.getAllClients());
-                    return "import/templates/view";
+                    model.addAttribute("clientId", clientId);
+                    return "clients/import/templates/view";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Шаблон не найден");
-                    return "redirect:/clients";
+                    redirectAttributes.addFlashAttribute("errorMessage", "Шаблон не найден");
+                    return "redirect:" + UrlConstants.CLIENT_IMPORT_TEMPLATES
+                            .replace("{clientId}", clientId.toString());
                 });
     }
 
     /**
      * Форма редактирования шаблона
      */
-    @GetMapping("/{templateId}/edit")
-    public String showEditForm(@PathVariable Long templateId,
+    @GetMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_EDIT)
+    public String showEditForm(@PathVariable Long clientId,
+                               @PathVariable Long templateId,
                                Model model,
                                RedirectAttributes redirectAttributes) {
-        log.debug("GET запрос на редактирование шаблона ID: {}", templateId);
+        log.debug("GET запрос на редактирование шаблона ID: {} для клиента ID: {}", templateId, clientId);
 
         return templateService.getTemplate(templateId)
+                .filter(template -> template.getClientId().equals(clientId))
                 .map(template -> {
                     model.addAttribute("template", template);
                     model.addAttribute("templateId", templateId);
+                    model.addAttribute("clientId", clientId);
                     populateAvailableFields(model, template);
-                    return "import/templates/form";
+                    return "clients/import/templates/form";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Шаблон не найден");
-                    return "redirect:/clients";
+                    redirectAttributes.addFlashAttribute("errorMessage", "Шаблон не найден");
+                    return "redirect:" + UrlConstants.CLIENT_IMPORT_TEMPLATES
+                            .replace("{clientId}", clientId.toString());
                 });
     }
 
     /**
      * Обновление шаблона
      */
-    @PostMapping("/{templateId}/edit")
-    public String updateTemplate(@PathVariable Long templateId,
+    @PostMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_EDIT)
+    public String updateTemplate(@PathVariable Long clientId,
+                                 @PathVariable Long templateId,
                                  @Valid @ModelAttribute ImportTemplateDto template,
                                  BindingResult bindingResult,
                                  Model model,
                                  RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на обновление шаблона ID: {}", templateId);
+        log.debug("POST запрос на обновление шаблона ID: {} для клиента ID: {}", templateId, clientId);
 
         if (bindingResult.hasErrors()) {
             populateAvailableFields(model, template);
-            return "import/templates/form";
+            model.addAttribute("templateId", templateId);
+            model.addAttribute("clientId", clientId);
+            return "clients/import/templates/form";
         }
 
         try {
             ImportTemplateDto updated = templateService.updateTemplate(templateId, template);
             redirectAttributes.addFlashAttribute("successMessage",
                     "Шаблон '" + updated.getName() + "' успешно обновлен");
-
-            return "redirect:/import/templates/" + templateId;
-
+            return "redirect:" + UrlConstants.CLIENT_IMPORT_TEMPLATE_DETAIL
+                    .replace("{clientId}", clientId.toString())
+                    .replace("{templateId}", templateId.toString());
         } catch (Exception e) {
             log.error("Ошибка обновления шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
             populateAvailableFields(model, template);
-            return "import/templates/form";
+            model.addAttribute("templateId", templateId);
+            model.addAttribute("clientId", clientId);
+            return "clients/import/templates/form";
         }
-    }
-
-    private void populateAvailableFields(Model model, ImportTemplateDto template) {
-        model.addAttribute("availableFields", fieldService.getFields(template.getEntityType()));
-    }
-
-
-    /**
-     * Возвращает список доступных полей для заданного типа сущности
-     */
-    @GetMapping("/available-fields")
-    @ResponseBody
-    public List<String> getAvailableFields(@RequestParam EntityType entityType) {
-        return fieldService.getFields(entityType);
     }
 
     /**
      * Удаление шаблона
      */
-    @PostMapping("/{templateId}/delete")
-    public String deleteTemplate(@PathVariable Long templateId,
-                                 @RequestParam Long clientId,
+    @PostMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_DELETE)
+    public String deleteTemplate(@PathVariable Long clientId,
+                                 @PathVariable Long templateId,
                                  RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на удаление шаблона ID: {}", templateId);
+        log.debug("POST запрос на удаление шаблона ID: {} для клиента ID: {}", templateId, clientId);
 
         try {
             templateService.deleteTemplate(templateId);
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Шаблон успешно удален");
+            redirectAttributes.addFlashAttribute("successMessage", "Шаблон успешно удален");
         } catch (Exception e) {
             log.error("Ошибка удаления шаблона", e);
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Ошибка удаления шаблона: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", "Ошибка удаления шаблона: " + e.getMessage());
         }
 
-        return "redirect:/import/templates/client/" + clientId;
+        return "redirect:" + UrlConstants.CLIENT_IMPORT_TEMPLATES
+                .replace("{clientId}", clientId.toString());
     }
 
     /**
      * Клонирование шаблона
      */
-    @PostMapping("/{templateId}/clone")
-    public String cloneTemplate(@PathVariable Long templateId,
+    @PostMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_CLONE)
+    public String cloneTemplate(@PathVariable Long clientId,
+                                @PathVariable Long templateId,
                                 @RequestParam String newName,
-                                @RequestParam Long clientId,
+                                @RequestParam Long targetClientId,
                                 RedirectAttributes redirectAttributes) {
         log.debug("POST запрос на клонирование шаблона ID: {} с именем: {} для клиента {}",
-                templateId, newName, clientId);
+                templateId, newName, targetClientId);
 
         try {
-            ImportTemplateDto cloned = templateService.cloneTemplate(templateId, newName, clientId);
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Шаблон успешно клонирован");
-
-            return "redirect:/import/templates/" + cloned.getId();
-
+            ImportTemplateDto cloned = templateService.cloneTemplate(templateId, newName, targetClientId);
+            redirectAttributes.addFlashAttribute("successMessage", "Шаблон успешно клонирован");
+            return "redirect:" + UrlConstants.CLIENT_IMPORT_TEMPLATE_DETAIL
+                    .replace("{clientId}", targetClientId.toString())
+                    .replace("{templateId}", cloned.getId().toString());
         } catch (Exception e) {
             log.error("Ошибка клонирования шаблона", e);
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Ошибка клонирования шаблона: " + e.getMessage());
-            return "redirect:/import/templates/" + templateId;
+            redirectAttributes.addFlashAttribute("errorMessage", "Ошибка клонирования шаблона: " + e.getMessage());
+            return "redirect:" + UrlConstants.CLIENT_IMPORT_TEMPLATE_DETAIL
+                    .replace("{clientId}", clientId.toString())
+                    .replace("{templateId}", templateId.toString());
         }
+    }
+
+    private void populateAvailableFields(Model model, ImportTemplateDto template) {
+        if (template.getEntityType() != null) {
+            model.addAttribute("availableFields", fieldService.getFields(template.getEntityType()));
+        }
+    }
+
+    /**
+     * API для получения доступных полей
+     */
+    @GetMapping("/api/import/templates/available-fields")
+    @ResponseBody
+    public List<String> getAvailableFields(@RequestParam EntityType entityType) {
+        return fieldService.getFields(entityType);
     }
 }

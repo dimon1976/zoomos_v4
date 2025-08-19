@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Статистика'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Статистика'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Статистика клиента</title>
+    <style>
+        .stats-card {
+            transition: transform 0.2s ease;
+        }
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .chart-container {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions">
+    <a th:href="@{/statistics/client/{id}(id=${clientId})}" class="btn btn-primary me-2">
+        <i class="fas fa-chart-line me-1"></i>Анализ статистики
+    </a>
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К обзору
+    </a>
+</div>
+
+<section>
+    <!-- Навигация клиента -->
+    <div th:replace="~{clients/navigation :: client-nav(${clientId}, 'statistics')}"></div>
+
+    <!-- Информация о клиенте -->
+    <div th:replace="~{clients/navigation :: client-info(${client})}"></div>
+
+    <!-- Основная статистика -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stats-card bg-primary text-white">
+                <div class="card-body text-center">
+                    <div class="h4 mb-0" id="totalExports">0</div>
+                    <small>Всего экспортов</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card bg-success text-white">
+                <div class="card-body text-center">
+                    <div class="h4 mb-0" id="successfulExports">0</div>
+                    <small>Успешных экспортов</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card bg-info text-white">
+                <div class="card-body text-center">
+                    <div class="h4 mb-0" id="totalRecords">0</div>
+                    <small>Обработано записей</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card bg-warning text-white">
+                <div class="card-body text-center">
+                    <div class="h4 mb-0" id="avgProcessingTime">0 мин</div>
+                    <small>Среднее время</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Графики и диаграммы -->
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>Динамика экспортов
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <i class="fas fa-chart-line fa-3x mb-3"></i>
+                        <h5>График будет здесь</h5>
+                        <p>Динамика количества экспортов по датам</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-pie-chart me-2"></i>Распределение по типам
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <i class="fas fa-chart-pie fa-3x mb-3"></i>
+                        <h5>Диаграмма будет здесь</h5>
+                        <p>Распределение экспортов по типам сущностей</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Детальная информация -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Сводка
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Первый экспорт:</label>
+                        <div id="firstExportDate" class="text-muted">-</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Последний экспорт:</label>
+                        <div id="lastExportDate" class="text-muted">-</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Самый большой файл:</label>
+                        <div id="largestFileSize" class="text-muted">-</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Средний размер файла:</label>
+                        <div id="avgFileSize" class="text-muted">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-list me-2"></i>Популярные шаблоны
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="popularTemplates">
+                        <div class="text-muted text-center">Данные загружаются...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Быстрые действия -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-bolt me-2"></i>Быстрые действия
+                    </h6>
+                    <div class="btn-group" role="group">
+                        <a th:href="@{/statistics/client/{id}(id=${clientId})}" class="btn btn-outline-primary">
+                            <i class="fas fa-chart-line me-1"></i>Подробный анализ
+                        </a>
+                        <a th:href="@{/clients/{id}/export(id=${clientId})}" class="btn btn-outline-success">
+                            <i class="fas fa-file-export me-1"></i>Новый экспорт
+                        </a>
+                        <a th:href="@{/clients/{id}/export/templates(id=${clientId})}" class="btn btn-outline-info">
+                            <i class="fas fa-cog me-1"></i>Настроить шаблоны
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    document.addEventListener('DOMContentLoaded', function() {
+        const clientId = /*[[${clientId}]]*/ 0;
+        loadClientStatistics(clientId);
+    });
+
+    function loadClientStatistics(clientId) {
+        // Имитация загрузки статистики
+        // В реальном приложении здесь будет API запрос
+        setTimeout(() => {
+            // Обновляем основные показатели
+            document.getElementById('totalExports').textContent = '12';
+            document.getElementById('successfulExports').textContent = '11';
+            document.getElementById('totalRecords').textContent = '1,250';
+            document.getElementById('avgProcessingTime').textContent = '3.5 мин';
+
+            // Обновляем детальную информацию
+            document.getElementById('firstExportDate').textContent = '15.01.2025';
+            document.getElementById('lastExportDate').textContent = '19.01.2025';
+            document.getElementById('largestFileSize').textContent = '15.2 МБ';
+            document.getElementById('avgFileSize').textContent = '2.8 МБ';
+
+            // Загружаем популярные шаблоны
+            loadPopularTemplates(clientId);
+        }, 1000);
+    }
+
+    function loadPopularTemplates(clientId) {
+        // Заглушка для популярных шаблонов
+        const templates = [
+            { name: 'Стандартный экспорт', count: 8 },
+            { name: 'Отчет по товарам', count: 3 },
+            { name: 'Анализ цен', count: 1 }
+        ];
+
+        const container = document.getElementById('popularTemplates');
+        container.innerHTML = templates.map(template => `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small">${template.name}</span>
+                <span class="badge bg-primary">${template.count}</span>
+            </div>
+        `).join('');
+    }
+    /*]]>*/
+</script>
+</body>
+</html>
