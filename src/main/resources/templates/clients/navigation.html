@@ -1,0 +1,69 @@
+<!-- src/main/resources/templates/clients/navigation.html -->
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Navigation Fragment</title>
+</head>
+<body>
+
+<!-- Навигация для страниц клиента -->
+<nav class="nav nav-pills nav-justified mb-4" th:fragment="client-nav(clientId, activePage)">
+    <a class="nav-link"
+       th:classappend="${activePage == 'overview'} ? 'active'"
+       th:href="@{/clients/{id}(id=${clientId})}">
+        <i class="fas fa-home me-1"></i>Обзор
+    </a>
+    <a class="nav-link"
+       th:classappend="${activePage == 'import'} ? 'active'"
+       th:href="@{/clients/{id}/import(id=${clientId})}">
+        <i class="fas fa-file-import me-1"></i>Импорт
+    </a>
+    <a class="nav-link"
+       th:classappend="${activePage == 'export'} ? 'active'"
+       th:href="@{/clients/{id}/export(id=${clientId})}">
+        <i class="fas fa-file-export me-1"></i>Экспорт
+    </a>
+    <a class="nav-link"
+       th:classappend="${activePage == 'templates'} ? 'active'"
+       th:href="@{/clients/{id}/templates(id=${clientId})}">
+        <i class="fas fa-cogs me-1"></i>Шаблоны
+    </a>
+    <a class="nav-link"
+       th:classappend="${activePage == 'statistics'} ? 'active'"
+       th:href="@{/clients/{id}/statistics(id=${clientId})}">
+        <i class="fas fa-chart-line me-1"></i>Статистика
+    </a>
+    <a class="nav-link"
+       th:classappend="${activePage == 'operations'} ? 'active'"
+       th:href="@{/clients/{id}/operations(id=${clientId})}">
+        <i class="fas fa-history me-1"></i>Операции
+    </a>
+</nav>
+
+<!-- Карточка с информацией о клиенте (опционально) -->
+<div class="card mb-4" th:fragment="client-info(client)">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p class="mb-1"><strong>Код региона:</strong>
+                    <span th:text="${client.regionCode != null && !client.regionCode.isEmpty() ? client.regionCode : 'Не указан'}">77</span>
+                </p>
+                <p class="mb-1"><strong>Регион:</strong>
+                    <span th:text="${client.regionName != null && !client.regionName.isEmpty() ? client.regionName : 'Не указан'}">Москва</span>
+                </p>
+                <p class="mb-1"><strong>Файловые операции:</strong>
+                    <span th:text="${client.fileOperationsCount != null ? client.fileOperationsCount : 0}">0</span>
+                </p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Описание:</strong></p>
+                <p th:text="${client.description != null && !client.description.isEmpty() ? client.description : 'Описание отсутствует'}">
+                    Описание клиента.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

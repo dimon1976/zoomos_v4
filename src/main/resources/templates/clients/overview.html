@@ -1,0 +1,291 @@
+<!-- src/main/resources/templates/clients/overview.html -->
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Обзор'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Обзор'}">Клиент - Обзор</title>
+    <style>
+        .stats-card {
+            transition: transform 0.2s ease;
+        }
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .recent-operations {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}/edit(id=${client.id})}" class="btn btn-primary btn-primary-action">
+        <i class="fas fa-edit me-1"></i>Редактировать
+    </a>
+    <button type="button" class="btn btn-danger btn-secondary-action" data-bs-toggle="modal" data-bs-target="#deleteClientModal">
+        <i class="fas fa-trash-alt me-1"></i>Удалить
+    </button>
+    <a th:href="@{/clients}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К списку
+    </a>
+</div>
+
+<section>
+    <!-- Навигация клиента -->
+    <div th:replace="~{clients/navigation :: client-nav(${clientId}, 'overview')}"></div>
+
+    <!-- Информация о клиенте -->
+    <div th:replace="~{clients/navigation :: client-info(${client})}"></div>
+
+    <!-- Статистика клиента -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stats-card bg-primary text-white">
+                <div class="card-body text-center">
+                    <div class="h4 mb-0" th:text="${client.fileOperationsCount ?: 0}">0</div>
+                    <small>Всего операций</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card bg-success text-white">
+                <div class="card-body text-center">
+                    <div class="h4 mb-0" id="completedOperations">0</div>
+                    <small>Завершено</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card bg-warning text-white">
+                <div class="card-body text-center">
+                    <div class="h4 mb-0" id="activeOperations">0</div>
+                    <small>В процессе</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card bg-danger text-white">
+                <div class="card-body text-center">
+                    <div class="h4 mb-0" id="failedOperations">0</div>
+                    <small>С ошибками</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Быстрые действия -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-file-import fa-3x text-primary mb-3"></i>
+                    <h5>Импорт файлов</h5>
+                    <p class="text-muted">Загрузите и обработайте файлы</p>
+                    <a th:href="@{/clients/{id}/import(id=${clientId})}" class="btn btn-primary">
+                        <i class="fas fa-upload me-1"></i>Начать импорт
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-file-export fa-3x text-success mb-3"></i>
+                    <h5>Экспорт данных</h5>
+                    <p class="text-muted">Выгрузите обработанные данные</p>
+                    <a th:href="@{/clients/{id}/export(id=${clientId})}" class="btn btn-success">
+                        <i class="fas fa-download me-1"></i>Начать экспорт
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-cogs fa-3x text-info mb-3"></i>
+                    <h5>Шаблоны</h5>
+                    <p class="text-muted">Настройте шаблоны обработки</p>
+                    <a th:href="@{/clients/{id}/templates(id=${clientId})}" class="btn btn-info">
+                        <i class="fas fa-cog me-1"></i>Управление
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Последние операции -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-history me-2"></i>Последние операции
+            </h5>
+            <a th:href="@{/clients/{id}/operations(id=${clientId})}" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-list me-1"></i>Все операции
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="recent-operations" id="recentOperations">
+                <div class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <div class="modal fade" id="deleteClientModal" tabindex="-1" aria-labelledby="deleteClientModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteClientModalLabel">Подтверждение удаления</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Вы уверены, что хотите удалить клиента <strong th:text="${client.name}">Имя клиента</strong>?</p>
+                    <p class="text-danger"><strong>Внимание:</strong> Это действие нельзя отменить. Все файлы и операции этого клиента будут удалены.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <form th:action="@{/clients/{id}/delete(id=${client.id})}" method="post">
+                        <button type="submit" class="btn btn-danger">Удалить</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    document.addEventListener('DOMContentLoaded', function() {
+        const clientId = /*[[${clientId}]]*/ 0;
+
+        // Загружаем статистику клиента
+        loadClientStats(clientId);
+
+        // Загружаем последние операции
+        loadRecentOperations(clientId);
+    });
+
+    function loadClientStats(clientId) {
+        fetch(`/api/clients/${clientId}/stats`)
+            .then(response => response.json())
+            .then(stats => {
+                document.getElementById('completedOperations').textContent = stats.completedOperations || 0;
+                document.getElementById('activeOperations').textContent = stats.activeOperations || 0;
+                document.getElementById('failedOperations').textContent = stats.failedOperations || 0;
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки статистики:', error);
+            });
+    }
+
+    function loadRecentOperations(clientId) {
+        fetch(`/api/clients/${clientId}/operations?size=5`)
+            .then(response => response.json())
+            .then(pageData => {
+                displayRecentOperations(pageData.operations);
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки операций:', error);
+                document.getElementById('recentOperations').innerHTML =
+                    '<div class="text-center text-muted">Ошибка загрузки операций</div>';
+            });
+    }
+
+    function displayRecentOperations(operations) {
+        const container = document.getElementById('recentOperations');
+
+        if (!operations || operations.length === 0) {
+            container.innerHTML = '<div class="text-center text-muted">Нет операций</div>';
+            return;
+        }
+
+        const html = operations.map(op => `
+            <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                <div>
+                    <div class="fw-semibold">
+                        <i class="fas fa-${getOperationIcon(op.operationType)} me-2"></i>
+                        ${op.fileName}
+                    </div>
+                    <small class="text-muted">${formatDateTime(op.startedAt)}</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge ${getStatusClass(op.status)}">${getStatusDisplay(op.status)}</span>
+                    <br>
+                    <small class="text-muted">${op.recordCount || '-'} записей</small>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = html;
+    }
+
+    function getOperationIcon(type) {
+        switch(type) {
+            case 'IMPORT': return 'file-import';
+            case 'EXPORT': return 'file-export';
+            case 'PROCESS': return 'cogs';
+            default: return 'file';
+        }
+    }
+
+    function getStatusClass(status) {
+        switch(status) {
+            case 'PENDING': return 'bg-warning';
+            case 'PROCESSING': return 'bg-info';
+            case 'COMPLETED': return 'bg-success';
+            case 'FAILED': return 'bg-danger';
+            default: return 'bg-secondary';
+        }
+    }
+
+    function getStatusDisplay(status) {
+        switch(status) {
+            case 'PENDING': return 'Ожидание';
+            case 'PROCESSING': return 'В процессе';
+            case 'COMPLETED': return 'Завершено';
+            case 'FAILED': return 'Ошибка';
+            default: return status;
+        }
+    }
+
+    function formatDateTime(dateTime) {
+        if (!dateTime) return '-';
+
+        let millis;
+        if (Array.isArray(dateTime)) {
+            const [y, m, d, h = 0, min = 0, s = 0] = dateTime;
+            millis = Date.UTC(y, (m || 1) - 1, d || 1, h, min, s);
+        } else if (typeof dateTime === 'number') {
+            millis = dateTime < 1e12 ? dateTime * 1000 : dateTime;
+        } else {
+            millis = Date.parse(dateTime);
+        }
+
+        if (isNaN(millis)) return '-';
+
+        return new Date(millis).toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+    /*]]>*/
+</script>
+</body>
+</html>
