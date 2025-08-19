@@ -74,7 +74,7 @@ public class WebConfig implements WebMvcConfigurer {
         templateResolver.setCharacterEncoding("UTF-8");
         templateResolver.setSuffix(".html");
         templateResolver.setTemplateMode(TemplateMode.HTML);
-        return templateResolver;
+        return templateResolver; //
     }
 
     @Bean
