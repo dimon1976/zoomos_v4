@@ -19,7 +19,7 @@ public final class UrlConstants {
     public static final String CLIENT_EDIT = "/clients/{clientId}/edit";
     public static final String CLIENT_DELETE = "/clients/{clientId}/delete";
 
-    // Разделы клиента (вместо вкладок)
+    // Страницы клиента (вместо вкладок)
     public static final String CLIENT_IMPORT = "/clients/{clientId}/import";
     public static final String CLIENT_EXPORT = "/clients/{clientId}/export";
     public static final String CLIENT_TEMPLATES = "/clients/{clientId}/templates";
@@ -43,7 +43,7 @@ public final class UrlConstants {
     public static final String CLIENT_EXPORT_TEMPLATE_CLONE = "/clients/{clientId}/export/templates/{templateId}/clone";
 
     // Операции
-    public static final String OPERATION_STATUS = "/operations/{operationId}/status";
+    public static final String CLIENT_OPERATION_DETAIL = "/clients/{clientId}/operations/{operationId}";
 
     // Импорт файлов
     public static final String IMPORT_UPLOAD = "/clients/{clientId}/import/upload";
@@ -109,18 +109,4 @@ public final class UrlConstants {
     public static final String PARAM_TEMPLATE_ID = "templateId";
     public static final String PARAM_OPERATION_ID = "operationId";
     public static final String PARAM_SESSION_ID = "sessionId";
-
-    // ===== BREADCRUMB SEGMENTS =====
-
-    public static final String SEGMENT_CLIENTS = "clients";
-    public static final String SEGMENT_IMPORT = "import";
-    public static final String SEGMENT_EXPORT = "export";
-    public static final String SEGMENT_TEMPLATES = "templates";
-    public static final String SEGMENT_STATISTICS = "statistics";
-    public static final String SEGMENT_OPERATIONS = "operations";
-    public static final String SEGMENT_SETTINGS = "settings";
-    public static final String SEGMENT_CREATE = "create";
-    public static final String SEGMENT_EDIT = "edit";
-    public static final String SEGMENT_DELETE = "delete";
-    public static final String SEGMENT_CLONE = "clone";
 }
