@@ -1,5 +1,6 @@
 package com.java.controller;
 
+import com.java.constants.UrlConstants;
 import com.java.dto.ExportRequestDto;
 import com.java.dto.ExportSessionDto;
 import com.java.dto.ExportTemplateDto;
@@ -23,13 +24,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Контроллер для операций экспорта
  */
 @Controller
-@RequestMapping("/export")
 @RequiredArgsConstructor
 @Slf4j
 public class ExportController {
@@ -43,7 +42,7 @@ public class ExportController {
     /**
      * Страница запуска экспорта для клиента
      */
-    @GetMapping("/client/{clientId}")
+    @GetMapping(UrlConstants.EXPORT_START)
     public String showExportPage(@PathVariable Long clientId, Model model) {
         List<ExportTemplateDto> templates = templateService.getClientTemplates(clientId);
 
@@ -62,7 +61,7 @@ public class ExportController {
     /**
      * Возвращает список полей для шаблона
      */
-    @GetMapping("/template/{templateId}/fields")
+    @GetMapping("/export/template/{templateId}/fields")
     @ResponseBody
     public List<String> getTemplateFields(@PathVariable Long templateId) {
         return templateService.getTemplate(templateId)
@@ -73,7 +72,7 @@ public class ExportController {
     /**
      * Запуск экспорта
      */
-    @PostMapping("/client/{clientId}/start")
+    @PostMapping(UrlConstants.EXPORT_START)
     public String startExport(@PathVariable Long clientId,
                               @ModelAttribute ExportRequestDto request,
                               @RequestParam(required = false) String operationIds,
@@ -95,10 +94,7 @@ public class ExportController {
                 }
             }
 
-            // Even when exporting the entire table, keep an empty list instead of null
-            // to avoid null value issues in subsequent processing
             request.setOperationIds(ops);
-
             ExportSessionDto session = exportService.startExport(request, clientId);
 
             redirectAttributes.addFlashAttribute("successMessage", "Экспорт запущен");
@@ -106,21 +102,21 @@ public class ExportController {
         } catch (Exception e) {
             log.error("Ошибка запуска экспорта", e);
             redirectAttributes.addFlashAttribute("errorMessage", "Ошибка запуска экспорта: " + e.getMessage());
-            return "redirect:/export/client/" + clientId;
+            return "redirect:" + UrlConstants.EXPORT_START.replace("{clientId}", clientId.toString());
         }
     }
 
     /**
      * Статус операции экспорта
      */
-    @GetMapping("/status/{operationId}")
+    @GetMapping("/export/status/{operationId}")
     public String showExportStatus(@PathVariable Long operationId,
                                    Model model,
                                    RedirectAttributes redirectAttributes) {
         FileOperation operation = fileOperationRepository.findById(operationId).orElse(null);
         if (operation == null) {
             redirectAttributes.addFlashAttribute("errorMessage", "Операция не найдена");
-            return "redirect:/clients";
+            return "redirect:" + UrlConstants.CLIENTS;
         }
 
         sessionRepository.findByFileOperationId(operationId)

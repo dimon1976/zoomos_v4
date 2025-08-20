@@ -27,7 +27,8 @@
             </h5>
         </div>
         <div class="card-body">
-            <form th:action="@{/export/client/{id}/start(id=${clientId})}" method="post" th:object="${request}">
+            <form th:action="@{/clients/{clientId}/export/start(clientId=${clientId})}"
+                  method="post" th:object="${request}">
                 <div class="mb-3">
                     <label for="templateId" class="form-label">Шаблон</label>
                     <select id="templateId" th:field="*{templateId}" class="form-select" required>
