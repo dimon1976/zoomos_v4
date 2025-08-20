@@ -15,9 +15,6 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Централизованное формирование хлебных крошек для всех страниц
- */
 @ControllerAdvice
 @RequiredArgsConstructor
 @Slf4j
@@ -58,170 +55,135 @@ public class BreadcrumbAdvice {
     }
 
     private void processBreadcrumbSegments(List<BreadcrumbItem> crumbs, String[] segments) {
-        StringBuilder currentPath = new StringBuilder();
-
         for (int i = 1; i < segments.length; i++) {
             String segment = segments[i];
-            currentPath.append("/").append(segment);
 
             switch (segment) {
-                case UrlConstants.SEGMENT_CLIENTS -> handleClientsSegment(crumbs, segments, i, currentPath);
-                case UrlConstants.SEGMENT_SETTINGS -> handleSettingsSegment(crumbs, segments, i, currentPath);
+                case "clients" -> handleClientsSegment(crumbs, segments, i);
+                case "settings" -> handleSettingsSegment(crumbs, segments, i);
+                case "utils" -> crumbs.add(new BreadcrumbItem("Утилиты", UrlConstants.UTILS));
+                case "stats" -> crumbs.add(new BreadcrumbItem("Статистика", UrlConstants.STATS));
                 default -> {
                     if (isNumeric(segment)) {
-                        handleNumericSegment(crumbs, segments, i, segment, currentPath.toString());
-                    } else {
-                        handleNamedSegment(crumbs, segments, i, segment, currentPath.toString());
+                        handleNumericSegment(crumbs, segments, i);
                     }
                 }
             }
         }
     }
 
-    private void handleClientsSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, StringBuilder currentPath) {
+    private void handleClientsSegment(List<BreadcrumbItem> crumbs, String[] segments, int index) {
         crumbs.add(new BreadcrumbItem("Клиенты", UrlConstants.CLIENTS));
 
-        // Проверяем следующий сегмент для обработки /clients/create
-        if (index + 1 < segments.length && "create".equals(segments[index + 1])) {
-            crumbs.add(new BreadcrumbItem("Создание", UrlConstants.CLIENTS_CREATE));
+        // Проверяем следующий сегмент
+        if (index + 1 < segments.length) {
+            String nextSegment = segments[index + 1];
+
+            if ("create".equals(nextSegment)) {
+                crumbs.add(new BreadcrumbItem("Создание", UrlConstants.CLIENTS_CREATE));
+            } else if (isNumeric(nextSegment)) {
+                // Обрабатываем /clients/{clientId}/...
+                Long clientId = Long.parseLong(nextSegment);
+                handleClientSegment(crumbs, segments, index + 1, clientId);
+            }
         }
     }
 
-    private void handleSettingsSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, StringBuilder currentPath) {
+    private void handleClientSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, Long clientId) {
+        String clientName = getClientName(clientId);
+        String clientPath = "/clients/" + clientId;
+        crumbs.add(new BreadcrumbItem(clientName, clientPath));
+
+        // Проверяем следующий сегмент после clientId
+        if (index + 1 < segments.length) {
+            String nextSegment = segments[index + 1];
+
+            switch (nextSegment) {
+                case "edit" -> crumbs.add(new BreadcrumbItem("Редактирование", clientPath + "/edit"));
+                case "import" -> handleImportSegment(crumbs, segments, index + 1, clientId, clientPath);
+                case "export" -> handleExportSegment(crumbs, segments, index + 1, clientId, clientPath);
+                case "templates" -> crumbs.add(new BreadcrumbItem("Шаблоны", clientPath + "/templates"));
+                case "statistics" -> crumbs.add(new BreadcrumbItem("Статистика", clientPath + "/statistics"));
+                case "operations" -> handleOperationsSegment(crumbs, segments, index + 1, clientId, clientPath);
+            }
+        }
+    }
+
+    private void handleImportSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, Long clientId, String clientPath) {
+        crumbs.add(new BreadcrumbItem("Импорт", clientPath + "/import"));
+
+        // Проверяем следующий сегмент после import
+        if (index + 1 < segments.length && "templates".equals(segments[index + 1])) {
+            crumbs.add(new BreadcrumbItem("Шаблоны импорта", clientPath + "/import/templates"));
+
+            // Проверяем дальнейшие сегменты
+            if (index + 2 < segments.length) {
+                String action = segments[index + 2];
+                if ("create".equals(action)) {
+                    crumbs.add(new BreadcrumbItem("Создание", clientPath + "/import/templates/create"));
+                } else if (isNumeric(action)) {
+                    Long templateId = Long.parseLong(action);
+                    String templateName = getImportTemplateName(templateId);
+                    crumbs.add(new BreadcrumbItem(templateName, clientPath + "/import/templates/" + templateId));
+
+                    if (index + 3 < segments.length && "edit".equals(segments[index + 3])) {
+                        crumbs.add(new BreadcrumbItem("Редактирование", clientPath + "/import/templates/" + templateId + "/edit"));
+                    }
+                }
+            }
+        }
+    }
+
+    private void handleExportSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, Long clientId, String clientPath) {
+        crumbs.add(new BreadcrumbItem("Экспорт", clientPath + "/export"));
+
+        // Проверяем следующий сегмент после export
+        if (index + 1 < segments.length && "templates".equals(segments[index + 1])) {
+            crumbs.add(new BreadcrumbItem("Шаблоны экспорта", clientPath + "/export/templates"));
+
+            // Проверяем дальнейшие сегменты
+            if (index + 2 < segments.length) {
+                String action = segments[index + 2];
+                if ("create".equals(action)) {
+                    crumbs.add(new BreadcrumbItem("Создание", clientPath + "/export/templates/create"));
+                } else if (isNumeric(action)) {
+                    Long templateId = Long.parseLong(action);
+                    String templateName = getExportTemplateName(templateId);
+                    crumbs.add(new BreadcrumbItem(templateName, clientPath + "/export/templates/" + templateId));
+
+                    if (index + 3 < segments.length && "edit".equals(segments[index + 3])) {
+                        crumbs.add(new BreadcrumbItem("Редактирование", clientPath + "/export/templates/" + templateId + "/edit"));
+                    }
+                }
+            }
+        }
+    }
+
+    private void handleOperationsSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, Long clientId, String clientPath) {
+        crumbs.add(new BreadcrumbItem("Операции", clientPath + "/operations"));
+
+        // Проверяем следующий сегмент после operations
+        if (index + 1 < segments.length && isNumeric(segments[index + 1])) {
+            Long operationId = Long.parseLong(segments[index + 1]);
+            crumbs.add(new BreadcrumbItem("Операция #" + operationId, clientPath + "/operations/" + operationId));
+        }
+    }
+
+    private void handleSettingsSegment(List<BreadcrumbItem> crumbs, String[] segments, int index) {
         crumbs.add(new BreadcrumbItem("Настройки", UrlConstants.SETTINGS));
 
         // Проверяем подразделы настроек
         if (index + 1 < segments.length) {
             String nextSegment = segments[index + 1];
-            if (UrlConstants.SEGMENT_STATISTICS.equals(nextSegment)) {
+            if ("statistics".equals(nextSegment)) {
                 crumbs.add(new BreadcrumbItem("Статистика", UrlConstants.SETTINGS_STATISTICS));
             }
         }
     }
 
-    private void handleNumericSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, String segment, String currentPath) {
-        Long id = Long.parseLong(segment);
-
-        if (index > 1) {
-            String prevSegment = segments[index - 1];
-
-            switch (prevSegment) {
-                case UrlConstants.SEGMENT_CLIENTS -> handleClientId(crumbs, segments, index, id, currentPath);
-                case UrlConstants.SEGMENT_TEMPLATES -> handleTemplateId(crumbs, segments, index, id, currentPath);
-                case UrlConstants.SEGMENT_OPERATIONS -> crumbs.add(new BreadcrumbItem("Операция #" + id, currentPath));
-            }
-        }
-    }
-
-    private void handleClientId(List<BreadcrumbItem> crumbs, String[] segments, int index, Long clientId, String currentPath) {
-        String clientName = getClientName(clientId);
-        crumbs.add(new BreadcrumbItem(clientName, currentPath));
-
-        // Обрабатываем дальнейшие сегменты для клиента
-        if (index + 1 < segments.length) {
-            String nextSegment = segments[index + 1];
-            String clientBasePath = "/clients/" + clientId;
-
-            switch (nextSegment) {
-                case UrlConstants.SEGMENT_EDIT -> crumbs.add(new BreadcrumbItem("Редактирование", currentPath + "/edit"));
-                case UrlConstants.SEGMENT_IMPORT -> handleImportSegment(crumbs, segments, index + 1, clientBasePath);
-                case UrlConstants.SEGMENT_EXPORT -> handleExportSegment(crumbs, segments, index + 1, clientBasePath);
-                case UrlConstants.SEGMENT_TEMPLATES -> crumbs.add(new BreadcrumbItem("Шаблоны", clientBasePath + "/templates"));
-                case UrlConstants.SEGMENT_STATISTICS -> crumbs.add(new BreadcrumbItem("Статистика", clientBasePath + "/statistics"));
-                case UrlConstants.SEGMENT_OPERATIONS -> crumbs.add(new BreadcrumbItem("Операции", clientBasePath + "/operations"));
-            }
-        }
-    }
-
-    private void handleImportSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, String clientBasePath) {
-        crumbs.add(new BreadcrumbItem("Импорт", clientBasePath + "/import"));
-
-        if (index + 1 < segments.length && UrlConstants.SEGMENT_TEMPLATES.equals(segments[index + 1])) {
-            crumbs.add(new BreadcrumbItem("Шаблоны импорта", clientBasePath + "/import/templates"));
-
-            // Обрабатываем дальнейшие сегменты шаблонов
-            if (index + 2 < segments.length) {
-                String action = segments[index + 2];
-                if (UrlConstants.SEGMENT_CREATE.equals(action)) {
-                    crumbs.add(new BreadcrumbItem("Создание", clientBasePath + "/import/templates/create"));
-                } else if (isNumeric(action)) {
-                    Long templateId = Long.parseLong(action);
-                    String templateName = getImportTemplateName(templateId);
-                    crumbs.add(new BreadcrumbItem(templateName, clientBasePath + "/import/templates/" + templateId));
-
-                    if (index + 3 < segments.length && UrlConstants.SEGMENT_EDIT.equals(segments[index + 3])) {
-                        crumbs.add(new BreadcrumbItem("Редактирование", clientBasePath + "/import/templates/" + templateId + "/edit"));
-                    }
-                }
-            }
-        }
-    }
-
-    private void handleExportSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, String clientBasePath) {
-        crumbs.add(new BreadcrumbItem("Экспорт", clientBasePath + "/export"));
-
-        if (index + 1 < segments.length && UrlConstants.SEGMENT_TEMPLATES.equals(segments[index + 1])) {
-            crumbs.add(new BreadcrumbItem("Шаблоны экспорта", clientBasePath + "/export/templates"));
-
-            // Обрабатываем дальнейшие сегменты шаблонов
-            if (index + 2 < segments.length) {
-                String action = segments[index + 2];
-                if (UrlConstants.SEGMENT_CREATE.equals(action)) {
-                    crumbs.add(new BreadcrumbItem("Создание", clientBasePath + "/export/templates/create"));
-                } else if (isNumeric(action)) {
-                    Long templateId = Long.parseLong(action);
-                    String templateName = getExportTemplateName(templateId);
-                    crumbs.add(new BreadcrumbItem(templateName, clientBasePath + "/export/templates/" + templateId));
-
-                    if (index + 3 < segments.length && UrlConstants.SEGMENT_EDIT.equals(segments[index + 3])) {
-                        crumbs.add(new BreadcrumbItem("Редактирование", clientBasePath + "/export/templates/" + templateId + "/edit"));
-                    }
-                }
-            }
-        }
-    }
-
-    private void handleTemplateId(List<BreadcrumbItem> crumbs, String[] segments, int index, Long templateId, String currentPath) {
-        // Определяем тип шаблона по контексту пути
-        boolean isImportTemplate = containsSegment(segments, UrlConstants.SEGMENT_IMPORT);
-
-        String templateName = isImportTemplate
-                ? getImportTemplateName(templateId)
-                : getExportTemplateName(templateId);
-        crumbs.add(new BreadcrumbItem(templateName, currentPath));
-    }
-
-    private void handleNamedSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, String segment, String currentPath) {
-        // Пропускаем сегменты, которые уже обработаны в контексте
-        if (isProcessedInContext(segments, index, segment)) {
-            return;
-        }
-
-        switch (segment) {
-            case "utils" -> crumbs.add(new BreadcrumbItem("Утилиты", "/utils"));
-            case "stats" -> crumbs.add(new BreadcrumbItem("Статистика", "/stats"));
-            default -> {
-                // Неизвестный сегмент - добавляем как есть с заглавной буквы
-                String displayName = segment.substring(0, 1).toUpperCase() + segment.substring(1);
-                crumbs.add(new BreadcrumbItem(displayName, currentPath));
-            }
-        }
-    }
-
-    private boolean isProcessedInContext(String[] segments, int index, String segment) {
-        // Проверяем, был ли сегмент уже обработан в контексте предыдущих сегментов
-        if (index > 0) {
-            String prevSegment = segments[index - 1];
-            return (isNumeric(prevSegment) &&
-                    (UrlConstants.SEGMENT_IMPORT.equals(segment) ||
-                            UrlConstants.SEGMENT_EXPORT.equals(segment) ||
-                            UrlConstants.SEGMENT_TEMPLATES.equals(segment) ||
-                            UrlConstants.SEGMENT_STATISTICS.equals(segment) ||
-                            UrlConstants.SEGMENT_OPERATIONS.equals(segment) ||
-                            UrlConstants.SEGMENT_EDIT.equals(segment) ||
-                            UrlConstants.SEGMENT_CREATE.equals(segment)));
-        }
-        return false;
+    private void handleNumericSegment(List<BreadcrumbItem> crumbs, String[] segments, int index) {
+        // Обработка числовых сегментов уже включена в соответствующие методы
+        // Этот метод остается для совместимости
     }
 
     private String getClientName(Long clientId) {
@@ -264,15 +226,6 @@ public class BreadcrumbAdvice {
         } catch (NumberFormatException e) {
             return false;
         }
-    }
-
-    private boolean containsSegment(String[] segments, String segment) {
-        for (String s : segments) {
-            if (segment.equals(s)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Data

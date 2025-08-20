@@ -272,7 +272,7 @@ public class DataTransformationService {
     /**
      * Трансформация в дату
      */
-    private LocalDate transformDate(String value, ImportTemplateField field) throws Exception {
+    private LocalDate transformDate(String value, ImportTemplateField field) {
         log.trace("transformDate: входное значение='{}', формат='{}'", value, field.getDateFormat());
 
         if (field.getDateFormat() == null || field.getDateFormat().isEmpty()) {

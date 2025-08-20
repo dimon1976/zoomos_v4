@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Настройки - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Настройки',
+        ~{::.page-actions}
+      )}">
+<head>
+  <title>Настройки</title>
+  <style>
+    .settings-card {
+      transition: transform 0.2s ease;
+    }
+    .settings-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+<div class="page-actions">
+  <a th:href="@{/}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left me-1"></i>На главную
+  </a>
+</div>
+
+<section>
+  <div class="row">
+    <div class="col-md-6 mb-4">
+      <div class="card settings-card h-100">
+        <div class="card-header bg-primary text-white">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-chart-line me-2"></i>Статистика
+          </h5>
+        </div>
+        <div class="card-body">
+          <p class="card-text">Настройки анализа статистики и сравнения экспортов</p>
+          <ul>
+            <li>Пороги отклонений</li>
+            <li>Количество операций для сравнения</li>
+            <li>Параметры анализа</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <a th:href="@{/settings/statistics}" class="btn btn-primary">
+            <i class="fas fa-cog me-1"></i>Настроить
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 mb-4">
+      <div class="card settings-card h-100">
+        <div class="card-header bg-success text-white">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-file-alt me-2"></i>Файлы
+          </h5>
+        </div>
+        <div class="card-body">
+          <p class="card-text">Настройки обработки файлов и хранения</p>
+          <ul>
+            <li>Размеры файлов</li>
+            <li>Время хранения</li>
+            <li>Кодировки по умолчанию</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <button class="btn btn-success" disabled>
+            <i class="fas fa-cog me-1"></i>В разработке
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 mb-4">
+      <div class="card settings-card h-100">
+        <div class="card-header bg-info text-white">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-database me-2"></i>База данных
+          </h5>
+        </div>
+        <div class="card-body">
+          <p class="card-text">Настройки подключения и управления базой данных</p>
+          <ul>
+            <li>Очистка старых данных</li>
+            <li>Резервное копирование</li>
+            <li>Оптимизация производительности</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <button class="btn btn-info" disabled>
+            <i class="fas fa-cog me-1"></i>В разработке
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 mb-4">
+      <div class="card settings-card h-100">
+        <div class="card-header bg-warning text-dark">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-shield-alt me-2"></i>Безопасность
+          </h5>
+        </div>
+        <div class="card-body">
+          <p class="card-text">Настройки безопасности и прав доступа</p>
+          <ul>
+            <li>Политики доступа</li>
+            <li>Журналирование</li>
+            <li>Валидация данных</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <button class="btn btn-warning" disabled>
+            <i class="fas fa-cog me-1"></i>В разработке
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Быстрые действия -->
+  <div class="card">
+    <div class="card-header">
+      <h6 class="card-title mb-0">
+        <i class="fas fa-bolt me-2"></i>Быстрые действия
+      </h6>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-3">
+          <a th:href="@{/settings/statistics}" class="btn btn-outline-primary btn-sm w-100 mb-2">
+            <i class="fas fa-chart-line me-1"></i>Статистика
+          </a>
+        </div>
+        <div class="col-md-3">
+          <a th:href="@{/utils}" class="btn btn-outline-secondary btn-sm w-100 mb-2">
+            <i class="fas fa-tools me-1"></i>Утилиты
+          </a>
+        </div>
+        <div class="col-md-3">
+          <a th:href="@{/}" class="btn btn-outline-info btn-sm w-100 mb-2">
+            <i class="fas fa-home me-1"></i>Дашборд
+          </a>
+        </div>
+        <div class="col-md-3">
+          <a th:href="@{/clients}" class="btn btn-outline-success btn-sm w-100 mb-2">
+            <i class="fas fa-users me-1"></i>Клиенты
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('Страница настроек загружена');
+  });
+</script>
+</body>
+</html>

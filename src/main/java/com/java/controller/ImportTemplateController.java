@@ -17,9 +17,6 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.List;
 
-/**
- * Контроллер для управления шаблонами импорта
- */
 @Controller
 @RequiredArgsConstructor
 @Slf4j
@@ -29,9 +26,6 @@ public class ImportTemplateController {
     private final EntityFieldService fieldService;
     private final ClientService clientService;
 
-    /**
-     * Отображение списка шаблонов клиента
-     */
     @GetMapping(UrlConstants.CLIENT_IMPORT_TEMPLATES)
     public String listClientTemplates(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET запрос на получение шаблонов клиента ID: {}", clientId);
@@ -50,9 +44,6 @@ public class ImportTemplateController {
                 });
     }
 
-    /**
-     * Форма создания нового шаблона
-     */
     @GetMapping(UrlConstants.CLIENT_IMPORT_TEMPLATES_CREATE)
     public String showCreateForm(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET запрос на отображение формы создания шаблона для клиента ID: {}", clientId);
@@ -73,9 +64,6 @@ public class ImportTemplateController {
                 });
     }
 
-    /**
-     * Создание нового шаблона
-     */
     @PostMapping(UrlConstants.CLIENT_IMPORT_TEMPLATES_CREATE)
     public String createTemplate(@PathVariable Long clientId,
                                  @Valid @ModelAttribute ImportTemplateDto template,
@@ -108,9 +96,6 @@ public class ImportTemplateController {
         }
     }
 
-    /**
-     * Просмотр деталей шаблона
-     */
     @GetMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_DETAIL)
     public String viewTemplate(@PathVariable Long clientId,
                                @PathVariable Long templateId,
@@ -132,9 +117,6 @@ public class ImportTemplateController {
                 });
     }
 
-    /**
-     * Форма редактирования шаблона
-     */
     @GetMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_EDIT)
     public String showEditForm(@PathVariable Long clientId,
                                @PathVariable Long templateId,
@@ -158,9 +140,6 @@ public class ImportTemplateController {
                 });
     }
 
-    /**
-     * Обновление шаблона
-     */
     @PostMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_EDIT)
     public String updateTemplate(@PathVariable Long clientId,
                                  @PathVariable Long templateId,
@@ -194,9 +173,6 @@ public class ImportTemplateController {
         }
     }
 
-    /**
-     * Удаление шаблона
-     */
     @PostMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_DELETE)
     public String deleteTemplate(@PathVariable Long clientId,
                                  @PathVariable Long templateId,
@@ -215,9 +191,6 @@ public class ImportTemplateController {
                 .replace("{clientId}", clientId.toString());
     }
 
-    /**
-     * Клонирование шаблона
-     */
     @PostMapping(UrlConstants.CLIENT_IMPORT_TEMPLATE_CLONE)
     public String cloneTemplate(@PathVariable Long clientId,
                                 @PathVariable Long templateId,
@@ -248,9 +221,6 @@ public class ImportTemplateController {
         }
     }
 
-    /**
-     * API для получения доступных полей
-     */
     @GetMapping("/api/import/templates/available-fields")
     @ResponseBody
     public List<String> getAvailableFields(@RequestParam EntityType entityType) {

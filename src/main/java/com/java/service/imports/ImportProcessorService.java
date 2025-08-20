@@ -3,13 +3,21 @@ package com.java.service.imports;
 import com.java.config.ImportConfig;
 import com.java.config.MemoryMonitor;
 import com.java.model.FileOperation;
-import com.java.model.entity.*;
-import com.java.model.enums.*;
-import com.java.repository.*;
+import com.java.model.entity.FileMetadata;
+import com.java.model.entity.ImportError;
+import com.java.model.entity.ImportSession;
+import com.java.model.entity.ImportTemplate;
+import com.java.model.enums.DuplicateStrategy;
+import com.java.model.enums.ErrorStrategy;
+import com.java.model.enums.ErrorType;
+import com.java.model.enums.ImportStatus;
+import com.java.repository.FileMetadataRepository;
+import com.java.repository.ImportErrorRepository;
+import com.java.repository.ImportSessionRepository;
+import com.java.repository.ImportTemplateRepository;
 import com.java.service.imports.handlers.DataTransformationService;
 import com.java.service.imports.handlers.DuplicateCheckService;
 import com.java.service.imports.handlers.EntityPersistenceService;
-import com.java.util.PathResolver;
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
@@ -18,13 +26,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
-import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,7 +39,6 @@ import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Stream;
 
 /**
  * Основной сервис обработки импорта файлов
@@ -55,7 +60,6 @@ public class ImportProcessorService {
 
     private final ImportConfig.ImportSettings importSettings;
     private final MemoryMonitor memoryMonitor;
-    private final PathResolver pathResolver;
 
     // Хранилище для отмены операций
     private final Map<Long, AtomicBoolean> cancellationFlags = new HashMap<>();
@@ -65,12 +69,8 @@ public class ImportProcessorService {
      */
     @Transactional
     public void processImport(ImportSession session) {
-        // Загружать сессию из репозитория внутри транзакции, чтобы избежать
-        // проблем с detached entity и коллекциями orphanRemoval
-        ImportSession managedSession = sessionRepository.findById(session.getId())
+        session = sessionRepository.findById(session.getId())
                 .orElseThrow(() -> new RuntimeException("Сессия импорта не найдена"));
-
-        session = managedSession;
         log.info("Начало обработки импорта, сессия ID: {}", session.getId());
 
         // Регистрируем флаг отмены
@@ -259,9 +259,9 @@ public class ImportProcessorService {
 
         long currentEstimate = session.getTotalRows();
 
-        // Если обработали больше чем оценивали, увеличиваем оценку
+        // Если обработали больше чем, оценивали, увеличиваем оценку
         if (actualProcessed > currentEstimate * 0.8) {
-            long newEstimate = (long)(actualProcessed * 1.25); // +25% запас
+            long newEstimate = (long) (actualProcessed * 1.25); // +25% запас
             session.setTotalRows(newEstimate);
             sessionRepository.save(session);
             log.debug("Скорректирована оценка строк: {} -> {} (обработано {})",
@@ -338,53 +338,6 @@ public class ImportProcessorService {
             if (!batch.isEmpty() && !cancelled.get()) {
                 processBatch(session, template, batch, rowNumber);
             }
-        }
-    }
-
-    /**
-     * Обрабатывает данные батчами из CSV
-     */
-    private void processBatches(ImportSession session, ImportTemplate template,
-                                CSVReader csvReader, String[] headers,
-                                AtomicBoolean cancelled) throws Exception {
-        List<Map<String, String>> batch = new ArrayList<>();
-        String[] row;
-        AtomicLong rowNumber = new AtomicLong(template.getSkipHeaderRows());
-
-        while ((row = csvReader.readNext()) != null && !cancelled.get()) {
-            rowNumber.incrementAndGet();
-
-            // Проверяем доступность памяти
-            if (!memoryMonitor.isMemoryAvailable()) {
-                log.warn("Недостаточно памяти, ожидание освобождения...");
-                Thread.sleep(5000);
-                System.gc();
-            }
-
-            // Конвертируем массив в Map для удобства
-            Map<String, String> rowData = new HashMap<>();
-            for (int i = 0; i < row.length; i++) {
-                // Добавляем по индексу
-                rowData.put(String.valueOf(i), row[i]);
-
-                // Добавляем по имени заголовка если есть
-                if (headers != null && i < headers.length && headers[i] != null) {
-                    rowData.put(headers[i], row[i]);
-                }
-            }
-
-            batch.add(rowData);
-
-            // Обрабатываем батч
-            if (batch.size() >= importSettings.getBatchSize()) {
-                processBatch(session, template, batch, rowNumber);
-                batch.clear();
-            }
-        }
-
-        // Обрабатываем оставшиеся записи
-        if (!batch.isEmpty() && !cancelled.get()) {
-            processBatch(session, template, batch, rowNumber);
         }
     }
 
