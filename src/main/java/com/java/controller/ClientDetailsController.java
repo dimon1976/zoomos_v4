@@ -1,4 +1,3 @@
-// src/main/java/com/java/controller/ClientDetailsController.java
 package com.java.controller;
 
 import com.java.constants.UrlConstants;
@@ -18,7 +17,6 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * Контроллер для страниц конкретного клиента
  */
 @Controller
-@RequestMapping("/clients/{clientId}")
 @RequiredArgsConstructor
 @Slf4j
 public class ClientDetailsController {
@@ -28,7 +26,7 @@ public class ClientDetailsController {
     /**
      * Главная страница клиента (обзор)
      */
-    @GetMapping
+    @GetMapping(UrlConstants.CLIENT_DETAIL)
     public String clientOverview(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET request for client overview, clientId: {}", clientId);
 
@@ -36,13 +34,11 @@ public class ClientDetailsController {
                 .map(client -> {
                     model.addAttribute("client", client);
                     model.addAttribute("clientId", clientId);
-                    model.addAttribute("activePage", "overview");
                     return "clients/overview";
                 })
                 .orElseGet(() -> {
                     log.warn("Client not found with id: {}", clientId);
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Клиент с ID " + clientId + " не найден");
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент с ID " + clientId + " не найден");
                     return "redirect:" + UrlConstants.CLIENTS;
                 });
     }
@@ -50,7 +46,7 @@ public class ClientDetailsController {
     /**
      * Страница редактирования клиента
      */
-    @GetMapping("/edit")
+    @GetMapping(UrlConstants.CLIENT_EDIT)
     public String editClient(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET request for client edit form, clientId: {}", clientId);
 
@@ -58,12 +54,11 @@ public class ClientDetailsController {
                 .map(client -> {
                     model.addAttribute("client", client);
                     model.addAttribute("clientId", clientId);
-                    return "clients/form";
+                    return "clients/edit";
                 })
                 .orElseGet(() -> {
                     log.warn("Client not found with id: {}", clientId);
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Клиент с ID " + clientId + " не найден");
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент с ID " + clientId + " не найден");
                     return "redirect:" + UrlConstants.CLIENTS;
                 });
     }
@@ -71,7 +66,7 @@ public class ClientDetailsController {
     /**
      * Обработка обновления клиента
      */
-    @PostMapping("/edit")
+    @PostMapping(UrlConstants.CLIENT_EDIT)
     public String updateClient(@PathVariable Long clientId,
                                @Valid @ModelAttribute("client") ClientDto clientDto,
                                BindingResult result,
@@ -82,14 +77,14 @@ public class ClientDetailsController {
         if (result.hasErrors()) {
             log.debug("Validation errors detected: {}", result.getAllErrors());
             model.addAttribute("clientId", clientId);
-            return "clients/form";
+            return "clients/edit";
         }
 
         try {
             ClientDto updatedClient = clientService.updateClient(clientId, clientDto);
             redirectAttributes.addFlashAttribute("successMessage",
                     "Клиент '" + updatedClient.getName() + "' успешно обновлен");
-            return "redirect:/clients/" + clientId;
+            return "redirect:" + UrlConstants.CLIENT_DETAIL.replace("{clientId}", clientId.toString());
         } catch (EntityNotFoundException e) {
             log.error("Client not found for update: {}", e.getMessage());
             redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
@@ -98,14 +93,14 @@ public class ClientDetailsController {
             log.error("Error updating client: {}", e.getMessage());
             result.rejectValue("name", "error.client", e.getMessage());
             model.addAttribute("clientId", clientId);
-            return "clients/form";
+            return "clients/edit";
         }
     }
 
     /**
      * Страница импорта клиента
      */
-    @GetMapping("/import")
+    @GetMapping(UrlConstants.CLIENT_IMPORT)
     public String importPage(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET request for client import page, clientId: {}", clientId);
 
@@ -113,12 +108,10 @@ public class ClientDetailsController {
                 .map(client -> {
                     model.addAttribute("client", client);
                     model.addAttribute("clientId", clientId);
-                    model.addAttribute("activePage", "import");
                     return "clients/import";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Клиент с ID " + clientId + " не найден");
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент с ID " + clientId + " не найден");
                     return "redirect:" + UrlConstants.CLIENTS;
                 });
     }
@@ -126,7 +119,7 @@ public class ClientDetailsController {
     /**
      * Страница экспорта клиента
      */
-    @GetMapping("/export")
+    @GetMapping(UrlConstants.CLIENT_EXPORT)
     public String exportPage(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET request for client export page, clientId: {}", clientId);
 
@@ -134,12 +127,10 @@ public class ClientDetailsController {
                 .map(client -> {
                     model.addAttribute("client", client);
                     model.addAttribute("clientId", clientId);
-                    model.addAttribute("activePage", "export");
                     return "clients/export";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Клиент с ID " + clientId + " не найден");
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент с ID " + clientId + " не найден");
                     return "redirect:" + UrlConstants.CLIENTS;
                 });
     }
@@ -147,7 +138,7 @@ public class ClientDetailsController {
     /**
      * Страница управления шаблонами
      */
-    @GetMapping("/templates")
+    @GetMapping(UrlConstants.CLIENT_TEMPLATES)
     public String templatesPage(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET request for client templates page, clientId: {}", clientId);
 
@@ -155,12 +146,10 @@ public class ClientDetailsController {
                 .map(client -> {
                     model.addAttribute("client", client);
                     model.addAttribute("clientId", clientId);
-                    model.addAttribute("activePage", "templates");
                     return "clients/templates";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Клиент с ID " + clientId + " не найден");
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент с ID " + clientId + " не найден");
                     return "redirect:" + UrlConstants.CLIENTS;
                 });
     }
@@ -168,7 +157,7 @@ public class ClientDetailsController {
     /**
      * Страница статистики клиента
      */
-    @GetMapping("/statistics")
+    @GetMapping(UrlConstants.CLIENT_STATISTICS)
     public String statisticsPage(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET request for client statistics page, clientId: {}", clientId);
 
@@ -176,12 +165,10 @@ public class ClientDetailsController {
                 .map(client -> {
                     model.addAttribute("client", client);
                     model.addAttribute("clientId", clientId);
-                    model.addAttribute("activePage", "statistics");
                     return "clients/statistics";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Клиент с ID " + clientId + " не найден");
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент с ID " + clientId + " не найден");
                     return "redirect:" + UrlConstants.CLIENTS;
                 });
     }
@@ -189,7 +176,7 @@ public class ClientDetailsController {
     /**
      * Страница операций клиента
      */
-    @GetMapping("/operations")
+    @GetMapping(UrlConstants.CLIENT_OPERATIONS)
     public String operationsPage(@PathVariable Long clientId, Model model, RedirectAttributes redirectAttributes) {
         log.debug("GET request for client operations page, clientId: {}", clientId);
 
@@ -197,12 +184,10 @@ public class ClientDetailsController {
                 .map(client -> {
                     model.addAttribute("client", client);
                     model.addAttribute("clientId", clientId);
-                    model.addAttribute("activePage", "operations");
                     return "clients/operations";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Клиент с ID " + clientId + " не найден");
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент с ID " + clientId + " не найден");
                     return "redirect:" + UrlConstants.CLIENTS;
                 });
     }

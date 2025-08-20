@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Редактирование клиента - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Редактирование клиента',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Редактирование клиента</title>
+    <style></style>
+</head>
+<body>
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${clientId})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К обзору
+    </a>
+</div>
+
+<section>
+    <form th:action="@{/clients/{id}/edit(id=${clientId})}" th:object="${client}" method="post">
+        <input type="hidden" th:field="*{id}"/>
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Основные данные</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="name" class="form-label required-field">Имя</label>
+                        <input type="text" id="name" class="form-control" th:field="*{name}" required>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('name')}" th:errors="*{name}">Ошибка</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="description" class="form-label">Описание</label>
+                        <input type="text" id="description" class="form-control" th:field="*{description}">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="regionCode" class="form-label">Код региона</label>
+                        <input type="text" id="regionCode" class="form-control" th:field="*{regionCode}">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="regionName" class="form-label">Регион</label>
+                        <input type="text" id="regionName" class="form-control" th:field="*{regionName}">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-end">
+            <button type="submit" class="btn btn-primary btn-primary-action">
+                <i class="fas fa-save me-1"></i>Сохранить изменения
+            </button>
+        </div>
+    </form>
+</section>
+<script></script>
+</body>
+</html>
