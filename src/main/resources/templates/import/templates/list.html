@@ -30,7 +30,7 @@
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/import/templates/client/{clientId}/create(clientId=${clientId})}"
+    <a th:href="@{/clients/{clientId}/import/templates/create(clientId=${clientId})}"
        class="btn btn-primary btn-primary-action">
         <i class="fas fa-plus me-1"></i>Создать шаблон
     </a>
@@ -45,7 +45,7 @@
         <i class="fas fa-file-import fa-3x text-muted mb-3"></i>
         <h3>Нет шаблонов импорта</h3>
         <p class="text-muted">Создайте шаблон для настройки импорта данных</p>
-        <a th:href="@{/import/templates/client/{clientId}/create(clientId=${clientId})}"
+        <a th:href="@{/clients/{clientId}/import/templates/create(clientId=${clientId})}"
            class="btn btn-primary mt-3">
             <i class="fas fa-plus me-1"></i>Создать первый шаблон
         </a>
