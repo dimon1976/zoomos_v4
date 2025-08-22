@@ -1,5 +1,6 @@
 package com.java.controller;
 
+import com.java.constants.UrlConstants;
 import com.java.dto.*;
 import com.java.mapper.FileMetadataMapper;
 import com.java.model.FileOperation;
@@ -59,7 +60,7 @@ public class ImportController {
     /**
      * Загрузка файлов для импорта
      */
-    @PostMapping("/{clientId}/upload")
+    @PostMapping(UrlConstants.LEGACY_IMPORT_UPLOAD)
     public String uploadFiles(@PathVariable Long clientId,
                               @RequestParam("files") MultipartFile[] files,
                               RedirectAttributes redirectAttributes) {
@@ -103,7 +104,7 @@ public class ImportController {
     /**
      * Страница анализа загруженных файлов
      */
-    @GetMapping("/{clientId}/analyze")
+    @GetMapping(UrlConstants.LEGACY_IMPORT_ANALYZE)
     public String showAnalysis(@PathVariable Long clientId,
                                @RequestParam("session") String sessionId,
                                Model model,
@@ -130,7 +131,7 @@ public class ImportController {
     /**
      * Отмена анализа загруженных файлов
      */
-    @GetMapping("/{clientId}/cancel")
+    @GetMapping(UrlConstants.LEGACY_IMPORT_CANCEL)
     public String cancelAnalysis(@PathVariable Long clientId,
                                  @RequestParam("session") String sessionId) {
         AnalysisSession session = analysisSessions.remove(sessionId);
@@ -144,7 +145,7 @@ public class ImportController {
     /**
      * Запуск импорта файлов
      */
-    @PostMapping("/{clientId}/start")
+    @PostMapping(UrlConstants.LEGACY_IMPORT_START)
     public String startImport(@PathVariable Long clientId,
                               @RequestParam("sessionId") String sessionId,
                               @RequestParam("templateId") Long templateId,
@@ -193,13 +194,16 @@ public class ImportController {
 
             // Перенаправляем на статус СРАЗУ
             if (operationIds.size() == 1) {
-                return "redirect:/import/status/" + operationIds.get(0);
+                return "redirect:" + UrlConstants.CLIENT_OPERATION_DETAIL
+                        .replace("{clientId}", clientId.toString())
+                        .replace("{operationId}", operationIds.get(0).toString());
             }
 
             // Если несколько - на список операций клиента
             redirectAttributes.addFlashAttribute("successMessage",
                     "Запущен импорт " + operationIds.size() + " файлов");
-            return "redirect:/clients/" + clientId + "#operations";
+            return "redirect:" + UrlConstants.CLIENT_OPERATIONS
+                    .replace("{clientId}", clientId.toString());
 
         } catch (Exception e) {
             log.error("Ошибка запуска импорта", e);
@@ -233,20 +237,43 @@ public class ImportController {
     }
 
     /**
-     * Отображение статуса импорта
+     * Отображение статуса импорта (legacy URL - перенаправление на новую страницу)
      */
-    @GetMapping("/status/{operationId}")
+    @GetMapping(UrlConstants.LEGACY_IMPORT_STATUS)
     public String showImportStatus(@PathVariable Long operationId,
-                                   Model model,
                                    RedirectAttributes redirectAttributes) {
-        log.debug("GET запрос на просмотр статуса операции ID: {}", operationId);
+        log.debug("GET запрос на просмотр статуса операции ID: {} (legacy URL)", operationId);
 
         FileOperation operation = fileOperationRepository.findById(operationId)
                 .orElse(null);
 
         if (operation == null) {
             redirectAttributes.addFlashAttribute("errorMessage", "Операция не найдена");
-            return "redirect:/clients";
+            return "redirect:" + UrlConstants.CLIENTS;
+        }
+
+        // Перенаправляем на новую унифицированную страницу
+        return "redirect:" + UrlConstants.CLIENT_OPERATION_DETAIL
+                .replace("{clientId}", operation.getClient().getId().toString())
+                .replace("{operationId}", operationId.toString());
+    }
+
+    /**
+     * Отображение унифицированного статуса операции (новый endpoint)
+     */
+    @GetMapping(UrlConstants.CLIENT_OPERATION_DETAIL)
+    public String showUnifiedOperationStatus(@PathVariable Long clientId,
+                                            @PathVariable Long operationId,
+                                            Model model,
+                                            RedirectAttributes redirectAttributes) {
+        log.debug("GET запрос на просмотр унифицированного статуса операции ID: {} для клиента {}", operationId, clientId);
+
+        FileOperation operation = fileOperationRepository.findById(operationId)
+                .orElse(null);
+
+        if (operation == null || !operation.getClient().getId().equals(clientId)) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Операция не найдена");
+            return "redirect:" + UrlConstants.CLIENTS;
         }
 
         // Находим сессию импорта
@@ -254,8 +281,7 @@ public class ImportController {
                 .ifPresent(session -> model.addAttribute("importSession", session));
 
         model.addAttribute("operation", operation);
-        model.addAttribute("clientId", operation.getClient().getId());
-        model.addAttribute("clientName", operation.getClient().getName());
+        model.addAttribute("client", operation.getClient());
 
         // Добавляем вспомогательные атрибуты для отображения
         model.addAttribute("operationTypeDisplay", getOperationTypeDisplay(operation));
@@ -265,13 +291,13 @@ public class ImportController {
         model.addAttribute("formattedCompletedAt", formatDateTime(operation.getCompletedAt()));
         model.addAttribute("duration", operation.getDuration());
 
-        return "operations/status";
+        return "operations/unified-status";
     }
 
     /**
-     * API endpoint для отмены импорта
+     * API endpoint для отмены импорта (legacy URL)
      */
-    @PostMapping("/api/cancel/{operationId}")
+    @PostMapping(UrlConstants.LEGACY_IMPORT_API_CANCEL)
     @ResponseBody
     public ImportCancelResponse cancelImport(@PathVariable Long operationId) {
         log.debug("POST запрос на отмену импорта для операции ID: {}", operationId);

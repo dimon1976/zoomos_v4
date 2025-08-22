@@ -268,6 +268,12 @@ public class AsyncImportService {
                         // Отправляем сигнал отмены процессору
                         processorService.cancelImport(sessionId);
 
+                        // Обновляем статус операции на CANCELLED
+                        if (session.getFileOperation() != null) {
+                            session.getFileOperation().markAsCancelled();
+                            fileOperationRepository.save(session.getFileOperation());
+                        }
+
                         return true;
                     }
                     return false;

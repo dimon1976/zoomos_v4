@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Операции'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Операции'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Операции'}">Клиент - Операции</title>
+    <style>
+        .operations-table {
+            font-size: 0.875rem;
+        }
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        .progress-compact {
+            height: 15px;
+        }
+        .operation-filters {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .operation-row:hover {
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        .auto-refresh-indicator {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <button type="button" id="refreshOperationsBtn" class="btn btn-outline-primary me-2" onclick="refreshOperations()">
+        <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Обновить
+    </button>
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<!-- Индикатор автообновления -->
+<div class="auto-refresh-indicator">
+    <span class="badge bg-success" id="operationUpdateIndicator" style="display: none;">
+        <i class="fas fa-wifi me-1"></i>Обновлено
+    </span>
+</div>
+
+<section>
+    <!-- Заголовок страницы -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3">
+                <i class="fas fa-tasks me-2"></i>Операции клиента: 
+                <span th:text="${client.name}">Название клиента</span>
+            </h4>
+            <p class="text-muted">
+                Просмотр и управление всеми операциями импорта и экспорта файлов клиента.
+            </p>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="operation-filters">
+        <form id="operationsFilter" class="row g-3" onsubmit="return false;">
+            <div class="col-md-3">
+                <label for="operationType" class="form-label">Тип операции</label>
+                <select class="form-select" id="operationType" name="operationType" onchange="loadOperations(0)">
+                    <option value="">Все операции</option>
+                    <option value="IMPORT">Импорт</option>
+                    <option value="EXPORT">Экспорт</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="status" class="form-label">Статус</label>
+                <select class="form-select" id="status" name="status" onchange="loadOperations(0)">
+                    <option value="">Все статусы</option>
+                    <option value="PENDING">Ожидание</option>
+                    <option value="PROCESSING">Выполняется</option>
+                    <option value="COMPLETED">Завершена</option>
+                    <option value="FAILED">Ошибка</option>
+                    <option value="CANCELLED">Отменена</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="dateFrom" class="form-label">С даты</label>
+                <input type="date" class="form-control" id="dateFrom" name="from" onchange="loadOperations(0)">
+            </div>
+            <div class="col-md-3">
+                <label for="dateTo" class="form-label">До даты</label>
+                <input type="date" class="form-control" id="dateTo" name="to" onchange="loadOperations(0)">
+            </div>
+        </form>
+    </div>
+
+    <!-- Таблица операций -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-list me-2"></i>Список операций
+            </h5>
+        </div>
+        <div class="card-body">
+            <!-- Индикатор загрузки -->
+            <div id="operationsLoading" class="text-center py-4" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+                <div class="mt-2">Загрузка операций...</div>
+            </div>
+
+            <!-- Таблица операций -->
+            <div class="table-responsive">
+                <table class="table table-hover operations-table" id="operationsTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Тип</th>
+                            <th>Файл</th>
+                            <th>Статус</th>
+                            <th>Прогресс</th>
+                            <th>Записи</th>
+                            <th>Начало</th>
+                            <th>Завершение</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="operationsTableBody">
+                        <!-- Здесь будут отображаться операции -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Пагинация -->
+            <div id="operationsPagination" class="mt-3"></div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    let currentPage = 0;
+    let hasActiveOperations = false;
+    let autoRefreshInterval;
+    const clientId = [[${client.id}]];
+
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', function() {
+        loadOperations(0);
+        startAutoRefresh();
+    });
+
+    /**
+     * Загрузка списка операций
+     */
+    function loadOperations(page = 0) {
+        showLoading(true);
+        
+        const form = document.getElementById('operationsFilter');
+        const formData = new FormData(form);
+        const params = new URLSearchParams(formData);
+        params.append('page', page);
+        params.append('size', 20);
+
+        fetch(`/api/clients/${clientId}/operations?` + params.toString())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка загрузки операций');
+                }
+                return response.json();
+            })
+            .then(pageData => {
+                currentPage = pageData.page;
+                displayOperations(pageData.operations);
+                updatePagination(pageData);
+                showLoading(false);
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки операций:', error);
+                showError('Ошибка загрузки операций: ' + error.message);
+                showLoading(false);
+            });
+    }
+
+    /**
+     * Отображение операций в таблице
+     */
+    function displayOperations(operations) {
+        const tbody = document.getElementById('operationsTableBody');
+        
+        if (!operations || operations.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-4">
+                        <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                        Операции не найдены
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        // Проверяем наличие активных операций для автообновления
+        hasActiveOperations = operations.some(op => 
+            op.status === 'PROCESSING' || op.status === 'PENDING'
+        );
+
+        tbody.innerHTML = operations.map(op => `
+            <tr class="operation-row" onclick="showOperationDetail(${op.id})">
+                <td>#${op.id}</td>
+                <td>
+                    <span class="badge ${getOperationTypeBadgeClass(op.operationType)}">
+                        ${getOperationTypeLabel(op.operationType)}
+                    </span>
+                </td>
+                <td>
+                    <div class="fw-bold">${op.fileName || 'Не указан'}</div>
+                    <small class="text-muted">${op.fileType || ''}</small>
+                </td>
+                <td>
+                    <span class="badge status-badge ${getStatusBadgeClass(op.status)}">
+                        ${getStatusLabel(op.status)}
+                    </span>
+                </td>
+                <td>
+                    ${op.processingProgress !== null ? `
+                        <div class="progress progress-compact">
+                            <div class="progress-bar ${getProgressBarClass(op.status)}" 
+                                 role="progressbar" 
+                                 style="width: ${op.processingProgress}%"
+                                 aria-valuenow="${op.processingProgress}"
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                                ${op.processingProgress}%
+                            </div>
+                        </div>
+                    ` : '<span class="text-muted">—</span>'}
+                </td>
+                <td>
+                    ${op.processedRecords !== null && op.totalRecords !== null 
+                        ? `${op.processedRecords}/${op.totalRecords}` 
+                        : (op.recordCount !== null ? op.recordCount : '—')}
+                </td>
+                <td>
+                    <small>${formatDateTime(op.startedAt)}</small>
+                </td>
+                <td>
+                    <small>${op.completedAt ? formatDateTime(op.completedAt) : '—'}</small>
+                </td>
+                <td>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" 
+                                onclick="event.stopPropagation(); showOperationDetail(${op.id})"
+                                title="Подробности">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        ${(op.status === 'COMPLETED' || op.status === 'FAILED' || op.status === 'CANCELLED') ? `
+                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                    onclick="event.stopPropagation(); deleteOperation(${op.id})"
+                                    title="Удалить">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    /**
+     * Обновление пагинации
+     */
+    function updatePagination(pageData) {
+        const container = document.getElementById('operationsPagination');
+        if (!pageData || pageData.totalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let pagination = '<nav><ul class="pagination justify-content-center">';
+        
+        // Кнопка "Назад"
+        pagination += `
+            <li class="page-item ${pageData.page === 0 ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="loadOperations(${pageData.page - 1}); return false;">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+            </li>
+        `;
+
+        // Номера страниц
+        for (let i = 0; i < pageData.totalPages; i++) {
+            if (i === pageData.page || 
+                Math.abs(i - pageData.page) <= 2 || 
+                i === 0 || 
+                i === pageData.totalPages - 1) {
+                pagination += `
+                    <li class="page-item ${i === pageData.page ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="loadOperations(${i}); return false;">${i + 1}</a>
+                    </li>
+                `;
+            } else if (Math.abs(i - pageData.page) === 3) {
+                pagination += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+            }
+        }
+
+        // Кнопка "Вперед"
+        pagination += `
+            <li class="page-item ${pageData.page === pageData.totalPages - 1 ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="loadOperations(${pageData.page + 1}); return false;">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+        `;
+
+        pagination += '</ul></nav>';
+        container.innerHTML = pagination;
+    }
+
+    /**
+     * Показать/скрыть индикатор загрузки
+     */
+    function showLoading(show) {
+        const loading = document.getElementById('operationsLoading');
+        const table = document.getElementById('operationsTable');
+        
+        loading.style.display = show ? 'block' : 'none';
+        table.style.display = show ? 'none' : 'table';
+    }
+
+    /**
+     * Показать ошибку
+     */
+    function showError(message) {
+        const tbody = document.getElementById('operationsTableBody');
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="text-center text-danger py-4">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-2"></i><br>
+                    ${message}
+                </td>
+            </tr>
+        `;
+    }
+
+    /**
+     * Обновление операций
+     */
+    function refreshOperations() {
+        const refreshBtn = document.getElementById('refreshOperationsBtn');
+        const refreshIcon = document.getElementById('refreshIcon');
+        
+        refreshBtn.disabled = true;
+        refreshIcon.classList.add('fa-spin');
+        
+        loadOperations(currentPage);
+        showUpdateIndicator();
+        
+        setTimeout(() => {
+            refreshBtn.disabled = false;
+            refreshIcon.classList.remove('fa-spin');
+        }, 1000);
+    }
+
+    /**
+     * Показать индикатор обновления
+     */
+    function showUpdateIndicator() {
+        const indicator = document.getElementById('operationUpdateIndicator');
+        indicator.style.display = 'block';
+        indicator.classList.add('pulse');
+        
+        setTimeout(() => {
+            indicator.style.display = 'none';
+            indicator.classList.remove('pulse');
+        }, 2000);
+    }
+
+    /**
+     * Автоматическое обновление
+     */
+    function startAutoRefresh() {
+        autoRefreshInterval = setInterval(() => {
+            if (hasActiveOperations) {
+                loadOperations(currentPage);
+            }
+        }, 10000); // Обновляем каждые 10 секунд
+    }
+
+    /**
+     * Показать детали операции
+     */
+    function showOperationDetail(operationId) {
+        window.location.href = `/clients/${clientId}/operations/${operationId}`;
+    }
+
+    /**
+     * Удалить операцию
+     */
+    function deleteOperation(operationId) {
+        if (!operationId) {
+            console.error('ID операции не указан');
+            alert('Ошибка: ID операции не указан');
+            return;
+        }
+
+        if (confirm('Вы уверены, что хотите удалить эту операцию?')) {
+            if (!confirm('Все связанные данные будут удалены безвозвратно. Продолжить?')) {
+                return;
+            }
+
+            // Ищем кнопку удаления более надежным способом
+            const deleteBtn = document.querySelector(`button[onclick="event.stopPropagation(); deleteOperation(${operationId})"]`);
+            
+            // Сохраняем ссылки на элементы до начала операции
+            let originalBtnContent = '';
+            let btnFound = false;
+            
+            if (deleteBtn && deleteBtn.parentNode) {
+                btnFound = true;
+                originalBtnContent = deleteBtn.innerHTML;
+                deleteBtn.disabled = true;
+                deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            }
+
+            fetch(`/api/operations/${operationId}`, { method: 'DELETE' })
+                .then(response => {
+                    if (response.ok) {
+                        // Успешное удаление - обновляем список операций
+                        loadOperations(currentPage);
+                        showUpdateIndicator();
+                    } else {
+                        return response.text().then(text => {
+                            throw new Error(text || 'Ошибка удаления операции');
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка удаления операции:', error);
+                    alert('Ошибка удаления операции: ' + error.message);
+                    
+                    // При ошибке восстанавливаем кнопку только если она все еще существует
+                    if (btnFound && deleteBtn && deleteBtn.parentNode) {
+                        deleteBtn.disabled = false;
+                        deleteBtn.innerHTML = originalBtnContent;
+                    }
+                });
+        }
+    }
+
+    // Утилиты для отображения
+    function getOperationTypeBadgeClass(type) {
+        return type === 'IMPORT' ? 'bg-info' : 'bg-warning';
+    }
+
+    function getOperationTypeLabel(type) {
+        return type === 'IMPORT' ? 'Импорт' : 'Экспорт';
+    }
+
+    function getStatusBadgeClass(status) {
+        const classes = {
+            'PENDING': 'bg-secondary',
+            'PROCESSING': 'bg-primary',
+            'COMPLETED': 'bg-success',
+            'FAILED': 'bg-danger',
+            'CANCELLED': 'bg-warning'
+        };
+        return classes[status] || 'bg-secondary';
+    }
+
+    function getStatusLabel(status) {
+        const labels = {
+            'PENDING': 'Ожидание',
+            'PROCESSING': 'Выполняется',
+            'COMPLETED': 'Завершена',
+            'FAILED': 'Ошибка',
+            'CANCELLED': 'Отменена'
+        };
+        return labels[status] || status;
+    }
+
+    function getProgressBarClass(status) {
+        return status === 'FAILED' ? 'bg-danger' : 'bg-primary';
+    }
+
+    function formatDateTime(dateTimeStr) {
+        if (!dateTimeStr) return '—';
+        
+        let date;
+        
+        // Обрабатываем различные форматы даты/времени
+        if (Array.isArray(dateTimeStr)) {
+            // Массив [year, month, day, hour, minute, second]
+            const [year, month, day, hour = 0, minute = 0, second = 0] = dateTimeStr;
+            date = new Date(year, (month || 1) - 1, day || 1, hour, minute, second);
+        } else if (typeof dateTimeStr === 'number') {
+            // Unix timestamp (в секундах или миллисекундах)
+            date = new Date(dateTimeStr < 1e12 ? dateTimeStr * 1000 : dateTimeStr);
+        } else if (typeof dateTimeStr === 'string') {
+            // Строка - может быть ISO, timestamp или другой формат
+            if (/^\d+$/.test(dateTimeStr)) {
+                // Числовая строка - timestamp
+                const num = parseInt(dateTimeStr, 10);
+                date = new Date(num < 1e12 ? num * 1000 : num);
+            } else {
+                // ISO строка или другой формат
+                date = new Date(dateTimeStr);
+            }
+        } else {
+            date = new Date(dateTimeStr);
+        }
+        
+        // Проверяем валидность даты
+        if (isNaN(date.getTime())) {
+            console.warn('Некорректная дата:', dateTimeStr);
+            return '—';
+        }
+        
+        // Проверяем разумность даты (не раньше 2000 года)
+        if (date.getFullYear() < 2000) {
+            console.warn('Подозрительная дата (возможно timestamp в секундах):', dateTimeStr, date);
+            // Пробуем интерпретировать как timestamp в секундах
+            if (typeof dateTimeStr === 'number' && dateTimeStr > 1000000000) {
+                date = new Date(dateTimeStr * 1000);
+            }
+        }
+        
+        return date.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    // Очистка интервала при уходе со страницы
+    window.addEventListener('beforeunload', function() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+        }
+    });
+</script>
+
+</body>
+</html>

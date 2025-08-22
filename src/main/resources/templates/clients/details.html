@@ -90,10 +90,9 @@
             </a>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates"
-                    type="button" role="tab" aria-controls="templates" aria-selected="false">
+            <a th:href="@{/clients/{clientId}/templates(clientId=${client.id})}" class="nav-link">
                 <i class="fas fa-cogs me-1"></i>Шаблоны
-            </button>
+            </a>
         </li>
     </ul>
 
@@ -175,67 +174,6 @@
             </div>
         </div>
 
-
-
-        <!-- Новая вкладка шаблонов - объединенная -->
-        <div class="tab-pane fade" id="templates" role="tabpanel" aria-labelledby="templates-tab">
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">
-                                <i class="fas fa-file-import me-2"></i>Шаблоны импорта
-                            </h6>
-                            <a th:href="@{/clients/{clientId}/import/templates/create(clientId=${client.id})}"
-                               class="btn btn-sm btn-success">
-                                <i class="fas fa-plus me-1"></i>Создать
-                            </a>
-                        </div>
-                        <div class="card-body">
-                            <div id="importTemplatesList">
-                                <div class="template-loading">
-                                    <div class="spinner-border spinner-border-sm me-2"></div>
-                                    Загрузка...
-                                </div>
-                            </div>
-                            <div class="mt-3">
-                                <a th:href="@{/clients/{clientId}/import/templates(clientId=${client.id})}"
-                                   class="btn btn-outline-primary btn-sm">
-                                    <i class="fas fa-list me-1"></i>Все шаблоны
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">
-                                <i class="fas fa-file-export me-2"></i>Шаблоны экспорта
-                            </h6>
-                            <a th:href="@{/clients/{clientId}/export/templates/create(clientId=${client.id})}"
-                               class="btn btn-sm btn-success">
-                                <i class="fas fa-plus me-1"></i>Создать
-                            </a>
-                        </div>
-                        <div class="card-body">
-                            <div id="exportTemplatesList">
-                                <div class="template-loading">
-                                    <div class="spinner-border spinner-border-sm me-2"></div>
-                                    Загрузка...
-                                </div>
-                            </div>
-                            <div class="mt-3">
-                                <a th:href="@{/clients/{clientId}/export/templates(clientId=${client.id})}"
-                                   class="btn btn-outline-primary btn-sm">
-                                    <i class="fas fa-list me-1"></i>Все шаблоны
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- Модальное окно подтверждения удаления -->
@@ -306,11 +244,8 @@
         if (window.location.hash === '#operations') {
             const tab = new bootstrap.Tab(document.getElementById('overview-tab'));
             tab.show();
-        } else if (window.location.hash === '#templates') {
-            const tab = new bootstrap.Tab(document.getElementById('templates-tab'));
-            tab.show();
         }
-
+        
         // Автообновление операций каждые 5 секунд если есть активные операции
         setInterval(function() {
             if (hasActiveOperations) {
@@ -321,6 +256,7 @@
 
     let hasActiveOperations = false;
     let currentPage = 0;
+    const clientId = /*[[${client.id}]]*/ 0;
 
     function applyOperationFilters() {
         currentPage = 0;
@@ -328,10 +264,15 @@
     }
 
     function loadOperations(page = currentPage) {
-        const clientId = /*[[${client.id}]]*/ 0;
+        
+        if (!clientId) {
+            console.error('ID клиента не определен');
+            return;
+        }
+        
         const params = new URLSearchParams();
         params.append('page', page);
-        params.append('size', document.getElementById('filterSize').value);
+        params.append('size', document.getElementById('filterSize').value || 50);
 
         const type = document.getElementById('filterType').value;
         if (type) params.append('operationType', type);
@@ -342,28 +283,47 @@
         const to = document.getElementById('filterTo').value;
         if (to) params.append('to', to);
 
-        console.log('Запрос операций для клиента', clientId, 'страница', page);
+        console.log('Запрос операций для клиента', clientId, 'страница', page, 'параметры:', params.toString());
+
+        // Показываем индикатор загрузки
+        const noOps = document.getElementById('noOperations');
+        const tbody = document.querySelector('#operationsTable tbody');
+        noOps.style.display = 'none';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin"></i> Загрузка...</td></tr>';
 
         fetch(`/api/clients/${clientId}/operations?` + params.toString())
             .then(response => {
-                console.log('Ответ сервера по операциям статус', response.status);
+                console.log('Ответ сервера по операциям статус:', response.status, response.statusText);
                 if (!response.ok) {
                     return response.text().then(text => {
-                        throw new Error(text || 'Ошибка ответа сервера');
+                        console.error('Ошибка ответа сервера:', text);
+                        throw new Error(text || `Ошибка сервера: ${response.status} ${response.statusText}`);
                     });
                 }
                 return response.json();
             })
             .then(pageData => {
-                console.log('Получены данные страницы операций', pageData);
-                currentPage = pageData.page;
-                displayOperations(pageData.operations);
+                console.log('Получены данные страницы операций:', pageData);
+                
+                if (!pageData) {
+                    throw new Error('Пустой ответ от сервера');
+                }
+                
+                currentPage = pageData.page || 0;
+                displayOperations(pageData.operations || []);
                 updatePagination(pageData);
             })
             .catch(error => {
                 console.error('Ошибка загрузки операций:', error);
-                document.getElementById('noOperations').style.display = 'block';
-                document.querySelector('#operationsTable tbody').innerHTML = '';
+                noOps.style.display = 'block';
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center text-danger">
+                            <i class="fas fa-exclamation-triangle"></i><br>
+                            Ошибка загрузки операций: ${error.message}
+                        </td>
+                    </tr>
+                `;
                 document.getElementById('operationsPagination').innerHTML = '';
             });
     }
@@ -420,13 +380,15 @@
                 <td>${formatDateTime(op.startedAt)}</td>
                 <td>${op.recordCount || '-'}</td>
                 <td>
-                    <a href="/import/status/${op.id}" class="btn btn-sm btn-outline-primary me-1">
+                    <a href="/clients/${clientId}/operations/${op.id}" class="btn btn-sm btn-outline-primary me-1">
                         <i class="fas fa-eye me-1"></i>Детали
                     </a>
-                    <button type="button" class="btn btn-sm btn-outline-danger"
-                            onclick="deleteOperation(${op.id})">
-                        <i class="fas fa-trash-alt me-1"></i>Удалить
-                    </button>
+                    ${(op.status === 'COMPLETED' || op.status === 'FAILED' || op.status === 'CANCELLED') ? `
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                onclick="deleteOperation(${op.id})">
+                            <i class="fas fa-trash-alt me-1"></i>Удалить
+                        </button>
+                    ` : ''}
                 </td>
             </tr>
         `).join('');
@@ -462,6 +424,12 @@
     }
 
     function deleteOperation(operationId) {
+        if (!operationId) {
+            console.error('ID операции не указан');
+            alert('Ошибка: ID операции не указан');
+            return;
+        }
+
         if (!confirm('Вы действительно хотите удалить эту операцию?')) {
             return;
         }
@@ -469,16 +437,30 @@
             return;
         }
 
+        const deleteBtn = document.querySelector(`button[onclick*="deleteOperation(${operationId})"]`);
+        if (deleteBtn) {
+            deleteBtn.disabled = true;
+            const originalText = deleteBtn.innerHTML;
+            deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Удаление...';
+        }
+
         fetch(`/api/operations/${operationId}`, { method: 'DELETE' })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Ошибка удаления');
+                    return response.text().then(text => {
+                        throw new Error(text || 'Ошибка удаления операции');
+                    });
                 }
                 loadOperations();
             })
             .catch(error => {
                 console.error('Ошибка удаления операции:', error);
-                alert('Не удалось удалить операцию');
+                alert('Не удалось удалить операцию: ' + error.message);
+                
+                if (deleteBtn) {
+                    deleteBtn.disabled = false;
+                    deleteBtn.innerHTML = '<i class="fas fa-trash-alt me-1"></i>Удалить';
+                }
             });
     }
 
@@ -524,87 +506,6 @@
         document.getElementById('uploadActions').style.display = 'none';
     }
 
-    // Загрузка списков шаблонов для вкладки "Шаблоны"
-    function loadTemplatesList() {
-        const clientId = /*[[${client.id}]]*/ 0;
-
-        // Загружаем шаблоны импорта
-        fetch(`/api/import/templates/client/${clientId}/summary`)
-            .then(response => response.json())
-            .then(templates => {
-                displayImportTemplates(templates);
-            })
-            .catch(error => {
-                document.getElementById('importTemplatesList').innerHTML =
-                    '<div class="text-muted">Ошибка загрузки шаблонов</div>';
-            });
-
-        // Загружаем шаблоны экспорта
-        fetch(`/api/export/templates/client/${clientId}/summary`)
-            .then(response => response.json())
-            .then(templates => {
-                displayExportTemplates(templates);
-            })
-            .catch(error => {
-                document.getElementById('exportTemplatesList').innerHTML =
-                    '<div class="text-muted">Ошибка загрузки шаблонов</div>';
-            });
-    }
-
-    function displayImportTemplates(templates) {
-        const container = document.getElementById('importTemplatesList');
-        if (templates.length === 0) {
-            container.innerHTML = '<div class="text-muted">Нет шаблонов</div>';
-            return;
-        }
-
-        const clientId = /*[[${client.id}]]*/ 0;
-        const html = templates.slice(0, 3).map(template => `
-            <div class="template-item d-flex justify-content-between align-items-center">
-                <div>
-                    <a href="/clients/${clientId}/import/templates/${template.id}" class="text-decoration-none">
-                        <strong>${template.name}</strong>
-                    </a>
-                    <br><small class="text-muted">${template.entityType}</small>
-                </div>
-                <a href="/clients/${clientId}/import/templates/${template.id}/edit" class="btn btn-sm btn-outline-secondary">
-                    <i class="fas fa-edit"></i>
-                </a>
-            </div>
-        `).join('');
-
-        container.innerHTML = html;
-    }
-
-    function displayExportTemplates(templates) {
-        const container = document.getElementById('exportTemplatesList');
-        if (templates.length === 0) {
-            container.innerHTML = '<div class="text-muted">Нет шаблонов</div>';
-            return;
-        }
-
-        const clientId = /*[[${client.id}]]*/ 0;
-        const html = templates.slice(0, 3).map(template => `
-            <div class="template-item d-flex justify-content-between align-items-center">
-                <div>
-                    <a href="/clients/${clientId}/export/templates/${template.id}" class="text-decoration-none">
-                        <strong>${template.name}</strong>
-                    </a>
-                    <br><small class="text-muted">${template.entityType}</small>
-                </div>
-                <a href="/clients/${clientId}/export/templates/${template.id}/edit" class="btn btn-sm btn-outline-secondary">
-                    <i class="fas fa-edit"></i>
-                </a>
-            </div>
-        `).join('');
-
-        container.innerHTML = html;
-    }
-
-    // Загружаем при переключении на вкладку шаблонов
-    document.getElementById('templates-tab').addEventListener('shown.bs.tab', function() {
-        loadTemplatesList();
-    });
 
     function getOperationIcon(type) {
         switch(type) {
@@ -649,24 +550,46 @@
             return '-';
         }
 
-        let millis;
+        let date;
+        
+        // Обрабатываем различные форматы даты/времени
         if (Array.isArray(dateTime)) {
-            const [y, m, d, h = 0, min = 0, s = 0] = dateTime;
-            millis = Date.UTC(y, (m || 1) - 1, d || 1, h, min, s);
+            // Массив [year, month, day, hour, minute, second]
+            const [year, month, day, hour = 0, minute = 0, second = 0] = dateTime;
+            date = new Date(year, (month || 1) - 1, day || 1, hour, minute, second);
         } else if (typeof dateTime === 'number') {
-            millis = dateTime < 1e12 ? dateTime * 1000 : dateTime;
-        } else if (typeof dateTime === 'string' && /^\d+$/.test(dateTime)) {
-            const num = parseInt(dateTime, 10);
-            millis = num < 1e12 ? num * 1000 : num;
+            // Unix timestamp (в секундах или миллисекундах)
+            date = new Date(dateTime < 1e12 ? dateTime * 1000 : dateTime);
+        } else if (typeof dateTime === 'string') {
+            // Строка - может быть ISO, timestamp или другой формат
+            if (/^\d+$/.test(dateTime)) {
+                // Числовая строка - timestamp
+                const num = parseInt(dateTime, 10);
+                date = new Date(num < 1e12 ? num * 1000 : num);
+            } else {
+                // ISO строка или другой формат
+                date = new Date(dateTime);
+            }
         } else {
-            millis = Date.parse(dateTime);
+            date = new Date(dateTime);
         }
-
-        if (isNaN(millis)) {
+        
+        // Проверяем валидность даты
+        if (isNaN(date.getTime())) {
+            console.warn('Некорректная дата:', dateTime);
             return '-';
         }
+        
+        // Проверяем разумность даты (не раньше 2000 года)
+        if (date.getFullYear() < 2000) {
+            console.warn('Подозрительная дата (возможно timestamp в секундах):', dateTime, date);
+            // Пробуем интерпретировать как timestamp в секундах
+            if (typeof dateTime === 'number' && dateTime > 1000000000) {
+                date = new Date(dateTime * 1000);
+            }
+        }
 
-        return new Date(millis).toLocaleString('ru-RU', {
+        return date.toLocaleString('ru-RU', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',

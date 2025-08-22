@@ -91,7 +91,7 @@ public class BreadcrumbAdvice {
 
     private void handleClientSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, Long clientId) {
         String clientName = getClientName(clientId);
-        String clientPath = "/clients/" + clientId;
+        String clientPath = UrlConstants.CLIENT_DETAIL.replace("{clientId}", String.valueOf(clientId));
         crumbs.add(new BreadcrumbItem(clientName, clientPath));
 
         // Проверяем следующий сегмент после clientId
@@ -99,11 +99,14 @@ public class BreadcrumbAdvice {
             String nextSegment = segments[index + 1];
 
             switch (nextSegment) {
-                case "edit" -> crumbs.add(new BreadcrumbItem("Редактирование", clientPath + "/edit"));
+                case "edit" -> crumbs.add(new BreadcrumbItem("Редактирование", 
+                    UrlConstants.CLIENT_EDIT.replace("{clientId}", String.valueOf(clientId))));
                 case "import" -> handleImportSegment(crumbs, segments, index + 1, clientId, clientPath);
                 case "export" -> handleExportSegment(crumbs, segments, index + 1, clientId, clientPath);
-                case "templates" -> crumbs.add(new BreadcrumbItem("Шаблоны", clientPath + "/templates"));
-                case "statistics" -> crumbs.add(new BreadcrumbItem("Статистика", clientPath + "/statistics"));
+                case "templates" -> crumbs.add(new BreadcrumbItem("Шаблоны", 
+                    UrlConstants.CLIENT_TEMPLATES.replace("{clientId}", String.valueOf(clientId))));
+                case "statistics" -> crumbs.add(new BreadcrumbItem("Статистика", 
+                    UrlConstants.CLIENT_STATISTICS.replace("{clientId}", String.valueOf(clientId))));
                 case "operations" -> handleOperationsSegment(crumbs, segments, index + 1, clientId, clientPath);
             }
         }
@@ -160,12 +163,16 @@ public class BreadcrumbAdvice {
     }
 
     private void handleOperationsSegment(List<BreadcrumbItem> crumbs, String[] segments, int index, Long clientId, String clientPath) {
-        crumbs.add(new BreadcrumbItem("Операции", clientPath + "/operations"));
+        crumbs.add(new BreadcrumbItem("Операции", 
+            UrlConstants.CLIENT_OPERATIONS.replace("{clientId}", String.valueOf(clientId))));
 
         // Проверяем следующий сегмент после operations
         if (index + 1 < segments.length && isNumeric(segments[index + 1])) {
             Long operationId = Long.parseLong(segments[index + 1]);
-            crumbs.add(new BreadcrumbItem("Операция #" + operationId, clientPath + "/operations/" + operationId));
+            crumbs.add(new BreadcrumbItem("Операция #" + operationId, 
+                UrlConstants.CLIENT_OPERATION_DETAIL
+                    .replace("{clientId}", String.valueOf(clientId))
+                    .replace("{operationId}", String.valueOf(operationId))));
         }
     }
 

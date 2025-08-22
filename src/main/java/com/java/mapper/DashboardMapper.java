@@ -51,6 +51,7 @@ public class DashboardMapper {
             case PROCESSING -> "В процессе";
             case COMPLETED -> "Завершено";
             case FAILED -> "Ошибка";
+            case CANCELLED -> "Отменена";
         };
     }
 

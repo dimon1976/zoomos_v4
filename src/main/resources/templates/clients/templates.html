@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Шаблоны'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Шаблоны'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Шаблоны'}">Клиент - Шаблоны</title>
+    <style>
+        .template-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .template-item:last-child {
+            border-bottom: none;
+        }
+        .template-loading {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+        }
+        .card-templates {
+            min-height: 300px;
+        }
+        .templates-header {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            border-radius: 10px 10px 0 0;
+        }
+        .templates-grid {
+            gap: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К деталям клиента
+    </a>
+</div>
+
+<section>
+    <!-- Заголовок страницы -->
+    <div class="card mb-4">
+        <div class="card-header templates-header">
+            <div class="row align-items-center">
+                <div class="col">
+                    <h4 class="mb-0">
+                        <i class="fas fa-cogs me-2"></i>Управление шаблонами
+                    </h4>
+                    <p class="mb-0 mt-1 opacity-75">Централизованное управление шаблонами импорта и экспорта</p>
+                </div>
+                <div class="col-auto">
+                    <span class="badge bg-light text-dark fs-6">
+                        <i class="fas fa-user me-1"></i><span th:text="${client.name}">Клиент</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Основной контент -->
+    <div class="row templates-grid">
+        <!-- Шаблоны импорта -->
+        <div class="col-md-6">
+            <div class="card card-templates h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-import me-2 text-success"></i>Шаблоны импорта
+                    </h5>
+                    <div class="btn-group">
+                        <a th:href="@{/clients/{clientId}/import/templates/create(clientId=${client.id})}"
+                           class="btn btn-sm btn-success">
+                            <i class="fas fa-plus me-1"></i>Создать
+                        </a>
+                        <a th:href="@{/clients/{clientId}/import/templates(clientId=${client.id})}"
+                           class="btn btn-sm btn-outline-success">
+                            <i class="fas fa-list me-1"></i>Все
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="importTemplatesList">
+                        <div class="template-loading">
+                            <div class="spinner-border spinner-border-sm me-2"></div>
+                            Загрузка шаблонов импорта...
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="row text-center">
+                        <div class="col">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Показаны последние 5 шаблонов
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаблоны экспорта -->
+        <div class="col-md-6">
+            <div class="card card-templates h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-export me-2 text-primary"></i>Шаблоны экспорта
+                    </h5>
+                    <div class="btn-group">
+                        <a th:href="@{/clients/{clientId}/export/templates/create(clientId=${client.id})}"
+                           class="btn btn-sm btn-primary">
+                            <i class="fas fa-plus me-1"></i>Создать
+                        </a>
+                        <a th:href="@{/clients/{clientId}/export/templates(clientId=${client.id})}"
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-list me-1"></i>Все
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="exportTemplatesList">
+                        <div class="template-loading">
+                            <div class="spinner-border spinner-border-sm me-2"></div>
+                            Загрузка шаблонов экспорта...
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="row text-center">
+                        <div class="col">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Показаны последние 5 шаблонов
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Быстрые действия -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bolt me-2"></i>Быстрые действия
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <a th:href="@{/clients/{clientId}/import(clientId=${client.id})}" 
+                               class="btn btn-outline-success w-100">
+                                <i class="fas fa-file-import d-block mb-2"></i>
+                                Перейти к импорту
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a th:href="@{/clients/{clientId}/export(clientId=${client.id})}" 
+                               class="btn btn-outline-primary w-100">
+                                <i class="fas fa-file-export d-block mb-2"></i>
+                                Перейти к экспорту
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a th:href="@{/clients/{clientId}/operations(clientId=${client.id})}" 
+                               class="btn btn-outline-info w-100">
+                                <i class="fas fa-history d-block mb-2"></i>
+                                История операций
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a th:href="@{/clients/{clientId}/statistics(clientId=${client.id})}" 
+                               class="btn btn-outline-warning w-100">
+                                <i class="fas fa-chart-bar d-block mb-2"></i>
+                                Статистика
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    document.addEventListener('DOMContentLoaded', function() {
+        loadTemplatesList();
+    });
+
+    // Загрузка списков шаблонов
+    function loadTemplatesList() {
+        const clientId = /*[[${client.id}]]*/ 0;
+
+        // Загружаем шаблоны импорта
+        fetch(`/api/import/templates/client/${clientId}/summary`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка загрузки');
+                }
+                return response.json();
+            })
+            .then(templates => {
+                displayImportTemplates(templates);
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки шаблонов импорта:', error);
+                document.getElementById('importTemplatesList').innerHTML =
+                    '<div class="text-muted text-center"><i class="fas fa-exclamation-triangle me-1"></i>Ошибка загрузки шаблонов</div>';
+            });
+
+        // Загружаем шаблоны экспорта
+        fetch(`/api/export/templates/client/${clientId}/summary`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка загрузки');
+                }
+                return response.json();
+            })
+            .then(templates => {
+                displayExportTemplates(templates);
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки шаблонов экспорта:', error);
+                document.getElementById('exportTemplatesList').innerHTML =
+                    '<div class="text-muted text-center"><i class="fas fa-exclamation-triangle me-1"></i>Ошибка загрузки шаблонов</div>';
+            });
+    }
+
+    function displayImportTemplates(templates) {
+        const container = document.getElementById('importTemplatesList');
+        if (!templates || templates.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center"><i class="fas fa-inbox me-1"></i>Нет шаблонов импорта</div>';
+            return;
+        }
+
+        const clientId = /*[[${client.id}]]*/ 0;
+        const html = templates.slice(0, 5).map(template => `
+            <div class="template-item d-flex justify-content-between align-items-center">
+                <div class="flex-grow-1">
+                    <a href="/clients/${clientId}/import/templates/${template.id}" class="text-decoration-none">
+                        <strong class="d-block">${template.name}</strong>
+                    </a>
+                    <small class="text-muted">
+                        <i class="fas fa-tag me-1"></i>${template.entityType}
+                        <span class="ms-2">
+                            <i class="fas fa-calendar me-1"></i>${formatDate(template.updatedAt)}
+                        </span>
+                    </small>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <a href="/clients/${clientId}/import/templates/${template.id}" 
+                       class="btn btn-sm btn-outline-primary" title="Просмотр">
+                        <i class="fas fa-eye"></i>
+                    </a>
+                    <a href="/clients/${clientId}/import/templates/${template.id}/edit" 
+                       class="btn btn-sm btn-outline-secondary" title="Редактировать">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = html;
+    }
+
+    function displayExportTemplates(templates) {
+        const container = document.getElementById('exportTemplatesList');
+        if (!templates || templates.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center"><i class="fas fa-inbox me-1"></i>Нет шаблонов экспорта</div>';
+            return;
+        }
+
+        const clientId = /*[[${client.id}]]*/ 0;
+        const html = templates.slice(0, 5).map(template => `
+            <div class="template-item d-flex justify-content-between align-items-center">
+                <div class="flex-grow-1">
+                    <a href="/clients/${clientId}/export/templates/${template.id}" class="text-decoration-none">
+                        <strong class="d-block">${template.name}</strong>
+                    </a>
+                    <small class="text-muted">
+                        <i class="fas fa-tag me-1"></i>${template.entityType}
+                        <span class="ms-2">
+                            <i class="fas fa-calendar me-1"></i>${formatDate(template.updatedAt)}
+                        </span>
+                    </small>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <a href="/clients/${clientId}/export/templates/${template.id}" 
+                       class="btn btn-sm btn-outline-primary" title="Просмотр">
+                        <i class="fas fa-eye"></i>
+                    </a>
+                    <a href="/clients/${clientId}/export/templates/${template.id}/edit" 
+                       class="btn btn-sm btn-outline-secondary" title="Редактировать">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = html;
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return 'Не указано';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+        } catch (e) {
+            return 'Не указано';
+        }
+    }
+    /*]]*/
+</script>
+</body>
+</html>

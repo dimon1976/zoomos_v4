@@ -1,11 +1,14 @@
 package com.java.controller;
 
+import com.java.constants.UrlConstants;
 import com.java.model.Client;
 import com.java.model.FileOperation;
 import com.java.repository.ClientRepository;
 import com.java.repository.ExportSessionRepository;
+import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.repository.ImportSessionRepository;
+import com.java.service.imports.AsyncImportService;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +18,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -27,7 +31,7 @@ import java.util.stream.Collectors;
  * REST контроллер для работы с операциями
  */
 @RestController
-@RequestMapping("/api")
+@RequestMapping(UrlConstants.API_BASE)
 @RequiredArgsConstructor
 @Slf4j
 public class OperationsRestController {
@@ -36,11 +40,13 @@ public class OperationsRestController {
     private final ClientRepository clientRepository;
     private final ImportSessionRepository importSessionRepository;
     private final ExportSessionRepository exportSessionRepository;
+    private final ExportStatisticsRepository exportStatisticsRepository;
+    private final AsyncImportService asyncImportService;
 
     /**
      * Получение списка операций клиента с фильтрацией и пагинацией
      */
-    @GetMapping("/clients/{clientId}/operations")
+    @GetMapping(UrlConstants.REL_CLIENT_OPERATIONS)
     public FileOperationPageDto getClientOperations(@PathVariable Long clientId,
                                                     @RequestParam(defaultValue = "0") int page,
                                                     @RequestParam(defaultValue = "50") int size,
@@ -95,7 +101,7 @@ public class OperationsRestController {
     /**
      * Получение статуса операции
      */
-    @GetMapping("/operations/{operationId}/status")
+    @GetMapping(UrlConstants.REL_OPERATION_STATUS)
     public FileOperationDto getOperationStatus(@PathVariable Long operationId) {
         log.debug("Запрос статуса операции ID: {}", operationId);
 
@@ -105,9 +111,50 @@ public class OperationsRestController {
     }
 
     /**
+     * Отмена операции
+     */
+    @PostMapping(UrlConstants.REL_OPERATION_CANCEL)
+    public OperationResponse cancelOperation(@PathVariable Long operationId) {
+        log.debug("Запрос на отмену операции ID: {}", operationId);
+
+        try {
+            FileOperation operation = fileOperationRepository.findById(operationId)
+                    .orElseThrow(() -> new IllegalArgumentException("Операция не найдена"));
+
+            if (operation.getStatus() != FileOperation.OperationStatus.PROCESSING 
+                && operation.getStatus() != FileOperation.OperationStatus.PENDING) {
+                return new OperationResponse(false, "Операция не может быть отменена в текущем статусе");
+            }
+
+            if (operation.getOperationType() == FileOperation.OperationType.IMPORT) {
+                var sessionOpt = importSessionRepository.findByFileOperationId(operationId);
+                if (sessionOpt.isPresent()) {
+                    boolean cancelled = asyncImportService.cancelImport(sessionOpt.get().getId());
+                    if (cancelled) {
+                        return new OperationResponse(true, "Операция отменена");
+                    } else {
+                        return new OperationResponse(false, "Не удалось отменить операцию");
+                    }
+                }
+            }
+
+            // Для других типов операций - обновляем статус напрямую
+            operation.markAsCancelled();
+            fileOperationRepository.save(operation);
+            
+            return new OperationResponse(true, "Операция отменена");
+
+        } catch (Exception e) {
+            log.error("Ошибка отмены операции ID: {}", operationId, e);
+            return new OperationResponse(false, "Ошибка отмены операции: " + e.getMessage());
+        }
+    }
+
+    /**
      * Удаление операции и связанных данных
      */
-    @DeleteMapping("/operations/{operationId}")
+    @DeleteMapping(UrlConstants.REL_OPERATION_DELETE)
+    @Transactional
     public void deleteOperation(@PathVariable Long operationId) {
         log.debug("Удаление операции ID: {}", operationId);
 
@@ -115,11 +162,33 @@ public class OperationsRestController {
             throw new IllegalArgumentException("Операция не найдена");
         }
 
-        importSessionRepository.findByFileOperationId(operationId)
-                .ifPresent(importSessionRepository::delete);
-        exportSessionRepository.findByFileOperationId(operationId)
-                .ifPresent(exportSessionRepository::delete);
-        fileOperationRepository.deleteById(operationId);
+        try {
+            // Удаляем связанные данные импорта
+            importSessionRepository.findByFileOperationId(operationId)
+                    .ifPresent(importSessionRepository::delete);
+            
+            // Удаляем связанные данные экспорта с каскадным удалением статистик
+            exportSessionRepository.findByFileOperationId(operationId)
+                    .ifPresent(exportSession -> {
+                        log.debug("Удаление экспорт-сессии ID: {} и связанных статистик", exportSession.getId());
+                        
+                        // Сначала удаляем все статистики этой сессии
+                        exportStatisticsRepository.deleteByExportSessionId(exportSession.getId());
+                        log.debug("Удалены статистики для экспорт-сессии ID: {}", exportSession.getId());
+                        
+                        // Затем удаляем саму сессию
+                        exportSessionRepository.delete(exportSession);
+                        log.debug("Удалена экспорт-сессия ID: {}", exportSession.getId());
+                    });
+            
+            // Наконец удаляем файловую операцию
+            fileOperationRepository.deleteById(operationId);
+            log.debug("Удалена файловая операция ID: {}", operationId);
+            
+        } catch (Exception e) {
+            log.error("Ошибка при удалении операции ID: {}", operationId, e);
+            throw new RuntimeException("Ошибка удаления операции: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -173,5 +242,15 @@ public class OperationsRestController {
         private int size;
         private long totalElements;
         private int totalPages;
+    }
+
+    /**
+     * DTO ответа операции
+     */
+    @Data
+    @lombok.AllArgsConstructor
+    public static class OperationResponse {
+        private boolean success;
+        private String message;
     }
 }

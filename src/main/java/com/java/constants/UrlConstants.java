@@ -46,11 +46,19 @@ public final class UrlConstants {
     // Операции
     public static final String CLIENT_OPERATION_DETAIL = "/clients/{clientId}/operations/{operationId}";
 
-    // Импорт файлов
+    // Импорт файлов (новая RESTful структура)
     public static final String IMPORT_UPLOAD = "/clients/{clientId}/import/upload";
     public static final String IMPORT_ANALYZE = "/clients/{clientId}/import/analyze";
     public static final String IMPORT_START = "/clients/{clientId}/import/start";
     public static final String IMPORT_CANCEL = "/clients/{clientId}/import/cancel";
+
+    // === LEGACY IMPORT URLS (для обратной совместимости) ===
+    public static final String LEGACY_IMPORT_UPLOAD = "/import/{clientId}/upload";
+    public static final String LEGACY_IMPORT_ANALYZE = "/import/{clientId}/analyze";
+    public static final String LEGACY_IMPORT_START = "/import/{clientId}/start";
+    public static final String LEGACY_IMPORT_CANCEL = "/import/{clientId}/cancel";
+    public static final String LEGACY_IMPORT_STATUS = "/import/status/{operationId}";
+    public static final String LEGACY_IMPORT_API_CANCEL = "/import/api/cancel/{operationId}";
 
     // Экспорт
     public static final String EXPORT_START = "/clients/{clientId}/export/start";
@@ -76,6 +84,7 @@ public final class UrlConstants {
     public static final String API_OPERATIONS = "/api/operations";
     public static final String API_OPERATION_STATUS = "/api/operations/{operationId}/status";
     public static final String API_OPERATION_DELETE = "/api/operations/{operationId}";
+    public static final String API_OPERATION_CANCEL = "/api/operations/{operationId}/cancel";
 
     // API дашборда
     public static final String API_DASHBOARD_STATS = "/api/dashboard/stats";
@@ -103,6 +112,13 @@ public final class UrlConstants {
     public static final String API_STATISTICS_ANALYZE = "/api/statistics/analyze";
     public static final String API_STATISTICS_PREVIEW = "/api/statistics/preview";
     public static final String API_STATISTICS_SAVED = "/api/statistics/session/{sessionId}/saved";
+
+    // ===== RELATIVE API PATHS (для использования с @RequestMapping("/api")) =====
+    
+    public static final String REL_CLIENT_OPERATIONS = "/clients/{clientId}/operations";
+    public static final String REL_OPERATION_STATUS = "/operations/{operationId}/status";
+    public static final String REL_OPERATION_DELETE = "/operations/{operationId}";
+    public static final String REL_OPERATION_CANCEL = "/operations/{operationId}/cancel";
 
     // ===== URL PARAMETERS =====
 

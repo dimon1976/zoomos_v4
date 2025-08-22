@@ -94,7 +94,7 @@ public class FileOperation {
 
     // Enum для статуса операции
     public enum OperationStatus {
-        PENDING, PROCESSING, COMPLETED, FAILED
+        PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED
     }
 
     // Метод для установки завершения операции
@@ -119,6 +119,12 @@ public class FileOperation {
         this.status = OperationStatus.PROCESSING;
     }
 
+    // Метод для отмены операции
+    public void markAsCancelled() {
+        this.status = OperationStatus.CANCELLED;
+        this.completedAt = ZonedDateTime.now();
+    }
+
     // Метод для получения строкового представления длительности операции
     public String getDuration() {
         if (startedAt == null) {
@@ -130,6 +136,10 @@ public class FileOperation {
                 return "В процессе";
             }
             return "Не завершено";
+        }
+
+        if (status == OperationStatus.CANCELLED) {
+            return "Отменено";
         }
 
         long durationSeconds = completedAt.toEpochSecond() - startedAt.toEpochSecond();
