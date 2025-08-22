@@ -39,9 +39,9 @@
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/import/{clientId}/cancel(clientId=${clientId},session=${sessionId})}"
+    <a th:href="@{/clients/{clientId}/import(clientId=${clientId})}"
        class="btn btn-secondary">
-        <i class="fas fa-arrow-left me-1"></i>Отмена
+        <i class="fas fa-arrow-left me-1"></i>Назад к импорту
     </a>
 </div>
 
@@ -209,7 +209,7 @@
 
         <!-- Кнопки действий -->
         <div class="d-flex justify-content-between">
-            <a th:href="@{/import/{clientId}/cancel(clientId=${clientId},session=${sessionId})}"
+            <a th:href="@{/clients/{clientId}/import(clientId=${clientId})}"
                class="btn btn-secondary">
                 <i class="fas fa-times me-1"></i>Отмена
             </a>
