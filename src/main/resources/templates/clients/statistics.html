@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Статистика'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Статистика'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Статистика'}">Клиент - Статистика</title>
+    <style>
+        .statistics-section {
+            margin-bottom: 30px;
+        }
+        .export-statistics-card {
+            background-color: #f8f9fa;
+        }
+        .quick-stats-card {
+            margin-top: 15px;
+        }
+        .statistics-info {
+            background-color: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{clientId}/statistics/export(clientId=${client.id})}"
+       class="btn btn-primary btn-primary-action">
+        <i class="fas fa-chart-line me-1"></i>Анализ экспорта
+    </a>
+    <a th:href="@{/clients/{clientId}/export(clientId=${client.id})}"
+       class="btn btn-success btn-secondary-action">
+        <i class="fas fa-file-export me-1"></i>К экспорту
+    </a>
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <!-- Заголовок страницы -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3">
+                <i class="fas fa-chart-bar me-2"></i>Статистика для клиента: 
+                <span th:text="${client.name}">Название клиента</span>
+            </h4>
+            <p class="text-muted">
+                Анализ статистики позволяет отслеживать изменения в данных экспорта и выявлять аномалии.
+            </p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Основная секция статистики -->
+            <div class="card statistics-section">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Анализ статистики экспорта
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="statistics-info">
+                        <h6><i class="fas fa-info-circle me-2"></i>Возможности анализа:</h6>
+                        <ul class="mb-0 mt-2">
+                            <li>Сравнение данных экспорта между операциями</li>
+                            <li>Выявление критических изменений в статистике</li>
+                            <li>Анализ отклонений по настраиваемым порогам</li>
+                            <li>Детальные метрики по полям и записям</li>
+                            <li>Экспорт результатов анализа в Excel</li>
+                        </ul>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex">
+                        <a th:href="@{/clients/{clientId}/statistics/export(clientId=${client.id})}"
+                           class="btn btn-primary btn-lg">
+                            <i class="fas fa-chart-line me-1"></i>Начать анализ
+                        </a>
+                    </div>
+
+                    <div class="mt-4">
+                        <h6>Как работает анализ:</h6>
+                        <ol>
+                            <li>Выберите шаблон экспорта с включенной статистикой</li>
+                            <li>Укажите операции для сравнения</li>
+                            <li>Настройте пороги предупреждений</li>
+                            <li>Получите детальный отчет об изменениях</li>
+                        </ol>
+                    </div>
+
+                    <div class="alert alert-info mt-3" th:if="${#lists.isEmpty(templates)}">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Внимание:</strong> Для анализа статистики необходимо создать шаблоны экспорта с включенной опцией сбора статистики.
+                        <br>
+                        <a th:href="@{/clients/{clientId}/export/templates/create(clientId=${client.id})}" class="alert-link">
+                            Создать шаблон экспорта
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <!-- Быстрая статистика -->
+            <div class="card quick-stats-card">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-chart-bar me-2"></i>Быстрая статистика
+                    </h6>
+                    
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="stat-box">
+                                <div class="stat-value" th:text="${#lists.size(recentExports)}">0</div>
+                                <div class="stat-label">Последние экспорты</div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="stat-box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                                <div class="stat-value" th:text="${#lists.size(templates)}">0</div>
+                                <div class="stat-label">Шаблоны со статистикой</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Настройки анализа -->
+            <div class="card export-statistics-card mt-3">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-cog me-2"></i>Настройки анализа
+                    </h6>
+                    <div class="small">
+                        <div class="mb-2">
+                            <strong>Порог предупреждения:</strong> <span th:text="${warningPercentage + '%'}">5%</span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>Критический порог:</strong> <span th:text="${criticalPercentage + '%'}">10%</span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>Макс. операций:</strong> <span th:text="${maxOperations}">20</span>
+                        </div>
+                    </div>
+                    <a href="/statistics/settings" class="btn btn-sm btn-outline-primary mt-2">
+                        <i class="fas fa-cog me-1"></i>Изменить настройки
+                    </a>
+                </div>
+            </div>
+
+            <!-- Последние шаблоны -->
+            <div class="card mt-3" th:if="${!#lists.isEmpty(templates)}">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-file-alt me-2"></i>Шаблоны со статистикой
+                    </h6>
+                    <div th:each="template : ${templates}" class="small mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span th:text="${template.name}">Название шаблона</span>
+                            <span class="badge bg-success">Активен</span>
+                        </div>
+                    </div>
+                    <a th:href="@{/clients/{clientId}/export/templates(clientId=${client.id})}" 
+                       class="btn btn-sm btn-outline-primary mt-2">
+                        <i class="fas fa-list me-1"></i>Все шаблоны
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Statistics page loaded for client:', /*[[${client.id}]]*/ 0);
+        
+        // Здесь можно добавить дополнительную логику для страницы статистики
+        // например, загрузку дополнительных метрик, графиков и т.д.
+    });
+    /*]]>*/
+</script>
+</body>
+</html>

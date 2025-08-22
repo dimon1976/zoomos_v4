@@ -24,6 +24,7 @@ public final class UrlConstants {
     public static final String CLIENT_EXPORT = "/clients/{clientId}/export";
     public static final String CLIENT_TEMPLATES = "/clients/{clientId}/templates";
     public static final String CLIENT_STATISTICS = "/clients/{clientId}/statistics";
+    public static final String CLIENT_STATISTICS_EXPORT = "/clients/{clientId}/statistics/export";
     public static final String CLIENT_OPERATIONS = "/clients/{clientId}/operations";
 
     // Шаблоны импорта

@@ -48,7 +48,7 @@
 </div>
 
 <section>
-    <form id="statisticsForm" th:action="@{/statistics/analyze}" method="post">
+    <form id="statisticsForm" th:action="@{/clients/{clientId}/statistics/export/analyze(clientId=${clientId})}" method="post">
 
         <!-- Выбор шаблона -->
         <div class="card mb-4">
@@ -63,7 +63,7 @@
                         <i class="fas fa-info-circle me-2"></i>
                         Нет шаблонов с включенной статистикой
                     </div>
-                    <a th:href="@{/export/templates/client/{clientId}(clientId=${clientId})}"
+                    <a th:href="@{/clients/{clientId}/export/templates(clientId=${clientId})}"
                        class="btn btn-primary mt-3">
                         <i class="fas fa-plus me-1"></i>Создать шаблон
                     </a>
@@ -384,7 +384,7 @@
             additionalFilters: appliedFilters
         };
 
-        fetch('/statistics/preview', {
+        fetch('/clients/' + /*[[${clientId}]]*/ + '/statistics/export/preview', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

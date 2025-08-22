@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Экспорт'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Экспорт'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Экспорт'}">Клиент - Экспорт</title>
+    <style>
+        .export-section {
+            margin-bottom: 30px;
+        }
+        .template-management-card {
+            background-color: #f8f9fa;
+        }
+        .strategies-card {
+            margin-top: 15px;
+        }
+        .quick-actions-card {
+            margin-top: 15px;
+        }
+        .export-info {
+            background-color: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{clientId}/export/templates(clientId=${client.id})}"
+       class="btn btn-primary btn-primary-action">
+        <i class="fas fa-cog me-1"></i>Настроить шаблоны
+    </a>
+    <a th:href="@{/clients/{clientId}/statistics(clientId=${client.id})}"
+       class="btn btn-success btn-secondary-action">
+        <i class="fas fa-chart-line me-1"></i>Анализ статистики
+    </a>
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <!-- Заголовок страницы -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3">
+                <i class="fas fa-file-export me-2"></i>Экспорт данных для клиента: 
+                <span th:text="${client.name}">Название клиента</span>
+            </h4>
+            <p class="text-muted">
+                Экспорт позволяет выгружать данные из базы в файлы CSV или Excel с применением фильтров и стратегий обработки.
+            </p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Основная секция экспорта -->
+            <div class="card export-section">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-export me-2"></i>Быстрый экспорт данных
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="export-info">
+                        <h6><i class="fas fa-info-circle me-2"></i>Возможности экспорта:</h6>
+                        <ul class="mb-0 mt-2">
+                            <li>Выбор операций импорта для экспорта</li>
+                            <li>Применение фильтров по датам и полям</li>
+                            <li>Использование стратегий обработки данных</li>
+                            <li>Настройка формата и параметров файла</li>
+                            <li>Сохранение шаблонов для повторного использования</li>
+                        </ul>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex">
+                        <a th:href="@{/export/client/{clientId}(clientId=${client.id})}"
+                           class="btn btn-primary btn-lg">
+                            <i class="fas fa-file-export me-1"></i>Начать экспорт
+                        </a>
+                        <a th:href="@{/clients/{clientId}/statistics/export(clientId=${client.id})}"
+                           class="btn btn-success btn-lg">
+                            <i class="fas fa-chart-line me-1"></i>Анализ статистики
+                        </a>
+                    </div>
+
+                    <div class="mt-4">
+                        <h6>Как работает экспорт:</h6>
+                        <ol>
+                            <li>Выберите операции импорта для экспорта</li>
+                            <li>Настройте фильтры и параметры обработки</li>
+                            <li>Выберите или создайте шаблон экспорта</li>
+                            <li>Запустите процесс и получите файл</li>
+                        </ol>
+                    </div>
+
+                    <div class="alert alert-warning mt-3">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Внимание:</strong> Экспорт больших объемов данных может занять некоторое время.
+                        Вы получите уведомление о готовности файла.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <!-- Управление шаблонами -->
+            <div class="card template-management-card">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-cog me-2"></i>Управление шаблонами
+                    </h6>
+                    <p class="card-text small">Настройте шаблоны для автоматического экспорта данных</p>
+                    <a th:href="@{/clients/{clientId}/export/templates(clientId=${client.id})}"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-cog me-1"></i>Настроить шаблоны
+                    </a>
+                </div>
+            </div>
+
+            <!-- Быстрые действия с шаблонами -->
+            <div class="card quick-actions-card">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-tools me-2"></i>Быстрые действия
+                    </h6>
+                    <div class="d-grid gap-2">
+                        <a th:href="@{/clients/{clientId}/export/templates/create(clientId=${client.id})}"
+                           class="btn btn-sm btn-success">
+                            <i class="fas fa-plus me-1"></i>Создать шаблон
+                        </a>
+                        <a th:href="@{/clients/{clientId}/export/templates(clientId=${client.id})}"
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-list me-1"></i>Все шаблоны
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Стратегии экспорта -->
+            <div class="card strategies-card">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-cogs me-2"></i>Стратегии обработки
+                    </h6>
+                    <ul class="small mb-0">
+                        <li>Экспорт без изменений</li>
+                        <li>Сверка задание-отчет</li>
+                        <li>Дополнение из справочника</li>
+                        <li>Пользовательские правила</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Статистика клиента -->
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-chart-bar me-2"></i>Статистика клиента
+                    </h6>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="fw-bold text-primary" th:text="${client.fileOperationsCount ?: 0}">0</div>
+                            <small class="text-muted">Операций</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="fw-bold text-info">
+                                <span th:text="${client.regionCode ?: 'N/A'}">77</span>
+                            </div>
+                            <small class="text-muted">Регион</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Export page loaded for client:', /*[[${client.id}]]*/ 0);
+        
+        // Здесь можно добавить дополнительную логику для страницы экспорта
+        // например, загрузку последних операций экспорта, статистики и т.д.
+    });
+    /*]]>*/
+</script>
+</body>
+</html>
