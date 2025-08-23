@@ -7,7 +7,7 @@
 </head>
 <body>
 <div class="page-actions">
-    <a th:href="${template.id != null} ? @{/export/templates/{id}(id=${template.id})} : @{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
+    <a th:href="${template.id != null} ? @{/clients/{clientId}/export/templates/{id}(clientId=${template.clientId},id=${template.id})} : @{/clients/{id}(id=${clientId})}" class="btn btn-secondary">
         <i class="fas fa-arrow-left me-1"></i>Назад
     </a>
 </div>
