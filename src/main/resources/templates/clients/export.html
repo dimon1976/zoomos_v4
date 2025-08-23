@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Экспорт данных'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Экспорт данных'}">Клиент - Экспорт данных</title>
+    <style>
+        .info-card {
+            background-color: #f8f9fa;
+            border-left: 4px solid #17a2b8;
+        }
+        .action-card {
+            transition: transform 0.2s;
+        }
+        .action-card:hover {
+            transform: translateY(-2px);
+        }
+        .feature-list {
+            list-style: none;
+            padding-left: 0;
+        }
+        .feature-list li {
+            padding: 0.25rem 0;
+        }
+        .feature-list li::before {
+            content: "✓";
+            color: #28a745;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К деталям клиента
+    </a>
+    <a th:href="@{/clients}" class="btn btn-outline-secondary">
+        <i class="fas fa-list me-1"></i>К списку клиентов
+    </a>
+</div>
+
+<section>
+    <!-- Заголовок страницы -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-file-export me-2 text-primary"></i>Экспорт данных
+                </h1>
+                <span class="badge bg-light text-dark ms-3" th:text="${client.name}">Имя клиента</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Основные действия экспорта -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card action-card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-export me-2"></i>Быстрый экспорт данных
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Экспорт позволяет выгружать данные из базы в файлы CSV или Excel с применением фильтров и стратегий обработки.</p>
+
+                    <div class="d-grid gap-2 d-md-flex">
+                        <a th:href="@{/export/client/{clientId}(clientId=${client.id})}"
+                           class="btn btn-primary">
+                            <i class="fas fa-file-export me-1"></i>Начать экспорт
+                        </a>
+                        <a th:href="@{/statistics/client/{id}(id=${client.id})}"
+                           class="btn btn-success">
+                            <i class="fas fa-chart-line me-1"></i>Анализ статистики
+                        </a>
+                    </div>
+
+                    <div class="alert alert-info mt-3 info-card">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Возможности экспорта:</strong>
+                        <ul class="feature-list mb-0 mt-2">
+                            <li>Выбор операций импорта для экспорта</li>
+                            <li>Применение фильтров по датам и полям</li>
+                            <li>Использование стратегий обработки данных</li>
+                            <li>Настройка формата и параметров файла</li>
+                            <li>Сохранение шаблонов для повторного использования</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-light action-card">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-cog me-2"></i>Управление шаблонами
+                    </h6>
+                    <p class="card-text small">Настройте шаблоны для автоматического экспорта данных</p>
+                    <a th:href="@{/export/templates/client/{clientId}(clientId=${client.id})}"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-cog me-1"></i>Настроить шаблоны
+                    </a>
+                </div>
+            </div>
+
+            <div class="card mt-3 action-card">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-cogs me-2"></i>Стратегии экспорта
+                    </h6>
+                    <ul class="small mb-0">
+                        <li>Экспорт без изменений</li>
+                        <li>Сверка задание-отчет</li>
+                        <li>Дополнение из справочника</li>
+                        <li>Пользовательские правила</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Информационные карточки -->
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card border-primary action-card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-download me-2"></i>Экспорт данных
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="card-text small">Выгружайте обработанные данные в удобном формате с применением фильтров и настроек.</p>
+                    <div class="mt-auto">
+                        <a th:href="@{/export/client/{clientId}(clientId=${client.id})}"
+                           class="btn btn-primary btn-sm">
+                            <i class="fas fa-arrow-right me-1"></i>Начать экспорт
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-success action-card h-100">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>Статистический анализ
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="card-text small">Проводите анализ импортированных данных и получайте детальную статистику по операциям.</p>
+                    <div class="mt-auto">
+                        <a th:href="@{/statistics/client/{id}(id=${client.id})}"
+                           class="btn btn-success btn-sm">
+                            <i class="fas fa-arrow-right me-1"></i>Анализировать
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-info action-card h-100">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-template me-2"></i>Шаблоны экспорта
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="card-text small">Создавайте и управляйте шаблонами для автоматизации процессов экспорта.</p>
+                    <div class="mt-auto">
+                        <a th:href="@{/export/templates/client/{clientId}(clientId=${client.id})}"
+                           class="btn btn-info btn-sm">
+                            <i class="fas fa-arrow-right me-1"></i>Управление
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Детали клиента -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Информация о клиенте
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <p class="mb-1"><strong>Код региона:</strong>
+                                <span th:text="${client.regionCode != null && !client.regionCode.isEmpty() ? client.regionCode : 'Не указан'}">77</span>
+                            </p>
+                        </div>
+                        <div class="col-md-3">
+                            <p class="mb-1"><strong>Регион:</strong>
+                                <span th:text="${client.regionName != null && !client.regionName.isEmpty() ? client.regionName : 'Не указан'}">Москва</span>
+                            </p>
+                        </div>
+                        <div class="col-md-3">
+                            <p class="mb-1"><strong>Файловые операции:</strong>
+                                <span th:text="${client.fileOperationsCount != null ? client.fileOperationsCount : 0}">0</span>
+                            </p>
+                        </div>
+                        <div class="col-md-3">
+                            <p class="mb-1"><strong>Описание:</strong>
+                                <span th:text="${client.description != null && !client.description.isEmpty() ? client.description : 'Не указано'}">Описание</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Анимация для карточек при наведении
+        const actionCards = document.querySelectorAll('.action-card');
+        actionCards.forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+            });
+            card.addEventListener('mouseleave', function() {
+                this.style.boxShadow = '';
+            });
+        });
+    });
+</script>
+</body>
+</html>
