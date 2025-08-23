@@ -138,6 +138,7 @@ public class ExportTemplateController {
                 .map(t -> {
                     model.addAttribute("template", t);
                     model.addAttribute("templateId", templateId);
+                    model.addAttribute("clientId", clientId);
                     populateAvailableFields(model, t);
                     return "export/templates/form";
                 })
@@ -164,11 +165,13 @@ public class ExportTemplateController {
         String dynamic = handleDynamicFields(template, addField, removeField, addFilter, removeFilter, model);
         if (dynamic != null) {
             model.addAttribute("templateId", templateId);
+            model.addAttribute("clientId", clientId);
             return dynamic;
         }
 
         if (bindingResult.hasErrors()) {
             model.addAttribute("templateId", templateId);
+            model.addAttribute("clientId", clientId);
             populateAvailableFields(model, template);
             return "export/templates/form";
         }
@@ -182,6 +185,7 @@ public class ExportTemplateController {
             log.error("Ошибка обновления шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
             model.addAttribute("templateId", templateId);
+            model.addAttribute("clientId", clientId);
             populateAvailableFields(model, template);
             return "export/templates/form";
         }
@@ -236,24 +240,28 @@ public class ExportTemplateController {
         if (addField != null) {
             template.getFields().add(new ExportTemplateFieldDto());
             model.addAttribute("template", template);
+            model.addAttribute("clientId", template.getClientId());
             populateAvailableFields(model, template);
             return "export/templates/form";
         }
         if (removeField != null && removeField >= 0 && removeField < template.getFields().size()) {
             template.getFields().remove((int) removeField);
             model.addAttribute("template", template);
+            model.addAttribute("clientId", template.getClientId());
             populateAvailableFields(model, template);
             return "export/templates/form";
         }
         if (addFilter != null) {
             template.getFilters().add(new ExportTemplateFilterDto());
             model.addAttribute("template", template);
+            model.addAttribute("clientId", template.getClientId());
             populateAvailableFields(model, template);
             return "export/templates/form";
         }
         if (removeFilter != null && removeFilter >= 0 && removeFilter < template.getFilters().size()) {
             template.getFilters().remove((int) removeFilter);
             model.addAttribute("template", template);
+            model.addAttribute("clientId", template.getClientId());
             populateAvailableFields(model, template);
             return "export/templates/form";
         }

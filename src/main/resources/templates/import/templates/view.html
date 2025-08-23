@@ -150,8 +150,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <form th:action="@{/import/templates/{id}/delete(id=${template.id})}" method="post">
-                        <input type="hidden" name="clientId" th:value="${template.clientId}" />
+                    <form th:action="@{/clients/{clientId}/import/templates/{id}/delete(clientId=${template.clientId},id=${template.id})}" method="post">
                         <button type="submit" class="btn btn-danger">Удалить</button>
                     </form>
                 </div>
@@ -202,7 +201,8 @@
             const templateName = button.getAttribute('data-template-name');
 
             document.getElementById('cloneTemplateName').textContent = templateName;
-            document.getElementById('cloneForm').action = '/import/templates/' + templateId + '/clone';
+            const clientId = /*[[${template.clientId}]]*/ 0;
+            document.getElementById('cloneForm').action = '/clients/' + clientId + '/import/templates/' + templateId + '/clone';
             document.getElementById('newName').value = templateName + ' (копия)';
         });
     });
