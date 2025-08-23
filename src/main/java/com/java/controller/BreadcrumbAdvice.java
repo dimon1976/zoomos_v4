@@ -8,10 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
@@ -82,10 +79,16 @@ public class BreadcrumbAdvice {
         // Получаем имя клиента и добавляем его в крошки
         try {
             Long id = Long.parseLong(clientId);
-            String clientName = clientService.getClientById(id)
-                    .map(client -> client.getName())
-                    .orElse("Клиент #" + clientId);
-            crumbs.add(new BreadcrumbItem(clientName, "/clients/" + clientId));
+            Optional<String> clientNameOpt = clientService.getClientById(id)
+                    .map(client -> client.getName());
+            
+            if (clientNameOpt.isPresent()) {
+                crumbs.add(new BreadcrumbItem(clientNameOpt.get(), "/clients/" + clientId));
+            } else {
+                // Клиент не найден - используем стандартную генерацию без проверки клиента
+                generateStandardBreadcrumbs(crumbs, "/clients/" + clientId + (subPath != null ? "/" + subPath : ""));
+                return;
+            }
             
             // Если есть подпуть, добавляем его
             if (subPath != null && !subPath.isEmpty()) {
@@ -127,13 +130,19 @@ public class BreadcrumbAdvice {
         
         try {
             Long id = Long.parseLong(clientId);
-            String clientName = clientService.getClientById(id)
-                    .map(client -> client.getName())
-                    .orElse("Клиент #" + clientId);
+            Optional<String> clientNameOpt = clientService.getClientById(id)
+                    .map(client -> client.getName());
+            
+            if (!clientNameOpt.isPresent()) {
+                // Клиент не найден - используем стандартную генерацию
+                generateStandardBreadcrumbs(crumbs, "/clients/" + clientId + "/" + type + "/templates" + 
+                        (templatePath != null ? "/" + templatePath : ""));
+                return;
+            }
             
             // Добавляем базовые крошки
             crumbs.add(new BreadcrumbItem("Клиенты", "/clients"));
-            crumbs.add(new BreadcrumbItem(clientName, "/clients/" + clientId));
+            crumbs.add(new BreadcrumbItem(clientNameOpt.get(), "/clients/" + clientId));
             
             // Добавляем тип (Импорт/Экспорт)
             String typeLabel = SEGMENT_NAMES.getOrDefault(type, type);

@@ -13,7 +13,7 @@
 </div>
 
 <section>
-    <form th:action="${template.id != null} ? @{/export/templates/{id}/edit(id=${template.id})} : @{/export/templates/create}"
+    <form th:action="${template.id != null} ? @{/clients/{clientId}/export/templates/{id}/edit(clientId=${template.clientId},id=${template.id})} : @{/clients/{clientId}/export/templates/create(clientId=${template.clientId})}"
           th:object="${template}" method="post">
         <input type="hidden" th:field="*{id}"/>
         <input type="hidden" th:field="*{clientId}"/>

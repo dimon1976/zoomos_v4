@@ -45,7 +45,7 @@
 </div>
 
 <section>
-    <form th:action="${template.id != null ? '/import/templates/' + template.id + '/edit' : '/import/templates/create'}"
+    <form th:action="${template.id != null ? '/clients/' + template.clientId + '/import/templates/' + template.id + '/edit' : '/clients/' + template.clientId + '/import/templates/create'}"
           th:object="${template}" method="post" class="needs-validation" novalidate>
 
         <input type="hidden" th:field="*{clientId}">
@@ -357,7 +357,7 @@
             updateFieldSelects();
             return;
         }
-        fetch(`/import/templates/available-fields?entityType=${type}`)
+        fetch(`/clients/${/*[[${template.clientId}]]*/ 0}/import/templates/available-fields?entityType=${type}`)
             .then(res => res.json())
             .then(fields => {
                 availableFields = fields;
