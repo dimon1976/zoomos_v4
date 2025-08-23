@@ -23,7 +23,7 @@
        class="btn btn-secondary btn-back">
         <i class="fas fa-arrow-left me-1"></i>К клиенту
     </a>
-    <a th:href="@{/import/templates/{id}/edit(id=${template.id})}"
+    <a th:href="@{/clients/{clientId}/import/templates/{id}/edit(clientId=${template.clientId},id=${template.id})}"
        class="btn btn-primary btn-primary-action">
         <i class="fas fa-edit me-1"></i>Редактировать
     </a>

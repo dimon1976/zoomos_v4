@@ -19,7 +19,7 @@
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/export/templates/{id}/edit(id=${template.id})}" class="btn btn-primary me-2">
+    <a th:href="@{/clients/{clientId}/export/templates/{id}/edit(clientId=${template.clientId},id=${template.id})}" class="btn btn-primary me-2">
         <i class="fas fa-edit me-1"></i>Редактировать
     </a>
     <button type="button" class="btn btn-outline-info me-2" data-bs-toggle="modal" data-bs-target="#cloneModal"

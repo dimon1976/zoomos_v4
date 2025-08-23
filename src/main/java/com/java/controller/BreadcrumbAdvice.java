@@ -30,12 +30,21 @@ public class BreadcrumbAdvice {
         SEGMENT_NAMES.put("statistics", "Статистика");
         SEGMENT_NAMES.put("operations", "История операций");
         SEGMENT_NAMES.put("settings", "Настройки");
+        SEGMENT_NAMES.put("create", "Создание");
+        SEGMENT_NAMES.put("edit", "Редактирование");
+        SEGMENT_NAMES.put("view", "Просмотр");
+        SEGMENT_NAMES.put("analyze", "Анализ");
+        SEGMENT_NAMES.put("start", "Запуск");
+        SEGMENT_NAMES.put("status", "Статус");
+        SEGMENT_NAMES.put("setup", "Настройка");
+        SEGMENT_NAMES.put("results", "Результаты");
     }
 
     private final ClientService clientService;
     
-    // Паттерн для идентификации клиентских страниц: /clients/{id}/...
+    // Паттерны для идентификации различных типов страниц
     private static final Pattern CLIENT_PATH_PATTERN = Pattern.compile("^/clients/(\\d+)(?:/(.+))?$");
+    private static final Pattern TEMPLATE_PATH_PATTERN = Pattern.compile("^/clients/(\\d+)/(import|export)/templates(?:/(.+))?$");
 
     @ModelAttribute("breadcrumbs")
     public List<BreadcrumbItem> breadcrumbs(HttpServletRequest request) {
@@ -43,11 +52,18 @@ public class BreadcrumbAdvice {
         crumbs.add(new BreadcrumbItem("Главная", "/"));
 
         String uri = request.getRequestURI();
-        Matcher matcher = CLIENT_PATH_PATTERN.matcher(uri);
         
-        if (matcher.matches()) {
-            // Это страница клиента
-            generateClientBreadcrumbs(crumbs, matcher);
+        // Проверяем специальные паттерны template paths
+        Matcher templateMatcher = TEMPLATE_PATH_PATTERN.matcher(uri);
+        if (templateMatcher.matches()) {
+            generateTemplateBreadcrumbs(crumbs, templateMatcher);
+            return crumbs;
+        }
+        
+        // Проверяем обычные client paths
+        Matcher clientMatcher = CLIENT_PATH_PATTERN.matcher(uri);
+        if (clientMatcher.matches()) {
+            generateClientBreadcrumbs(crumbs, clientMatcher);
         } else {
             // Стандартная генерация хлебных крошек
             generateStandardBreadcrumbs(crumbs, uri);
@@ -102,6 +118,67 @@ public class BreadcrumbAdvice {
             String label = SEGMENT_NAMES.getOrDefault(part, part);
             crumbs.add(new BreadcrumbItem(label, path.toString()));
         }
+    }
+
+    private void generateTemplateBreadcrumbs(List<BreadcrumbItem> crumbs, Matcher matcher) {
+        String clientId = matcher.group(1);
+        String type = matcher.group(2); // import или export
+        String templatePath = matcher.group(3); // все после /templates/
+        
+        try {
+            Long id = Long.parseLong(clientId);
+            String clientName = clientService.getClientById(id)
+                    .map(client -> client.getName())
+                    .orElse("Клиент #" + clientId);
+            
+            // Добавляем базовые крошки
+            crumbs.add(new BreadcrumbItem("Клиенты", "/clients"));
+            crumbs.add(new BreadcrumbItem(clientName, "/clients/" + clientId));
+            
+            // Добавляем тип (Импорт/Экспорт)
+            String typeLabel = SEGMENT_NAMES.getOrDefault(type, type);
+            crumbs.add(new BreadcrumbItem(typeLabel, "/clients/" + clientId + "/" + type));
+            
+            // Добавляем "Шаблоны"
+            crumbs.add(new BreadcrumbItem("Шаблоны", "/clients/" + clientId + "/" + type + "/templates"));
+            
+            // Если есть дополнительный путь (templateId, edit, create, etc.)
+            if (templatePath != null && !templatePath.isEmpty()) {
+                String[] pathParts = templatePath.split("/");
+                StringBuilder pathBuilder = new StringBuilder("/clients/" + clientId + "/" + type + "/templates");
+                
+                for (String part : pathParts) {
+                    if (!part.isEmpty()) {
+                        pathBuilder.append("/").append(part);
+                        
+                        // Если это ID шаблона (число), получаем имя шаблона
+                        if (part.matches("\\d+")) {
+                            try {
+                                Long templateId = Long.parseLong(part);
+                                String templateName = getTemplateName(templateId, type);
+                                crumbs.add(new BreadcrumbItem(templateName, pathBuilder.toString()));
+                            } catch (NumberFormatException e) {
+                                crumbs.add(new BreadcrumbItem("Шаблон #" + part, pathBuilder.toString()));
+                            }
+                        } else {
+                            // Это действие (create, edit, etc.)
+                            String label = SEGMENT_NAMES.getOrDefault(part, part);
+                            crumbs.add(new BreadcrumbItem(label, pathBuilder.toString()));
+                        }
+                    }
+                }
+            }
+        } catch (NumberFormatException e) {
+            // Если не удается распарсить ID, используем стандартную генерацию
+            generateStandardBreadcrumbs(crumbs, "/clients/" + clientId + "/" + type + "/templates" + 
+                    (templatePath != null ? "/" + templatePath : ""));
+        }
+    }
+    
+    private String getTemplateName(Long templateId, String type) {
+        // TODO: Можно добавить сервис для получения имен шаблонов
+        // Пока возвращаем базовое имя
+        return "Шаблон #" + templateId;
     }
 
     @Data

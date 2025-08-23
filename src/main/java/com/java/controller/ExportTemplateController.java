@@ -22,7 +22,7 @@ import java.util.List;
  * Контроллер для управления шаблонами экспорта
  */
 @Controller
-@RequestMapping("/export/templates")
+@RequestMapping("/clients/{clientId}/export/templates")
 @RequiredArgsConstructor
 @Slf4j
 public class ExportTemplateController {
@@ -34,7 +34,7 @@ public class ExportTemplateController {
     /**
      * Форма создания шаблона
      */
-    @GetMapping("/client/{clientId}")
+    @GetMapping
     public String listTemplates(@PathVariable Long clientId, Model model) {
         model.addAttribute("templates", templateService.getClientTemplates(clientId));
         model.addAttribute("clientId", clientId);
@@ -42,7 +42,7 @@ public class ExportTemplateController {
         return "export/templates/list";
     }
 
-    @GetMapping("/client/{clientId}/create")
+    @GetMapping("/create")
     public String showCreateForm(@PathVariable Long clientId, Model model) {
         ExportTemplateDto template = new ExportTemplateDto();
         template.setClientId(clientId);
@@ -56,7 +56,8 @@ public class ExportTemplateController {
      * Создание шаблона
      */
     @PostMapping("/create")
-    public String createTemplate(@Valid @ModelAttribute("template") ExportTemplateDto template,
+    public String createTemplate(@PathVariable Long clientId,
+                                 @Valid @ModelAttribute("template") ExportTemplateDto template,
                                  BindingResult bindingResult,
                                  @RequestParam(required = false) String addField,
                                  @RequestParam(required = false) Integer removeField,
@@ -95,7 +96,7 @@ public class ExportTemplateController {
             ExportTemplateDto created = templateService.createTemplate(template);
             redirectAttributes.addFlashAttribute("successMessage",
                     "Шаблон '" + created.getName() + "' успешно создан");
-            return "redirect:/export/templates/" + created.getId();
+            return "redirect:/clients/" + clientId + "/export/templates/" + created.getId();
         } catch (Exception e) {
             log.error("Ошибка создания шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
@@ -109,7 +110,8 @@ public class ExportTemplateController {
      * Просмотр шаблона
      */
     @GetMapping("/{templateId}")
-    public String viewTemplate(@PathVariable Long templateId,
+    public String viewTemplate(@PathVariable Long clientId,
+                               @PathVariable Long templateId,
                                Model model,
                                RedirectAttributes redirectAttributes) {
         return templateService.getTemplate(templateId)
@@ -120,7 +122,7 @@ public class ExportTemplateController {
                 })
                 .orElseGet(() -> {
                     redirectAttributes.addFlashAttribute("errorMessage", "Шаблон не найден");
-                    return "redirect:/clients";
+                    return "redirect:/clients/" + clientId + "/export/templates";
                 });
     }
 
@@ -128,7 +130,8 @@ public class ExportTemplateController {
      * Форма редактирования
      */
     @GetMapping("/{templateId}/edit")
-    public String showEditForm(@PathVariable Long templateId,
+    public String showEditForm(@PathVariable Long clientId,
+                               @PathVariable Long templateId,
                                Model model,
                                RedirectAttributes redirectAttributes) {
         return templateService.getTemplate(templateId)
@@ -140,7 +143,7 @@ public class ExportTemplateController {
                 })
                 .orElseGet(() -> {
                     redirectAttributes.addFlashAttribute("errorMessage", "Шаблон не найден");
-                    return "redirect:/clients";
+                    return "redirect:/clients/" + clientId + "/export/templates";
                 });
     }
 
@@ -148,7 +151,8 @@ public class ExportTemplateController {
      * Обновление шаблона
      */
     @PostMapping("/{templateId}/edit")
-    public String updateTemplate(@PathVariable Long templateId,
+    public String updateTemplate(@PathVariable Long clientId,
+                                 @PathVariable Long templateId,
                                  @Valid @ModelAttribute("template") ExportTemplateDto template,
                                  BindingResult bindingResult,
                                  @RequestParam(required = false) String addField,
@@ -173,7 +177,7 @@ public class ExportTemplateController {
             ExportTemplateDto updated = templateService.updateTemplate(templateId, template);
             redirectAttributes.addFlashAttribute("successMessage",
                     "Шаблон '" + updated.getName() + "' успешно обновлен");
-            return "redirect:/export/templates/" + templateId;
+            return "redirect:/clients/" + clientId + "/export/templates/" + templateId;
         } catch (Exception e) {
             log.error("Ошибка обновления шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
@@ -187,8 +191,8 @@ public class ExportTemplateController {
      * Удаление шаблона
      */
     @PostMapping("/{templateId}/delete")
-    public String deleteTemplate(@PathVariable Long templateId,
-                                 @RequestParam Long clientId,
+    public String deleteTemplate(@PathVariable Long clientId,
+                                 @PathVariable Long templateId,
                                  RedirectAttributes redirectAttributes) {
         try {
             templateService.deleteTemplate(templateId);
@@ -197,7 +201,7 @@ public class ExportTemplateController {
             log.error("Ошибка удаления шаблона", e);
             redirectAttributes.addFlashAttribute("errorMessage", "Ошибка удаления шаблона: " + e.getMessage());
         }
-        return "redirect:/export/templates/client/" + clientId;
+        return "redirect:/clients/" + clientId + "/export/templates";
     }
 
 
@@ -205,9 +209,9 @@ public class ExportTemplateController {
      * Клонирование шаблона
      */
     @PostMapping("/{templateId}/clone")
-    public String cloneTemplate(@PathVariable Long templateId,
+    public String cloneTemplate(@PathVariable Long clientId,
+                                @PathVariable Long templateId,
                                 @RequestParam String newName,
-                                @RequestParam Long clientId,
                                 RedirectAttributes redirectAttributes) {
         log.debug("POST запрос на клонирование шаблона ID: {} с именем: {} для клиента {}",
                 templateId, newName, clientId);
@@ -215,11 +219,11 @@ public class ExportTemplateController {
         try {
             ExportTemplateDto cloned = templateService.cloneTemplate(templateId, newName, clientId);
             redirectAttributes.addFlashAttribute("successMessage", "Шаблон успешно клонирован");
-            return "redirect:/export/templates/" + cloned.getId();
+            return "redirect:/clients/" + clientId + "/export/templates/" + cloned.getId();
         } catch (Exception e) {
             log.error("Ошибка клонирования шаблона", e);
             redirectAttributes.addFlashAttribute("errorMessage", "Ошибка клонирования шаблона: " + e.getMessage());
-            return "redirect:/export/templates/" + templateId;
+            return "redirect:/clients/" + clientId + "/export/templates/" + templateId;
         }
     }
 
