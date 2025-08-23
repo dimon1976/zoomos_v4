@@ -18,7 +18,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Slf4j
 public class AsyncConfig {
 
-    @Value("${import.async.core-pool-size:2}")
+    @Value("${import.async.core-pool-size:2}") //
     private int corePoolSize;
 
     @Value("${import.async.max-pool-size:4}")
