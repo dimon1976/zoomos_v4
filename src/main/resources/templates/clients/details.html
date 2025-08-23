@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{layout/main :: html(
-        ${client.name + ' - Обработка файлов'},
+        ${client.name + ' - Обзор клиента'},
         ~{::section},
         ~{::script},
         ~{::style},
@@ -9,25 +9,26 @@
         ~{::.page-actions}
       )}">
 <head>
-    <title th:text="${client.name + ' - Обработка файлов'}">Клиент - Обработка файлов</title>
+    <title th:text="${client.name + ' - Обзор клиента'}">Клиент - Обзор клиента</title>
     <style>
-        .tab-content {
-            padding: 20px 0;
+        .section-card {
+            transition: transform 0.2s;
         }
-        .status-badge {
-            font-size: 0.875rem;
+        .section-card:hover {
+            transform: translateY(-2px);
         }
-        .operation-row:hover {
+        .info-card {
             background-color: #f8f9fa;
+            border-left: 4px solid #17a2b8;
         }
-        /* Стили для компактного progress bar */
-        .progress-compact {
-            height: 20px;
-            border-radius: 10px;
+        .stats-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #495057;
         }
-        .progress-compact .progress-bar {
-            line-height: 20px;
-            font-size: 11px;
+        .stats-label {
+            color: #6c757d;
+            font-size: 0.875rem;
         }
     </style>
 </head>
@@ -82,14 +83,6 @@
                     <div class="row">
                         <div class="col-md-2 col-sm-6 mb-2">
                             <div class="d-grid">
-                                <button class="btn btn-primary" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview"
-                                        type="button" role="tab" aria-controls="overview" aria-selected="true">
-                                    <i class="fas fa-chart-line me-1"></i>Обзор
-                                </button>
-                            </div>
-                        </div>
-                        <div class="col-md-2 col-sm-6 mb-2">
-                            <div class="d-grid">
                                 <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-outline-primary">
                                     <i class="fas fa-file-import me-1"></i>Импорт
                                 </a>
@@ -104,10 +97,9 @@
                         </div>
                         <div class="col-md-2 col-sm-6 mb-2">
                             <div class="d-grid">
-                                <button class="btn btn-outline-primary" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates"
-                                        type="button" role="tab" aria-controls="templates" aria-selected="false">
+                                <a th:href="@{/clients/{id}/templates(id=${client.id})}" class="btn btn-outline-primary">
                                     <i class="fas fa-cogs me-1"></i>Шаблоны
-                                </button>
+                                </a>
                             </div>
                         </div>
                         <div class="col-md-2 col-sm-6 mb-2">
@@ -130,143 +122,82 @@
         </div>
     </div>
 
-    <div class="tab-content" id="clientTabsContent">
-        <!-- Вкладка обзора (бывшие операции) -->
-        <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-history me-2"></i>История операций
-                    </h5>
-                </div>
+    <!-- Краткая статистика -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card section-card text-center">
                 <div class="card-body">
-                    <form id="operationsFilter" class="row g-3 mb-3" onsubmit="return false;">
-                        <div class="col-md-3">
-                            <label for="filterType" class="form-label">Тип операции</label>
-                            <select id="filterType" class="form-select">
-                                <option value="">Все</option>
-                                <option value="IMPORT">Импорт</option>
-                                <option value="EXPORT">Экспорт</option>
-                                <option value="PROCESS">Обработка</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="filterStatus" class="form-label">Статус</label>
-                            <select id="filterStatus" class="form-select">
-                                <option value="">Все</option>
-                                <option value="PENDING">Ожидание</option>
-                                <option value="PROCESSING">В процессе</option>
-                                <option value="COMPLETED">Завершено</option>
-                                <option value="FAILED">Ошибка</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label for="filterFrom" class="form-label">Дата с</label>
-                            <input type="date" id="filterFrom" class="form-control"/>
-                        </div>
-                        <div class="col-md-2">
-                            <label for="filterTo" class="form-label">Дата по</label>
-                            <input type="date" id="filterTo" class="form-control"/>
-                        </div>
-                        <div class="col-md-2">
-                            <label for="filterSize" class="form-label">На странице</label>
-                            <select id="filterSize" class="form-select">
-                                <option value="10">10</option>
-                                <option value="25">25</option>
-                                <option value="50" selected>50</option>
-                                <option value="100">100</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2 align-self-end">
-                            <button type="button" class="btn btn-primary" onclick="applyOperationFilters()">Применить</button>
-                        </div>
-                    </form>
-                    <div class="table-responsive">
-                        <table class="table table-hover" id="operationsTable">
-                            <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Тип</th>
-                                <th>Файл</th>
-                                <th>Статус</th>
-                                <th>Прогресс</th>
-                                <th>Время запуска</th>
-                                <th>Записей</th>
-                                <th>Действия</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            <!-- Операции будут загружены через AJAX -->
-                            </tbody>
-                        </table>
+                    <div class="stats-value" id="totalOperations">
+                        <i class="fas fa-spinner fa-spin"></i>
                     </div>
-                    <div id="noOperations" class="text-center text-muted py-4" style="display: none;">
-                        Нет операций для отображения
-                    </div>
-                    <div id="operationsPagination" class="mt-3"></div>
+                    <div class="stats-label">Всего операций</div>
                 </div>
             </div>
         </div>
+        <div class="col-md-3 mb-3">
+            <div class="card section-card text-center">
+                <div class="card-body">
+                    <div class="stats-value" id="totalRecords">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="stats-label">Записей обработано</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card section-card text-center">
+                <div class="card-body">
+                    <div class="stats-value" id="totalTemplates">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="stats-label">Активных шаблонов</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card section-card text-center">
+                <div class="card-body">
+                    <div class="stats-value text-warning" id="activeOperations">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="stats-label">Активных операций</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-
-
-        <!-- Новая вкладка шаблонов - объединенная -->
-        <div class="tab-pane fade" id="templates" role="tabpanel" aria-labelledby="templates-tab">
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">
-                                <i class="fas fa-file-import me-2"></i>Шаблоны импорта
-                            </h6>
-                            <a th:href="@{/import/templates/client/{clientId}/create(clientId=${client.id})}"
-                               class="btn btn-sm btn-success">
-                                <i class="fas fa-plus me-1"></i>Создать
-                            </a>
-                        </div>
-                        <div class="card-body">
-                            <div id="importTemplatesList">
-                                <div class="template-loading">
-                                    <div class="spinner-border spinner-border-sm me-2"></div>
-                                    Загрузка...
-                                </div>
-                            </div>
-                            <div class="mt-3">
-                                <a th:href="@{/import/templates/client/{clientId}(clientId=${client.id})}"
-                                   class="btn btn-outline-primary btn-sm">
-                                    <i class="fas fa-list me-1"></i>Все шаблоны
-                                </a>
-                            </div>
+    <!-- Последние операции -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-clock me-2"></i>Последние операции
+                    </h5>
+                    <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-history me-1"></i>Вся история
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div id="recentOperations">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <div class="mt-2">Загрузка последних операций...</div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">
-                                <i class="fas fa-file-export me-2"></i>Шаблоны экспорта
-                            </h6>
-                            <a th:href="@{/export/templates/client/{clientId}/create(clientId=${client.id})}"
-                               class="btn btn-sm btn-success">
-                                <i class="fas fa-plus me-1"></i>Создать
-                            </a>
-                        </div>
-                        <div class="card-body">
-                            <div id="exportTemplatesList">
-                                <div class="template-loading">
-                                    <div class="spinner-border spinner-border-sm me-2"></div>
-                                    Загрузка...
-                                </div>
-                            </div>
-                            <div class="mt-3">
-                                <a th:href="@{/export/templates/client/{clientId}(clientId=${client.id})}"
-                                   class="btn btn-outline-primary btn-sm">
-                                    <i class="fas fa-list me-1"></i>Все шаблоны
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Информационная панель -->
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-info info-card">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Обзор клиента:</strong>
+                Здесь отображается краткая информация о клиенте и его активности. 
+                Используйте навигационное меню выше для перехода к конкретным разделам: импорт, экспорт, шаблоны, история операций и подробная статистика.
             </div>
         </div>
     </div>
@@ -296,275 +227,167 @@
     </div>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
 <script th:inline="javascript">
     /*<![CDATA[*/
     document.addEventListener('DOMContentLoaded', function() {
-        // Загружаем операции клиента
-        loadOperations();
+        // Загружаем данные обзора при загрузке страницы
+        loadOverviewData();
 
-
-        // Обработка якоря в URL для переключения на нужную вкладку
-        if (window.location.hash === '#operations') {
-            const tab = new bootstrap.Tab(document.getElementById('overview-tab'));
-            tab.show();
-        } else if (window.location.hash === '#templates') {
-            const tab = new bootstrap.Tab(document.getElementById('templates-tab'));
-            tab.show();
-        }
-
-        // Автообновление операций каждые 5 секунд если есть активные операции
-        setInterval(function() {
-            if (hasActiveOperations) {
-                loadOperations();
-            }
-        }, 5000);
+        // Автообновление каждые 30 секунд
+        setInterval(loadOverviewData, 30000);
     });
 
-    let hasActiveOperations = false;
-    let currentPage = 0;
-
-    function applyOperationFilters() {
-        currentPage = 0;
-        loadOperations();
+    function loadOverviewData() {
+        const clientId = /*[[${client.id}]]*/ 0;
+        
+        // Загружаем общую статистику
+        loadGeneralStats(clientId);
+        
+        // Загружаем последние операции
+        loadRecentOperations(clientId);
     }
 
-    function loadOperations(page = currentPage) {
-        const clientId = /*[[${client.id}]]*/ 0;
-        const params = new URLSearchParams();
-        params.append('page', page);
-        params.append('size', document.getElementById('filterSize').value);
+    function loadGeneralStats(clientId) {
+        // Загружаем общую статистику операций
+        fetch(`/api/clients/${clientId}/operations?page=0&size=1`)
+            .then(response => response.ok ? response.json() : null)
+            .then(pageData => {
+                const totalOps = pageData ? pageData.totalElements : 0;
+                document.getElementById('totalOperations').textContent = totalOps;
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки общей статистики:', error);
+                document.getElementById('totalOperations').textContent = 'N/A';
+            });
 
-        const type = document.getElementById('filterType').value;
-        if (type) params.append('operationType', type);
-        const status = document.getElementById('filterStatus').value;
-        if (status) params.append('status', status);
-        const from = document.getElementById('filterFrom').value;
-        if (from) params.append('from', from);
-        const to = document.getElementById('filterTo').value;
-        if (to) params.append('to', to);
+        // Загружаем статистику активных операций
+        fetch(`/api/clients/${clientId}/operations?status=PROCESSING,PENDING&page=0&size=1`)
+            .then(response => response.ok ? response.json() : null)
+            .then(pageData => {
+                const activeOps = pageData ? pageData.totalElements : 0;
+                document.getElementById('activeOperations').textContent = activeOps;
+                
+                // Если есть активные операции, меняем цвет
+                if (activeOps > 0) {
+                    document.getElementById('activeOperations').className = 'stats-value text-warning';
+                } else {
+                    document.getElementById('activeOperations').className = 'stats-value text-success';
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки активных операций:', error);
+                document.getElementById('activeOperations').textContent = 'N/A';
+            });
 
-        console.log('Запрос операций для клиента', clientId, 'страница', page);
+        // Загружаем количество шаблонов
+        Promise.all([
+            fetch(`/api/import/templates/client/${clientId}/summary`).then(r => r.ok ? r.json() : []),
+            fetch(`/api/export/templates/client/${clientId}/summary`).then(r => r.ok ? r.json() : [])
+        ])
+        .then(([importTemplates, exportTemplates]) => {
+            const totalTemplates = importTemplates.length + exportTemplates.length;
+            document.getElementById('totalTemplates').textContent = totalTemplates;
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки шаблонов:', error);
+            document.getElementById('totalTemplates').textContent = 'N/A';
+        });
 
-        fetch(`/api/clients/${clientId}/operations?` + params.toString())
+        // Загружаем общую статистику записей (это может потребовать отдельного API)
+        // Пока используем заглушку
+        document.getElementById('totalRecords').textContent = '0';
+    }
+
+    function loadRecentOperations(clientId) {
+        fetch(`/api/clients/${clientId}/operations?page=0&size=5`)
             .then(response => {
-                console.log('Ответ сервера по операциям статус', response.status);
                 if (!response.ok) {
-                    return response.text().then(text => {
-                        throw new Error(text || 'Ошибка ответа сервера');
-                    });
+                    throw new Error('Ошибка загрузки операций');
                 }
                 return response.json();
             })
             .then(pageData => {
-                console.log('Получены данные страницы операций', pageData);
-                currentPage = pageData.page;
-                displayOperations(pageData.operations);
-                updatePagination(pageData);
+                displayRecentOperations(pageData.operations || []);
             })
             .catch(error => {
-                console.error('Ошибка загрузки операций:', error);
-                document.getElementById('noOperations').style.display = 'block';
-                document.querySelector('#operationsTable tbody').innerHTML = '';
-                document.getElementById('operationsPagination').innerHTML = '';
+                console.error('Ошибка загрузки последних операций:', error);
+                document.getElementById('recentOperations').innerHTML = `
+                    <div class="text-center py-4">
+                        <div class="text-muted">
+                            <i class="fas fa-exclamation-circle fa-2x mb-2"></i>
+                            <div>Ошибка загрузки операций</div>
+                        </div>
+                    </div>
+                `;
             });
     }
 
-    function displayOperations(operations) {
-        const tbody = document.querySelector('#operationsTable tbody');
-        const noOps = document.getElementById('noOperations');
-
+    function displayRecentOperations(operations) {
+        const container = document.getElementById('recentOperations');
+        
         if (!operations || operations.length === 0) {
-            console.log('Операции не найдены для отображения');
-            tbody.innerHTML = '';
-            noOps.style.display = 'block';
-            hasActiveOperations = false;
-            return;
-        }
-
-        console.debug('Загружены операции:', operations);
-        operations.forEach(op => console.debug('Операция', op.id, 'статус', op.status, 'прогресс', op.processingProgress));
-
-        noOps.style.display = 'none';
-        hasActiveOperations = operations.some(op =>
-            op.status === 'PROCESSING' || op.status === 'PENDING'
-        );
-
-        tbody.innerHTML = operations.map(op => `
-            <tr class="operation-row">
-                <td>${op.id}</td>
-                <td>
-                    <i class="fas fa-${getOperationIcon(op.operationType)} me-1"></i>
-                    ${getOperationTypeDisplay(op.operationType)}
-                </td>
-                <td class="text-truncate" style="max-width: 200px;" title="${op.fileName}">
-                    ${op.fileName}
-                </td>
-                <td>
-                    <span class="badge status-badge ${getStatusClass(op.status)}">
-                        ${getStatusDisplay(op.status)}
-                    </span>
-                </td>
-                <td>
-                    ${op.status === 'PROCESSING'
-            ? `<div class="progress progress-compact">
-                             <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                                  role="progressbar"
-                                  style="width: ${op.processingProgress || 0}%"
-                                  aria-valuenow="${op.processingProgress || 0}"
-                                  aria-valuemin="0"
-                                  aria-valuemax="100">
-                               <small class="text-white fw-bold">${op.processingProgress || 0}%</small>
-                             </div>
-                           </div>`
-            : (op.processingProgress != null ? op.processingProgress + '%' : '-')}
-                </td>
-                <td>${formatDateTime(op.startedAt)}</td>
-                <td>${op.recordCount || '-'}</td>
-                <td>
-                    <a href="/import/status/${op.id}" class="btn btn-sm btn-outline-primary me-1">
-                        <i class="fas fa-eye me-1"></i>Детали
-                    </a>
-                    <button type="button" class="btn btn-sm btn-outline-danger"
-                            onclick="deleteOperation(${op.id})">
-                        <i class="fas fa-trash-alt me-1"></i>Удалить
-                    </button>
-                </td>
-            </tr>
-        `).join('');
-    }
-
-    function updatePagination(pageData) {
-        const container = document.getElementById('operationsPagination');
-        if (!pageData || pageData.totalPages <= 1) {
-            container.innerHTML = '';
-            return;
-        }
-        const prevDisabled = pageData.page === 0 ? 'disabled' : '';
-        const nextDisabled = pageData.page >= pageData.totalPages - 1 ? 'disabled' : '';
-        container.innerHTML = `
-            <nav>
-                <ul class="pagination justify-content-center mb-0">
-                    <li class="page-item ${prevDisabled}">
-                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.page - 1}); return false;">Предыдущая</a>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">${pageData.page + 1} / ${pageData.totalPages}</span>
-                    </li>
-                    <li class="page-item ${nextDisabled}">
-                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.page + 1}); return false;">Следующая</a>
-                    </li>
-                </ul>
-            </nav>`;
-    }
-
-    function changeOperationsPage(page) {
-        if (page < 0) return;
-        loadOperations(page);
-    }
-
-    function deleteOperation(operationId) {
-        if (!confirm('Вы действительно хотите удалить эту операцию?')) {
-            return;
-        }
-        if (!confirm('Все связанные данные будут удалены безвозвратно. Продолжить?')) {
-            return;
-        }
-
-        fetch(`/api/operations/${operationId}`, { method: 'DELETE' })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Ошибка удаления');
-                }
-                loadOperations();
-            })
-            .catch(error => {
-                console.error('Ошибка удаления операции:', error);
-                alert('Не удалось удалить операцию');
-            });
-    }
-
-
-    // Загрузка списков шаблонов для вкладки "Шаблоны"
-    function loadTemplatesList() {
-        const clientId = /*[[${client.id}]]*/ 0;
-
-        // Загружаем шаблоны импорта
-        fetch(`/api/import/templates/client/${clientId}/summary`)
-            .then(response => response.json())
-            .then(templates => {
-                displayImportTemplates(templates);
-            })
-            .catch(error => {
-                document.getElementById('importTemplatesList').innerHTML =
-                    '<div class="text-muted">Ошибка загрузки шаблонов</div>';
-            });
-
-        // Загружаем шаблоны экспорта
-        fetch(`/api/export/templates/client/${clientId}/summary`)
-            .then(response => response.json())
-            .then(templates => {
-                displayExportTemplates(templates);
-            })
-            .catch(error => {
-                document.getElementById('exportTemplatesList').innerHTML =
-                    '<div class="text-muted">Ошибка загрузки шаблонов</div>';
-            });
-    }
-
-    function displayImportTemplates(templates) {
-        const container = document.getElementById('importTemplatesList');
-        if (templates.length === 0) {
-            container.innerHTML = '<div class="text-muted">Нет шаблонов</div>';
-            return;
-        }
-
-        const html = templates.slice(0, 3).map(template => `
-            <div class="template-item d-flex justify-content-between align-items-center">
-                <div>
-                    <a href="/import/templates/${template.id}" class="text-decoration-none">
-                        <strong>${template.name}</strong>
-                    </a>
-                    <br><small class="text-muted">${template.entityType}</small>
+            container.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="text-muted">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <h6>Нет операций</h6>
+                        <p class="mb-0">Выполните импорт или экспорт данных, чтобы увидеть операции здесь</p>
+                        <div class="mt-3">
+                            <a href="/clients/${/*[[${client.id}]]*/ 0}/import" class="btn btn-primary btn-sm me-2">
+                                <i class="fas fa-file-import me-1"></i>Импорт
+                            </a>
+                            <a href="/clients/${/*[[${client.id}]]*/ 0}/export" class="btn btn-success btn-sm">
+                                <i class="fas fa-file-export me-1"></i>Экспорт
+                            </a>
+                        </div>
+                    </div>
                 </div>
-                <a href="/import/templates/${template.id}/edit" class="btn btn-sm btn-outline-secondary">
-                    <i class="fas fa-edit"></i>
-                </a>
+            `;
+            return;
+        }
+
+        const html = operations.map((op, index) => `
+            <div class="d-flex justify-content-between align-items-center ${index < operations.length - 1 ? 'border-bottom' : ''} py-3">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-${getOperationIcon(op.operationType)} me-2 text-muted"></i>
+                        <div>
+                            <div class="fw-bold">#${op.id} - ${getOperationTypeDisplay(op.operationType)}</div>
+                            <small class="text-muted">
+                                <i class="fas fa-file me-1"></i>${op.fileName}
+                                ${op.recordCount ? ` • ${op.recordCount} записей` : ''}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="mb-1">
+                        <span class="badge ${getStatusClass(op.status)}">${getStatusDisplay(op.status)}</span>
+                    </div>
+                    <small class="text-muted">${formatDateTime(op.startedAt)}</small>
+                    ${op.status === 'PROCESSING' ? `
+                        <br><div class="progress progress-sm mt-1" style="height: 6px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 style="width: ${op.processingProgress || 0}%"></div>
+                        </div>
+                    ` : ''}
+                </div>
             </div>
         `).join('');
 
         container.innerHTML = html;
-    }
 
-    function displayExportTemplates(templates) {
-        const container = document.getElementById('exportTemplatesList');
-        if (templates.length === 0) {
-            container.innerHTML = '<div class="text-muted">Нет шаблонов</div>';
-            return;
-        }
-
-        const html = templates.slice(0, 3).map(template => `
-            <div class="template-item d-flex justify-content-between align-items-center">
-                <div>
-                    <a href="/export/templates/${template.id}" class="text-decoration-none">
-                        <strong>${template.name}</strong>
+        // Добавляем ссылку на полную историю внизу
+        if (operations.length === 5) {
+            container.innerHTML += `
+                <div class="text-center pt-3 border-top">
+                    <a href="/clients/${/*[[${client.id}]]*/ 0}/operations" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-history me-1"></i>Посмотреть всю историю операций
                     </a>
-                    <br><small class="text-muted">${template.entityType}</small>
                 </div>
-                <a href="/export/templates/${template.id}/edit" class="btn btn-sm btn-outline-secondary">
-                    <i class="fas fa-edit"></i>
-                </a>
-            </div>
-        `).join('');
-
-        container.innerHTML = html;
+            `;
+        }
     }
-
-    // Загружаем при переключении на вкладку шаблонов
-    document.getElementById('templates-tab').addEventListener('shown.bs.tab', function() {
-        loadTemplatesList();
-    });
 
     function getOperationIcon(type) {
         switch(type) {
@@ -596,17 +419,17 @@
 
     function getStatusClass(status) {
         switch(status) {
-            case 'PENDING': return 'status-pending';
-            case 'PROCESSING': return 'status-processing';
-            case 'COMPLETED': return 'status-success';
-            case 'FAILED': return 'status-error';
-            default: return 'status-unknown';
+            case 'PENDING': return 'bg-warning text-dark';
+            case 'PROCESSING': return 'bg-primary';
+            case 'COMPLETED': return 'bg-success';
+            case 'FAILED': return 'bg-danger';
+            default: return 'bg-secondary';
         }
     }
 
     function formatDateTime(dateTime) {
         if (!dateTime) {
-            return '-';
+            return 'Неизвестно';
         }
 
         let millis;
@@ -623,7 +446,7 @@
         }
 
         if (isNaN(millis)) {
-            return '-';
+            return 'Неизвестно';
         }
 
         return new Date(millis).toLocaleString('ru-RU', {
