@@ -261,7 +261,7 @@
             });
 
         // Загружаем статистику активных операций
-        fetch(`/api/clients/${clientId}/operations?status=PROCESSING,PENDING&page=0&size=1`)
+        fetch(`/api/clients/${clientId}/operations?status=PROCESSING&page=0&size=1`)
             .then(response => response.ok ? response.json() : null)
             .then(pageData => {
                 const activeOps = pageData ? pageData.totalElements : 0;
