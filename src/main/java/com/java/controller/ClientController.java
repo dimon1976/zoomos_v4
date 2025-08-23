@@ -167,6 +167,26 @@ public class ClientController {
     }
 
     /**
+     * Отображение страницы импорта клиента
+     */
+    @GetMapping("/{id}/import")
+    public String getClientImportPage(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
+        log.debug("GET request to get client import page for id: {}", id);
+
+        return clientService.getClientById(id)
+                .map(client -> {
+                    model.addAttribute("client", client);
+                    return "clients/import";
+                })
+                .orElseGet(() -> {
+                    log.warn("Client not found with id: {}", id);
+                    redirectAttributes.addFlashAttribute("errorMessage",
+                            "Клиент с ID " + id + " не найден");
+                    return "redirect:/clients";
+                });
+    }
+
+    /**
      * Поиск клиентов
      */
     @GetMapping("/search")
