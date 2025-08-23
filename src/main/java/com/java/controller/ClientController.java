@@ -207,6 +207,66 @@ public class ClientController {
     }
 
     /**
+     * Отображение страницы управления шаблонами клиента
+     */
+    @GetMapping("/{id}/templates")
+    public String getClientTemplatesPage(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
+        log.debug("GET request to get client templates page for id: {}", id);
+
+        return clientService.getClientById(id)
+                .map(client -> {
+                    model.addAttribute("client", client);
+                    return "clients/templates";
+                })
+                .orElseGet(() -> {
+                    log.warn("Client not found with id: {}", id);
+                    redirectAttributes.addFlashAttribute("errorMessage",
+                            "Клиент с ID " + id + " не найден");
+                    return "redirect:/clients";
+                });
+    }
+
+    /**
+     * Отображение страницы истории операций клиента
+     */
+    @GetMapping("/{id}/operations")
+    public String getClientOperationsPage(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
+        log.debug("GET request to get client operations page for id: {}", id);
+
+        return clientService.getClientById(id)
+                .map(client -> {
+                    model.addAttribute("client", client);
+                    return "clients/operations";
+                })
+                .orElseGet(() -> {
+                    log.warn("Client not found with id: {}", id);
+                    redirectAttributes.addFlashAttribute("errorMessage",
+                            "Клиент с ID " + id + " не найден");
+                    return "redirect:/clients";
+                });
+    }
+
+    /**
+     * Отображение страницы статистики клиента
+     */
+    @GetMapping("/{id}/statistics")
+    public String getClientStatisticsPage(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
+        log.debug("GET request to get client statistics page for id: {}", id);
+
+        return clientService.getClientById(id)
+                .map(client -> {
+                    model.addAttribute("client", client);
+                    return "clients/statistics";
+                })
+                .orElseGet(() -> {
+                    log.warn("Client not found with id: {}", id);
+                    redirectAttributes.addFlashAttribute("errorMessage",
+                            "Клиент с ID " + id + " не найден");
+                    return "redirect:/clients";
+                });
+    }
+
+    /**
      * Поиск клиентов
      */
     @GetMapping("/search")

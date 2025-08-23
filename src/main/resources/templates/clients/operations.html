@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - История операций'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - История операций'}">Клиент - История операций</title>
+    <style>
+        .status-badge {
+            font-size: 0.875rem;
+        }
+        .operation-row:hover {
+            background-color: #f8f9fa;
+        }
+        /* Стили для компактного progress bar */
+        .progress-compact {
+            height: 20px;
+            border-radius: 10px;
+        }
+        .progress-compact .progress-bar {
+            line-height: 20px;
+            font-size: 11px;
+        }
+        .filter-card {
+            background-color: #f8f9fa;
+        }
+        .info-card {
+            background-color: #f8f9fa;
+            border-left: 4px solid #17a2b8;
+        }
+        .action-card {
+            transition: transform 0.2s;
+        }
+        .action-card:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К обзору клиента
+    </a>
+    <a th:href="@{/clients}" class="btn btn-secondary">
+        <i class="fas fa-list me-1"></i>К списку клиентов
+    </a>
+</div>
+
+<section>
+    <!-- Заголовок страницы -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex align-items-center">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-history me-2 text-primary"></i>История операций
+                </h1>
+                <span class="badge bg-light text-dark ms-3" th:text="${client.name}">Имя клиента</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Быстрые действия -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card action-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">
+                                <i class="fas fa-bolt me-2 text-warning"></i>Быстрые действия
+                            </h6>
+                            <p class="text-muted mb-0 small">Выполните новые операции с данными клиента</p>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-file-import me-1"></i>Импорт
+                            </a>
+                            <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-success btn-sm">
+                                <i class="fas fa-file-export me-1"></i>Экспорт
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры операций -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card filter-card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-filter me-2"></i>Фильтры поиска
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form id="operationsFilter" class="row g-3" onsubmit="return false;">
+                        <div class="col-md-2">
+                            <label for="filterType" class="form-label">Тип операции</label>
+                            <select id="filterType" class="form-select form-select-sm">
+                                <option value="">Все типы</option>
+                                <option value="IMPORT">Импорт</option>
+                                <option value="EXPORT">Экспорт</option>
+                                <option value="PROCESS">Обработка</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filterStatus" class="form-label">Статус</label>
+                            <select id="filterStatus" class="form-select form-select-sm">
+                                <option value="">Все статусы</option>
+                                <option value="PENDING">Ожидание</option>
+                                <option value="PROCESSING">В процессе</option>
+                                <option value="COMPLETED">Завершено</option>
+                                <option value="FAILED">Ошибка</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filterFrom" class="form-label">Дата с</label>
+                            <input type="date" id="filterFrom" class="form-control form-control-sm"/>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filterTo" class="form-label">Дата по</label>
+                            <input type="date" id="filterTo" class="form-control form-control-sm"/>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="filterSize" class="form-label">На странице</label>
+                            <select id="filterSize" class="form-select form-select-sm">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="button" class="btn btn-primary btn-sm w-100" onclick="applyOperationFilters()">
+                                <i class="fas fa-search me-1"></i>Применить
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица операций -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list me-2"></i>Список операций
+                    </h5>
+                    <div class="d-flex align-items-center">
+                        <div id="operationsStatus" class="me-3">
+                            <span class="badge bg-secondary" id="operationsCount">Загрузка...</span>
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm" onclick="loadOperations()" title="Обновить">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="operationsTable">
+                            <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Тип</th>
+                                <th>Файл</th>
+                                <th>Статус</th>
+                                <th>Прогресс</th>
+                                <th>Время запуска</th>
+                                <th>Записей</th>
+                                <th width="150">Действия</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <!-- Операции будут загружены через AJAX -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="noOperations" class="text-center text-muted py-5" style="display: none;">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <h6>Нет операций для отображения</h6>
+                        <p class="mb-0">Выполните импорт или экспорт данных, чтобы увидеть операции здесь</p>
+                    </div>
+                    <div id="operationsLoading" class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <div class="mt-2">Загрузка операций...</div>
+                    </div>
+                </div>
+                <div class="card-footer" id="operationsPagination"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Информационная панель -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="alert alert-info info-card">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Информация об операциях:</strong>
+                <ul class="mb-0 mt-2">
+                    <li><strong>Импорт</strong> - загрузка данных из файлов в базу данных</li>
+                    <li><strong>Экспорт</strong> - выгрузка данных из базы в файлы</li>
+                    <li><strong>Обработка</strong> - дополнительная обработка уже загруженных данных</li>
+                    <li>Операции выполняются асинхронно, вы можете отслеживать их прогресс в реальном времени</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    document.addEventListener('DOMContentLoaded', function() {
+        // Загружаем операции при загрузке страницы
+        loadOperations();
+
+        // Автообновление операций каждые 5 секунд если есть активные операции
+        setInterval(function() {
+            if (hasActiveOperations) {
+                loadOperations();
+            }
+        }, 5000);
+    });
+
+    let hasActiveOperations = false;
+    let currentPage = 0;
+
+    function applyOperationFilters() {
+        currentPage = 0;
+        loadOperations();
+    }
+
+    function loadOperations(page = currentPage) {
+        const clientId = /*[[${client.id}]]*/ 0;
+        const params = new URLSearchParams();
+        params.append('page', page);
+        params.append('size', document.getElementById('filterSize').value);
+
+        const type = document.getElementById('filterType').value;
+        if (type) params.append('operationType', type);
+        
+        const status = document.getElementById('filterStatus').value;
+        if (status) params.append('status', status);
+        
+        const from = document.getElementById('filterFrom').value;
+        if (from) params.append('from', from);
+        
+        const to = document.getElementById('filterTo').value;
+        if (to) params.append('to', to);
+
+        console.log('Запрос операций для клиента', clientId, 'страница', page);
+
+        // Показать индикатор загрузки
+        document.getElementById('operationsLoading').style.display = 'block';
+        document.getElementById('noOperations').style.display = 'none';
+        document.querySelector('#operationsTable tbody').innerHTML = '';
+
+        fetch(`/api/clients/${clientId}/operations?` + params.toString())
+            .then(response => {
+                console.log('Ответ сервера по операциям статус', response.status);
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        throw new Error(text || 'Ошибка ответа сервера');
+                    });
+                }
+                return response.json();
+            })
+            .then(pageData => {
+                console.log('Получены данные страницы операций', pageData);
+                document.getElementById('operationsLoading').style.display = 'none';
+                currentPage = pageData.page;
+                displayOperations(pageData.operations);
+                updatePagination(pageData);
+                updateOperationsStatus(pageData);
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки операций:', error);
+                document.getElementById('operationsLoading').style.display = 'none';
+                document.getElementById('noOperations').style.display = 'block';
+                document.querySelector('#operationsTable tbody').innerHTML = '';
+                document.getElementById('operationsPagination').innerHTML = '';
+                document.getElementById('operationsCount').textContent = 'Ошибка загрузки';
+                document.getElementById('operationsCount').className = 'badge bg-danger';
+            });
+    }
+
+    function displayOperations(operations) {
+        const tbody = document.querySelector('#operationsTable tbody');
+        const noOps = document.getElementById('noOperations');
+
+        if (!operations || operations.length === 0) {
+            console.log('Операции не найдены для отображения');
+            tbody.innerHTML = '';
+            noOps.style.display = 'block';
+            hasActiveOperations = false;
+            return;
+        }
+
+        console.debug('Загружены операции:', operations);
+        operations.forEach(op => console.debug('Операция', op.id, 'статус', op.status, 'прогресс', op.processingProgress));
+
+        noOps.style.display = 'none';
+        hasActiveOperations = operations.some(op =>
+            op.status === 'PROCESSING' || op.status === 'PENDING'
+        );
+
+        tbody.innerHTML = operations.map(op => `
+            <tr class="operation-row">
+                <td class="fw-bold">#${op.id}</td>
+                <td>
+                    <i class="fas fa-${getOperationIcon(op.operationType)} me-1 text-muted"></i>
+                    ${getOperationTypeDisplay(op.operationType)}
+                </td>
+                <td class="text-truncate" style="max-width: 200px;" title="${op.fileName}">
+                    <i class="fas fa-file me-1 text-muted"></i>
+                    ${op.fileName}
+                </td>
+                <td>
+                    <span class="badge status-badge ${getStatusClass(op.status)}">
+                        ${getStatusDisplay(op.status)}
+                    </span>
+                </td>
+                <td>
+                    ${op.status === 'PROCESSING'
+            ? `<div class="progress progress-compact">
+                             <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                  role="progressbar"
+                                  style="width: ${op.processingProgress || 0}%"
+                                  aria-valuenow="${op.processingProgress || 0}"
+                                  aria-valuemin="0"
+                                  aria-valuemax="100">
+                               <small class="text-white fw-bold">${op.processingProgress || 0}%</small>
+                             </div>
+                           </div>`
+            : (op.processingProgress != null ? 
+                `<span class="badge bg-light text-dark">${op.processingProgress}%</span>` : 
+                '<span class="text-muted">-</span>')}
+                </td>
+                <td class="small">${formatDateTime(op.startedAt)}</td>
+                <td>
+                    ${op.recordCount ? 
+                        `<span class="badge bg-info text-white">${op.recordCount}</span>` : 
+                        '<span class="text-muted">-</span>'}
+                </td>
+                <td>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <a href="/import/status/${op.id}" class="btn btn-outline-primary btn-sm" title="Детали">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <button type="button" class="btn btn-outline-danger btn-sm"
+                                onclick="deleteOperation(${op.id})" title="Удалить">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function updatePagination(pageData) {
+        const container = document.getElementById('operationsPagination');
+        if (!pageData || pageData.totalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+        
+        const prevDisabled = pageData.page === 0 ? 'disabled' : '';
+        const nextDisabled = pageData.page >= pageData.totalPages - 1 ? 'disabled' : '';
+        
+        container.innerHTML = `
+            <nav>
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    <li class="page-item ${prevDisabled}">
+                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.page - 1}); return false;">
+                            <i class="fas fa-chevron-left"></i> Предыдущая
+                        </a>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">
+                            Страница ${pageData.page + 1} из ${pageData.totalPages}
+                        </span>
+                    </li>
+                    <li class="page-item ${nextDisabled}">
+                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.page + 1}); return false;">
+                            Следующая <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        `;
+    }
+
+    function updateOperationsStatus(pageData) {
+        const countElement = document.getElementById('operationsCount');
+        if (pageData && pageData.totalElements !== undefined) {
+            const total = pageData.totalElements;
+            const activeCount = pageData.operations ? 
+                pageData.operations.filter(op => op.status === 'PROCESSING' || op.status === 'PENDING').length : 0;
+            
+            if (activeCount > 0) {
+                countElement.textContent = `${total} операций (${activeCount} активных)`;
+                countElement.className = 'badge bg-warning text-dark';
+            } else {
+                countElement.textContent = `${total} операций`;
+                countElement.className = 'badge bg-success';
+            }
+        } else {
+            countElement.textContent = 'Нет данных';
+            countElement.className = 'badge bg-secondary';
+        }
+    }
+
+    function changeOperationsPage(page) {
+        if (page < 0) return;
+        loadOperations(page);
+    }
+
+    function deleteOperation(operationId) {
+        if (!confirm('Вы действительно хотите удалить эту операцию?')) {
+            return;
+        }
+        if (!confirm('Все связанные данные будут удалены безвозвратно. Продолжить?')) {
+            return;
+        }
+
+        fetch(`/api/operations/${operationId}`, { method: 'DELETE' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка удаления');
+                }
+                // Перезагружаем текущую страницу операций
+                loadOperations(currentPage);
+            })
+            .catch(error => {
+                console.error('Ошибка удаления операции:', error);
+                alert('Не удалось удалить операцию: ' + error.message);
+            });
+    }
+
+    function getOperationIcon(type) {
+        switch(type) {
+            case 'IMPORT': return 'file-import';
+            case 'EXPORT': return 'file-export';
+            case 'PROCESS': return 'cogs';
+            default: return 'file';
+        }
+    }
+
+    function getOperationTypeDisplay(type) {
+        switch(type) {
+            case 'IMPORT': return 'Импорт';
+            case 'EXPORT': return 'Экспорт';
+            case 'PROCESS': return 'Обработка';
+            default: return type;
+        }
+    }
+
+    function getStatusDisplay(status) {
+        switch(status) {
+            case 'PENDING': return 'Ожидание';
+            case 'PROCESSING': return 'В процессе';
+            case 'COMPLETED': return 'Завершено';
+            case 'FAILED': return 'Ошибка';
+            default: return status;
+        }
+    }
+
+    function getStatusClass(status) {
+        switch(status) {
+            case 'PENDING': return 'bg-warning text-dark';
+            case 'PROCESSING': return 'bg-primary';
+            case 'COMPLETED': return 'bg-success';
+            case 'FAILED': return 'bg-danger';
+            default: return 'bg-secondary';
+        }
+    }
+
+    function formatDateTime(dateTime) {
+        if (!dateTime) {
+            return '<span class="text-muted">-</span>';
+        }
+
+        let millis;
+        if (Array.isArray(dateTime)) {
+            const [y, m, d, h = 0, min = 0, s = 0] = dateTime;
+            millis = Date.UTC(y, (m || 1) - 1, d || 1, h, min, s);
+        } else if (typeof dateTime === 'number') {
+            millis = dateTime < 1e12 ? dateTime * 1000 : dateTime;
+        } else if (typeof dateTime === 'string' && /^\d+$/.test(dateTime)) {
+            const num = parseInt(dateTime, 10);
+            millis = num < 1e12 ? num * 1000 : num;
+        } else {
+            millis = Date.parse(dateTime);
+        }
+
+        if (isNaN(millis)) {
+            return '<span class="text-muted">-</span>';
+        }
+
+        const date = new Date(millis);
+        return date.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+    /*]]*/
+</script>
+</body>
+</html>

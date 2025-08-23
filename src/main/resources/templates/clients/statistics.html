@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Статистика'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Статистика'}">Клиент - Статистика</title>
+    <style>
+        .stats-card {
+            transition: transform 0.2s;
+            border-left: 4px solid;
+        }
+        .stats-card:hover {
+            transform: translateY(-2px);
+        }
+        .stats-card.imports {
+            border-left-color: #17a2b8;
+        }
+        .stats-card.exports {
+            border-left-color: #28a745;
+        }
+        .stats-card.success {
+            border-left-color: #28a745;
+        }
+        .stats-card.failed {
+            border-left-color: #dc3545;
+        }
+        .stats-card.processing {
+            border-left-color: #ffc107;
+        }
+        .stats-value {
+            font-size: 2rem;
+            font-weight: bold;
+            line-height: 1;
+        }
+        .stats-label {
+            color: #6c757d;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+        .info-card {
+            background-color: #f8f9fa;
+            border-left: 4px solid #17a2b8;
+        }
+        .action-card {
+            transition: transform 0.2s;
+        }
+        .action-card:hover {
+            transform: translateY(-2px);
+        }
+        .feature-list {
+            list-style: none;
+            padding-left: 0;
+        }
+        .feature-list li {
+            padding: 0.25rem 0;
+        }
+        .feature-list li::before {
+            content: "📊";
+            margin-right: 0.5rem;
+        }
+        .loading-stats {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary btn-back">
+        <i class="fas fa-arrow-left me-1"></i>К обзору клиента
+    </a>
+    <a th:href="@{/clients}" class="btn btn-secondary">
+        <i class="fas fa-list me-1"></i>К списку клиентов
+    </a>
+</div>
+
+<section>
+    <!-- Заголовок страницы -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-chart-bar me-2 text-primary"></i>Статистика
+                    </h1>
+                    <span class="badge bg-light text-dark ms-3" th:text="${client.name}">Имя клиента</span>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" onclick="loadStatistics()" title="Обновить статистику">
+                        <i class="fas fa-sync-alt me-1"></i>Обновить
+                    </button>
+                    <a th:href="@{/statistics/client/{id}(id=${client.id})}" class="btn btn-success btn-sm">
+                        <i class="fas fa-chart-line me-1"></i>Подробная аналитика
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Общая статистика -->
+    <div class="row mb-4" id="generalStats">
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card imports h-100">
+                <div class="card-body text-center">
+                    <div class="stats-value text-info" id="totalImports">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="stats-label">Всего импортов</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card exports h-100">
+                <div class="card-body text-center">
+                    <div class="stats-value text-success" id="totalExports">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="stats-label">Всего экспортов</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card success h-100">
+                <div class="card-body text-center">
+                    <div class="stats-value text-success" id="totalRecords">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="stats-label">Обработано записей</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card processing h-100">
+                <div class="card-body text-center">
+                    <div class="stats-value text-warning" id="activeOperations">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="stats-label">Активных операций</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Статистика по статусам -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-pie me-2"></i>Статистика по статусам операций
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row" id="statusStats">
+                        <div class="col-12 text-center py-4">
+                            <div class="loading-stats">
+                                <div class="spinner-border text-primary" role="status"></div>
+                                <div class="mt-2">Загрузка статистики...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Последние операции -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-clock me-2"></i>Последние операции
+                    </h5>
+                    <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-history me-1"></i>Вся история
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div id="recentOperations">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <div class="mt-2">Загрузка операций...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Шаблоны и быстрые действия -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card action-card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cogs me-2"></i>Шаблоны
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="templatesStats">
+                        <div class="text-center py-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            <div class="mt-2 small">Загрузка...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <a th:href="@{/clients/{id}/templates(id=${client.id})}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-cogs me-1"></i>Управление шаблонами
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card action-card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bolt me-2"></i>Быстрые действия
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">Выполните операции с данными клиента</p>
+                    
+                    <div class="d-grid gap-2">
+                        <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-file-import me-1"></i>Импорт данных
+                        </a>
+                        <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-success btn-sm">
+                            <i class="fas fa-file-export me-1"></i>Экспорт данных
+                        </a>
+                    </div>
+
+                    <div class="alert alert-info mt-3 p-2">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            Результаты операций отражаются в статистике в реальном времени
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Информационная панель -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="alert alert-info info-card">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>О статистике:</strong>
+                <ul class="feature-list mb-0 mt-2">
+                    <li>Статистика обновляется автоматически каждые 30 секунд</li>
+                    <li>Показываются данные за весь период существования клиента</li>
+                    <li>Для подробного анализа используйте специальный модуль аналитики</li>
+                    <li>Данные включают все типы операций: импорт, экспорт, обработка</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    document.addEventListener('DOMContentLoaded', function() {
+        // Загружаем статистику при загрузке страницы
+        loadStatistics();
+
+        // Автообновление каждые 30 секунд
+        setInterval(loadStatistics, 30000);
+    });
+
+    function loadStatistics() {
+        const clientId = /*[[${client.id}]]*/ 0;
+        
+        // Загружаем общую статистику
+        loadGeneralStats(clientId);
+        
+        // Загружаем статистику по статусам
+        loadStatusStats(clientId);
+        
+        // Загружаем последние операции
+        loadRecentOperations(clientId);
+        
+        // Загружаем статистику шаблонов
+        loadTemplatesStats(clientId);
+    }
+
+    function loadGeneralStats(clientId) {
+        fetch(`/api/clients/${clientId}/statistics/general`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка загрузки общей статистики');
+                }
+                return response.json();
+            })
+            .then(stats => {
+                document.getElementById('totalImports').textContent = stats.totalImports || 0;
+                document.getElementById('totalExports').textContent = stats.totalExports || 0;
+                document.getElementById('totalRecords').textContent = formatNumber(stats.totalRecords || 0);
+                document.getElementById('activeOperations').textContent = stats.activeOperations || 0;
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки общей статистики:', error);
+                document.getElementById('totalImports').textContent = 'N/A';
+                document.getElementById('totalExports').textContent = 'N/A';
+                document.getElementById('totalRecords').textContent = 'N/A';
+                document.getElementById('activeOperations').textContent = 'N/A';
+            });
+    }
+
+    function loadStatusStats(clientId) {
+        fetch(`/api/clients/${clientId}/statistics/status`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка загрузки статистики статусов');
+                }
+                return response.json();
+            })
+            .then(stats => {
+                displayStatusStats(stats);
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки статистики статусов:', error);
+                document.getElementById('statusStats').innerHTML = `
+                    <div class="col-12 text-center py-4">
+                        <div class="text-muted">
+                            <i class="fas fa-exclamation-circle fa-2x mb-2"></i>
+                            <div>Ошибка загрузки статистики</div>
+                        </div>
+                    </div>
+                `;
+            });
+    }
+
+    function loadRecentOperations(clientId) {
+        fetch(`/api/clients/${clientId}/operations?page=0&size=5`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка загрузки последних операций');
+                }
+                return response.json();
+            })
+            .then(pageData => {
+                displayRecentOperations(pageData.operations || []);
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки последних операций:', error);
+                document.getElementById('recentOperations').innerHTML = `
+                    <div class="text-center py-4">
+                        <div class="text-muted">
+                            <i class="fas fa-exclamation-circle fa-2x mb-2"></i>
+                            <div>Ошибка загрузки операций</div>
+                        </div>
+                    </div>
+                `;
+            });
+    }
+
+    function loadTemplatesStats(clientId) {
+        Promise.all([
+            fetch(`/api/import/templates/client/${clientId}/summary`).then(r => r.ok ? r.json() : []),
+            fetch(`/api/export/templates/client/${clientId}/summary`).then(r => r.ok ? r.json() : [])
+        ])
+        .then(([importTemplates, exportTemplates]) => {
+            displayTemplatesStats(importTemplates, exportTemplates);
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки статистики шаблонов:', error);
+            document.getElementById('templatesStats').innerHTML = `
+                <div class="text-muted text-center">
+                    <i class="fas fa-exclamation-circle"></i> Ошибка загрузки
+                </div>
+            `;
+        });
+    }
+
+    function displayStatusStats(stats) {
+        if (!stats || Object.keys(stats).length === 0) {
+            document.getElementById('statusStats').innerHTML = `
+                <div class="col-12 text-center py-4">
+                    <div class="text-muted">
+                        <i class="fas fa-inbox fa-2x mb-2"></i>
+                        <div>Нет данных для отображения</div>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        const statusConfig = {
+            'COMPLETED': { label: 'Завершено', color: 'success', icon: 'check-circle' },
+            'FAILED': { label: 'Ошибки', color: 'danger', icon: 'times-circle' },
+            'PROCESSING': { label: 'В процессе', color: 'warning', icon: 'spinner' },
+            'PENDING': { label: 'Ожидание', color: 'info', icon: 'clock' }
+        };
+
+        const html = Object.entries(stats).map(([status, count]) => {
+            const config = statusConfig[status] || { label: status, color: 'secondary', icon: 'question' };
+            return `
+                <div class="col-md-3 mb-3">
+                    <div class="card stats-card ${config.color} h-100">
+                        <div class="card-body text-center">
+                            <div class="stats-value text-${config.color}">
+                                <i class="fas fa-${config.icon} me-2"></i>${count}
+                            </div>
+                            <div class="stats-label">${config.label}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        document.getElementById('statusStats').innerHTML = html;
+    }
+
+    function displayRecentOperations(operations) {
+        if (!operations || operations.length === 0) {
+            document.getElementById('recentOperations').innerHTML = `
+                <div class="text-center py-4">
+                    <div class="text-muted">
+                        <i class="fas fa-inbox fa-2x mb-2"></i>
+                        <div>Нет операций</div>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        const html = operations.map(op => `
+            <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-${getOperationIcon(op.operationType)} me-2 text-muted"></i>
+                        <span class="fw-bold me-2">#${op.id}</span>
+                        <span class="text-muted small">${op.fileName}</span>
+                    </div>
+                    <small class="text-muted">${formatDateTime(op.startedAt)}</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge ${getStatusClass(op.status)}">${getStatusDisplay(op.status)}</span>
+                    ${op.recordCount ? `<br><small class="text-muted">${op.recordCount} записей</small>` : ''}
+                </div>
+            </div>
+        `).join('');
+
+        document.getElementById('recentOperations').innerHTML = html;
+    }
+
+    function displayTemplatesStats(importTemplates, exportTemplates) {
+        const totalImport = importTemplates.length;
+        const totalExport = exportTemplates.length;
+        const total = totalImport + totalExport;
+
+        document.getElementById('templatesStats').innerHTML = `
+            <div class="row text-center">
+                <div class="col-6">
+                    <div class="border-end">
+                        <div class="h4 text-info">${totalImport}</div>
+                        <small class="text-muted">Шаблонов импорта</small>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="h4 text-success">${totalExport}</div>
+                    <small class="text-muted">Шаблонов экспорта</small>
+                </div>
+            </div>
+            ${total === 0 ? '<div class="text-center mt-2"><small class="text-muted">Создайте первый шаблон</small></div>' : ''}
+        `;
+    }
+
+    function formatNumber(num) {
+        if (num >= 1000000) {
+            return (num / 1000000).toFixed(1) + 'M';
+        } else if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        }
+        return num.toString();
+    }
+
+    function getOperationIcon(type) {
+        switch(type) {
+            case 'IMPORT': return 'file-import';
+            case 'EXPORT': return 'file-export';
+            case 'PROCESS': return 'cogs';
+            default: return 'file';
+        }
+    }
+
+    function getStatusDisplay(status) {
+        switch(status) {
+            case 'PENDING': return 'Ожидание';
+            case 'PROCESSING': return 'В процессе';
+            case 'COMPLETED': return 'Завершено';
+            case 'FAILED': return 'Ошибка';
+            default: return status;
+        }
+    }
+
+    function getStatusClass(status) {
+        switch(status) {
+            case 'PENDING': return 'bg-warning text-dark';
+            case 'PROCESSING': return 'bg-primary';
+            case 'COMPLETED': return 'bg-success';
+            case 'FAILED': return 'bg-danger';
+            default: return 'bg-secondary';
+        }
+    }
+
+    function formatDateTime(dateTime) {
+        if (!dateTime) {
+            return 'Неизвестно';
+        }
+
+        let millis;
+        if (Array.isArray(dateTime)) {
+            const [y, m, d, h = 0, min = 0, s = 0] = dateTime;
+            millis = Date.UTC(y, (m || 1) - 1, d || 1, h, min, s);
+        } else if (typeof dateTime === 'number') {
+            millis = dateTime < 1e12 ? dateTime * 1000 : dateTime;
+        } else if (typeof dateTime === 'string' && /^\d+$/.test(dateTime)) {
+            const num = parseInt(dateTime, 10);
+            millis = num < 1e12 ? num * 1000 : num;
+        } else {
+            millis = Date.parse(dateTime);
+        }
+
+        if (isNaN(millis)) {
+            return 'Неизвестно';
+        }
+
+        return new Date(millis).toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+    /*]]*/
+</script>
+</body>
+</html>
