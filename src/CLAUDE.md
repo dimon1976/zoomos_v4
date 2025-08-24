@@ -6,35 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Zoomos v4 is a Spring Boot 3.2.3 application for client-based file processing with import/export functionality. It provides asynchronous processing of Excel and CSV files with configurable templates, statistics analysis, and a web interface for managing clients and operations.
 
-## Key Architecture Components
-
-### Core Modules
-- **Client Management**: Client entities with associated file operations and templates
-- **Import System**: Asynchronous file import with validation, duplicate checking, and error handling
-- **Export System**: Multi-format export (CSV, XLSX) with template-based field mapping and statistics
-- **Template Engine**: Configurable import/export templates with field mappings and filters
-- **Statistics Engine**: Export statistics analysis with threshold-based reporting
-- **Dashboard**: Real-time operation monitoring with WebSocket updates
-
-### Technology Stack
-- Spring Boot 3.2.3 with Java 17
-- PostgreSQL database with Flyway migrations
-- Thymeleaf templates for web UI
-- Apache POI for Excel processing
-- OpenCSV for CSV handling
-- WebSocket for real-time updates
-- Lombok for code generation
-
 ## Development Commands
-
-## AI Assistant Guidelines
-
-* Разработка ведется на ОС Windows
-* Ты должен общаться на русском языке
-* Не редактируй .env файл - лишь говори какие переменные нужно туда добавить
-* Используй Context7 для доступа к документациям библиотек
-* Для релизации любых фич с использованием интеграций с внешними арі библиотеками изучай документации с помощью context7 инструмента
-* Если есть изменения на фронтенде, то в конце проверь что фронт работает, открыв его через рlaywrigh
 
 ### Build and Run
 ```bash
@@ -47,104 +19,176 @@ mvn spring-boot:run
 # Build JAR file
 mvn clean package
 
-# Run tests (if any exist)
+# Run tests
 mvn test
+
+# Run specific test class
+mvn test -Dtest=ClassNameTest
+
+# Run application with specific profile
+mvn spring-boot:run -Dspring-boot.run.profiles=silent
 ```
 
 ### Database
-- PostgreSQL connection configured in `application.properties`
+- PostgreSQL connection: `jdbc:postgresql://localhost:5432/zoomos_v4`
 - Flyway migrations in `src/main/resources/db/migration/`
-- Default connection: `jdbc:postgresql://localhost:5432/zoomos_v4`
+- Test profile uses H2 in-memory database
 
-## Navigation Architecture
+## Architecture Overview
 
-The application uses a sophisticated breadcrumb system (`BreadcrumbAdvice`) that works with URL constants (`UrlConstants`) to provide consistent navigation. The architecture is moving from tab-based navigation to separate pages:
+### Core Processing Flow
+The application follows a request-driven processing model with three main flows:
 
-### URL Structure
-- `/clients` - Client list
-- `/clients/{clientId}` - Client overview
-- `/clients/{clientId}/import` - Import page
-- `/clients/{clientId}/export` - Export page
-- `/clients/{clientId}/templates` - Template management
-- `/clients/{clientId}/statistics` - Statistics page
-- `/clients/{clientId}/operations` - Operation history
+1. **Import Flow**: Upload → Analyze → Template Selection → Async Processing → Status Monitoring
+2. **Export Flow**: Template Selection → Operation Selection → Async Processing → File Generation
+3. **Statistics Flow**: Setup → Analysis → Results Visualization
 
-### Template URLs
-- `/clients/{clientId}/import/templates` - Import templates
-- `/clients/{clientId}/export/templates` - Export templates
-- Template CRUD: `/templates/{templateId}/edit`, `/templates/{templateId}/view`
+### Key Architectural Patterns
 
-## Service Architecture Patterns
+**Async Processing Architecture**
+- Dual async executors: `ImportExecutor-*` and `ExportExecutor-*` thread pools
+- Progress tracking via WebSocket (`WebSocketConfig`) and database sessions
+- Configurable thread pools via `import.async.*` and `export.async.*` properties
 
-### Async Processing
-- Import: `AsyncImportService` with configurable thread pool (`import.async.*` properties)
-- Export: `AsyncExportService` with configurable thread pool (`export.async.*` properties)
-- Progress tracking via WebSocket and database sessions
+**Strategy Pattern for Export Processing**
+- `ExportStrategyFactory` selects between strategies: `DefaultExportStrategy`, `SimpleReportExportStrategy`, `TaskReportExportStrategy`
+- Each strategy handles different export requirements and data formats
 
-### Strategy Pattern
-- Export strategies: `DefaultExportStrategy`, `SimpleReportExportStrategy`, `TaskReportExportStrategy`
-- Factory: `ExportStrategyFactory` for strategy selection
+**Template-Based Processing**
+- `ImportTemplate` and `ExportTemplate` entities with field mappings and filters
+- Templates are client-specific and support cloning
+- Field validation through `TemplateValidationService`
 
-### Error Handling
-- Global exception handling via `GlobalExceptionHandler` and `ImportExceptionHandler`
-- Custom exceptions: `FileOperationException`, `ImportException`, `TemplateValidationException`
-- Structured error messages in `ErrorMessages`
+### Navigation Architecture
 
-## File Processing Flow
+**URL Structure** (defined in `UrlConstants`)
+```
+/clients                           # Client list
+/clients/{clientId}                # Client overview (main page)
+/clients/{clientId}/import         # Import page
+/clients/{clientId}/export         # Export page
+/clients/{clientId}/templates      # Template management
+/clients/{clientId}/statistics     # Client statistics
+/clients/{clientId}/operations     # Operation history
+/clients/{clientId}/import/templates/{templateId}  # Template CRUD
+```
 
-### Import Process
-1. Upload files to `/clients/{clientId}/import`
-2. Analysis at `/import/{clientId}/analyze` 
-3. Template selection and import start at `/import/{clientId}/start`
-4. Progress monitoring at `/import/status/{operationId}`
+**Breadcrumb System**
+- `BreadcrumbAdvice` provides consistent navigation breadcrumbs
+- Works with URL constants to maintain navigation state
+- Currently transitioning from tab-based to page-based navigation
 
-### Export Process
-1. Start export at `/export/client/{clientId}`
-2. Template and operation selection at `export/start`
-3. Progress monitoring at `/operations/status` with `operationId`
+### Service Layer Organization
 
-### Statistics Analysis
-1. Setup at `/statistics/client/{clientId}` → `statistics/setup`
-2. Analysis execution at `/statistics/analyze`
-3. Results display at `statistics/results`
+**Client Services**
+- `ClientService` - Client management and CRUD operations
+- `DashboardService` - Cross-client statistics and monitoring
 
-## Configuration Highlights
+**Processing Services**
+- `AsyncImportService` / `AsyncExportService` - Asynchronous file processing
+- `ImportProcessorService` / `ExportProcessorService` - Core processing logic
+- `FileAnalyzerService` - File structure analysis and validation
 
-### Import Settings
-- `import.batch-size=500` - Processing batch size
-- `import.max-memory-percentage=60` - Memory usage limit
-- `import.file-analysis.sample-rows=100` - File analysis sample size
+**Template Services**
+- `ImportTemplateService` / `ExportTemplateService` - Template management
+- `TemplateValidationService` - Template field validation
 
-### Export Settings
-- `export.async.threshold-rows=10000` - Async processing threshold
-- `export.batch-size=1000` - Export batch size
-- `export.xlsx.max-rows=1048576` - Excel row limit
+**Data Services**
+- `EntityPersistenceService` - Database operations for imported data
+- `DuplicateCheckService` - Duplicate detection and handling
+- `ExportDataService` - Data retrieval for exports
 
-### File Locations
-- Upload directory: `data/upload`
-- Export results: `data/upload/exports`
-- Import staging: `data/upload/imports`
-- Temporary files: `data/temp`
+## Configuration System
 
-## Development Notes
+### Performance Tuning
+```properties
+# Import processing
+import.batch-size=500
+import.max-memory-percentage=60
+import.timeout-minutes=60
 
-### Current Refactoring (per refactor.md)
-The application is transitioning from tab-based to page-based navigation. Key changes involve:
-- Converting client tabs to separate pages
+# Export processing  
+export.async.threshold-rows=10000
+export.batch-size=1000
+export.xlsx.max-rows=1048576
+
+# Thread pool configuration
+import.async.core-pool-size=1
+import.async.max-pool-size=2
+export.async.core-pool-size=2
+export.async.max-pool-size=4
+```
+
+### File Handling
+```properties
+# File size limits
+spring.servlet.multipart.max-file-size=1200MB
+spring.servlet.multipart.max-request-size=1200MB
+
+# Directory structure
+application.upload.dir=data/upload
+application.export.dir=data/upload/exports
+application.temp.dir=data/temp
+```
+
+## Data Model
+
+### Core Entities
+- `Client` - Central entity linking all operations
+- `FileOperation` - Tracks all import/export operations with status and progress
+- `ImportSession` / `ExportSession` - Operation-specific data and configuration
+- `ImportTemplate` / `ExportTemplate` - Processing templates with field mappings
+
+### Statistics and Monitoring
+- `ExportStatistics` - Analysis results with configurable thresholds
+- `ImportError` - Error tracking with categorization
+- `FileMetadata` - File analysis results and structure information
+
+### Repository Pattern
+- All repositories extend `JpaRepository` with `JpaSpecificationExecutor`
+- Custom queries use native SQL for PostgreSQL-specific features
+- Statistics queries use aggregation functions and window functions
+
+## Error Handling Strategy
+
+**Exception Hierarchy**
+- `FileOperationException` - Base for all file processing errors
+- `ImportException` - Import-specific errors
+- `TemplateValidationException` - Template configuration errors
+
+**Global Error Handling**
+- `GlobalExceptionHandler` - Application-wide exception handling
+- `ImportExceptionHandler` - Specialized import error handling
+- `ErrorMessages` - Centralized error message constants
+
+## WebSocket Integration
+
+Real-time progress updates for long-running operations:
+- Progress updates broadcast to `/topic/progress/{operationId}`
+- Client-side JavaScript in `main.js` handles WebSocket connections
+- Automatic reconnection and error handling
+
+## AI Assistant Guidelines
+
+## AI Assistant Guidelines
+
+* Разработка ведется на ОС Windows
+* Ты должен общаться на русском языке
+* Не редактируй .env файл - лишь говори какие переменные нужно туда добавить
+* Используй Context7 для доступа к документациям библиотек
+* Для релизации любых фич с использованием интеграций с внешними арі библиотеками изучай документации с помощью context7 инструмента
+* Если есть изменения на фронтенде, то в конце проверь что фронт работает, открыв его через рlaywrigh
+
+## Current State Notes
+
+**Active Refactoring** (per `refactor.md`)
+- Converting from tab-based navigation to separate pages
 - Implementing template CRUD operations
-- Maintaining existing business logic while updating UI structure
-- Ensuring breadcrumb consistency across new page structure
+- URL structure follows `UrlConstants` definitions
+- All existing business logic is preserved during UI restructuring
 
-### Database Entities
-- Main entities: `Client`, `ImportSession`, `ExportSession`, `ImportTemplate`, `ExportTemplate`
-- Metadata tracking: `FileMetadata`, `FileOperation`
-- Statistics: `ExportStatistics` with configurable analysis
-- Error tracking: `ImportError` with categorization
-
-### WebSocket Integration
-- Progress updates via WebSocket for long-running operations
-- Configuration in `WebSocketConfig`
-- Client-side JavaScript in `main.js` for real-time updates
-
-## Testing
-Currently uses H2 in-memory database for testing. Test configuration should use `test` profile with appropriate properties.
+**JavaScript Patterns**
+- Client ID extraction from URL paths rather than Thymeleaf inlining
+- Global variables for shared state between functions
+- Error handling with user-friendly messages and HTTP status codes
+- Automatic data refresh every 30 seconds for statistics pages
