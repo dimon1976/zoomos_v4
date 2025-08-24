@@ -120,4 +120,11 @@ public interface FileOperationRepository extends JpaRepository<FileOperation, Lo
             ORDER BY COUNT(fo.id) DESC
             """, nativeQuery = true)
     List<DashboardService.ClientStatsDto> getClientStatistics();
+
+    // Методы для статистики по клиенту
+    Long countByClientAndOperationType(Client client, FileOperation.OperationType operationType);
+    Long countByClientAndStatus(Client client, FileOperation.OperationStatus status);
+    
+    @Query("SELECT COALESCE(SUM(fo.processedRecords), 0) FROM FileOperation fo WHERE fo.client = :client")
+    Long sumProcessedRecordsByClient(@Param("client") Client client);
 }
