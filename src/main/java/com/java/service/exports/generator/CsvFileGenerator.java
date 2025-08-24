@@ -25,11 +25,14 @@ import java.util.stream.Stream;
 
 @Component
 @Slf4j
-@RequiredArgsConstructor
-public class CsvFileGenerator implements FileGenerator {
+public class CsvFileGenerator extends AbstractFileGenerator {
 
-    private final PathResolver pathResolver;
     private final ValueFormatter valueFormatter;
+
+    public CsvFileGenerator(PathResolver pathResolver, ValueFormatter valueFormatter) {
+        super(pathResolver);
+        this.valueFormatter = valueFormatter;
+    }
 
     @Value("${export.batch-size:1000}")
     private int batchSize;
@@ -217,54 +220,6 @@ public class CsvFileGenerator implements FileGenerator {
         return "CSV".equalsIgnoreCase(format);
     }
 
-    private void validateInputs(Stream<Map<String, Object>> data,
-                                ExportTemplate template,
-                                String fileName) {
-        if (data == null) {
-            throw new FileOperationException(
-                    ErrorMessages.format("%s: data", ErrorMessages.REQUIRED_FIELD_EMPTY)
-            );
-        }
 
-        if (template == null) {
-            throw new FileOperationException(ErrorMessages.TEMPLATE_NOT_FOUND);
-        }
 
-        if (fileName == null || fileName.trim().isEmpty()) {
-            throw new FileOperationException(
-                    ErrorMessages.format("%s: fileName", ErrorMessages.REQUIRED_FIELD_EMPTY)
-            );
-        }
-
-        if (template.getFields() == null || template.getFields().isEmpty()) {
-            throw new FileOperationException(ErrorMessages.TEMPLATE_FIELDS_REQUIRED);
-        }
-    }
-
-    private List<ExportTemplateField> getOrderedFields(ExportTemplate template) {
-        return template.getFields().stream()
-                .filter(f -> Boolean.TRUE.equals(f.getIsIncluded()))
-                .sorted(Comparator.comparing(ExportTemplateField::getFieldOrder))
-                .collect(Collectors.toList());
-    }
-
-    private List<String> extractHeaders(List<ExportTemplateField> fields) {
-        return fields.stream()
-                .map(ExportTemplateField::getExportColumnName)
-                .collect(Collectors.toList());
-    }
-
-    private Path moveToExportDirectory(Path tempFile, String fileName,
-                                       ExportTemplate template) throws IOException {
-        try {
-            boolean hasTemplate = template.getFilenameTemplate() != null
-                    && !template.getFilenameTemplate().trim().isEmpty();
-            return pathResolver.moveFromTempToExport(tempFile, fileName, !hasTemplate);
-        } catch (IOException e) {
-            throw new FileProcessingException(
-                    ErrorMessages.format("%s: %s", ErrorMessages.PERSISTENCE_FAILED, e.getMessage()),
-                    fileName, e
-            );
-        }
-    }
 }

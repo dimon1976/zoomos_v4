@@ -9,6 +9,7 @@ import com.java.model.entity.ImportTemplateField;
 import com.java.repository.ClientRepository;
 import com.java.repository.ImportTemplateRepository;
 import com.java.service.imports.validation.TemplateValidationService;
+import com.java.util.TemplateUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -30,6 +31,7 @@ public class ImportTemplateService {
     private final ImportTemplateRepository templateRepository;
     private final ClientRepository clientRepository;
     private final TemplateValidationService validationService;
+    private final TemplateUtils templateUtils;
 
     /**
      * Создает новый шаблон импорта
@@ -38,14 +40,9 @@ public class ImportTemplateService {
     public ImportTemplateDto createTemplate(ImportTemplateDto dto) {
         log.info("Создание шаблона импорта: {}", dto.getName());
 
-        // Получаем клиента
-        Client client = clientRepository.findById(dto.getClientId())
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
-
-        // Проверяем уникальность имени шаблона для клиента
-        if (templateRepository.existsByNameAndClient(dto.getName(), client)) {
-            throw new IllegalArgumentException("Шаблон с таким именем уже существует");
-        }
+        Client client = templateUtils.getClientById(dto.getClientId());
+        templateUtils.validateTemplateNameUniqueness(dto.getName(), client,
+                templateRepository.existsByNameAndClient(dto.getName(), client));
 
         // Валидируем шаблон
         validationService.validateTemplate(dto);
@@ -70,15 +67,11 @@ public class ImportTemplateService {
         ImportTemplate template = templateRepository.findByIdWithFields(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
 
-        // Проверяем принадлежность клиенту
-        if (!template.getClient().getId().equals(dto.getClientId())) {
-            throw new IllegalArgumentException("Нельзя изменить клиента шаблона");
-        }
-
-        // Проверяем уникальность имени если оно изменилось
-        if (!template.getName().equals(dto.getName()) &&
-                templateRepository.existsByNameAndClient(dto.getName(), template.getClient())) {
-            throw new IllegalArgumentException("Шаблон с таким именем уже существует");
+        templateUtils.validateTemplateOwnership(template.getClient().getId(), dto.getClientId());
+        
+        if (!template.getName().equals(dto.getName())) {
+            templateUtils.validateTemplateNameUniqueness(dto.getName(), template.getClient(),
+                    templateRepository.existsByNameAndClient(dto.getName(), template.getClient()));
         }
 
         // Валидируем
@@ -116,8 +109,7 @@ public class ImportTemplateService {
      */
     @Transactional(readOnly = true)
     public List<ImportTemplateDto> getClientTemplates(Long clientId) {
-        Client client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+        Client client = templateUtils.getClientById(clientId);
 
         List<ImportTemplate> templates = templateRepository.findByClientAndIsActiveTrue(client);
         return ImportTemplateMapper.toDtoList(templates);
@@ -174,13 +166,9 @@ public class ImportTemplateService {
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
 
         Long targetClientId = clientId != null ? clientId : original.getClient().getId();
-        Client targetClient = clientRepository.findById(targetClientId)
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
-
-        // Проверяем уникальность нового имени
-        if (templateRepository.existsByNameAndClient(newName, targetClient)) {
-            throw new IllegalArgumentException("Шаблон с таким именем уже существует");
-        }
+        Client targetClient = templateUtils.getClientById(targetClientId);
+        templateUtils.validateTemplateNameUniqueness(newName, targetClient,
+                templateRepository.existsByNameAndClient(newName, targetClient));
 
         ImportTemplateDto dto = ImportTemplateMapper.toDto(original);
         dto.setId(null);
@@ -202,8 +190,7 @@ public class ImportTemplateService {
      */
     @Transactional(readOnly = true)
     public List<Object[]> getTemplateUsageStatistics(Long clientId) {
-        Client client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+        Client client = templateUtils.getClientById(clientId);
 
         return templateRepository.findTemplatesWithUsageCount(client);
     }

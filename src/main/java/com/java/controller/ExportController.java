@@ -8,6 +8,7 @@ import com.java.model.FileOperation;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.service.EntityFieldService;
+import com.java.util.ControllerUtils;
 import com.java.service.exports.ExportService;
 import com.java.service.exports.ExportTemplateService;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class ExportController {
     private final FileOperationRepository fileOperationRepository;
     private final ExportSessionRepository sessionRepository;
     private final EntityFieldService fieldService;
+    private final ControllerUtils controllerUtils;
 
     /**
      * Страница запуска экспорта для клиента
@@ -129,63 +131,14 @@ public class ExportController {
         model.addAttribute("operation", operation);
         model.addAttribute("clientId", operation.getClient().getId());
         model.addAttribute("clientName", operation.getClient().getName());
-        model.addAttribute("operationTypeDisplay", getOperationTypeDisplay(operation));
-        model.addAttribute("statusDisplay", getStatusDisplay(operation));
-        model.addAttribute("statusClass", getStatusClass(operation));
-        model.addAttribute("formattedStartedAt", formatDateTime(operation.getStartedAt()));
-        model.addAttribute("formattedCompletedAt", formatDateTime(operation.getCompletedAt()));
+        model.addAttribute("operationTypeDisplay", controllerUtils.getOperationTypeDisplay(operation.getOperationType()));
+        model.addAttribute("statusDisplay", controllerUtils.getStatusDisplay(operation.getStatus()));
+        model.addAttribute("statusClass", controllerUtils.getStatusClass(operation.getStatus()));
+        model.addAttribute("formattedStartedAt", controllerUtils.formatDateTime(operation.getStartedAt()));
+        model.addAttribute("formattedCompletedAt", controllerUtils.formatDateTime(operation.getCompletedAt()));
         model.addAttribute("duration", operation.getDuration());
 
         return "operations/status";
     }
 
-    private String getOperationTypeDisplay(FileOperation operation) {
-        switch (operation.getOperationType()) {
-            case IMPORT:
-                return "Импорт";
-            case EXPORT:
-                return "Экспорт";
-            case PROCESS:
-                return "Обработка";
-            default:
-                return operation.getOperationType().name();
-        }
-    }
-
-    private String getStatusDisplay(FileOperation operation) {
-        switch (operation.getStatus()) {
-            case PENDING:
-                return "Ожидание";
-            case PROCESSING:
-                return "В процессе";
-            case COMPLETED:
-                return "Завершено";
-            case FAILED:
-                return "Ошибка";
-            default:
-                return operation.getStatus().name();
-        }
-    }
-
-    private String getStatusClass(FileOperation operation) {
-        switch (operation.getStatus()) {
-            case PENDING:
-                return "status-pending";
-            case PROCESSING:
-                return "status-processing";
-            case COMPLETED:
-                return "status-success";
-            case FAILED:
-                return "status-error";
-            default:
-                return "status-unknown";
-        }
-    }
-
-    private String formatDateTime(ZonedDateTime dateTime) {
-        if (dateTime == null) {
-            return null;
-        }
-        return dateTime.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"));
-    }
 }

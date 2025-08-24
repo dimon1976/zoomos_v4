@@ -1,5 +1,6 @@
 package com.java.exception;
 
+import com.java.service.imports.validation.TemplateValidationService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -33,6 +34,8 @@ public class GlobalExceptionHandler {
     private static final String FILE_ERROR_VIEW = "error/file-error";
     private static final String ACCESS_DENIED_VIEW = "error/access-denied";
     private static final String NOT_FOUND_VIEW = "error/not-found";
+    private static final String IMPORT_ERROR_VIEW = "error/import-error";
+    private static final String QUOTA_EXCEEDED_VIEW = "error/quota-exceeded";
 
     // Константы для атрибутов ошибок
     private static final String ERROR_MESSAGE_ATTR = "errorMessage";
@@ -118,11 +121,6 @@ public class GlobalExceptionHandler {
 
     /**
      * Обработка ошибок размера загружаемого файла
-     *
-     * @param ex исключение
-     * @param model модель представления
-     * @param request HTTP-запрос
-     * @return имя представления ошибки
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -131,7 +129,7 @@ public class GlobalExceptionHandler {
 
         logError("Превышен размер файла", ex);
         setErrorAttributes(model,
-                "Превышен максимальный размер файла. Максимальный размер: 1000MB.", request);
+                "Превышен максимальный размер файла. Максимальный размер: 1200MB.", request);
 
         return FILE_ERROR_VIEW;
     }
@@ -202,6 +200,86 @@ public class GlobalExceptionHandler {
             FileOperationException ex, RedirectAttributes redirectAttributes) {
         redirectAttributes.addFlashAttribute(ERROR_MESSAGE_ATTR, ex.getMessage());
         return new RedirectView(ex.getRedirectUrl(), true);
+    }
+
+    /**
+     * Обработка общих исключений импорта
+     */
+    @ExceptionHandler(ImportException.class)
+    public String handleImportException(ImportException ex, Model model,
+                                       HttpServletRequest request) {
+        logError("Ошибка импорта", ex);
+        
+        model.addAttribute(ERROR_MESSAGE_ATTR, ex.getMessage());
+        model.addAttribute("errorCode", ex.getCode());
+        model.addAttribute(REQUEST_URI_ATTR, request.getRequestURI());
+        model.addAttribute(TIMESTAMP_ATTR, System.currentTimeMillis());
+
+        return IMPORT_ERROR_VIEW;
+    }
+
+    /**
+     * Обработка ошибок обработки файла
+     */
+    @ExceptionHandler(FileProcessingException.class)
+    public String handleFileProcessingException(FileProcessingException ex,
+                                               Model model,
+                                               HttpServletRequest request) {
+        logError("Ошибка обработки файла", ex);
+        
+        model.addAttribute(ERROR_MESSAGE_ATTR, ex.getMessage());
+        model.addAttribute("fileName", ex.getFileName());
+        model.addAttribute("rowNumber", ex.getRowNumber());
+        model.addAttribute(REQUEST_URI_ATTR, request.getRequestURI());
+        model.addAttribute(TIMESTAMP_ATTR, System.currentTimeMillis());
+
+        return FILE_ERROR_VIEW;
+    }
+
+    /**
+     * Обработка ошибок валидации шаблона
+     */
+    @ExceptionHandler(TemplateValidationService.ValidationException.class)
+    public String handleTemplateValidationException(TemplateValidationService.ValidationException ex,
+                                                   RedirectAttributes redirectAttributes,
+                                                   HttpServletRequest request) {
+        logError("Ошибка валидации шаблона", ex);
+        
+        redirectAttributes.addFlashAttribute(ERROR_MESSAGE_ATTR, "Ошибка валидации шаблона");
+        redirectAttributes.addFlashAttribute("validationErrors", ex.getErrors());
+
+        String referer = request.getHeader("Referer");
+        return "redirect:" + (referer != null ? referer : "/import/templates");
+    }
+
+    /**
+     * Обработка превышения квоты
+     */
+    @ExceptionHandler(ImportQuotaExceededException.class)
+    public String handleQuotaExceeded(ImportQuotaExceededException ex, Model model) {
+        logError("Превышена квота импорта", ex);
+        
+        model.addAttribute(ERROR_MESSAGE_ATTR, ex.getMessage());
+        model.addAttribute("limit", ex.getLimit());
+        model.addAttribute("current", ex.getCurrent());
+        model.addAttribute(TIMESTAMP_ATTR, System.currentTimeMillis());
+
+        return QUOTA_EXCEEDED_VIEW;
+    }
+
+    /**
+     * Обработка неподдерживаемых операций
+     */
+    @ExceptionHandler(UnsupportedOperationException.class)
+    public String handleUnsupportedOperation(UnsupportedOperationException ex,
+                                            Model model,
+                                            HttpServletRequest request) {
+        logError("Неподдерживаемая операция", ex);
+        
+        setErrorAttributes(model,
+                "Операция не поддерживается: " + ex.getMessage(), request);
+
+        return DEFAULT_ERROR_VIEW;
     }
 
     /**
