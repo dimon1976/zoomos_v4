@@ -163,6 +163,66 @@ public class OperationsRestController {
     }
 
     /**
+     * Получение общей статистики клиента
+     */
+    @GetMapping("/clients/{clientId}/statistics/general")
+    public GeneralStatsDto getClientGeneralStats(@PathVariable Long clientId) {
+        log.debug("Запрос общей статистики для клиента ID: {}", clientId);
+
+        // Проверяем существование клиента
+        Client client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+
+        // Подсчитываем статистику
+        long totalImports = fileOperationRepository.countByClientAndOperationType(client, FileOperation.OperationType.IMPORT);
+        long totalExports = fileOperationRepository.countByClientAndOperationType(client, FileOperation.OperationType.EXPORT);
+        long totalRecords = fileOperationRepository.sumProcessedRecordsByClient(client);
+        long activeOperations = fileOperationRepository.countByClientAndStatus(client, FileOperation.OperationStatus.PROCESSING);
+
+        return GeneralStatsDto.builder()
+                .totalImports(totalImports)
+                .totalExports(totalExports)
+                .totalRecords(totalRecords)
+                .activeOperations(activeOperations)
+                .build();
+    }
+
+    /**
+     * Получение статистики по статусам операций
+     */
+    @GetMapping("/clients/{clientId}/statistics/status")
+    public java.util.Map<String, Long> getClientStatusStats(@PathVariable Long clientId) {
+        log.debug("Запрос статистики по статусам для клиента ID: {}", clientId);
+
+        // Проверяем существование клиента
+        Client client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+
+        // Подсчитываем статистику по статусам
+        java.util.Map<String, Long> statusStats = new java.util.HashMap<>();
+        for (FileOperation.OperationStatus status : FileOperation.OperationStatus.values()) {
+            long count = fileOperationRepository.countByClientAndStatus(client, status);
+            if (count > 0) {
+                statusStats.put(status.name(), count);
+            }
+        }
+
+        return statusStats;
+    }
+
+    /**
+     * DTO общей статистики
+     */
+    @Data
+    @Builder
+    public static class GeneralStatsDto {
+        private long totalImports;
+        private long totalExports;
+        private long totalRecords;
+        private long activeOperations;
+    }
+
+    /**
      * DTO страницы операций
      */
     @Data

@@ -275,7 +275,20 @@
 
 <script th:inline="javascript">
     /*<![CDATA[*/
+    // Глобальная переменная для ID клиента
+    let clientId;
+    
     document.addEventListener('DOMContentLoaded', function() {
+        // Получаем clientId из URL (например: /clients/123/statistics -> 123)
+        const pathParts = window.location.pathname.split('/');
+        clientId = pathParts[2]; // /clients/{id}/statistics
+        
+        // Проверяем, что clientId является корректным числом
+        if (!clientId || isNaN(clientId) || clientId <= 0) {
+            console.error('Некорректный ID клиента:', clientId);
+            return;
+        }
+        
         // Загружаем статистику при загрузке страницы
         loadStatistics();
 
@@ -284,7 +297,11 @@
     });
 
     function loadStatistics() {
-        const clientId = /*[[${client.id}]]*/ 0;
+        // Проверяем, что clientId доступен
+        if (!clientId) {
+            console.error('clientId не определен');
+            return;
+        }
         
         // Загружаем общую статистику
         loadGeneralStats(clientId);
