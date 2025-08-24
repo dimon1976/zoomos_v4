@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Zoomos v4 is a Spring Boot 3.2.3 application for client-based file processing with import/export functionality. It provides asynchronous processing of Excel and CSV files with configurable templates, statistics analysis, and a web interface for managing clients and operations.
+Zoomos v4 is a Spring Boot 3.2.12 application for client-based file processing with import/export functionality. It provides asynchronous processing of Excel and CSV files with configurable templates, statistics analysis, and a web interface for managing clients and operations.
 
 ## Development Commands
 
@@ -214,11 +214,25 @@ Real-time progress updates for long-running operations:
 
 ## Current State Notes
 
-**Active Refactoring** (per `refactor.md`)
-- Converting from tab-based navigation to separate pages
-- Implementing template CRUD operations
-- URL structure follows `UrlConstants` definitions
+**Active Refactoring** (as of 2025-08-24)
+- Navigation refactoring from tab-based to separate pages is actively ongoing
+- Converting client interface from tabs to individual pages with proper URLs  
+- Template CRUD operations are being implemented with new URL structure
 - All existing business logic is preserved during UI restructuring
+- Focus on simplicity over complex design patterns (это пет-проект)
+
+**Refactoring Completed**
+- Eliminated controller duplication with `ControllerUtils`
+- Merged async configurations (`AsyncConfig`) 
+- Simplified template services with `TemplateUtils`
+- Consolidated exception handlers in `GlobalExceptionHandler`
+- Created base classes for file generators (`AbstractFileGenerator`)
+- Removed unnecessary dependencies (WebJars, Java8Time extras)
+
+**Navigation Flow**
+1. **Import**: Upload → Analyze (`/import/{clientId}/analyze`) → Template Selection → Start (`/import/{clientId}/start`) → Status (`/import/status/{operationId}`)
+2. **Export**: Export Page → Start Form (`/export/client/{clientId}`) → Status (`/export/status/{operationId}`)
+3. **Statistics**: Setup (`/statistics/client/{clientId}`) → Analyze (`/statistics/analyze`) → Results (`/statistics/results`)
 
 **JavaScript Patterns**
 - Client ID extraction from URL paths rather than Thymeleaf inlining
