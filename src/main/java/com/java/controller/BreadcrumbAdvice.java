@@ -1,5 +1,6 @@
 package com.java.controller;
 
+import com.java.dto.ClientDto;
 import com.java.service.client.ClientService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;
@@ -80,7 +81,7 @@ public class BreadcrumbAdvice {
         try {
             Long id = Long.parseLong(clientId);
             Optional<String> clientNameOpt = clientService.getClientById(id)
-                    .map(client -> client.getName());
+                    .map(ClientDto::getName);
             
             if (clientNameOpt.isPresent()) {
                 crumbs.add(new BreadcrumbItem(clientNameOpt.get(), "/clients/" + clientId));
@@ -131,9 +132,9 @@ public class BreadcrumbAdvice {
         try {
             Long id = Long.parseLong(clientId);
             Optional<String> clientNameOpt = clientService.getClientById(id)
-                    .map(client -> client.getName());
+                    .map(ClientDto::getName);
             
-            if (!clientNameOpt.isPresent()) {
+            if (clientNameOpt.isEmpty()) {
                 // Клиент не найден - используем стандартную генерацию
                 generateStandardBreadcrumbs(crumbs, "/clients/" + clientId + "/" + type + "/templates" + 
                         (templatePath != null ? "/" + templatePath : ""));
