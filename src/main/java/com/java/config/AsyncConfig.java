@@ -11,24 +11,36 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * Конфигурация для асинхронной обработки импорта файлов
+ * Конфигурация для асинхронной обработки импорта и экспорта файлов
  */
 @Configuration
 @EnableAsync
 @Slf4j
 public class AsyncConfig {
 
-    @Value("${import.async.core-pool-size:2}") //
-    private int corePoolSize;
+    @Value("${import.async.core-pool-size:2}")
+    private int importCorePoolSize;
 
     @Value("${import.async.max-pool-size:4}")
-    private int maxPoolSize;
+    private int importMaxPoolSize;
 
     @Value("${import.async.queue-capacity:100}")
-    private int queueCapacity;
+    private int importQueueCapacity;
 
     @Value("${import.async.thread-name-prefix:ImportExecutor-}")
-    private String threadNamePrefix;
+    private String importThreadNamePrefix;
+
+    @Value("${export.async.core-pool-size:2}")
+    private int exportCorePoolSize;
+
+    @Value("${export.async.max-pool-size:4}")
+    private int exportMaxPoolSize;
+
+    @Value("${export.async.queue-capacity:100}")
+    private int exportQueueCapacity;
+
+    @Value("${export.async.thread-name-prefix:ExportExecutor-}")
+    private String exportThreadNamePrefix;
 
     /**
      * Основной пул потоков для импорта файлов
@@ -36,17 +48,38 @@ public class AsyncConfig {
     @Bean(name = "importTaskExecutor")
     public Executor importTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(corePoolSize);
-        executor.setMaxPoolSize(maxPoolSize);
-        executor.setQueueCapacity(queueCapacity);
-        executor.setThreadNamePrefix(threadNamePrefix);
+        executor.setCorePoolSize(importCorePoolSize);
+        executor.setMaxPoolSize(importMaxPoolSize);
+        executor.setQueueCapacity(importQueueCapacity);
+        executor.setThreadNamePrefix(importThreadNamePrefix);
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
         executor.initialize();
 
         log.info("Инициализирован пул потоков для импорта: core={}, max={}, queue={}",
-                corePoolSize, maxPoolSize, queueCapacity);
+                importCorePoolSize, importMaxPoolSize, importQueueCapacity);
+
+        return executor;
+    }
+
+    /**
+     * Основной пул потоков для экспорта файлов
+     */
+    @Bean(name = "exportTaskExecutor")
+    public Executor exportTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(exportCorePoolSize);
+        executor.setMaxPoolSize(exportMaxPoolSize);
+        executor.setQueueCapacity(exportQueueCapacity);
+        executor.setThreadNamePrefix(exportThreadNamePrefix);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+
+        log.info("Инициализирован пул потоков для экспорта: core={}, max={}, queue={}",
+                exportCorePoolSize, exportMaxPoolSize, exportQueueCapacity);
 
         return executor;
     }

@@ -168,7 +168,38 @@ Real-time progress updates for long-running operations:
 - Client-side JavaScript in `main.js` handles WebSocket connections
 - Automatic reconnection and error handling
 
-## AI Assistant Guidelines
+## Technology Stack
+
+### Backend
+- **Framework**: Spring Boot 3.2.3 with Java 17
+- **Database**: PostgreSQL with Flyway migrations
+- **File Processing**: Apache POI 5.2.3 (Excel), OpenCSV 5.8 (CSV)
+- **Character Detection**: juniversalchardet 2.4.0
+- **Template Engine**: Thymeleaf with Java 8 Time extras
+- **WebSockets**: Spring WebSocket with SockJS/STOMP
+- **Development**: Spring DevTools, Lombok
+
+### Key Dependencies
+```xml
+<apache.poi.version>5.2.3</apache.poi.version>
+<opencsv.version>5.8</opencsv.version>
+<juniversalchardet.version>2.4.0</juniversalchardet.version>
+```
+
+### Testing Stack
+- Spring Boot Test with H2 in-memory database for tests
+- Test profile automatically switches to H2 from PostgreSQL
+
+## Development Environment
+
+### Application Profiles
+- **verbose** (default): Standard logging, detailed output
+- **silent**: Minimal logging for production-like environment
+
+### Server Configuration
+- **Port**: 8080 (default)
+- **Hot Reload**: Spring DevTools enabled with LiveReload
+- **Thymeleaf**: Cache disabled for development
 
 ## AI Assistant Guidelines
 
@@ -178,6 +209,8 @@ Real-time progress updates for long-running operations:
 * Используй Context7 для доступа к документациям библиотек
 * Для релизации любых фич с использованием интеграций с внешними арі библиотеками изучай документации с помощью context7 инструмента
 * Если есть изменения на фронтенде, то в конце проверь что фронт работает, открыв его через рlaywrigh
+* Это мой pet проект, не нужно стремится усложнять и использовать какие-то сложные паттерны проектирования.
+* Если чего-то не знаешь, не придумывай, так и говори.
 
 ## Current State Notes
 

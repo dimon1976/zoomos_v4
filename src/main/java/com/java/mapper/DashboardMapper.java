@@ -2,23 +2,28 @@ package com.java.mapper;
 
 import com.java.dto.DashboardOperationDto;
 import com.java.model.FileOperation;
+import com.java.util.ControllerUtils;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 
 @Component
+@RequiredArgsConstructor
 public class DashboardMapper {
+
+    private final ControllerUtils controllerUtils;
 
     public DashboardOperationDto toOperationDto(FileOperation operation) {
         return DashboardOperationDto.builder()
                 .id(operation.getId())
                 .operationType(operation.getOperationType().name())
-                .operationTypeDisplay(getOperationTypeDisplay(operation.getOperationType()))
+                .operationTypeDisplay(controllerUtils.getOperationTypeDisplay(operation.getOperationType()))
                 .fileName(operation.getFileName())
                 .fileType(operation.getFileType())
                 .status(operation.getStatus().name())
-                .statusDisplay(getStatusDisplay(operation.getStatus()))
+                .statusDisplay(controllerUtils.getStatusDisplay(operation.getStatus()))
                 .clientId(operation.getClient().getId())
                 .clientName(operation.getClient().getName())
                 .recordCount(operation.getRecordCount())
@@ -37,22 +42,6 @@ public class DashboardMapper {
                 .build();
     }
 
-    private String getOperationTypeDisplay(FileOperation.OperationType type) {
-        return switch (type) {
-            case IMPORT -> "Импорт";
-            case EXPORT -> "Экспорт";
-            case PROCESS -> "Обработка";
-        };
-    }
-
-    private String getStatusDisplay(FileOperation.OperationStatus status) {
-        return switch (status) {
-            case PENDING -> "Ожидание";
-            case PROCESSING -> "В процессе";
-            case COMPLETED -> "Завершено";
-            case FAILED -> "Ошибка";
-        };
-    }
 
     private String formatFileSize(Long sizeInBytes) {
         if (sizeInBytes == null || sizeInBytes == 0) {

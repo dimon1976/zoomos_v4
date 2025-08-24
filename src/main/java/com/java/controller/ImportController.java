@@ -10,6 +10,7 @@ import com.java.service.imports.ImportTemplateService;
 import com.java.repository.FileOperationRepository;
 import com.java.repository.ImportSessionRepository;
 import com.java.util.PathResolver;
+import com.java.util.ControllerUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -40,6 +41,7 @@ public class ImportController {
     private final FileOperationRepository fileOperationRepository;
     private final ImportSessionRepository sessionRepository;
     private final PathResolver pathResolver;
+    private final ControllerUtils controllerUtils;
 
     // Временное хранилище для связи файлов с анализом
     private final Map<String, AnalysisSession> analysisSessions = new ConcurrentHashMap<>();
@@ -258,11 +260,11 @@ public class ImportController {
         model.addAttribute("clientName", operation.getClient().getName());
 
         // Добавляем вспомогательные атрибуты для отображения
-        model.addAttribute("operationTypeDisplay", getOperationTypeDisplay(operation));
-        model.addAttribute("statusDisplay", getStatusDisplay(operation));
-        model.addAttribute("statusClass", getStatusClass(operation));
-        model.addAttribute("formattedStartedAt", formatDateTime(operation.getStartedAt()));
-        model.addAttribute("formattedCompletedAt", formatDateTime(operation.getCompletedAt()));
+        model.addAttribute("operationTypeDisplay", controllerUtils.getOperationTypeDisplay(operation.getOperationType()));
+        model.addAttribute("statusDisplay", controllerUtils.getStatusDisplay(operation.getStatus()));
+        model.addAttribute("statusClass", controllerUtils.getStatusClass(operation.getStatus()));
+        model.addAttribute("formattedStartedAt", controllerUtils.formatDateTime(operation.getStartedAt()));
+        model.addAttribute("formattedCompletedAt", controllerUtils.formatDateTime(operation.getCompletedAt()));
         model.addAttribute("duration", operation.getDuration());
 
         return "operations/status";
@@ -297,40 +299,6 @@ public class ImportController {
         }
     }
 
-    // Вспомогательные методы
-    private String getOperationTypeDisplay(FileOperation operation) {
-        switch (operation.getOperationType()) {
-            case IMPORT: return "Импорт";
-            case EXPORT: return "Экспорт";
-            case PROCESS: return "Обработка";
-            default: return operation.getOperationType().name();
-        }
-    }
-
-    private String getStatusDisplay(FileOperation operation) {
-        switch (operation.getStatus()) {
-            case PENDING: return "Ожидание";
-            case PROCESSING: return "В процессе";
-            case COMPLETED: return "Завершено";
-            case FAILED: return "Ошибка";
-            default: return operation.getStatus().name();
-        }
-    }
-
-    private String getStatusClass(FileOperation operation) {
-        switch (operation.getStatus()) {
-            case PENDING: return "status-pending";
-            case PROCESSING: return "status-processing";
-            case COMPLETED: return "status-success";
-            case FAILED: return "status-error";
-            default: return "status-unknown";
-        }
-    }
-
-    private String formatDateTime(java.time.ZonedDateTime dateTime) {
-        if (dateTime == null) return null;
-        return dateTime.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"));
-    }
 
     // Внутренние классы
     @lombok.Data

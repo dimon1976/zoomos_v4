@@ -8,6 +8,7 @@ import com.java.model.enums.EntityType;
 import com.java.repository.ClientRepository;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.ExportTemplateRepository;
+import com.java.util.TemplateUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class ExportTemplateService {
     private final ExportTemplateRepository templateRepository;
     private final ExportSessionRepository sessionRepository;
     private final ClientRepository clientRepository;
+    private final TemplateUtils templateUtils;
 
     /**
      * Создает новый шаблон экспорта
@@ -35,14 +37,9 @@ public class ExportTemplateService {
     public ExportTemplateDto createTemplate(ExportTemplateDto dto) {
         log.info("Создание шаблона экспорта: {}", dto.getName());
 
-        // Получаем клиента
-        Client client = clientRepository.findById(dto.getClientId())
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
-
-        // Проверяем уникальность имени
-        if (templateRepository.existsByNameAndClient(dto.getName(), client)) {
-            throw new IllegalArgumentException("Шаблон с таким именем уже существует");
-        }
+        Client client = templateUtils.getClientById(dto.getClientId());
+        templateUtils.validateTemplateNameUniqueness(dto.getName(), client,
+                templateRepository.existsByNameAndClient(dto.getName(), client));
 
         // Создаем entity
         ExportTemplate template = ExportTemplateMapper.toEntity(dto, client);
@@ -64,15 +61,11 @@ public class ExportTemplateService {
         ExportTemplate template = templateRepository.findByIdWithFieldsAndFilters(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
 
-        // Проверяем принадлежность клиенту
-        if (!template.getClient().getId().equals(dto.getClientId())) {
-            throw new IllegalArgumentException("Нельзя изменить клиента шаблона");
-        }
-
-        // Проверяем уникальность имени если оно изменилось
-        if (!template.getName().equals(dto.getName()) &&
-                templateRepository.existsByNameAndClient(dto.getName(), template.getClient())) {
-            throw new IllegalArgumentException("Шаблон с таким именем уже существует");
+        templateUtils.validateTemplateOwnership(template.getClient().getId(), dto.getClientId());
+        
+        if (!template.getName().equals(dto.getName())) {
+            templateUtils.validateTemplateNameUniqueness(dto.getName(), template.getClient(),
+                    templateRepository.existsByNameAndClient(dto.getName(), template.getClient()));
         }
 
         // Обновляем
@@ -97,8 +90,7 @@ public class ExportTemplateService {
      */
     @Transactional(readOnly = true)
     public List<ExportTemplateDto> getClientTemplates(Long clientId) {
-        Client client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+        Client client = templateUtils.getClientById(clientId);
 
         List<ExportTemplate> templates = templateRepository.findByClientAndIsActiveTrue(client);
 
@@ -122,8 +114,7 @@ public class ExportTemplateService {
      */
     @Transactional(readOnly = true)
     public List<ExportTemplateDto> getTemplatesByEntityType(Long clientId, EntityType entityType) {
-        Client client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+        Client client = templateUtils.getClientById(clientId);
 
         List<ExportTemplate> templates = templateRepository
                 .findByClientAndEntityTypeAndIsActiveTrue(client, entityType);
@@ -157,13 +148,9 @@ public class ExportTemplateService {
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
 
         Long targetClientId = clientId != null ? clientId : original.getClient().getId();
-        Client targetClient = clientRepository.findById(targetClientId)
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
-
-        // Проверяем уникальность нового имени
-        if (templateRepository.existsByNameAndClient(newName, targetClient)) {
-            throw new IllegalArgumentException("Шаблон с таким именем уже существует");
-        }
+        Client targetClient = templateUtils.getClientById(targetClientId);
+        templateUtils.validateTemplateNameUniqueness(newName, targetClient,
+                templateRepository.existsByNameAndClient(newName, targetClient));
 
         // Создаем копию через DTO
         ExportTemplateDto dto = ExportTemplateMapper.toDto(original);
