@@ -5,9 +5,16 @@
       "Read(/E:\\workspace\\zoomos_v4/**)",
       "Read(/E:\\workspace\\zoomos_v4/**)",
       "Bash(cmd /c npx -y @upstash/context7-mcp)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Read(/E:\\workspace\\zoomos_v4/**)",
+      "Bash(./mvnw:*)",
+      "Read(/E:\\workspace\\zoomos_v4\\target/**)",
+      "Bash(java:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "E:\\E\\workspace\\zoomos_v4"
+    ]
   }
 }

@@ -105,6 +105,7 @@ public class ImportTemplateController {
         return templateService.getTemplate(templateId)
                 .map(template -> {
                     model.addAttribute("template", template);
+                    model.addAttribute("clientId", clientId);
                     model.addAttribute("clients", clientService.getAllClients());
                     return "import/templates/view";
                 })
@@ -128,6 +129,7 @@ public class ImportTemplateController {
         return templateService.getTemplate(templateId)
                 .map(template -> {
                     model.addAttribute("template", template);
+                    model.addAttribute("clientId", clientId);
                     model.addAttribute("templateId", templateId);
                     populateAvailableFields(model, template);
                     return "import/templates/form";

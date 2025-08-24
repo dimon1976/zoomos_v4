@@ -201,7 +201,7 @@
             const templateName = button.getAttribute('data-template-name');
 
             document.getElementById('cloneTemplateName').textContent = templateName;
-            const clientId = /*[[${template.clientId}]]*/ 0;
+            const clientId = /*[[${clientId}]]*/ 0;
             document.getElementById('cloneForm').action = '/clients/' + clientId + '/import/templates/' + templateId + '/clone';
             document.getElementById('newName').value = templateName + ' (копия)';
         });
