@@ -54,6 +54,26 @@ public class DashboardStatsDto {
     // Системная информация
     private SystemInfoDto systemInfo;
 
+    // Расширенная аналитика
+    private Long totalAvDataRecords; // Общее количество записей AvData
+    private Long errorOperations; // Количество операций с ошибками
+    private Double avgRecordsPerOperation; // Среднее количество записей на операцию
+    
+    // Статистика по времени
+    private Double avgProcessingTimeSeconds; // В секундах для более точности
+    private Long operationsLastHour;
+    private Long operationsLast24Hours;
+    
+    // Статистика файлов по типам
+    private Long csvFilesProcessed;
+    private Long xlsxFilesProcessed;
+    private Long xlsFilesProcessed;
+    
+    // Качество данных
+    private Double dataQualityScore; // Процент успешных операций от 0 до 100
+    private Long duplicateRecords; // Количество дублирующихся записей
+    private Long incompleteRecords; // Записи с незаполненными обязательными полями
+
     @Data
     @Builder
     @NoArgsConstructor

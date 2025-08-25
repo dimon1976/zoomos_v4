@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Расширенная аналитика',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Расширенная аналитика',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Расширенная аналитика</title>
+    <style>
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            transition: transform 0.2s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+        .metric-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .loading {
+            text-align: center;
+            padding: 2rem;
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .filter-section {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="page-actions">
+    <button id="refreshBtn" class="btn btn-primary">
+        <i class="fas fa-sync-alt me-1"></i>Обновить данные
+    </button>
+    <button id="exportBtn" class="btn btn-secondary">
+        <i class="fas fa-download me-1"></i>Экспорт CSV
+    </button>
+</div>
+
+<section>
+    <!-- Фильтры -->
+    <div class="filter-section">
+        <div class="row">
+            <div class="col-md-4">
+                <label for="clientFilter" class="form-label">Клиент</label>
+                <select id="clientFilter" class="form-select">
+                    <option value="">Все клиенты</option>
+                    <option th:each="client : ${clients}" 
+                            th:value="${client.id}" 
+                            th:text="${client.name}">Клиент</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="dateRangeFilter" class="form-label">Период</label>
+                <select id="dateRangeFilter" class="form-select">
+                    <option value="30">Последние 30 дней</option>
+                    <option value="7">Последние 7 дней</option>
+                    <option value="90">Последние 90 дней</option>
+                    <option value="365">Последний год</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="metricFilter" class="form-label">Показать</label>
+                <select id="metricFilter" class="form-select">
+                    <option value="all">Все метрики</option>
+                    <option value="operations">Только операции</option>
+                    <option value="files">Только файлы</option>
+                    <option value="performance">Производительность</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Основные метрики -->
+    <div id="metricsSection">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <p>Загрузка данных...</p>
+        </div>
+    </div>
+
+    <!-- Графики -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Тренд операций
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="operationsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>Обработка записей
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="recordsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Детальная статистика по клиентам -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-users me-2"></i>Статистика по клиентам
+            </h5>
+        </div>
+        <div class="card-body">
+            <div id="clientStatsSection">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Загрузка статистики клиентов...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Системные метрики -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-server me-2"></i>Системные показатели
+            </h5>
+        </div>
+        <div class="card-body">
+            <div id="systemMetricsSection">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Загрузка системных метрик...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Глобальные переменные
+    let operationsChart = null;
+    let recordsChart = null;
+    let currentStats = null;
+
+    // WebSocket подключение
+    let stompClient = null;
+
+    // Инициализация страницы
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCharts();
+        loadData();
+        setupEventListeners();
+        connectWebSocket();
+    });
+
+    // Подключение к WebSocket для real-time обновлений
+    function connectWebSocket() {
+        if (typeof SockJS !== 'undefined' && typeof Stomp !== 'undefined') {
+            const socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+            
+            stompClient.connect({}, function(frame) {
+                console.log('Connected to WebSocket: ' + frame);
+                
+                // Подписываемся на обновления расширенной статистики
+                stompClient.subscribe('/topic/dashboard-advanced-stats', function(message) {
+                    const stats = JSON.parse(message.body);
+                    updateMetrics(stats);
+                });
+            });
+        }
+    }
+
+    // Настройка обработчиков событий
+    function setupEventListeners() {
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            loadData();
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            exportToCsv();
+        });
+
+        // Обработчики фильтров
+        document.getElementById('clientFilter').addEventListener('change', applyFilters);
+        document.getElementById('dateRangeFilter').addEventListener('change', applyFilters);
+        document.getElementById('metricFilter').addEventListener('change', applyFilters);
+    }
+
+    // Загрузка всех данных
+    function loadData() {
+        Promise.all([
+            loadAdvancedStats(),
+            loadTimeSeriesData(),
+            loadClientStats()
+        ]).then(() => {
+            console.log('Все данные загружены');
+        }).catch(error => {
+            console.error('Ошибка загрузки данных:', error);
+            showErrorMessage('Ошибка загрузки данных: ' + error.message);
+        });
+    }
+
+    // Загрузка расширенной статистики
+    function loadAdvancedStats() {
+        return fetch('/api/dashboard/advanced-stats')
+            .then(response => response.json())
+            .then(stats => {
+                currentStats = stats;
+                updateMetrics(stats);
+                updateSystemMetrics(stats);
+            });
+    }
+
+    // Загрузка временных рядов
+    function loadTimeSeriesData() {
+        const days = document.getElementById('dateRangeFilter').value;
+        const fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - days);
+        
+        const params = new URLSearchParams({
+            fromDate: fromDate.toISOString().split('T')[0],
+            toDate: new Date().toISOString().split('T')[0]
+        });
+
+        return fetch('/api/dashboard/time-series?' + params)
+            .then(response => response.json())
+            .then(data => {
+                updateCharts(data);
+            });
+    }
+
+    // Загрузка статистики клиентов
+    function loadClientStats() {
+        return fetch('/api/dashboard/clients')
+            .then(response => response.json())
+            .then(clients => {
+                return Promise.all(clients.map(client =>
+                    fetch(`/api/dashboard/client-analytics/${client.id}`)
+                        .then(response => response.json())
+                ));
+            })
+            .then(clientStats => {
+                updateClientStats(clientStats);
+            });
+    }
+
+    // Обновление основных метрик
+    function updateMetrics(stats) {
+        const metricsHtml = `
+            <div class="stats-grid">
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <div class="metric-value">${stats.totalOperations || 0}</div>
+                        <div class="metric-label">Всего операций</div>
+                    </div>
+                </div>
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <div class="metric-value">${stats.totalRecordsProcessed || 0}</div>
+                        <div class="metric-label">Обработано записей</div>
+                    </div>
+                </div>
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <div class="metric-value">${Math.round(stats.dataQualityScore || 0)}%</div>
+                        <div class="metric-label">Качество данных</div>
+                    </div>
+                </div>
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <div class="metric-value">${Math.round(stats.avgProcessingTimeSeconds || 0)}с</div>
+                        <div class="metric-label">Среднее время обработки</div>
+                    </div>
+                </div>
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <div class="metric-value">${stats.csvFilesProcessed || 0}</div>
+                        <div class="metric-label">CSV файлов</div>
+                    </div>
+                </div>
+                <div class="card metric-card">
+                    <div class="card-body text-center">
+                        <div class="metric-value">${stats.xlsxFilesProcessed || 0}</div>
+                        <div class="metric-label">Excel файлов</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('metricsSection').innerHTML = metricsHtml;
+    }
+
+    // Обновление системных метрик
+    function updateSystemMetrics(stats) {
+        const systemInfo = stats.systemInfo || {};
+        const systemHtml = `
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h6>Использование памяти</h6>
+                        <div class="h4 text-primary">${systemInfo.usedMemoryMb || 0} МБ</div>
+                        <small class="text-muted">из ${systemInfo.totalMemoryMb || 0} МБ</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h6>Время работы</h6>
+                        <div class="h4 text-success">${Math.round((systemInfo.uptimeMinutes || 0) / 60)} ч</div>
+                        <small class="text-muted">${systemInfo.uptimeMinutes || 0} минут</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h6>Java версия</h6>
+                        <div class="h6 text-info">${systemInfo.javaVersion || 'N/A'}</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h6>Размер файлов</h6>
+                        <div class="h4 text-warning">${stats.totalFileSizeFormatted || '0 Б'}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('systemMetricsSection').innerHTML = systemHtml;
+    }
+
+    // Инициализация графиков
+    function initializeCharts() {
+        // График операций
+        const operationsCtx = document.getElementById('operationsChart').getContext('2d');
+        operationsChart = new Chart(operationsCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Операции',
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // График записей
+        const recordsCtx = document.getElementById('recordsChart').getContext('2d');
+        recordsChart = new Chart(recordsCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Записи',
+                    data: [],
+                    backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    // Обновление графиков
+    function updateCharts(timeSeriesData) {
+        // Обновляем график операций
+        if (timeSeriesData.operationsTrend) {
+            operationsChart.data.labels = timeSeriesData.operationsTrend.map(point => point.label);
+            operationsChart.data.datasets[0].data = timeSeriesData.operationsTrend.map(point => point.value);
+            operationsChart.update();
+        }
+
+        // Обновляем график записей
+        if (timeSeriesData.recordsTrend) {
+            recordsChart.data.labels = timeSeriesData.recordsTrend.map(point => point.label);
+            recordsChart.data.datasets[0].data = timeSeriesData.recordsTrend.map(point => point.value);
+            recordsChart.update();
+        }
+    }
+
+    // Обновление статистики клиентов
+    function updateClientStats(clientStats) {
+        let clientStatsHtml = '<div class="table-responsive"><table class="table table-striped">';
+        clientStatsHtml += '<thead><tr><th>Клиент</th><th>Операций</th><th>Записей</th><th>Успешность</th><th>Размер файлов</th></tr></thead>';
+        clientStatsHtml += '<tbody>';
+        
+        clientStats.forEach(client => {
+            clientStatsHtml += `
+                <tr>
+                    <td>${client.clientName}</td>
+                    <td>${client.totalOperations}</td>
+                    <td>${client.totalRecords}</td>
+                    <td><span class="badge bg-${client.successRate > 90 ? 'success' : client.successRate > 70 ? 'warning' : 'danger'}">${Math.round(client.successRate)}%</span></td>
+                    <td>${client.formattedFileSize}</td>
+                </tr>
+            `;
+        });
+        
+        clientStatsHtml += '</tbody></table></div>';
+        document.getElementById('clientStatsSection').innerHTML = clientStatsHtml;
+    }
+
+    // Применение фильтров
+    function applyFilters() {
+        loadTimeSeriesData();
+        // Здесь можно добавить дополнительную логику фильтрации
+    }
+
+    // Экспорт в CSV
+    function exportToCsv() {
+        if (!currentStats) {
+            showErrorMessage('Нет данных для экспорта');
+            return;
+        }
+
+        // Формируем CSV данные
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Метрика,Значение\n";
+        csvContent += `Всего операций,${currentStats.totalOperations}\n`;
+        csvContent += `Обработано записей,${currentStats.totalRecordsProcessed}\n`;
+        csvContent += `Качество данных,${currentStats.dataQualityScore}%\n`;
+        csvContent += `CSV файлов,${currentStats.csvFilesProcessed}\n`;
+        csvContent += `Excel файлов,${currentStats.xlsxFilesProcessed}\n`;
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "analytics_" + new Date().toISOString().split('T')[0] + ".csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // Показ сообщения об ошибке
+    function showErrorMessage(message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+        alertDiv.innerHTML = `
+            <i class="fas fa-exclamation-circle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        const container = document.querySelector('main .container');
+        container.insertBefore(alertDiv, container.firstChild);
+    }
+
+    // Отключение от WebSocket при закрытии страницы
+    window.addEventListener('beforeunload', function() {
+        if (stompClient !== null) {
+            stompClient.disconnect();
+        }
+    });
+</script>
+
+</body>
+</html>

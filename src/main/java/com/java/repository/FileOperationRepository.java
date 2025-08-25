@@ -127,4 +127,69 @@ public interface FileOperationRepository extends JpaRepository<FileOperation, Lo
     
     @Query("SELECT COALESCE(SUM(fo.processedRecords), 0) FROM FileOperation fo WHERE fo.client = :client")
     Long sumProcessedRecordsByClient(@Param("client") Client client);
+
+    // Дополнительные методы для расширенной аналитики
+    Long countByFileTypeIgnoreCase(String fileType);
+
+    // Временные ряды для графиков
+    @Query(value = """
+            SELECT DATE(fo.started_at) as operation_date, COUNT(fo.id) as operation_count
+            FROM file_operations fo
+            WHERE fo.started_at >= :fromDate AND fo.started_at < :toDate
+            GROUP BY DATE(fo.started_at)
+            ORDER BY operation_date
+            """, nativeQuery = true)
+    List<Object[]> getOperationsTimeSeriesData(@Param("fromDate") ZonedDateTime fromDate, @Param("toDate") ZonedDateTime toDate);
+
+    @Query(value = """
+            SELECT DATE(fo.started_at) as operation_date, COALESCE(SUM(fo.record_count), 0) as record_count
+            FROM file_operations fo
+            WHERE fo.started_at >= :fromDate AND fo.started_at < :toDate
+            AND fo.record_count IS NOT NULL
+            GROUP BY DATE(fo.started_at)
+            ORDER BY operation_date
+            """, nativeQuery = true)
+    List<Object[]> getRecordsTimeSeriesData(@Param("fromDate") ZonedDateTime fromDate, @Param("toDate") ZonedDateTime toDate);
+
+    @Query(value = """
+            SELECT DATE(fo.started_at) as operation_date, COUNT(fo.id) as error_count
+            FROM file_operations fo
+            WHERE fo.started_at >= :fromDate AND fo.started_at < :toDate
+            AND fo.status = 'FAILED'
+            GROUP BY DATE(fo.started_at)
+            ORDER BY operation_date
+            """, nativeQuery = true)
+    List<Object[]> getErrorsTimeSeriesData(@Param("fromDate") ZonedDateTime fromDate, @Param("toDate") ZonedDateTime toDate);
+
+    // Детальная статистика клиента
+    @Query(value = """
+            SELECT
+                c.id                                                        AS clientId,
+                c.name                                                      AS clientName,
+                COUNT(fo.id)                                               AS totalOperations,
+                SUM(CASE WHEN fo.operation_type = 'IMPORT' THEN 1 ELSE 0 END)   AS importOperations,
+                SUM(CASE WHEN fo.operation_type = 'EXPORT' THEN 1 ELSE 0 END)   AS exportOperations,
+                COALESCE(SUM(fo.record_count), 0)                         AS totalRecords,
+                COALESCE(SUM(fo.file_size), 0)                            AS totalFileSize,
+                CASE WHEN COUNT(fo.id) > 0 
+                     THEN (SUM(CASE WHEN fo.status = 'COMPLETED' THEN 1 ELSE 0 END) * 100.0) / COUNT(fo.id)
+                     ELSE 0.0
+                END                                                        AS successRate,
+                COALESCE(AVG(EXTRACT(EPOCH FROM (fo.completed_at - fo.started_at)) / 60.0), 0.0) AS avgProcessingTimeMinutes,
+                COALESCE(MAX(fo.started_at), NOW())                        AS lastOperationDate
+            FROM clients c
+            LEFT JOIN file_operations fo ON fo.client_id = c.id
+            WHERE c.id = :clientId
+            GROUP BY c.id, c.name
+            """, nativeQuery = true)
+    Optional<Object[]> getDetailedClientStatsRaw(@Param("clientId") Long clientId);
+    
+    // Получение типов файлов для клиента
+    @Query(value = """
+            SELECT DISTINCT fo.file_type
+            FROM file_operations fo
+            WHERE fo.client_id = :clientId AND fo.file_type IS NOT NULL
+            ORDER BY fo.file_type
+            """, nativeQuery = true)
+    List<String> getFileTypesForClient(@Param("clientId") Long clientId);
 }
