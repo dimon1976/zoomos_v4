@@ -162,7 +162,7 @@ public class ExportTemplateService extends AbstractTemplateService<ExportTemplat
      */
     @Transactional(readOnly = true)
     public List<ExportTemplateDto> getTemplatesByEntityType(Long clientId, EntityType entityType) {
-        Client client = templateUtils.getClientById(clientId);
+        Client client = getClientById(clientId);
 
         List<ExportTemplate> templates = templateRepository
                 .findByClientAndEntityTypeAndIsActiveTrue(client, entityType);
