@@ -9,8 +9,7 @@ import com.java.model.entity.ImportTemplateField;
 import com.java.repository.ClientRepository;
 import com.java.repository.ImportTemplateRepository;
 import com.java.service.imports.validation.TemplateValidationService;
-import com.java.util.TemplateUtils;
-import lombok.RequiredArgsConstructor;
+import com.java.service.template.AbstractTemplateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,74 +24,124 @@ import java.util.Optional;
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
-public class ImportTemplateService {
+public class ImportTemplateService extends AbstractTemplateService<ImportTemplate, ImportTemplateDto, ImportTemplateRepository> {
 
-    private final ImportTemplateRepository templateRepository;
-    private final ClientRepository clientRepository;
     private final TemplateValidationService validationService;
-    private final TemplateUtils templateUtils;
 
-    /**
-     * Создает новый шаблон импорта
-     */
-    @Transactional
-    public ImportTemplateDto createTemplate(ImportTemplateDto dto) {
-        log.info("Создание шаблона импорта: {}", dto.getName());
-
-        Client client = templateUtils.getClientById(dto.getClientId());
-        templateUtils.validateTemplateNameUniqueness(dto.getName(), client,
-                templateRepository.existsByNameAndClient(dto.getName(), client));
-
-        // Валидируем шаблон
-        validationService.validateTemplate(dto);
-
-        // Создаем entity
-        ImportTemplate template = ImportTemplateMapper.toEntity(dto, client);
-
-        // Сохраняем
-        template = templateRepository.save(template);
-        log.info("Шаблон импорта создан с ID: {}", template.getId());
-
-        return ImportTemplateMapper.toDto(template);
+    public ImportTemplateService(ImportTemplateRepository templateRepository,
+                               ClientRepository clientRepository,
+                               TemplateValidationService validationService) {
+        super(templateRepository, clientRepository);
+        this.validationService = validationService;
     }
 
-    /**
-     * Обновляет существующий шаблон
-     */
-    @Transactional
-    public ImportTemplateDto updateTemplate(Long templateId, ImportTemplateDto dto) {
-        log.info("Обновление шаблона импорта ID: {}", templateId);
+    @Override
+    protected void validateTemplate(ImportTemplateDto dto) {
+        validationService.validateTemplate(dto);
+    }
 
-        ImportTemplate template = templateRepository.findByIdWithFields(templateId)
-                .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
+    // Реализация абстрактных методов AbstractTemplateService
 
-        templateUtils.validateTemplateOwnership(template.getClient().getId(), dto.getClientId());
-        
-        if (!template.getName().equals(dto.getName())) {
-            templateUtils.validateTemplateNameUniqueness(dto.getName(), template.getClient(),
-                    templateRepository.existsByNameAndClient(dto.getName(), template.getClient()));
+    @Override
+    protected Long getTemplateId(ImportTemplate template) {
+        return template.getId();
+    }
+
+    @Override
+    protected Long getTemplateClientId(ImportTemplate template) {
+        return template.getClient().getId();
+    }
+
+    @Override
+    protected String getTemplateName(ImportTemplateDto dto) {
+        return dto.getName();
+    }
+
+    @Override
+    protected Long getClientIdFromDto(ImportTemplateDto dto) {
+        return dto.getClientId();
+    }
+
+    @Override
+    protected boolean isTemplateNameExists(String templateName, Client client, Long excludeTemplateId) {
+        if (excludeTemplateId != null) {
+            return templateRepository.existsByNameAndClientAndIdNot(templateName, client, excludeTemplateId);
         }
+        return templateRepository.existsByNameAndClient(templateName, client);
+    }
 
-        // Валидируем
-        validationService.validateTemplate(dto);
+    @Override
+    protected boolean isTemplateInUse(Long templateId) {
+        // Простая проверка - можно удалять все шаблоны импорта
+        return false;
+    }
 
-        // Обновляем
-        ImportTemplateMapper.updateEntity(template, dto);
-        template = templateRepository.save(template);
+    @Override
+    protected ImportTemplate createEntityFromDto(ImportTemplateDto dto, Client client) {
+        return ImportTemplateMapper.toEntity(dto, client);
+    }
 
-        log.info("Шаблон импорта обновлен");
+    @Override
+    protected ImportTemplate updateEntityFromDto(ImportTemplate existingTemplate, ImportTemplateDto dto, Client client) {
+        ImportTemplateMapper.updateEntity(existingTemplate, dto);
+        return existingTemplate;
+    }
+
+    @Override
+    protected ImportTemplateDto createDtoFromEntity(ImportTemplate template) {
         return ImportTemplateMapper.toDto(template);
     }
 
-    /**
-     * Получает шаблон по ID
-     */
-    @Transactional(readOnly = true)
-    public Optional<ImportTemplateDto> getTemplate(Long templateId) {
-        return templateRepository.findByIdWithFields(templateId)
-                .map(ImportTemplateMapper::toDto);
+    @Override
+    protected ImportTemplate cloneEntity(ImportTemplate sourceTemplate, String newName, Client client) {
+        // Создаем копию через DTO
+        ImportTemplateDto dto = ImportTemplateMapper.toDto(sourceTemplate);
+        dto.setId(null);
+        dto.setName(newName);
+        dto.setClientId(client.getId());
+        dto.setClientName(null);
+        dto.setCreatedAt(null);
+        dto.setUpdatedAt(null);
+        dto.setUsageCount(null);
+        dto.setLastUsedAt(null);
+
+        // Очищаем ID у полей
+        dto.getFields().forEach(field -> field.setId(null));
+
+        return ImportTemplateMapper.toEntity(dto, client);
     }
+
+    @Override
+    protected Optional<ImportTemplate> findTemplateById(Long templateId) {
+        return templateRepository.findByIdWithFields(templateId);
+    }
+
+    @Override
+    protected List<ImportTemplate> findTemplatesByClient(Client client) {
+        return templateRepository.findByClientAndIsActiveTrue(client);
+    }
+
+    @Override
+    protected Page<ImportTemplate> findTemplatesByClient(Client client, Pageable pageable) {
+        return templateRepository.findByClientAndIsActiveTrue(client, pageable);
+    }
+
+    @Override
+    protected ImportTemplate saveTemplate(ImportTemplate template) {
+        return templateRepository.save(template);
+    }
+
+    @Override
+    protected boolean existsById(Long templateId) {
+        return templateRepository.existsById(templateId);
+    }
+
+    @Override
+    protected void deleteById(Long templateId) {
+        templateRepository.deleteById(templateId);
+    }
+
+    // Дополнительные методы, специфичные для импорта
 
     /**
      * Получает шаблон с проверкой доступа клиента
@@ -102,17 +151,6 @@ public class ImportTemplateService {
         return templateRepository.findByIdWithFields(templateId)
                 .filter(t -> t.getClient().getId().equals(clientId))
                 .map(ImportTemplateMapper::toDto);
-    }
-
-    /**
-     * Получает список шаблонов клиента
-     */
-    @Transactional(readOnly = true)
-    public List<ImportTemplateDto> getClientTemplates(Long clientId) {
-        Client client = templateUtils.getClientById(clientId);
-
-        List<ImportTemplate> templates = templateRepository.findByClientAndIsActiveTrue(client);
-        return ImportTemplateMapper.toDtoList(templates);
     }
 
     /**
@@ -141,57 +179,11 @@ public class ImportTemplateService {
     }
 
     /**
-     * Удаляет шаблон полностью
-     */
-    @Transactional
-    public void deleteTemplate(Long templateId) {
-        log.info("Удаление шаблона ID: {}", templateId);
-
-        if (!templateRepository.existsById(templateId)) {
-            throw new IllegalArgumentException("Шаблон не найден");
-        }
-
-        templateRepository.deleteById(templateId);
-        log.info("Шаблон удален");
-    }
-
-    /**
-     * Клонирует существующий шаблон
-     */
-    @Transactional
-    public ImportTemplateDto cloneTemplate(Long templateId, String newName, Long clientId) {
-        log.info("Клонирование шаблона ID: {} с новым именем: {} для клиента {}", templateId, newName, clientId);
-
-        ImportTemplate original = templateRepository.findByIdWithFields(templateId)
-                .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
-
-        Long targetClientId = clientId != null ? clientId : original.getClient().getId();
-        Client targetClient = templateUtils.getClientById(targetClientId);
-        templateUtils.validateTemplateNameUniqueness(newName, targetClient,
-                templateRepository.existsByNameAndClient(newName, targetClient));
-
-        ImportTemplateDto dto = ImportTemplateMapper.toDto(original);
-        dto.setId(null);
-        dto.setName(newName);
-        dto.setClientId(targetClientId);
-        dto.setClientName(null);
-        dto.setCreatedAt(null);
-        dto.setUpdatedAt(null);
-        dto.setIsActive(true);
-        if (dto.getFields() != null) {
-            dto.getFields().forEach(field -> field.setId(null));
-        }
-
-        return createTemplate(dto);
-    }
-
-    /**
      * Получает статистику использования шаблонов клиента
      */
     @Transactional(readOnly = true)
     public List<Object[]> getTemplateUsageStatistics(Long clientId) {
-        Client client = templateUtils.getClientById(clientId);
-
+        Client client = getClientById(clientId);
         return templateRepository.findTemplatesWithUsageCount(client);
     }
 

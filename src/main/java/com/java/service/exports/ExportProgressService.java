@@ -6,95 +6,26 @@ import com.java.model.FileOperation;
 import com.java.model.entity.ExportSession;
 import com.java.model.enums.ExportStatus;
 import com.java.repository.FileOperationRepository;
-import lombok.RequiredArgsConstructor;
+import com.java.service.progress.BaseProgressService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Duration;
-import java.time.ZonedDateTime;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
-public class ExportProgressService {
+public class ExportProgressService extends BaseProgressService<ExportSession, ExportProgressDto> {
 
     private final ExportProgressController progressController;
-    private final FileOperationRepository fileOperationRepository;
-    private final ConcurrentHashMap<Long, ZonedDateTime> lastUpdateTimes = new ConcurrentHashMap<>();
 
-    @Transactional
-    public void sendProgressUpdate(ExportSession session) {
-        log.debug("=== Отправка обновления прогресса экспорта для сессии {} ===", session.getId());
-
-        if (!shouldSendUpdate(session.getId())) {
-            log.trace("Пропуск обновления - слишком частые вызовы");
-            return;
-        }
-
-        ExportProgressDto progress = buildProgressDto(session);
-        log.debug("Создан DTO прогресса экспорта: {}% ({}/{})",
-                progress.getProgressPercentage(),
-                progress.getExportedRows(),
-                progress.getTotalRows());
-
-        // Обновляем связанную операцию
-        FileOperation operation = session.getFileOperation();
-        operation.setProcessingProgress(progress.getProgressPercentage());
-        if (progress.getExportedRows() != null) {
-            operation.setProcessedRecords(progress.getExportedRows().intValue());
-        }
-        if (progress.getTotalRows() != null) {
-            operation.setTotalRecords(progress.getTotalRows().intValue());
-        }
-
-        fileOperationRepository.saveAndFlush(operation);
-
-        Long operationId = session.getFileOperation().getId();
-        log.debug("Отправка через WebSocket для операции экспорта ID: {}", operationId);
-
-        try {
-            progressController.sendProgressUpdate(operationId, progress);
-            log.info("✓ WebSocket обновление экспорта отправлено для сессии {}: {}%",
-                    session.getId(), progress.getProgressPercentage());
-        } catch (Exception e) {
-            log.error("✗ Ошибка отправки WebSocket обновления экспорта для сессии {}", session.getId(), e);
-        }
+    public ExportProgressService(FileOperationRepository fileOperationRepository, 
+                               ExportProgressController progressController) {
+        super(fileOperationRepository);
+        this.progressController = progressController;
     }
 
-    @Transactional
-    public void sendCompletionNotification(ExportSession session) {
-        ExportProgressDto progress = buildProgressDto(session);
-        progress.setUpdateType("COMPLETED");
-        progress.setIsCompleted(true);
+    // Реализация абстрактных методов BaseProgressService
 
-        String message = buildCompletionMessage(session);
-        progress.setMessage(message);
-
-        Long operationId = session.getFileOperation().getId();
-        progressController.sendProgressUpdate(operationId, progress);
-
-        lastUpdateTimes.remove(session.getId());
-        log.info("Отправлено уведомление о завершении экспорта для сессии {}", session.getId());
-    }
-
-    @Transactional
-    public void sendErrorNotification(ExportSession session, String errorMessage) {
-        ExportProgressDto progress = buildProgressDto(session);
-        progress.setUpdateType("ERROR");
-        progress.setMessage(errorMessage);
-
-        Long operationId = session.getFileOperation().getId();
-        progressController.sendProgressUpdate(operationId, progress);
-
-        lastUpdateTimes.remove(session.getId());
-        log.error("Отправлено уведомление об ошибке экспорта для сессии {}: {}",
-                session.getId(), errorMessage);
-    }
-
-    private ExportProgressDto buildProgressDto(ExportSession session) {
+    @Override
+    protected ExportProgressDto buildProgressDto(ExportSession session) {
         return ExportProgressDto.builder()
                 .sessionId(session.getId())
                 .status(session.getStatus())
@@ -108,6 +39,74 @@ public class ExportProgressService {
                 .currentOperation(getCurrentOperation(session))
                 .build();
     }
+
+    @Override
+    protected void sendWebSocketUpdate(Long operationId, ExportProgressDto progress) {
+        progressController.sendProgressUpdate(operationId, progress);
+    }
+
+    @Override
+    protected String buildCompletionMessage(ExportSession session) {
+        if (session.getStatus() == ExportStatus.COMPLETED) {
+            return String.format("Экспорт успешно завершен. Экспортировано %d записей.",
+                    session.getExportedRows());
+        } else if (session.getStatus() == ExportStatus.FAILED) {
+            return "Экспорт завершился с ошибкой: " +
+                    (session.getErrorMessage() != null ? session.getErrorMessage() : "Неизвестная ошибка");
+        }
+        return "Экспорт завершен.";
+    }
+
+    // Геттеры для извлечения данных
+    
+    @Override
+    protected Long getSessionId(ExportSession session) {
+        return session.getId();
+    }
+
+    @Override
+    protected Long getOperationId(ExportSession session) {
+        return session.getFileOperation().getId();
+    }
+
+    @Override
+    protected FileOperation getFileOperation(ExportSession session) {
+        return session.getFileOperation();
+    }
+
+    @Override
+    protected Integer getProgressPercentage(ExportProgressDto progress) {
+        return progress.getProgressPercentage();
+    }
+
+    @Override
+    protected Integer getProcessedRecords(ExportProgressDto progress) {
+        return progress.getExportedRows() != null ? progress.getExportedRows().intValue() : null;
+    }
+
+    @Override
+    protected Integer getTotalRecords(ExportProgressDto progress) {
+        return progress.getTotalRows() != null ? progress.getTotalRows().intValue() : null;
+    }
+
+    // Сеттеры для установки данных в DTO
+    
+    @Override
+    protected void setUpdateType(ExportProgressDto progress, String updateType) {
+        progress.setUpdateType(updateType);
+    }
+
+    @Override
+    protected void setIsCompleted(ExportProgressDto progress, boolean isCompleted) {
+        progress.setIsCompleted(isCompleted);
+    }
+
+    @Override
+    protected void setMessage(ExportProgressDto progress, String message) {
+        progress.setMessage(message);
+    }
+
+    // Приватные методы (оставляем как есть)
 
     private Integer calculateProgressPercentage(ExportSession session) {
         // Базовый расчет по статусу
@@ -152,28 +151,6 @@ public class ExportProgressService {
             default:
                 return "Неизвестная операция";
         }
-    }
-
-    private String buildCompletionMessage(ExportSession session) {
-        if (session.getStatus() == ExportStatus.COMPLETED) {
-            return String.format("Экспорт успешно завершен. Экспортировано %d записей.",
-                    session.getExportedRows());
-        } else if (session.getStatus() == ExportStatus.FAILED) {
-            return "Экспорт завершился с ошибкой: " +
-                    (session.getErrorMessage() != null ? session.getErrorMessage() : "Неизвестная ошибка");
-        }
-        return "Экспорт завершен.";
-    }
-
-    private boolean shouldSendUpdate(Long sessionId) {
-        ZonedDateTime lastUpdate = lastUpdateTimes.get(sessionId);
-        ZonedDateTime now = ZonedDateTime.now();
-
-        if (lastUpdate == null || Duration.between(lastUpdate, now).getSeconds() >= 1) {
-            lastUpdateTimes.put(sessionId, now);
-            return true;
-        }
-        return false;
     }
 
     private boolean isCompleted(ExportStatus status) {
