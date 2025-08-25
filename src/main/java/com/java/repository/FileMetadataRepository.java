@@ -12,6 +12,9 @@ public interface FileMetadataRepository extends JpaRepository<FileMetadata, Long
 
     // Найти метаданные по сессии
     Optional<FileMetadata> findByImportSession(ImportSession session);
+    
+    // Найти метаданные по ID сессии
+    Optional<FileMetadata> findByImportSessionId(Long importSessionId);
 
     // Найти по хешу файла (для проверки дубликатов файлов)
     Optional<FileMetadata> findByFileHash(String fileHash);

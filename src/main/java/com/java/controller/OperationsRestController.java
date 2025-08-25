@@ -6,6 +6,7 @@ import com.java.repository.ClientRepository;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.repository.ImportSessionRepository;
+import com.java.service.operations.OperationDeletionService;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class OperationsRestController {
     private final ClientRepository clientRepository;
     private final ImportSessionRepository importSessionRepository;
     private final ExportSessionRepository exportSessionRepository;
+    private final OperationDeletionService operationDeletionService;
 
     /**
      * Получение списка операций клиента с фильтрацией и пагинацией
@@ -109,17 +111,19 @@ public class OperationsRestController {
      */
     @DeleteMapping("/operations/{operationId}")
     public void deleteOperation(@PathVariable Long operationId) {
-        log.debug("Удаление операции ID: {}", operationId);
+        log.info("Запрос на удаление операции ID: {}", operationId);
+        
+        // Используем новый сервис для полного удаления операции со всеми данными
+        operationDeletionService.deleteOperationCompletely(operationId);
+    }
 
-        if (!fileOperationRepository.existsById(operationId)) {
-            throw new IllegalArgumentException("Операция не найдена");
-        }
-
-        importSessionRepository.findByFileOperationId(operationId)
-                .ifPresent(importSessionRepository::delete);
-        exportSessionRepository.findByFileOperationId(operationId)
-                .ifPresent(exportSessionRepository::delete);
-        fileOperationRepository.deleteById(operationId);
+    /**
+     * Получение статистики предстоящего удаления операции
+     */
+    @GetMapping("/operations/{operationId}/deletion-stats")
+    public OperationDeletionService.DeletionStatistics getDeletionStatistics(@PathVariable Long operationId) {
+        log.debug("Запрос статистики удаления для операции ID: {}", operationId);
+        return operationDeletionService.getDeletionStatistics(operationId);
     }
 
     /**
