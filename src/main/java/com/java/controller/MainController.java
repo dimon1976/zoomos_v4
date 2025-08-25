@@ -32,26 +32,33 @@ public class MainController {
     public String displayHomePage(Model model, HttpServletRequest request) {
         log.debug("Запрос на отображение главной страницы");
 
-        // Получаем начальную статистику для дашборда
-        DashboardStatsDto stats = dashboardService.getDashboardStats();
+        try {
+            // Получаем начальную статистику для дашборда
+            DashboardStatsDto stats = dashboardService.getDashboardStats();
 
-        // Получаем список клиентов для фильтра
-        List<ClientDto> clients = clientService.getAllClients();
+            // Получаем список клиентов для фильтра
+            List<ClientDto> clients = clientService.getAllClients();
 
-        // Получаем доступные типы файлов
-        List<String> fileTypes = dashboardService.getAvailableFileTypes();
+            // Получаем доступные типы файлов
+            List<String> fileTypes = dashboardService.getAvailableFileTypes();
 
-        // Получаем доступные типы операций и статусы
-        FileOperation.OperationType[] operationTypes = FileOperation.OperationType.values();
-        FileOperation.OperationStatus[] operationStatuses = FileOperation.OperationStatus.values();
+            // Получаем доступные типы операций и статусы
+            FileOperation.OperationType[] operationTypes = FileOperation.OperationType.values();
+            FileOperation.OperationStatus[] operationStatuses = FileOperation.OperationStatus.values();
 
-        model.addAttribute("dashboardStats", stats);
-        model.addAttribute("clients", clients);
-        model.addAttribute("fileTypes", fileTypes);
-        model.addAttribute("operationTypes", operationTypes);
-        model.addAttribute("operationStatuses", operationStatuses);
-        model.addAttribute("currentUri", request.getRequestURI());
-        model.addAttribute("pageTitle", "Дашборд");
+            model.addAttribute("dashboardStats", stats);
+            model.addAttribute("clients", clients);
+            model.addAttribute("fileTypes", fileTypes);
+            model.addAttribute("operationTypes", operationTypes);
+            model.addAttribute("operationStatuses", operationStatuses);
+            model.addAttribute("currentUri", request.getRequestURI());
+            model.addAttribute("pageTitle", "Дашборд");
+        } catch (Exception e) {
+            log.error("Ошибка при подготовке данных для главной страницы: ", e);
+            // Возвращаем простую страницу ошибки
+            model.addAttribute("pageTitle", "Ошибка");
+            return "error/simple";
+        }
 
         return "index";
     }
