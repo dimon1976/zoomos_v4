@@ -3,8 +3,10 @@ package com.java.service.dashboard;
 import com.java.dto.DashboardFilterDto;
 import com.java.dto.DashboardOperationDto;
 import com.java.dto.DashboardStatsDto;
+import com.java.dto.TimeSeriesDataDto;
 import org.springframework.data.domain.Page;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -33,6 +35,21 @@ public interface DashboardService {
     List<ClientStatsDto> getClientStats();
 
     /**
+     * Получение расширенной статистики дашборда
+     */
+    DashboardStatsDto getAdvancedDashboardStats();
+
+    /**
+     * Получение временных рядов для графиков
+     */
+    TimeSeriesDataDto getTimeSeriesData(LocalDate fromDate, LocalDate toDate);
+
+    /**
+     * Получение детальной статистики по клиенту
+     */
+    ClientDetailedStatsDto getDetailedClientStats(Long clientId);
+
+    /**
      * DTO для статистики клиентов
      */
     record ClientStatsDto(
@@ -42,5 +59,23 @@ public interface DashboardService {
             Long successCount,
             Long failureCount,
             Double successRate
+    ) {}
+
+    /**
+     * DTO для детальной статистики клиента
+     */
+    record ClientDetailedStatsDto(
+            Long clientId,
+            String clientName,
+            Long totalOperations,
+            Long importOperations,
+            Long exportOperations,
+            Long totalRecords,
+            Long totalFileSize,
+            String formattedFileSize,
+            Double successRate,
+            Double avgProcessingTimeMinutes,
+            String lastOperationDate,
+            List<String> mostUsedFileTypes
     ) {}
 }
