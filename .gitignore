@@ -6,6 +6,15 @@ uploads/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# Резервные файлы
+*~
+*.tmp
+*.bak
+
+# Временные файлы различных редакторов
+.#*
+#*#
+
 ### STS ###
 .apt_generated
 .classpath
