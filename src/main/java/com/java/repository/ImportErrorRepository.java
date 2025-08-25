@@ -32,4 +32,10 @@ public interface ImportErrorRepository extends JpaRepository<ImportError, Long> 
 
     // Удалить все ошибки сессии (для отката)
     void deleteByImportSession(ImportSession session);
+    
+    // Удалить все ошибки сессии по ID
+    void deleteByImportSessionId(Long importSessionId);
+    
+    // Подсчитать количество ошибок сессии по ID
+    long countByImportSessionId(Long importSessionId);
 }
