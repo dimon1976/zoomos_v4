@@ -6,122 +6,32 @@ import com.java.model.FileOperation;
 import com.java.model.entity.ImportSession;
 import com.java.model.enums.ImportStatus;
 import com.java.repository.FileOperationRepository;
-import lombok.RequiredArgsConstructor;
+import com.java.service.progress.BaseProgressService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Сервис для отслеживания и уведомления о прогрессе импорта
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
-public class ImportProgressService {
+public class ImportProgressService extends BaseProgressService<ImportSession, ImportProgressDto> {
 
     private final ImportProgressController progressController;
-    private final FileOperationRepository fileOperationRepository;
 
-    // Кеш для отслеживания времени последнего обновления
-    private final ConcurrentHashMap<Long, ZonedDateTime> lastUpdateTimes = new ConcurrentHashMap<>();
-
-    /**
-     * Отправляет обновление прогресса через WebSocket
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void sendProgressUpdate(ImportSession session) {
-        log.debug("=== Отправка обновления прогресса для сессии {} ===", session.getId());
-        // Ограничиваем частоту обновлений (не чаще раза в секунду)
-        if (!shouldSendUpdate(session.getId())) {
-            log.trace("Пропуск обновления - слишком частые вызовы");
-            return;
-        }
-
-        ImportProgressDto progress = buildProgressDto(session);
-        log.debug("Создан DTO прогресса: {}% ({}/{})",
-                progress.getProgressPercentage(),
-                progress.getProcessedRows(),
-                progress.getTotalRows());
-
-        // Обновляем связанную операцию, загружая ее в новой транзакции
-        Long operationId = session.getFileOperation().getId();
-        FileOperation operation = fileOperationRepository.findById(operationId)
-                .orElse(null);
-        if (operation != null) {
-            operation.setProcessingProgress(progress.getProgressPercentage());
-            if (progress.getProcessedRows() != null) {
-                operation.setProcessedRecords(progress.getProcessedRows().intValue());
-            }
-            if (progress.getTotalRows() != null) {
-                operation.setTotalRecords(progress.getTotalRows().intValue());
-            }
-            // Сохраняем и сразу пишем в БД, чтобы прогресс был виден другим транзакциям
-            fileOperationRepository.saveAndFlush(operation);
-        } else {
-            log.warn("Не найдена операция файла для обновления прогресса, ID: {}", operationId);
-        }
-
-        // Отправляем обновление через контроллер
-        log.debug("Отправка через WebSocket для операции ID: {}", operationId);
-        try {
-            progressController.sendProgressUpdate(operationId, progress);
-            log.info("✓ WebSocket обновление отправлено для сессии {}: {}%",
-                    session.getId(), progress.getProgressPercentage());
-        } catch (Exception e) {
-            log.error("✗ Ошибка отправки WebSocket обновления для сессии {}", session.getId(), e);
-        }
+    public ImportProgressService(FileOperationRepository fileOperationRepository,
+                               ImportProgressController progressController) {
+        super(fileOperationRepository);
+        this.progressController = progressController;
     }
 
-    /**
-     * Отправляет уведомление о завершении импорта
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void sendCompletionNotification(ImportSession session) {
-        ImportProgressDto progress = buildProgressDto(session);
-        progress.setUpdateType("COMPLETED");
-        progress.setIsCompleted(true);
+    // Реализация абстрактных методов BaseProgressService
 
-        String message = buildCompletionMessage(session);
-        progress.setMessage(message);
-
-        // Отправляем финальное обновление
-        Long operationId = session.getFileOperation().getId();
-        progressController.sendProgressUpdate(operationId, progress);
-
-        // Очищаем кеш
-        lastUpdateTimes.remove(session.getId());
-
-        log.info("Отправлено уведомление о завершении импорта для сессии {}", session.getId());
-    }
-
-    /**
-     * Отправляет уведомление об ошибке
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void sendErrorNotification(ImportSession session, String errorMessage) {
-        ImportProgressDto progress = buildProgressDto(session);
-        progress.setUpdateType("ERROR");
-        progress.setMessage(errorMessage);
-
-        Long operationId = session.getFileOperation().getId();
-        progressController.sendProgressUpdate(operationId, progress);
-
-        // Очищаем кеш
-        lastUpdateTimes.remove(session.getId());
-
-        log.error("Отправлено уведомление об ошибке для сессии {}: {}",
-                session.getId(), errorMessage);
-    }
-
-    /**
-     * Создает DTO прогресса из сессии
-     */
-    private ImportProgressDto buildProgressDto(ImportSession session) {
+    @Override
+    protected ImportProgressDto buildProgressDto(ImportSession session) {
         ImportProgressDto dto = ImportProgressDto.builder()
                 .sessionId(session.getId())
                 .status(session.getStatus())
@@ -143,6 +53,81 @@ public class ImportProgressService {
 
         return dto;
     }
+
+    @Override
+    protected void sendWebSocketUpdate(Long operationId, ImportProgressDto progress) {
+        progressController.sendProgressUpdate(operationId, progress);
+    }
+
+    @Override
+    protected String buildCompletionMessage(ImportSession session) {
+        if (session.getStatus() == ImportStatus.COMPLETED) {
+            if (session.getErrorRows() == 0) {
+                return String.format("Импорт успешно завершен. Обработано %d записей.",
+                        session.getSuccessRows());
+            } else {
+                return String.format("Импорт завершен. Успешно: %d, Ошибок: %d.",
+                        session.getSuccessRows(), session.getErrorRows());
+            }
+        } else if (session.getStatus() == ImportStatus.FAILED) {
+            return "Импорт завершился с ошибкой: " +
+                    (session.getErrorMessage() != null ? session.getErrorMessage() : "Неизвестная ошибка");
+        } else if (session.getStatus() == ImportStatus.CANCELLED) {
+            return "Импорт был отменен пользователем.";
+        }
+        return "Импорт завершен.";
+    }
+
+    // Геттеры для извлечения данных
+    
+    @Override
+    protected Long getSessionId(ImportSession session) {
+        return session.getId();
+    }
+
+    @Override
+    protected Long getOperationId(ImportSession session) {
+        return session.getFileOperation().getId();
+    }
+
+    @Override
+    protected FileOperation getFileOperation(ImportSession session) {
+        return session.getFileOperation();
+    }
+
+    @Override
+    protected Integer getProgressPercentage(ImportProgressDto progress) {
+        return progress.getProgressPercentage();
+    }
+
+    @Override
+    protected Integer getProcessedRecords(ImportProgressDto progress) {
+        return progress.getProcessedRows() != null ? progress.getProcessedRows().intValue() : null;
+    }
+
+    @Override
+    protected Integer getTotalRecords(ImportProgressDto progress) {
+        return progress.getTotalRows() != null ? progress.getTotalRows().intValue() : null;
+    }
+
+    // Сеттеры для установки данных в DTO
+    
+    @Override
+    protected void setUpdateType(ImportProgressDto progress, String updateType) {
+        progress.setUpdateType(updateType);
+    }
+
+    @Override
+    protected void setIsCompleted(ImportProgressDto progress, boolean isCompleted) {
+        progress.setIsCompleted(isCompleted);
+    }
+
+    @Override
+    protected void setMessage(ImportProgressDto progress, String message) {
+        progress.setMessage(message);
+    }
+
+    // Приватные методы (оставляем как есть)
 
     /**
      * Вычисляет прогресс с учетом того, что totalRows может быть оценкой
@@ -235,43 +220,6 @@ public class ImportProgressService {
         } else {
             return String.format("%d сек", seconds);
         }
-    }
-
-    /**
-     * Создает сообщение о завершении
-     */
-    private String buildCompletionMessage(ImportSession session) {
-        if (session.getStatus() == ImportStatus.COMPLETED) {
-            if (session.getErrorRows() == 0) {
-                return String.format("Импорт успешно завершен. Обработано %d записей.",
-                        session.getSuccessRows());
-            } else {
-                return String.format("Импорт завершен. Успешно: %d, Ошибок: %d.",
-                        session.getSuccessRows(), session.getErrorRows());
-            }
-        } else if (session.getStatus() == ImportStatus.FAILED) {
-            return "Импорт завершился с ошибкой: " +
-                    (session.getErrorMessage() != null ? session.getErrorMessage() : "Неизвестная ошибка");
-        } else if (session.getStatus() == ImportStatus.CANCELLED) {
-            return "Импорт был отменен пользователем.";
-        }
-
-        return "Импорт завершен.";
-    }
-
-    /**
-     * Проверяет, нужно ли отправлять обновление
-     */
-    private boolean shouldSendUpdate(Long sessionId) {
-        ZonedDateTime lastUpdate = lastUpdateTimes.get(sessionId);
-        ZonedDateTime now = ZonedDateTime.now();
-
-        if (lastUpdate == null || Duration.between(lastUpdate, now).getSeconds() >= 1) {
-            lastUpdateTimes.put(sessionId, now);
-            return true;
-        }
-
-        return false;
     }
 
     /**

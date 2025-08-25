@@ -3,6 +3,8 @@ package com.java.repository;
 import com.java.model.Client;
 import com.java.model.entity.ImportTemplate;
 import com.java.model.enums.EntityType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +19,9 @@ public interface ImportTemplateRepository extends JpaRepository<ImportTemplate, 
     // Найти активные шаблоны клиента
     List<ImportTemplate> findByClientAndIsActiveTrue(Client client);
 
+    // Найти активные шаблоны клиента с пагинацией
+    Page<ImportTemplate> findByClientAndIsActiveTrue(Client client, Pageable pageable);
+
     // Найти шаблоны по типу сущности
     List<ImportTemplate> findByEntityTypeAndIsActiveTrue(EntityType entityType);
 
@@ -25,6 +30,9 @@ public interface ImportTemplateRepository extends JpaRepository<ImportTemplate, 
 
     // Проверка существования шаблона с таким именем у клиента
     boolean existsByNameAndClient(String name, Client client);
+
+    // Проверка существования шаблона с таким именем у клиента (исключая определенный ID)
+    boolean existsByNameAndClientAndIdNot(String name, Client client, Long id);
 
     // Найти шаблон с полями
     @Query("SELECT t FROM ImportTemplate t LEFT JOIN FETCH t.fields WHERE t.id = :id")

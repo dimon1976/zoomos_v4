@@ -3,6 +3,8 @@ package com.java.repository;
 import com.java.model.Client;
 import com.java.model.entity.ExportTemplate;
 import com.java.model.enums.EntityType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,11 +18,15 @@ public interface ExportTemplateRepository extends JpaRepository<ExportTemplate, 
 
     List<ExportTemplate> findByClientAndIsActiveTrue(Client client);
 
+    Page<ExportTemplate> findByClientAndIsActiveTrue(Client client, Pageable pageable);
+
     List<ExportTemplate> findByClientAndEntityTypeAndIsActiveTrue(Client client, EntityType entityType);
 
     Optional<ExportTemplate> findByNameAndClient(String name, Client client);
 
     boolean existsByNameAndClient(String name, Client client);
+
+    boolean existsByNameAndClientAndIdNot(String name, Client client, Long id);
 
     @Query("SELECT t FROM ExportTemplate t LEFT JOIN FETCH t.fields WHERE t.id = :id")
     Optional<ExportTemplate> findByIdWithFields(@Param("id") Long id);
