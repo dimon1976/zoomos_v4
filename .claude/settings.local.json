@@ -9,7 +9,22 @@
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_click",
       "Bash(mvn:*)",
-      "Bash(wmic process where:*)"
+      "Bash(wmic process where:*)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_select_option",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_close",
+      "Bash(start-dev.bat)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "additionalDirectories": [
+      "D:\\d D:\\project"
     ]
   },
   "outputStyle": "default"
