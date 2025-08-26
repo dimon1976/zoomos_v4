@@ -141,7 +141,7 @@ public class ImportProcessorService {
                     .withQuoteChar(metadata.getDetectedQuoteChar() != null ?
                             metadata.getDetectedQuoteChar().charAt(0) : '"')
                     .withEscapeChar(metadata.getDetectedEscapeChar() != null ?
-                            metadata.getDetectedEscapeChar().charAt(0) : '\\')
+                            metadata.getDetectedEscapeChar().charAt(0) : CSVParser.NULL_CHARACTER)
                     .build();
 
             CSVReader csvReader = new CSVReaderBuilder(reader)

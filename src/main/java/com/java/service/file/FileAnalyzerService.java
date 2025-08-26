@@ -43,7 +43,7 @@ public class FileAnalyzerService {
     private static final int ENCODING_BUFFER_SIZE = 4096;
     private static final int CSV_SAMPLE_LINES = 10;
     private static final int HASH_BUFFER_SIZE = 8192;
-    private static final char DEFAULT_ESCAPE_CHAR = '\\';
+    private static final char DEFAULT_ESCAPE_CHAR = CSVParser.NULL_CHARACTER;
 
     /**
      * Анализирует файл и извлекает метаданные, сохраняя его под указанным префиксом
@@ -129,7 +129,12 @@ public class FileAnalyzerService {
         CsvFormat format = detectCsvFormat(filePath, encoding);
         metadata.setDetectedDelimiter(String.valueOf(format.delimiter));
         metadata.setDetectedQuoteChar(String.valueOf(format.quoteChar));
-        metadata.setDetectedEscapeChar(String.valueOf(format.escapeChar));
+        // Сохраняем escape символ, если он не NULL_CHARACTER
+        if (format.escapeChar != CSVParser.NULL_CHARACTER) {
+            metadata.setDetectedEscapeChar(String.valueOf(format.escapeChar));
+        } else {
+            metadata.setDetectedEscapeChar(null); // NULL означает отсутствие escape символа
+        }
 
         // Читаем заголовки и примеры данных
         try (Reader reader = Files.newBufferedReader(filePath, Charset.forName(encoding))) {
