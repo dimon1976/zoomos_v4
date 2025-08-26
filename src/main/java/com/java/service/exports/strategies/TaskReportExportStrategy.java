@@ -85,24 +85,59 @@ public class TaskReportExportStrategy implements ExportStrategy {
             log.debug("Допустимые ключи: {}", allowedKeys);
         }
 
+        // ВРЕМЕННОЕ РЕШЕНИЕ: Если не найдено ключей по точным номерам, попробуем расширенный поиск
+        if (allowedKeys.isEmpty()) {
+            log.warn("ПРИМЕНЕНИЕ ВРЕМЕННОГО РЕШЕНИЯ: Расширенный поиск заданий");
+            allowedKeys = loadAllTaskKeysWithFlexibleMatching();
+            log.warn("Расширенный поиск нашел {} ключей", allowedKeys.size());
+        }
+
         // 4. Анализируем какие ключи ожидаются в отчетах
         if (log.isDebugEnabled()) {
+            // Сначала посмотрим на исходные данные отчетов
+            log.debug("=== Анализ исходных данных отчетов ===");
+            reportData.stream().limit(5).forEach(row -> {
+                String taskNum = Objects.toString(row.get("product_additional1"), null);
+                String networkCode = Objects.toString(row.get("competitor_additional"), null);
+                log.debug("Исходная запись отчета: product_additional1='{}', competitor_additional='{}'", 
+                    taskNum, networkCode);
+            });
+            
             Set<String> reportKeys = reportData.stream()
                     .map(row -> {
                         String taskNum = Objects.toString(row.get("product_additional1"), null);
                         String networkCode = Objects.toString(row.get("competitor_additional"), null);
-                        return buildKey(taskNum, networkCode);
+                        String key = buildKey(taskNum, networkCode);
+                        if (log.isTraceEnabled() && key != null) {
+                            log.trace("Построен ключ отчета: taskNum='{}', networkCode='{}' -> key='{}'", 
+                                taskNum, networkCode, key);
+                        }
+                        return key;
                     })
                     .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
             log.debug("Уникальных ключей в отчетах: {}", reportKeys.size());
-            log.debug("Ключи отчетов: {}", reportKeys);
+            log.debug("Первые 10 ключей отчетов: {}", 
+                reportKeys.stream().limit(10).collect(Collectors.toList()));
 
             // Показываем какие ключи отчетов не найдены в заданиях
             Set<String> missingKeys = new HashSet<>(reportKeys);
             missingKeys.removeAll(allowedKeys);
             if (!missingKeys.isEmpty()) {
-                log.debug("Ключи отчетов, не найденные в заданиях: {}", missingKeys);
+                log.debug("Ключи отчетов, не найденные в заданиях ({} из {}): {}", 
+                    missingKeys.size(), reportKeys.size(), 
+                    missingKeys.stream().limit(10).collect(Collectors.toList()));
+            }
+            
+            // Показываем какие ключи заданий найдены в отчетах
+            Set<String> matchingKeys = new HashSet<>(reportKeys);
+            matchingKeys.retainAll(allowedKeys);
+            if (!matchingKeys.isEmpty()) {
+                log.debug("Совпадающие ключи ({} из {}): {}", 
+                    matchingKeys.size(), reportKeys.size(),
+                    matchingKeys.stream().limit(10).collect(Collectors.toList()));
+            } else {
+                log.warn("НЕТ СОВПАДАЮЩИХ КЛЮЧЕЙ между отчетами и заданиями!");
             }
         }
 
@@ -111,6 +146,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
         int matched = 0;
         int enriched = 0;
         int skippedWithoutKey = 0;
+        int totalDateModifications = 0; // Счетчик измененных дат
         Map<TaskNetworkKey, Integer> missingKeyCounts = new HashMap<>();
 
         for (Map<String, Object> reportRow : reportData) {
@@ -145,7 +181,10 @@ public class TaskReportExportStrategy implements ExportStrategy {
             }
 
             // 5.3. Корректируем дату мониторинга
-            adjustMonitoringDate(workingRow, maxReportAgeDays);
+            boolean wasDateModified = adjustMonitoringDate(workingRow, maxReportAgeDays);
+            if (wasDateModified) {
+                totalDateModifications++;
+            }
 
             processedData.add(workingRow);
             matched++;
@@ -162,8 +201,12 @@ public class TaskReportExportStrategy implements ExportStrategy {
             log.debug("Пропущенные записи отчета без ключа: {}", summary);
         }
 
-        log.info("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {})",
-                matched, reportData.size(), enriched, skippedWithoutKey);
+        log.info("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {}, дат изменено: {})",
+                matched, reportData.size(), enriched, skippedWithoutKey, totalDateModifications);
+
+        // Сохраняем статистику изменений дат в контекст для статистики
+        context.put("dateModificationsCount", totalDateModifications);
+        context.put("totalProcessedRecords", matched);
 
         // 6. Применяем стандартную обработку для форматирования полей
         return defaultStrategy.processData(processedData, template, context);
@@ -279,12 +322,13 @@ public class TaskReportExportStrategy implements ExportStrategy {
 
     /**
      * Корректирует дату мониторинга если она слишком старая
+     * @return true если дата была изменена
      */
-    private void adjustMonitoringDate(Map<String, Object> row, int maxReportAgeDays) {
+    private boolean adjustMonitoringDate(Map<String, Object> row, int maxReportAgeDays) {
         String dateStr = Objects.toString(row.get("competitor_date"), null);
         if (dateStr == null) {
             row.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
-            return;
+            return true; // Дата была добавлена (считается как изменение)
         }
 
         try {
@@ -296,10 +340,13 @@ public class TaskReportExportStrategy implements ExportStrategy {
                 row.put("competitor_date", minAllowedDate.format(DATE_FORMAT));
                 log.debug("Дата {} заменена на {} (макс. давность {} дней)",
                         dateStr, minAllowedDate.format(DATE_FORMAT), maxReportAgeDays);
+                return true; // Дата была изменена
             }
+            return false; // Дата не изменялась
         } catch (DateTimeParseException e) {
             log.warn("Некорректная дата отчета: {}, установлена текущая", dateStr);
             row.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
+            return true; // Дата была исправлена (считается как изменение)
         }
     }
 
@@ -320,8 +367,11 @@ public class TaskReportExportStrategy implements ExportStrategy {
             return null;
         }
 
-        String key = taskStr + "|" + codeStr.toUpperCase();
-        log.trace("buildKey: сформирован ключ '{}'", key);
+        // ИСПРАВЛЕНИЕ: Нормализуем код сети - убираем лишние пробелы и приводим к верхнему регистру
+        String normalizedCode = codeStr.replaceAll("\\s+", "").toUpperCase();
+        String key = taskStr + "|" + normalizedCode;
+        log.trace("buildKey: taskStr='{}', codeStr='{}' -> normalizedCode='{}' -> key='{}'", 
+            taskStr, codeStr, normalizedCode, key);
         return key;
     }
 
@@ -351,12 +401,12 @@ public class TaskReportExportStrategy implements ExportStrategy {
             jdbcTemplate.query(sql, batch.toArray(), rs -> {
                 String taskNum = rs.getString("product_additional1");
                 String networkCode = rs.getString("competitor_additional");
-                log.debug("Найдена запись задания: taskNum='{}', networkCode='{}'", taskNum, networkCode);
+                log.debug("Найдена запись задания: taskNum='{}', networkCode='{}' (исходный)", taskNum, networkCode);
 
                 String key = buildKey(taskNum, networkCode);
                 if (key != null) {
                     allowed.add(key);
-                    log.debug("Добавлен допустимый ключ: '{}'", key);
+                    log.debug("Добавлен допустимый ключ: '{}' (после обработки buildKey)", key);
                 } else {
                     log.debug("Пропущена запись задания с null ключом: taskNum='{}', networkCode='{}'",
                             taskNum, networkCode);
@@ -365,6 +415,11 @@ public class TaskReportExportStrategy implements ExportStrategy {
         }
 
         log.debug("=== Итого загружено {} допустимых ключей ===", allowed.size());
+        if (log.isDebugEnabled() && !allowed.isEmpty()) {
+            log.debug("Первые 10 допустимых ключей: {}", 
+                allowed.stream().limit(10).collect(Collectors.toList()));
+        }
+        
         if (allowed.isEmpty()) {
             log.warn("ВНИМАНИЕ: Не найдено ни одного задания с data_source='TASK' для номеров: {}", taskNumbers);
 
@@ -378,9 +433,94 @@ public class TaskReportExportStrategy implements ExportStrategy {
                 String sampleSql = "SELECT DISTINCT product_additional1 FROM av_data WHERE data_source = 'TASK' LIMIT 10";
                 List<String> sampleTaskNumbers = jdbcTemplate.queryForList(sampleSql, String.class);
                 log.debug("Примеры номеров заданий в таблице: {}", sampleTaskNumbers);
+                
+                // Проверим есть ли записи с заполненными полями
+                String filledFieldsSql = """
+                    SELECT product_additional1, competitor_additional 
+                    FROM av_data 
+                    WHERE data_source = 'TASK' 
+                    AND product_additional1 IS NOT NULL 
+                    AND competitor_additional IS NOT NULL 
+                    LIMIT 5
+                    """;
+                List<Map<String, Object>> filledSamples = jdbcTemplate.queryForList(filledFieldsSql);
+                log.debug("Примеры записей TASK с заполненными полями: {}", filledSamples);
+                
+                // ДИАГНОСТИКА: Попробуем найти задания без фильтрации по номерам
+                String fallbackSql = """
+                    SELECT product_additional1, competitor_additional 
+                    FROM av_data 
+                    WHERE data_source = 'TASK' 
+                    AND product_additional1 IS NOT NULL 
+                    AND competitor_additional IS NOT NULL 
+                    LIMIT 20
+                    """;
+                List<Map<String, Object>> fallbackTasks = jdbcTemplate.queryForList(fallbackSql);
+                log.warn("ДИАГНОСТИКА: Всего доступных заданий TASK с заполненными полями: {}", fallbackTasks.size());
+                
+                if (!fallbackTasks.isEmpty()) {
+                    // Попробуем создать ключи из всех доступных заданий
+                    Set<String> fallbackKeys = new HashSet<>();
+                    fallbackTasks.forEach(task -> {
+                        String key = buildKey(task.get("product_additional1"), task.get("competitor_additional"));
+                        if (key != null) {
+                            fallbackKeys.add(key);
+                        }
+                    });
+                    log.warn("ДИАГНОСТИКА: Создано {} ключей из всех доступных заданий", fallbackKeys.size());
+                    log.warn("ДИАГНОСТИКА: Примеры ключей из всех заданий: {}", 
+                        fallbackKeys.stream().limit(10).collect(Collectors.toList()));
+                        
+                    if (!fallbackKeys.isEmpty()) {
+                        log.error("КРИТИЧЕСКАЯ ОШИБКА: В таблице есть задания с заполненными полями, " +
+                            "но они не соответствуют номерам из отчетов!");
+                        log.error("Номера заданий в отчетах: {}", taskNumbers);
+                        log.error("Доступные номера заданий: {}", 
+                            fallbackTasks.stream()
+                                .map(t -> Objects.toString(t.get("product_additional1"), "null"))
+                                .distinct()
+                                .limit(10)
+                                .collect(Collectors.toList()));
+                    }
+                }
             }
         }
 
+        return allowed;
+    }
+    
+    /**
+     * ВРЕМЕННЫЙ МЕТОД: Загружает все доступные ключи заданий для диагностики
+     * Используется когда основной поиск не дает результатов
+     */
+    private Set<String> loadAllTaskKeysWithFlexibleMatching() {
+        log.debug("=== РАСШИРЕННЫЙ ПОИСК: Загрузка всех доступных ключей заданий ===");
+        
+        Set<String> allowed = new HashSet<>();
+        String sql = """
+            SELECT product_additional1, competitor_additional 
+            FROM av_data 
+            WHERE data_source = 'TASK' 
+            AND product_additional1 IS NOT NULL 
+            AND competitor_additional IS NOT NULL
+            """;
+        
+        log.debug("SQL для расширенного поиска: {}", sql);
+        
+        jdbcTemplate.query(sql, rs -> {
+            String taskNum = rs.getString("product_additional1");
+            String networkCode = rs.getString("competitor_additional");
+            log.debug("Найдена запись TASK (расширенный поиск): taskNum='{}', networkCode='{}'", 
+                taskNum, networkCode);
+            
+            String key = buildKey(taskNum, networkCode);
+            if (key != null) {
+                allowed.add(key);
+                log.debug("Добавлен ключ (расширенный поиск): '{}'", key);
+            }
+        });
+        
+        log.debug("=== РАСШИРЕННЫЙ ПОИСК: Итого {} ключей ===", allowed.size());
         return allowed;
     }
 

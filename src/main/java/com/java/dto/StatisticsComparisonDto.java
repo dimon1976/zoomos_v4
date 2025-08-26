@@ -26,6 +26,7 @@ public class StatisticsComparisonDto {
         private String operationName;
         private java.time.ZonedDateTime exportDate;
         private Map<String, MetricValue> metrics; // поле -> значение с отклонением
+        private DateModificationStats dateModificationStats; // статистика изменений дат
     }
 
     @Data
@@ -46,5 +47,16 @@ public class StatisticsComparisonDto {
 
     public enum AlertLevel {
         NORMAL, WARNING, CRITICAL
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DateModificationStats {
+        private Long modifiedCount; // количество измененных дат
+        private Long totalCount; // общее количество записей
+        private Double modificationPercentage; // процент изменений
+        private AlertLevel alertLevel; // уровень предупреждения для изменений дат
     }
 }

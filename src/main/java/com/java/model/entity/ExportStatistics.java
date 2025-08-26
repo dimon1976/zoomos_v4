@@ -45,6 +45,18 @@ public class ExportStatistics {
     @Column(name = "filter_conditions", columnDefinition = "TEXT")
     private String filterConditions; // JSON условий фильтрации (может не использоваться)
 
+    @Column(name = "date_modifications_count", nullable = false)
+    @Builder.Default
+    private Long dateModificationsCount = 0L;
+
+    @Column(name = "total_records_count", nullable = false)
+    @Builder.Default
+    private Long totalRecordsCount = 0L;
+
+    @Column(name = "modification_type", nullable = false, length = 50)
+    @Builder.Default
+    private String modificationType = "STANDARD";
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;

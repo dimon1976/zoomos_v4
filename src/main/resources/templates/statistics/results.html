@@ -95,6 +95,11 @@
 
         /* Плавающая кнопка экспорта */
         .export-button { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+
+        /* Статистика изменений дат */
+        .date-mod-normal { background-color: var(--bs-gray-100) !important; color: #6c757d; }
+        .date-mod-warning { background-color: var(--bs-warning-bg) !important; color: var(--bs-warning-text); }
+        .date-mod-critical { background-color: var(--bs-danger-bg) !important; color: var(--bs-danger-text); }
     </style>
 </head>
 <body>
@@ -181,6 +186,22 @@
                 <div class="card-body text-center">
                     <div class="h4" id="criticalChangesCount">0</div>
                     <div>Критических</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Статистика изменений дат (только для последней операции) -->
+    <div th:unless="${#lists.isEmpty(comparison)}" id="dateModificationsPanel" class="mb-4 d-none">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-calendar-alt me-2"></i>Изменения дат в последней операции
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="dateModificationsContent" class="row">
+                    <!-- Содержимое будет добавлено через JavaScript -->
                 </div>
             </div>
         </div>
@@ -342,6 +363,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         addGroupStartClass();
         updateSummaryCounters();
+        displayDateModifications();
     });
 
     function toggleSettings() {
@@ -474,6 +496,67 @@
         document.querySelectorAll('.statistics-table tbody tr').forEach(tr => {
             if (tr.querySelector('td[rowspan]')) tr.classList.add('group-start');
         });
+    }
+
+    function displayDateModifications() {
+        if (!statisticsData || statisticsData.length === 0) return;
+
+        const panel = document.getElementById('dateModificationsPanel');
+        const content = document.getElementById('dateModificationsContent');
+
+        // Собираем статистику изменений дат из всех групп (только для последней операции)
+        const allDateMods = [];
+        
+        statisticsData.forEach(group => {
+            if (group.operations && group.operations.length > 0) {
+                // Берем первую операцию (самую новую, т.к. отсортированы по убыванию даты)
+                const latestOperation = group.operations[0];
+                if (latestOperation.dateModificationStats) {
+                    allDateMods.push({
+                        group: group.groupFieldValue,
+                        operation: latestOperation.operationName,
+                        exportDate: latestOperation.exportDate,
+                        ...latestOperation.dateModificationStats
+                    });
+                }
+            }
+        });
+
+        if (allDateMods.length === 0) {
+            panel.classList.add('d-none');
+            return;
+        }
+
+        // Отображаем панель
+        panel.classList.remove('d-none');
+
+        // Создаем карточки для каждой группы с изменениями дат
+        content.innerHTML = allDateMods.map(dateMod => {
+            const alertClass = dateMod.alertLevel.toLowerCase() === 'critical' ? 'date-mod-critical' :
+                              dateMod.alertLevel.toLowerCase() === 'warning' ? 'date-mod-warning' :
+                              'date-mod-normal';
+
+            return `
+                <div class="col-md-4 mb-3">
+                    <div class="card ${alertClass}">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">${dateMod.group}</h6>
+                            <div class="h4">${dateMod.modificationPercentage.toFixed(1)}%</div>
+                            <div class="small">
+                                ${dateMod.modifiedCount} из ${dateMod.totalCount} записей
+                            </div>
+                            <div class="small text-muted mt-1">
+                                ${dateMod.operation}
+                            </div>
+                            ${dateMod.alertLevel.toLowerCase() === 'critical' ? 
+                                '<div class="small mt-2"><i class="fas fa-exclamation-triangle"></i> Критическое превышение</div>' :
+                              dateMod.alertLevel.toLowerCase() === 'warning' ?
+                                '<div class="small mt-2"><i class="fas fa-exclamation-triangle"></i> Предупреждение</div>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
     /*]]>*/
 </script>

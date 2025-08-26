@@ -119,6 +119,8 @@ public class ExportTemplate {
     @Column(name = "statistics_filter_fields", columnDefinition = "TEXT")
     private String statisticsFilterFields; // JSON массив полей для фильтрации
 
+    @Column(name = "filterable_fields", columnDefinition = "TEXT")
+    private String filterableFields; // JSON массив полей доступных для фильтрации в статистике
 
     // Настройки именования файлов
     @Column(name = "filename_template")

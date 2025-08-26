@@ -141,7 +141,7 @@ public class ExportProcessorService {
             // 2.5. Сохраняем статистику
             log.info("Сохранение статистики экспорта");
             try {
-                statisticsWriterService.saveExportStatistics(session, template, processedData);
+                statisticsWriterService.saveExportStatistics(session, template, processedData, context);
             } catch (Exception e) {
                 log.error("Ошибка сохранения статистики экспорта", e);
             }

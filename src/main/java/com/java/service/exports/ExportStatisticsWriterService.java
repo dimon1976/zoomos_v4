@@ -30,10 +30,12 @@ public class ExportStatisticsWriterService {
      * @param session сессия экспорта
      * @param template шаблон экспорта с настройками статистики
      * @param exportedData данные, которые были экспортированы в файл
+     * @param context контекст операции экспорта с дополнительными данными
      */
     @Transactional
     public void saveExportStatistics(ExportSession session, ExportTemplate template,
-                                     List<Map<String, Object>> exportedData) {
+                                     List<Map<String, Object>> exportedData, 
+                                     Map<String, Object> context) {
 
         // Проверяем, включена ли статистика для шаблона
         if (!Boolean.TRUE.equals(template.getEnableStatistics())) {
@@ -76,6 +78,10 @@ public class ExportStatisticsWriterService {
 
         log.debug("Данные сгруппированы на {} групп по колонке '{}'", groupedData.size(), groupColumnName);
 
+        // Получаем статистику изменений дат из контекста (если есть)
+        Integer dateModificationsCount = (Integer) context.get("dateModificationsCount");
+        Integer totalProcessedRecords = (Integer) context.get("totalProcessedRecords");
+        
         // Для каждой группы подсчитываем статистику
         List<ExportStatistics> statisticsToSave = new ArrayList<>();
 
@@ -97,6 +103,9 @@ public class ExportStatisticsWriterService {
                         .groupFieldValue(groupValue)
                         .countFieldName(countField) // сохраняем исходное название поля
                         .countValue(countValue)
+                        .totalRecordsCount((long) groupRows.size())
+                        .dateModificationsCount(0L) // для обычной статистики всегда 0
+                        .modificationType("STANDARD")
                         .build();
 
                 statisticsToSave.add(statistics);
@@ -104,12 +113,44 @@ public class ExportStatisticsWriterService {
                 log.debug("Группа '{}', поле '{}' (колонка '{}'): {} значений",
                         groupValue, countField, countColumnName, countValue);
             }
+            
+            // Если есть статистика изменений дат, сохраняем дополнительную запись
+            if (dateModificationsCount != null && dateModificationsCount > 0) {
+                ExportStatistics dateModStats = ExportStatistics.builder()
+                        .exportSession(session)
+                        .groupFieldName(groupField)
+                        .groupFieldValue(groupValue)
+                        .countFieldName("DATE_MODIFICATIONS") // специальное поле для изменений дат
+                        .countValue(dateModificationsCount.longValue())
+                        .totalRecordsCount(totalProcessedRecords != null ? totalProcessedRecords.longValue() : (long) groupRows.size())
+                        .dateModificationsCount(dateModificationsCount.longValue())
+                        .modificationType("DATE_ADJUSTMENT")
+                        .build();
+                        
+                statisticsToSave.add(dateModStats);
+                
+                log.debug("Группа '{}': сохранена статистика изменений дат - {} из {} записей",
+                        groupValue, dateModificationsCount, totalProcessedRecords);
+            }
         }
 
         // Сохраняем всю статистику
         statisticsRepository.saveAll(statisticsToSave);
 
         log.info("Сохранено {} записей статистики для сессии ID: {}", statisticsToSave.size(), session.getId());
+    }
+
+    /**
+     * Сохраняет статистику по данным экспорта (версия без контекста для обратной совместимости)
+     *
+     * @param session сессия экспорта
+     * @param template шаблон экспорта с настройками статистики
+     * @param exportedData данные, которые были экспортированы в файл
+     */
+    @Transactional
+    public void saveExportStatistics(ExportSession session, ExportTemplate template,
+                                     List<Map<String, Object>> exportedData) {
+        saveExportStatistics(session, template, exportedData, new HashMap<>());
     }
 
     /**

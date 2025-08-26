@@ -96,11 +96,16 @@ public class ExportStatisticsService {
                             Map<String, StatisticsComparisonDto.MetricValue> metrics =
                                     calculateMetrics(sessionStats, previousStats, request);
 
+                            // Вычисляем статистику изменений дат
+                            StatisticsComparisonDto.DateModificationStats dateModStats = 
+                                    calculateDateModificationStats(sessionStats);
+
                             operationStats.add(StatisticsComparisonDto.OperationStatistics.builder()
                                     .exportSessionId(session.getId())
                                     .operationName(generateOperationName(session, session.getTemplate()))
                                     .exportDate(session.getStartedAt())
                                     .metrics(metrics)
+                                    .dateModificationStats(dateModStats)
                                     .build());
                         }
                     });
@@ -296,5 +301,50 @@ public class ExportStatisticsService {
         } else {
             return sessionRepository.findAllById(sessionIds);
         }
+    }
+
+    /**
+     * Вычисляет статистику изменений дат для операции
+     */
+    private StatisticsComparisonDto.DateModificationStats calculateDateModificationStats(
+            List<ExportStatistics> sessionStats) {
+        
+        // Ищем запись с изменениями дат
+        ExportStatistics dateModRecord = sessionStats.stream()
+                .filter(stat -> "DATE_MODIFICATIONS".equals(stat.getCountFieldName()))
+                .filter(stat -> "DATE_ADJUSTMENT".equals(stat.getModificationType()))
+                .findFirst()
+                .orElse(null);
+        
+        if (dateModRecord == null) {
+            // Нет данных об изменениях дат
+            return null;
+        }
+        
+        Long modifiedCount = dateModRecord.getDateModificationsCount();
+        Long totalCount = dateModRecord.getTotalRecordsCount();
+        
+        if (totalCount == null || totalCount == 0) {
+            return null;
+        }
+        
+        double modificationPercentage = (modifiedCount.doubleValue() / totalCount.doubleValue()) * 100.0;
+        
+        // Определяем уровень предупреждения (если более 50% дат изменено - критическое)
+        StatisticsComparisonDto.AlertLevel alertLevel;
+        if (modificationPercentage >= 50.0) {
+            alertLevel = StatisticsComparisonDto.AlertLevel.CRITICAL;
+        } else if (modificationPercentage >= 25.0) {
+            alertLevel = StatisticsComparisonDto.AlertLevel.WARNING;
+        } else {
+            alertLevel = StatisticsComparisonDto.AlertLevel.NORMAL;
+        }
+        
+        return StatisticsComparisonDto.DateModificationStats.builder()
+                .modifiedCount(modifiedCount)
+                .totalCount(totalCount)
+                .modificationPercentage(modificationPercentage)
+                .alertLevel(alertLevel)
+                .build();
     }
 }
