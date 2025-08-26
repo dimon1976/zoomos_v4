@@ -41,7 +41,7 @@ public class DashboardServiceImpl implements DashboardService {
 
     private final FileOperationRepository fileOperationRepository;
     private final ClientRepository clientRepository;
-    // private final DashboardMapper dashboardMapper; // Временно закомментировано
+    private final DashboardMapper dashboardMapper;
     private final Environment environment;
     private final PathResolver pathResolver;
 
@@ -126,8 +126,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         Page<FileOperation> operations = fileOperationRepository.findAll(spec, pageable);
 
-        // return operations.map(dashboardMapper::toOperationDto); // Временно закомментировано
-        throw new UnsupportedOperationException("Метод временно недоступен из-за проблем с зависимостями");
+        return operations.map(dashboardMapper::toOperationDto);
     }
 
     @Override
@@ -442,11 +441,22 @@ public class DashboardServiceImpl implements DashboardService {
             );
         }
         
-        Object[] data = rawData.get();
+        Object[] rawArray = rawData.get();
         List<String> fileTypes = fileOperationRepository.getFileTypesForClient(clientId);
         
+        // Проверяем, если первый элемент - это вложенный массив
+        Object[] data;
+        if (rawArray.length == 1 && rawArray[0] instanceof Object[]) {
+            // Если получили вложенный массив, извлекаем его содержимое
+            data = (Object[]) rawArray[0];
+            log.debug("Extracted nested array, length: {}", data.length);
+        } else {
+            // Если обычный массив, используем как есть
+            data = rawArray;
+            log.debug("Using flat array, length: {}", data.length);
+        }
+        
         // Отладочная информация
-        log.debug("Raw data array length: {}", data.length);
         for (int i = 0; i < data.length; i++) {
             log.debug("data[{}] = {} (type: {})", i, data[i], 
                     data[i] != null ? data[i].getClass().getName() : "null");

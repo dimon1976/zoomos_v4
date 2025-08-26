@@ -244,6 +244,11 @@
             loadClientStats()
         ]).then(() => {
             console.log('Все данные загружены');
+            
+            // Применяем текущий фильтр метрик после загрузки данных
+            const metricFilter = document.getElementById('metricFilter').value;
+            setTimeout(() => applyMetricFilter(metricFilter), 100);
+            
         }).catch(error => {
             console.error('Ошибка загрузки данных:', error);
             showErrorMessage('Ошибка загрузки данных: ' + error.message);
@@ -252,13 +257,41 @@
 
     // Загрузка расширенной статистики
     function loadAdvancedStats() {
-        return fetch('/api/dashboard/advanced-stats')
-            .then(response => response.json())
-            .then(stats => {
-                currentStats = stats;
-                updateMetrics(stats);
-                updateSystemMetrics(stats);
-            });
+        const clientFilter = document.getElementById('clientFilter').value;
+        
+        // Если выбран конкретный клиент, загружаем его статистику
+        if (clientFilter) {
+            console.log('Загружаю статистику для клиента:', clientFilter);
+            return fetch(`/api/dashboard/client-analytics/${clientFilter}`)
+                .then(response => response.json())
+                .then(clientStats => {
+                    // Преобразуем статистику клиента в формат общих метрик
+                    const adaptedStats = {
+                        totalOperations: clientStats.totalOperations,
+                        totalRecordsProcessed: clientStats.totalRecords,
+                        dataQualityScore: clientStats.successRate,
+                        avgProcessingTimeSeconds: Math.round(clientStats.avgProcessingTimeMinutes * 60),
+                        csvFilesProcessed: clientStats.mostUsedFileTypes?.filter(type => 
+                            type.toLowerCase().includes('csv')).length || 0,
+                        xlsxFilesProcessed: clientStats.mostUsedFileTypes?.filter(type => 
+                            type.toLowerCase().includes('xlsx') || 
+                            type.toLowerCase().includes('spreadsheet')).length || 0
+                    };
+                    
+                    currentStats = adaptedStats;
+                    updateMetrics(adaptedStats);
+                    // Не обновляем системные метрики для отдельного клиента
+                });
+        } else {
+            // Загружаем общую статистику
+            return fetch('/api/dashboard/advanced-stats')
+                .then(response => response.json())
+                .then(stats => {
+                    currentStats = stats;
+                    updateMetrics(stats);
+                    updateSystemMetrics(stats);
+                });
+        }
     }
 
     // Загрузка временных рядов
@@ -281,10 +314,17 @@
 
     // Загрузка статистики клиентов
     function loadClientStats() {
+        const clientFilter = document.getElementById('clientFilter').value;
+        
         return fetch('/api/dashboard/clients')
             .then(response => response.json())
             .then(clients => {
-                return Promise.all(clients.map(client =>
+                // Фильтруем клиентов если выбран конкретный клиент
+                let filteredClients = clientFilter ? 
+                    clients.filter(client => client.id == clientFilter) : 
+                    clients;
+                    
+                return Promise.all(filteredClients.map(client =>
                     fetch(`/api/dashboard/client-analytics/${client.id}`)
                         .then(response => response.json())
                 ));
@@ -471,8 +511,77 @@
 
     // Применение фильтров
     function applyFilters() {
-        loadTimeSeriesData();
-        // Здесь можно добавить дополнительную логику фильтрации
+        const clientFilter = document.getElementById('clientFilter').value;
+        const metricFilter = document.getElementById('metricFilter').value;
+        
+        console.log('Применение фильтров:', { clientFilter, metricFilter });
+        
+        // Перезагружаем все данные с учетом фильтров
+        Promise.all([
+            loadAdvancedStats(),
+            loadTimeSeriesData(),
+            loadClientStats()
+        ]).then(() => {
+            // После загрузки применяем фильтр метрик к отображению
+            applyMetricFilter(metricFilter);
+        }).catch(error => {
+            console.error('Ошибка при применении фильтров:', error);
+            showErrorMessage('Ошибка при применении фильтров: ' + error.message);
+        });
+    }
+
+    // Применение фильтра по метрикам
+    function applyMetricFilter(metricFilter) {
+        console.log('Применение фильтра метрик:', metricFilter);
+        
+        if (!currentStats) {
+            console.log('Нет данных для фильтрации');
+            return;
+        }
+
+        // Получаем все карточки метрик
+        const metricCards = document.querySelectorAll('.metric-card');
+        console.log('Найдено карточек метрик:', metricCards.length);
+        
+        if (metricFilter === 'all') {
+            // Показываем все карточки
+            metricCards.forEach(card => {
+                card.style.display = 'block';
+            });
+        } else {
+            // Скрываем все карточки сначала
+            metricCards.forEach(card => {
+                card.style.display = 'none';
+            });
+            
+            // Показываем только нужные карточки
+            switch(metricFilter) {
+                case 'operations':
+                    // Показываем карточки операций (первые две)
+                    console.log('Показываю карточки операций (0, 1)');
+                    const operationCards = Array.from(metricCards).slice(0, 2);
+                    operationCards.forEach(card => {
+                        card.style.display = 'block';
+                    });
+                    break;
+                case 'files':
+                    // Показываем карточки файлов (CSV и Excel - последние две)
+                    console.log('Показываю карточки файлов (4, 5)');
+                    const fileCards = Array.from(metricCards).slice(4, 6);
+                    fileCards.forEach(card => {
+                        card.style.display = 'block';
+                    });
+                    break;
+                case 'performance':
+                    // Показываем карточки производительности (качество данных и время - 2, 3)
+                    console.log('Показываю карточки производительности (2, 3)');
+                    const perfCards = Array.from(metricCards).slice(2, 4);
+                    perfCards.forEach(card => {
+                        card.style.display = 'block';
+                    });
+                    break;
+            }
+        }
     }
 
     // Экспорт в CSV
@@ -502,15 +611,34 @@
 
     // Показ сообщения об ошибке
     function showErrorMessage(message) {
+        console.error('Показ сообщения об ошибке:', message);
+        
         const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+        alertDiv.className = 'alert alert-danger alert-dismissible fade show mt-2';
         alertDiv.innerHTML = `
             <i class="fas fa-exclamation-circle me-2"></i>${message}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
         
-        const container = document.querySelector('main .container');
-        container.insertBefore(alertDiv, container.firstChild);
+        // Пробуем найти контейнер разными способами
+        let container = document.querySelector('main .container') || 
+                       document.querySelector('.container') || 
+                       document.querySelector('main') || 
+                       document.querySelector('section');
+        
+        if (container && container.firstChild) {
+            container.insertBefore(alertDiv, container.firstChild);
+        } else {
+            // Если не нашли контейнер, добавляем в body
+            document.body.appendChild(alertDiv);
+        }
+        
+        // Автоматически убираем алерт через 5 секунд
+        setTimeout(() => {
+            if (alertDiv && alertDiv.parentNode) {
+                alertDiv.parentNode.removeChild(alertDiv);
+            }
+        }, 5000);
     }
 
     // Отключение от WebSocket при закрытии страницы
