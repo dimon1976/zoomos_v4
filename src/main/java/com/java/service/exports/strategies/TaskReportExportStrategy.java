@@ -146,7 +146,8 @@ public class TaskReportExportStrategy implements ExportStrategy {
         int matched = 0;
         int enriched = 0;
         int skippedWithoutKey = 0;
-        int totalDateModifications = 0; // Счетчик измененных дат
+        // Карта для подсчета измененных дат по группам (ключ группировки -> количество)
+        Map<String, Integer> групповыеИзменяДат = new HashMap<>();
         Map<TaskNetworkKey, Integer> missingKeyCounts = new HashMap<>();
 
         for (Map<String, Object> reportRow : reportData) {
@@ -183,7 +184,9 @@ public class TaskReportExportStrategy implements ExportStrategy {
             // 5.3. Корректируем дату мониторинга
             boolean wasDateModified = adjustMonitoringDate(workingRow, maxReportAgeDays);
             if (wasDateModified) {
-                totalDateModifications++;
+                // Определяем ключ группировки для данной записи
+                String ключГруппировки = определитьКлючГруппировки(workingRow, template);
+                групповыеИзменяДат.merge(ключГруппировки, 1, Integer::sum);
             }
 
             processedData.add(workingRow);
@@ -201,11 +204,22 @@ public class TaskReportExportStrategy implements ExportStrategy {
             log.debug("Пропущенные записи отчета без ключа: {}", summary);
         }
 
-        log.info("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {}, дат изменено: {})",
-                matched, reportData.size(), enriched, skippedWithoutKey, totalDateModifications);
+        int общееКоличествоИзмененийДат = групповыеИзменяДат.values().stream().mapToInt(Integer::intValue).sum();
+        
+        log.info("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {}, дат изменено: {} по {} группам)",
+                matched, reportData.size(), enriched, skippedWithoutKey, общееКоличествоИзмененийДат, групповыеИзменяДат.size());
 
-        // Сохраняем статистику изменений дат в контекст для статистики
-        context.put("dateModificationsCount", totalDateModifications);
+        // Логируем детализацию по группам
+        if (!групповыеИзменяДат.isEmpty() && log.isDebugEnabled()) {
+            log.debug("Детализация изменений дат по группам:");
+            групповыеИзменяДат.forEach((группа, количество) -> 
+                log.debug("  Группа '{}': {} измененных дат", группа, количество)
+            );
+        }
+
+        // Сохраняем статистику изменений дат по группам в контекст для статистики
+        context.put("dateModificationsByGroup", групповыеИзменяДат);
+        context.put("totalDateModifications", общееКоличествоИзмененийДат);
         context.put("totalProcessedRecords", matched);
 
         // 6. Применяем стандартную обработку для форматирования полей
@@ -538,5 +552,46 @@ public class TaskReportExportStrategy implements ExportStrategy {
         if (code == null) return null;
         String trimmed = code.trim();
         return trimmed.replaceFirst("^0+(?!$)", "");
+    }
+    
+    /**
+     * Определяет ключ группировки для записи на основе настроек шаблона экспорта
+     */
+    private String определитьКлючГруппировки(Map<String, Object> запись, ExportTemplate шаблон) {
+        // Получаем поле группировки из настроек шаблона
+        String полеГруппировки = получитьПолеГруппировки(шаблон);
+        
+        if (полеГруппировки == null || полеГруппировки.trim().isEmpty()) {
+            return "DEFAULT_GROUP"; // Группа по умолчанию, если не настроено группирование
+        }
+        
+        // Извлекаем значение поля группировки из записи
+        Object значениеГруппировки = запись.get(полеГруппировки);
+        if (значениеГруппировки == null) {
+            return "NULL_" + полеГруппировки; // Для записей с пустым значением поля группировки
+        }
+        
+        String результат = значениеГруппировки.toString().trim();
+        return результат.isEmpty() ? "EMPTY_" + полеГруппировки : результат;
+    }
+    
+    /**
+     * Извлекает настройку поля группировки из шаблона экспорта
+     */
+    private String получитьПолеГруппировки(ExportTemplate шаблон) {
+        if (шаблон == null) {
+            log.debug("Шаблон не найден, используется группировка по умолчанию");
+            return "competitor_additional"; // По умолчанию группируем по коду розничной сети
+        }
+        
+        // Сначала проверяем поле statisticsGroupField
+        if (шаблон.getStatisticsGroupField() != null && !шаблон.getStatisticsGroupField().trim().isEmpty()) {
+            String результат = шаблон.getStatisticsGroupField().trim();
+            log.debug("Найдено поле группировки в statisticsGroupField: {}", результат);
+            return результат;
+        }
+        
+        log.debug("Поле группировки не найдено в шаблоне, используется competitor_additional");
+        return "competitor_additional"; // Значение по умолчанию
     }
 }
