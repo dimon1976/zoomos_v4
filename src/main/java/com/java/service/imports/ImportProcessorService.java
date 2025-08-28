@@ -9,6 +9,7 @@ import com.java.repository.*;
 import com.java.service.imports.handlers.DataTransformationService;
 import com.java.service.imports.handlers.DuplicateCheckService;
 import com.java.service.imports.handlers.EntityPersistenceService;
+import com.java.service.notification.NotificationService;
 import com.java.util.PathResolver;
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
@@ -47,11 +48,13 @@ public class ImportProcessorService {
     private final ImportErrorRepository errorRepository;
     private final FileMetadataRepository metadataRepository;
     private final ImportTemplateRepository templateRepository;
+    private final FileOperationRepository fileOperationRepository;
 
     private final DataTransformationService transformationService;
     private final DuplicateCheckService duplicateCheckService;
     private final EntityPersistenceService persistenceService;
     private final ImportProgressService progressService;
+    private final NotificationService notificationService;
 
     private final ImportConfig.ImportSettings importSettings;
     private final MemoryMonitor memoryMonitor;
@@ -537,6 +540,14 @@ public class ImportProcessorService {
 
         // Отправляем финальное обновление
         progressService.sendProgressUpdate(session);
+        
+        // Отправляем нотификацию об успешном завершении
+        if (session.getStatus() == ImportStatus.COMPLETED) {
+            // Перезагружаем операцию с клиентом для нотификации
+            FileOperation operationWithClient = fileOperationRepository.findByIdWithClient(fileOperation.getId())
+                    .orElse(fileOperation);
+            notificationService.sendImportCompletedNotification(session, operationWithClient);
+        }
 
         log.info("Импорт завершен. Успешно: {}, Ошибок: {}, Дубликатов: {}",
                 session.getSuccessRows(), session.getErrorRows(), session.getDuplicateRows());

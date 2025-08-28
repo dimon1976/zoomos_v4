@@ -52,6 +52,18 @@
 
         showNotification(notification) {
             console.log('Получено уведомление:', notification);
+            
+            // Преобразуем тип уведомления, если он пришел как строка из enum
+            if (typeof notification.type === 'string') {
+                const typeMapping = {
+                    'SUCCESS': { bootstrapClass: 'success', iconClass: 'fas fa-check-circle' },
+                    'ERROR': { bootstrapClass: 'danger', iconClass: 'fas fa-exclamation-triangle' },
+                    'WARNING': { bootstrapClass: 'warning', iconClass: 'fas fa-exclamation-triangle' },
+                    'INFO': { bootstrapClass: 'info', iconClass: 'fas fa-info-circle' },
+                    'PROGRESS': { bootstrapClass: 'primary', iconClass: 'fas fa-spinner fa-spin' }
+                };
+                notification.type = typeMapping[notification.type] || typeMapping['INFO'];
+            }
 
             // Проверяем, не показано ли уже это уведомление
             if (this.notifications.has(notification.id)) {
@@ -183,7 +195,7 @@
                 message: message,
                 type: { bootstrapClass: 'success', iconClass: 'fas fa-check-circle' },
                 timestamp: new Date().toISOString(),
-                autoHideSeconds: 6
+                autoHideSeconds: 60
             });
         }
 
@@ -205,7 +217,7 @@
                 message: message,
                 type: { bootstrapClass: 'warning', iconClass: 'fas fa-exclamation-triangle' },
                 timestamp: new Date().toISOString(),
-                autoHideSeconds: 8
+                autoHideSeconds: 60
             });
         }
 
@@ -216,7 +228,7 @@
                 message: message,
                 type: { bootstrapClass: 'info', iconClass: 'fas fa-info-circle' },
                 timestamp: new Date().toISOString(),
-                autoHideSeconds: 6
+                autoHideSeconds: 60
             });
         }
     }

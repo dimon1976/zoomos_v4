@@ -45,7 +45,10 @@ public class AsyncExportService {
 
             // Отправляем уведомление об успешном завершении
             if (operation != null) {
-                notificationService.sendExportCompletedNotification(session, operation);
+                // Перезагружаем операцию с клиентом для нотификации
+                FileOperation operationWithClient = fileOperationRepository.findByIdWithClient(operation.getId())
+                        .orElse(operation);
+                notificationService.sendExportCompletedNotification(session, operationWithClient);
             }
             
             log.info("Асинхронный экспорт для сессии ID: {} завершен успешно", session.getId());
@@ -56,7 +59,10 @@ public class AsyncExportService {
             
             // Отправляем уведомление об ошибке
             if (operation != null) {
-                notificationService.sendExportFailedNotification(session, operation, e.getMessage());
+                // Перезагружаем операцию с клиентом для нотификации
+                FileOperation operationWithClient = fileOperationRepository.findByIdWithClient(operation.getId())
+                        .orElse(operation);
+                notificationService.sendExportFailedNotification(session, operationWithClient, e.getMessage());
             }
             
             return CompletableFuture.failedFuture(e);

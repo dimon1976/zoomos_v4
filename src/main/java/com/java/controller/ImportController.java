@@ -243,7 +243,7 @@ public class ImportController {
                                    RedirectAttributes redirectAttributes) {
         log.debug("GET запрос на просмотр статуса операции ID: {}", operationId);
 
-        FileOperation operation = fileOperationRepository.findById(operationId)
+        FileOperation operation = fileOperationRepository.findByIdWithClient(operationId)
                 .orElse(null);
 
         if (operation == null) {

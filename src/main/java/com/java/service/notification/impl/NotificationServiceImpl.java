@@ -40,7 +40,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .fileName(operation.getFileName())
                 .actionUrl("/import/status/" + operation.getId())
                 .actionText("Просмотреть результат")
-                .autoHideSeconds(8)
+                .autoHideSeconds(60)
                 .build();
 
         // Отправляем уведомление всем подключенным клиентам
@@ -66,7 +66,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .fileName(operation.getResultFilePath() != null ? operation.getResultFilePath().substring(operation.getResultFilePath().lastIndexOf('/') + 1) : operation.getFileName())
                 .actionUrl("/export/status/" + session.getId())
                 .actionText("Скачать файл")
-                .autoHideSeconds(10)
+                .autoHideSeconds(60)
                 .build();
 
         messagingTemplate.convertAndSend("/topic/notifications", notification);
@@ -128,7 +128,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .message(message)
                 .type(type)
                 .timestamp(ZonedDateTime.now())
-                .autoHideSeconds(type == NotificationDto.NotificationType.ERROR ? 0 : 6)
+                .autoHideSeconds(type == NotificationDto.NotificationType.ERROR ? 0 : 60)
                 .build();
 
         messagingTemplate.convertAndSend("/topic/notifications", notification);

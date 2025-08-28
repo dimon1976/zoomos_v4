@@ -10,6 +10,7 @@ import com.java.model.entity.ImportTemplate;
 import com.java.model.enums.ImportStatus;
 import com.java.repository.*;
 import com.java.service.file.FileAnalyzerService;
+import com.java.service.notification.NotificationService;
 import com.java.util.PathResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,7 @@ public class AsyncImportService {
     private final ImportProgressService progressService;
     private final MemoryMonitor memoryMonitor;
     private final PathResolver pathResolver;
+    private final NotificationService notificationService;
 
     @Autowired
     @Qualifier("importTaskExecutor")
@@ -177,6 +179,12 @@ public class AsyncImportService {
             fileOperationRepository.save(fileOperation);
 
             progressService.sendErrorNotification(session, e.getMessage());
+            
+            // Отправляем нотификацию об ошибке
+            // Перезагружаем операцию с клиентом для нотификации
+            FileOperation operationWithClient = fileOperationRepository.findByIdWithClient(fileOperation.getId())
+                    .orElse(fileOperation);
+            notificationService.sendImportFailedNotification(session, operationWithClient, e.getMessage());
 
         } catch (Exception ex) {
             log.error("Ошибка обработки ошибки импорта", ex);

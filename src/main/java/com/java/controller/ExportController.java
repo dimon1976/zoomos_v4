@@ -119,7 +119,7 @@ public class ExportController {
     public String showExportStatus(@PathVariable Long operationId,
                                    Model model,
                                    RedirectAttributes redirectAttributes) {
-        FileOperation operation = fileOperationRepository.findById(operationId).orElse(null);
+        FileOperation operation = fileOperationRepository.findByIdWithClient(operationId).orElse(null);
         if (operation == null) {
             redirectAttributes.addFlashAttribute("errorMessage", "Операция не найдена");
             return "redirect:/clients";
