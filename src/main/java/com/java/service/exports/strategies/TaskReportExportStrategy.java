@@ -146,8 +146,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
         int matched = 0;
         int enriched = 0;
         int skippedWithoutKey = 0;
-        // Карта для подсчета измененных дат по группам (ключ группировки -> количество)
-        Map<String, Integer> групповыеИзменяДат = new HashMap<>();
+        int общееКоличествоИзмененийДат = 0; // Общий счетчик для логирования
         Map<TaskNetworkKey, Integer> missingKeyCounts = new HashMap<>();
 
         for (Map<String, Object> reportRow : reportData) {
@@ -184,9 +183,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
             // 5.3. Корректируем дату мониторинга
             boolean wasDateModified = adjustMonitoringDate(workingRow, maxReportAgeDays);
             if (wasDateModified) {
-                // Определяем ключ группировки для данной записи
-                String ключГруппировки = определитьКлючГруппировки(workingRow, template);
-                групповыеИзменяДат.merge(ключГруппировки, 1, Integer::sum);
+                общееКоличествоИзмененийДат++;
             }
 
             processedData.add(workingRow);
@@ -204,26 +201,22 @@ public class TaskReportExportStrategy implements ExportStrategy {
             log.debug("Пропущенные записи отчета без ключа: {}", summary);
         }
 
-        int общееКоличествоИзмененийДат = групповыеИзменяДат.values().stream().mapToInt(Integer::intValue).sum();
-        
-        log.info("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {}, дат изменено: {} по {} группам)",
-                matched, reportData.size(), enriched, skippedWithoutKey, общееКоличествоИзмененийДат, групповыеИзменяДат.size());
+        log.info("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {}, дат изменено: {})",
+                matched, reportData.size(), enriched, skippedWithoutKey, общееКоличествоИзмененийДат);
 
-        // Логируем детализацию по группам
-        if (!групповыеИзменяДат.isEmpty() && log.isDebugEnabled()) {
-            log.debug("Детализация изменений дат по группам:");
-            групповыеИзменяДат.forEach((группа, количество) -> 
-                log.debug("  Группа '{}': {} измененных дат", группа, количество)
-            );
-        }
+        // 6. Применяем стандартную обработку для форматирования полей
+        List<Map<String, Object>> finalData = defaultStrategy.processData(processedData, template, context);
+        
+        // После обработки defaultStrategy подсчитываем группировку по экспортированным данным
+        Map<String, Integer> групповыеИзмененияДатПоЭкспортируемымПолям = подсчитатьИзмененияДатПоЭкспортнымГруппам(
+            processedData, finalData, template);
 
         // Сохраняем статистику изменений дат по группам в контекст для статистики
-        context.put("dateModificationsByGroup", групповыеИзменяДат);
+        context.put("dateModificationsByGroup", групповыеИзмененияДатПоЭкспортируемымПолям);
         context.put("totalDateModifications", общееКоличествоИзмененийДат);
         context.put("totalProcessedRecords", matched);
 
-        // 6. Применяем стандартную обработку для форматирования полей
-        return defaultStrategy.processData(processedData, template, context);
+        return finalData;
     }
 
     /**
@@ -340,28 +333,36 @@ public class TaskReportExportStrategy implements ExportStrategy {
      */
     private boolean adjustMonitoringDate(Map<String, Object> row, int maxReportAgeDays) {
         String dateStr = Objects.toString(row.get("competitor_date"), null);
+        boolean wasModified = false;
+        
         if (dateStr == null) {
             row.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
-            return true; // Дата была добавлена (считается как изменение)
-        }
+            wasModified = true; // Дата была добавлена (считается как изменение)
+        } else {
+            try {
+                LocalDate date = LocalDate.parse(dateStr, DATE_FORMAT);
+                LocalDate today = LocalDate.now();
+                LocalDate minAllowedDate = today.minusDays(maxReportAgeDays - 1L);
 
-        try {
-            LocalDate date = LocalDate.parse(dateStr, DATE_FORMAT);
-            LocalDate today = LocalDate.now();
-            LocalDate minAllowedDate = today.minusDays(maxReportAgeDays - 1L);
-
-            if (date.isBefore(minAllowedDate)) {
-                row.put("competitor_date", minAllowedDate.format(DATE_FORMAT));
-                log.debug("Дата {} заменена на {} (макс. давность {} дней)",
-                        dateStr, minAllowedDate.format(DATE_FORMAT), maxReportAgeDays);
-                return true; // Дата была изменена
+                if (date.isBefore(minAllowedDate)) {
+                    row.put("competitor_date", minAllowedDate.format(DATE_FORMAT));
+                    log.debug("Дата {} заменена на {} (макс. давность {} дней)",
+                            dateStr, minAllowedDate.format(DATE_FORMAT), maxReportAgeDays);
+                    wasModified = true; // Дата была изменена
+                }
+            } catch (DateTimeParseException e) {
+                log.warn("Некорректная дата отчета: {}, установлена текущая", dateStr);
+                row.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
+                wasModified = true; // Дата была исправлена (считается как изменение)
             }
-            return false; // Дата не изменялась
-        } catch (DateTimeParseException e) {
-            log.warn("Некорректная дата отчета: {}, установлена текущая", dateStr);
-            row.put("competitor_date", LocalDate.now().format(DATE_FORMAT));
-            return true; // Дата была исправлена (считается как изменение)
         }
+        
+        // Устанавливаем маркер об изменении даты
+        if (wasModified) {
+            row.put("_dateWasModified", true);
+        }
+        
+        return wasModified;
     }
 
     /**
@@ -593,5 +594,82 @@ public class TaskReportExportStrategy implements ExportStrategy {
         
         log.debug("Поле группировки не найдено в шаблоне, используется competitor_additional");
         return "competitor_additional"; // Значение по умолчанию
+    }
+    
+    /**
+     * Подсчитывает изменения дат по экспортным группам, сопоставляя исходные и экспортированные данные
+     */
+    private Map<String, Integer> подсчитатьИзмененияДатПоЭкспортнымГруппам(
+            List<Map<String, Object>> исходныеДанные,
+            List<Map<String, Object>> экспортированныеДанные, 
+            ExportTemplate template) {
+            
+        if (исходныеДанные.size() != экспортированныеДанные.size()) {
+            log.warn("Размеры исходных ({}) и экспортированных ({}) данных не совпадают", 
+                    исходныеДанные.size(), экспортированныеДанные.size());
+            return new HashMap<>();
+        }
+        
+        if (исходныеДанные.isEmpty()) {
+            return new HashMap<>();
+        }
+        
+        // Получаем поле группировки из шаблона
+        String полеГруппировки = получитьПолеГруппировки(template);
+        
+        // Находим экспортированное название поля группировки
+        String экспортноеНазваниеПоляГруппировки = null;
+        if (template.getFields() != null) {
+            for (var field : template.getFields()) {
+                if (Boolean.TRUE.equals(field.getIsIncluded()) && 
+                    полеГруппировки.equals(field.getEntityFieldName())) {
+                    экспортноеНазваниеПоляГруппировки = field.getExportColumnName();
+                    break;
+                }
+            }
+        }
+        
+        if (экспортноеНазваниеПоляГруппировки == null) {
+            log.warn("Не найдено экспортное название для поля группировки '{}', используется исходное", полеГруппировки);
+            экспортноеНазваниеПоляГруппировки = полеГруппировки;
+        }
+        
+        log.debug("Подсчет изменений дат: поле группировки '{}' -> экспортное поле '{}'", 
+                полеГруппировки, экспортноеНазваниеПоляГруппировки);
+        
+        Map<String, Integer> результат = new HashMap<>();
+        
+        // Проходим по каждой записи и проверяем была ли изменена дата
+        for (int i = 0; i < исходныеДанные.size(); i++) {
+            Map<String, Object> исходнаяЗапись = исходныеДанные.get(i);
+            Map<String, Object> экспортнаяЗапись = экспортированныеДанные.get(i);
+            
+            // Проверяем была ли изменена дата для этой записи
+            boolean датаИзменена = проверитьИзменениеДаты(исходнаяЗапись);
+            
+            if (датаИзменена) {
+                // Получаем значение группы из экспортированных данных
+                Object значениеГруппы = экспортнаяЗапись.get(экспортноеНазваниеПоляГруппировки);
+                String группа = значениеГруппы != null ? значениеГруппы.toString() : "NULL";
+                
+                результат.merge(группа, 1, Integer::sum);
+                
+                if (log.isTraceEnabled()) {
+                    log.trace("Найдено изменение даты в группе '{}' для записи с product_additional1='{}'", 
+                            группа, исходнаяЗапись.get("product_additional1"));
+                }
+            }
+        }
+        
+        log.debug("Подсчитано изменений дат по экспортным группам: {}", результат);
+        return результат;
+    }
+    
+    /**
+     * Проверяет была ли изменена дата в записи (проверяем по особому маркеру)
+     */
+    private boolean проверитьИзменениеДаты(Map<String, Object> запись) {
+        // Используем специальный маркер, который устанавливается в adjustMonitoringDate
+        return Boolean.TRUE.equals(запись.get("_dateWasModified"));
     }
 }

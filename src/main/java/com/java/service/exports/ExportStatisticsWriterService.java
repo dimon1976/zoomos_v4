@@ -79,7 +79,8 @@ public class ExportStatisticsWriterService {
         log.debug("Данные сгруппированы на {} групп по колонке '{}'", groupedData.size(), groupColumnName);
 
         // Получаем статистику изменений дат из контекста (если есть)
-        Integer dateModificationsCount = (Integer) context.get("dateModificationsCount");
+        Map<String, Integer> dateModificationsByGroup = (Map<String, Integer>) context.get("dateModificationsByGroup");
+        Integer totalDateModifications = (Integer) context.get("totalDateModifications");
         Integer totalProcessedRecords = (Integer) context.get("totalProcessedRecords");
         
         // Для каждой группы подсчитываем статистику
@@ -113,24 +114,33 @@ public class ExportStatisticsWriterService {
                 log.debug("Группа '{}', поле '{}' (колонка '{}'): {} значений",
                         groupValue, countField, countColumnName, countValue);
             }
+        }
+        
+        // Сохраняем статистику изменений дат по группам (если есть)
+        if (dateModificationsByGroup != null && !dateModificationsByGroup.isEmpty()) {
+            log.debug("Сохранение статистики изменений дат по {} группам", dateModificationsByGroup.size());
             
-            // Если есть статистика изменений дат, сохраняем дополнительную запись
-            if (dateModificationsCount != null && dateModificationsCount > 0) {
-                ExportStatistics dateModStats = ExportStatistics.builder()
-                        .exportSession(session)
-                        .groupFieldName(groupField)
-                        .groupFieldValue(groupValue)
-                        .countFieldName("DATE_MODIFICATIONS") // специальное поле для изменений дат
-                        .countValue(dateModificationsCount.longValue())
-                        .totalRecordsCount(totalProcessedRecords != null ? totalProcessedRecords.longValue() : (long) groupRows.size())
-                        .dateModificationsCount(dateModificationsCount.longValue())
-                        .modificationType("DATE_ADJUSTMENT")
-                        .build();
-                        
-                statisticsToSave.add(dateModStats);
+            for (Map.Entry<String, Integer> entry : dateModificationsByGroup.entrySet()) {
+                String groupValue = entry.getKey();
+                Integer modificationsCount = entry.getValue();
                 
-                log.debug("Группа '{}': сохранена статистика изменений дат - {} из {} записей",
-                        groupValue, dateModificationsCount, totalProcessedRecords);
+                if (modificationsCount != null && modificationsCount > 0) {
+                    ExportStatistics dateModStats = ExportStatistics.builder()
+                            .exportSession(session)
+                            .groupFieldName(groupField)
+                            .groupFieldValue(groupValue)
+                            .countFieldName("DATE_MODIFICATIONS")
+                            .countValue(modificationsCount.longValue())
+                            .totalRecordsCount(totalProcessedRecords != null ? totalProcessedRecords.longValue() : 0L)
+                            .dateModificationsCount(modificationsCount.longValue())
+                            .modificationType("DATE_ADJUSTMENT")
+                            .build();
+                            
+                    statisticsToSave.add(dateModStats);
+                    
+                    log.debug("Группа '{}': сохранена статистика изменений дат - {} записей",
+                            groupValue, modificationsCount);
+                }
             }
         }
 
