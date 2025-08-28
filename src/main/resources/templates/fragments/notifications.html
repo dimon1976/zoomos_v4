@@ -87,11 +87,14 @@
 
         createNotificationElement(notification) {
             const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${notification.type.bootstrapClass} alert-dismissible fade mb-2 notification-alert`;
+            const bootstrapClass = notification.type.bootstrapClass || notification.type;
+            const iconClass = notification.type.iconClass || 'fas fa-info-circle';
+            
+            alertDiv.className = `alert alert-${bootstrapClass} alert-dismissible fade mb-2 notification-alert`;
             alertDiv.setAttribute('role', 'alert');
             alertDiv.style.cssText = 'border-left: 4px solid currentColor; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
 
-            const iconHtml = `<i class="${notification.type.iconClass} me-2"></i>`;
+            const iconHtml = `<i class="${iconClass} me-2"></i>`;
             const titleHtml = notification.title ? `<strong>${notification.title}</strong><br>` : '';
             const timeHtml = `<small class="text-muted d-block mt-1">${this.formatTime(notification.timestamp)}</small>`;
             
@@ -99,7 +102,7 @@
             if (notification.actionUrl && notification.actionText) {
                 actionButtonHtml = `
                     <div class="mt-2">
-                        <a href="${notification.actionUrl}" class="btn btn-sm btn-outline-${notification.type.bootstrapClass}">
+                        <a href="${notification.actionUrl}" class="btn btn-sm btn-outline-${bootstrapClass}">
                             ${notification.actionText}
                         </a>
                     </div>

@@ -220,6 +220,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
         // Сохраняем статистику изменений дат по группам в контекст для статистики
         context.put("dateModificationsByGroup", групповыеИзменяДат);
         context.put("totalDateModifications", общееКоличествоИзмененийДат);
+        context.put("dateModificationsCount", общееКоличествоИзмененийДат); // Совместимость с ExportStatisticsWriterService
         context.put("totalProcessedRecords", matched);
 
         // 6. Применяем стандартную обработку для форматирования полей

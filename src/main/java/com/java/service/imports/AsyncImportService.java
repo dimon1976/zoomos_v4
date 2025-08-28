@@ -46,6 +46,7 @@ public class AsyncImportService {
     private final ImportProgressService progressService;
     private final MemoryMonitor memoryMonitor;
     private final PathResolver pathResolver;
+    private final com.java.service.notification.NotificationService notificationService;
 
     @Autowired
     @Qualifier("importTaskExecutor")
@@ -177,6 +178,11 @@ public class AsyncImportService {
             fileOperationRepository.save(fileOperation);
 
             progressService.sendErrorNotification(session, e.getMessage());
+            
+            // Отправляем уведомление об ошибке импорта
+            if (fileOperation != null) {
+                notificationService.sendImportFailedNotification(session, fileOperation, e.getMessage());
+            }
 
         } catch (Exception ex) {
             log.error("Ошибка обработки ошибки импорта", ex);
@@ -250,6 +256,12 @@ public class AsyncImportService {
         session.setCompletedAt(ZonedDateTime.now());
         sessionRepository.save(session);
         progressService.sendCompletionNotification(session);
+        
+        // Отправляем уведомление о завершении импорта
+        FileOperation operation = session.getFileOperation();
+        if (operation != null) {
+            notificationService.sendImportCompletedNotification(session, operation);
+        }
     }
 
     /**
