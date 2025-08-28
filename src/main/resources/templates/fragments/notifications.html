@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+
+<!-- Фрагмент для системы уведомлений -->
+<div th:fragment="notifications" id="notificationContainer" 
+     style="position: fixed; top: 80px; right: 20px; z-index: 9999; max-width: 400px; min-width: 300px;">
+    <!-- Уведомления будут добавляться здесь через JavaScript -->
+</div>
+
+<!-- Скрипт для обработки уведомлений -->
+<script th:fragment="notification-script">
+    /*<![CDATA[*/
+    class NotificationManager {
+        constructor() {
+            this.container = document.getElementById('notificationContainer');
+            this.stompClient = null;
+            this.notifications = new Map();
+            this.maxNotifications = 5;
+            this.initWebSocket();
+        }
+
+        initWebSocket() {
+            try {
+                // Подключение к WebSocket для уведомлений
+                const socket = new SockJS('/ws');
+                this.stompClient = Stomp.over(socket);
+
+                this.stompClient.connect({}, (frame) => {
+                    console.log('Подключен к WebSocket уведомлений');
+
+                    // Подписываемся на общие уведомления
+                    this.stompClient.subscribe('/topic/notifications', (message) => {
+                        const notification = JSON.parse(message.body);
+                        this.showNotification(notification);
+                    });
+
+                    // Можно добавить подписку на персональные уведомления
+                    // this.stompClient.subscribe('/user/queue/notifications', (message) => {
+                    //     const notification = JSON.parse(message.body);
+                    //     this.showNotification(notification);
+                    // });
+
+                }, (error) => {
+                    console.error('Ошибка подключения к WebSocket уведомлений:', error);
+                    // Повторное подключение через 5 секунд
+                    setTimeout(() => this.initWebSocket(), 5000);
+                });
+            } catch (error) {
+                console.error('Ошибка инициализации WebSocket:', error);
+            }
+        }
+
+        showNotification(notification) {
+            console.log('Получено уведомление:', notification);
+
+            // Проверяем, не показано ли уже это уведомление
+            if (this.notifications.has(notification.id)) {
+                return;
+            }
+
+            // Удаляем старые уведомления, если их слишком много
+            if (this.notifications.size >= this.maxNotifications) {
+                const oldestId = this.notifications.keys().next().value;
+                this.hideNotification(oldestId);
+            }
+
+            // Создаем элемент уведомления
+            const alertElement = this.createNotificationElement(notification);
+            this.container.appendChild(alertElement);
+            this.notifications.set(notification.id, alertElement);
+
+            // Анимация появления
+            setTimeout(() => {
+                alertElement.classList.add('show');
+            }, 10);
+
+            // Автоматическое скрытие
+            if (notification.autoHideSeconds > 0) {
+                setTimeout(() => {
+                    this.hideNotification(notification.id);
+                }, notification.autoHideSeconds * 1000);
+            }
+
+            // Воспроизводим звук уведомления (если разрешено)
+            this.playNotificationSound(notification.type);
+        }
+
+        createNotificationElement(notification) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${notification.type.bootstrapClass} alert-dismissible fade mb-2 notification-alert`;
+            alertDiv.setAttribute('role', 'alert');
+            alertDiv.style.cssText = 'border-left: 4px solid currentColor; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+
+            const iconHtml = `<i class="${notification.type.iconClass} me-2"></i>`;
+            const titleHtml = notification.title ? `<strong>${notification.title}</strong><br>` : '';
+            const timeHtml = `<small class="text-muted d-block mt-1">${this.formatTime(notification.timestamp)}</small>`;
+            
+            let actionButtonHtml = '';
+            if (notification.actionUrl && notification.actionText) {
+                actionButtonHtml = `
+                    <div class="mt-2">
+                        <a href="${notification.actionUrl}" class="btn btn-sm btn-outline-${notification.type.bootstrapClass}">
+                            ${notification.actionText}
+                        </a>
+                    </div>
+                `;
+            }
+
+            alertDiv.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        ${iconHtml}${titleHtml}${notification.message}
+                        ${timeHtml}
+                        ${actionButtonHtml}
+                    </div>
+                    <button type="button" class="btn-close" aria-label="Закрыть" 
+                            onclick="notificationManager.hideNotification('${notification.id}')"></button>
+                </div>
+            `;
+
+            return alertDiv;
+        }
+
+        hideNotification(notificationId) {
+            const element = this.notifications.get(notificationId);
+            if (element) {
+                element.classList.remove('show');
+                element.classList.add('fade-out');
+                
+                setTimeout(() => {
+                    if (element.parentNode) {
+                        element.parentNode.removeChild(element);
+                    }
+                    this.notifications.delete(notificationId);
+                }, 150);
+            }
+        }
+
+        formatTime(timestamp) {
+            if (!timestamp) return '';
+            
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Только что';
+            if (diffMins < 60) return `${diffMins} мин назад`;
+            if (diffMins < 1440) return `${Math.floor(diffMins / 60)} ч назад`;
+            
+            return date.toLocaleDateString('ru-RU', { 
+                day: '2-digit', 
+                month: '2-digit', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+
+        playNotificationSound(type) {
+            // Проверяем разрешение на воспроизведение звуков
+            if (!('Notification' in window) || Notification.permission !== 'granted') {
+                return;
+            }
+
+            try {
+                // Можно добавить различные звуки для разных типов уведомлений
+                const audio = new Audio('/static/sounds/notification.mp3');
+                audio.volume = 0.3;
+                audio.play().catch(e => {
+                    // Игнорируем ошибки воспроизведения звука
+                    console.debug('Не удалось воспроизвести звук уведомления:', e);
+                });
+            } catch (error) {
+                console.debug('Звуки уведомлений недоступны:', error);
+            }
+        }
+
+        // Публичные методы для ручного создания уведомлений
+        showSuccess(message, title = 'Успешно') {
+            this.showNotification({
+                id: 'manual-' + Date.now(),
+                title: title,
+                message: message,
+                type: { bootstrapClass: 'success', iconClass: 'fas fa-check-circle' },
+                timestamp: new Date().toISOString(),
+                autoHideSeconds: 6
+            });
+        }
+
+        showError(message, title = 'Ошибка') {
+            this.showNotification({
+                id: 'manual-' + Date.now(),
+                title: title,
+                message: message,
+                type: { bootstrapClass: 'danger', iconClass: 'fas fa-exclamation-triangle' },
+                timestamp: new Date().toISOString(),
+                autoHideSeconds: 0
+            });
+        }
+
+        showWarning(message, title = 'Предупреждение') {
+            this.showNotification({
+                id: 'manual-' + Date.now(),
+                title: title,
+                message: message,
+                type: { bootstrapClass: 'warning', iconClass: 'fas fa-exclamation-triangle' },
+                timestamp: new Date().toISOString(),
+                autoHideSeconds: 8
+            });
+        }
+
+        showInfo(message, title = 'Информация') {
+            this.showNotification({
+                id: 'manual-' + Date.now(),
+                title: title,
+                message: message,
+                type: { bootstrapClass: 'info', iconClass: 'fas fa-info-circle' },
+                timestamp: new Date().toISOString(),
+                autoHideSeconds: 6
+            });
+        }
+    }
+
+    // Инициализируем менеджер уведомлений при загрузке страницы
+    let notificationManager;
+    document.addEventListener('DOMContentLoaded', function() {
+        notificationManager = new NotificationManager();
+    });
+
+    // Отключение WebSocket при уходе со страницы
+    window.addEventListener('beforeunload', function() {
+        if (notificationManager && notificationManager.stompClient && notificationManager.stompClient.connected) {
+            notificationManager.stompClient.disconnect();
+        }
+    });
+    /*]]>*/
+</script>
+
+<!-- Стили для уведомлений -->
+<style th:fragment="notification-styles">
+    .notification-alert {
+        animation: slideInRight 0.3s ease-out;
+        transition: all 0.3s ease;
+    }
+    
+    .notification-alert.fade-out {
+        animation: slideOutRight 0.15s ease-in;
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    
+    @keyframes slideInRight {
+        from {
+            opacity: 0;
+            transform: translateX(100%);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    @keyframes slideOutRight {
+        from {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        to {
+            opacity: 0;
+            transform: translateX(100%);
+        }
+    }
+    
+    .notification-alert:hover {
+        box-shadow: 0 6px 16px rgba(0,0,0,0.2) !important;
+    }
+</style>
+
+</html>

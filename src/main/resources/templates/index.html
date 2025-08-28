@@ -564,26 +564,47 @@
     function refreshDashboard() {
         const refreshButton = document.getElementById('refreshButton');
         const refreshIcon = document.getElementById('refreshIcon');
+        const buttonText = refreshButton.querySelector('.btn-text') || 
+                          document.createElement('span');
+        
+        // Сохраняем исходный текст кнопки
+        const originalText = refreshButton.innerHTML;
+        
+        // Состояние загрузки
         refreshButton.disabled = true;
         refreshIcon.classList.add('fa-spin');
+        refreshButton.innerHTML = '<i class="fas fa-sync-alt fa-spin me-1"></i>Обновление...';
+        
+        console.log('Запуск обновления дашборда...');
 
         // Обновляем статистику
         fetch('/api/dashboard/refresh')
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Ошибка обновления');
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 return response.json();
             })
             .then(stats => {
+                console.log('Получена обновленная статистика:', stats);
                 updateStats(stats);
                 loadOperations(currentPage);
                 showUpdateIndicator();
+                if (window.notificationManager) {
+                    notificationManager.showSuccess('Данные успешно обновлены');
+                }
             })
-            .catch(err => console.error('Ошибка обновления дашборда:', err))
+            .catch(err => {
+                console.error('Ошибка обновления дашборда:', err);
+                if (window.notificationManager) {
+                    notificationManager.showError('Ошибка обновления данных: ' + err.message);
+                }
+            })
             .finally(() => {
-                refreshIcon.classList.remove('fa-spin');
+                // Восстанавливаем исходное состояние кнопки
+                refreshButton.innerHTML = originalText;
                 refreshButton.disabled = false;
+                console.log('Обновление дашборда завершено');
             });
     }
 

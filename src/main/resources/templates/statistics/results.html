@@ -191,15 +191,27 @@
         </div>
     </div>
 
-    <!-- Статистика изменений дат (только для последней операции) -->
-    <div th:unless="${#lists.isEmpty(comparison)}" id="dateModificationsPanel" class="mb-4 d-none">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="fas fa-calendar-alt me-2"></i>Изменения дат в последней операции
-                </h5>
+    <!-- Компактная статистика изменений дат -->
+    <div th:unless="${#lists.isEmpty(comparison)}" id="dateModificationsPanel" class="mb-3 d-none">
+        <div class="alert alert-info mb-3" style="background-color: #e3f2fd; border-color: #81d4fa; padding: 10px 15px;">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-calendar-alt text-info me-2"></i>
+                    <strong class="me-2">Изменения дат:</strong>
+                    <span id="dateModificationsSummary" class="text-muted">Загрузка...</span>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-info" 
+                            data-bs-toggle="collapse" data-bs-target="#dateModificationsDetails" 
+                            aria-expanded="false" aria-controls="dateModificationsDetails"
+                            title="Показать детали">
+                        <i class="fas fa-chevron-down"></i> Детали
+                    </button>
+                </div>
             </div>
-            <div class="card-body">
+            
+            <!-- Развертываемые детали -->
+            <div class="collapse mt-2" id="dateModificationsDetails">
                 <div id="dateModificationsContent" class="row">
                     <!-- Содержимое будет добавлено через JavaScript -->
                 </div>
@@ -502,6 +514,7 @@
         if (!statisticsData || statisticsData.length === 0) return;
 
         const panel = document.getElementById('dateModificationsPanel');
+        const summary = document.getElementById('dateModificationsSummary');
         const content = document.getElementById('dateModificationsContent');
 
         // Собираем статистику изменений дат из всех групп (только для последней операции)
@@ -530,28 +543,55 @@
         // Отображаем панель
         panel.classList.remove('d-none');
 
-        // Создаем карточки для каждой группы с изменениями дат
+        // Создаем компактное резюме
+        const totalModified = allDateMods.reduce((sum, mod) => sum + mod.modifiedCount, 0);
+        const totalRecords = allDateMods.reduce((sum, mod) => sum + mod.totalCount, 0);
+        const overallPercentage = totalRecords > 0 ? (totalModified / totalRecords * 100).toFixed(1) : '0.0';
+        
+        const criticalGroups = allDateMods.filter(mod => mod.alertLevel.toLowerCase() === 'critical').length;
+        const warningGroups = allDateMods.filter(mod => mod.alertLevel.toLowerCase() === 'warning').length;
+        
+        let summaryText = `${totalModified} из ${totalRecords} записей (${overallPercentage}%)`;
+        if (criticalGroups > 0) {
+            summaryText += ` | <span class="text-danger"><i class="fas fa-exclamation-triangle"></i> ${criticalGroups} критических</span>`;
+        }
+        if (warningGroups > 0) {
+            summaryText += ` | <span class="text-warning"><i class="fas fa-exclamation-triangle"></i> ${warningGroups} предупреждений</span>`;
+        }
+        
+        summary.innerHTML = summaryText;
+
+        // Создаем детализированные карточки для каждой группы с изменениями дат
         content.innerHTML = allDateMods.map(dateMod => {
-            const alertClass = dateMod.alertLevel.toLowerCase() === 'critical' ? 'date-mod-critical' :
-                              dateMod.alertLevel.toLowerCase() === 'warning' ? 'date-mod-warning' :
-                              'date-mod-normal';
+            const alertClass = dateMod.alertLevel.toLowerCase() === 'critical' ? 'border-danger' :
+                              dateMod.alertLevel.toLowerCase() === 'warning' ? 'border-warning' :
+                              'border-info';
+            
+            const alertBadge = dateMod.alertLevel.toLowerCase() === 'critical' ? 
+                              '<span class="badge bg-danger ms-2">Критическое</span>' :
+                              dateMod.alertLevel.toLowerCase() === 'warning' ?
+                              '<span class="badge bg-warning text-dark ms-2">Предупреждение</span>' :
+                              '<span class="badge bg-success ms-2">Нормально</span>';
 
             return `
-                <div class="col-md-4 mb-3">
-                    <div class="card ${alertClass}">
-                        <div class="card-body text-center">
-                            <h6 class="card-title">${dateMod.group}</h6>
-                            <div class="h4">${dateMod.modificationPercentage.toFixed(1)}%</div>
-                            <div class="small">
-                                ${dateMod.modifiedCount} из ${dateMod.totalCount} записей
+                <div class="col-md-6 col-lg-4 mb-2">
+                    <div class="card ${alertClass} h-100" style="font-size: 0.9rem;">
+                        <div class="card-body p-2">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <h6 class="card-title mb-0" style="font-size: 0.95rem;">${dateMod.group}</h6>
+                                ${alertBadge}
                             </div>
-                            <div class="small text-muted mt-1">
-                                ${dateMod.operation}
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-bold text-primary">${dateMod.modificationPercentage.toFixed(1)}%</div>
+                                    <div class="small text-muted">
+                                        ${dateMod.modifiedCount}/${dateMod.totalCount} записей
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="small text-muted">${dateMod.operation}</div>
+                                </div>
                             </div>
-                            ${dateMod.alertLevel.toLowerCase() === 'critical' ? 
-                                '<div class="small mt-2"><i class="fas fa-exclamation-triangle"></i> Критическое превышение</div>' :
-                              dateMod.alertLevel.toLowerCase() === 'warning' ?
-                                '<div class="small mt-2"><i class="fas fa-exclamation-triangle"></i> Предупреждение</div>' : ''}
                         </div>
                     </div>
                 </div>
