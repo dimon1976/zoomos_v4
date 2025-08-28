@@ -63,6 +63,20 @@ public class ExportStatisticsService {
         List<ExportStatistics> allStatistics = statisticsRepository.findByExportSessionIds(sessionIds);
         log.info("Найдено записей статистики: {} для {} сессий", allStatistics.size(), sessionIds.size());
         
+        // Дополнительная диагностика: пробуем упрощенный запрос
+        if (allStatistics.isEmpty()) {
+            log.debug("Пробуем упрощенный запрос к статистике...");
+            List<ExportStatistics> simpleResults = statisticsRepository.findByExportSessionIdsSimple(sessionIds);
+            log.debug("Упрощенный запрос вернул {} записей", simpleResults.size());
+            
+            if (!simpleResults.isEmpty()) {
+                log.error("ПРОБЛЕМА: Основной запрос возвращает 0 записей, упрощенный - {}. Возможна проблема с сортировкой в основном запросе", 
+                    simpleResults.size());
+                // Используем результаты упрощенного запроса
+                allStatistics = simpleResults;
+            }
+        }
+        
         // Диагностика: проверяем каждую сессию отдельно
         sessionIds.forEach(sessionId -> {
             List<ExportStatistics> sessionStats = statisticsRepository.findByExportSessionId(sessionId);
@@ -235,6 +249,9 @@ public class ExportStatisticsService {
             List<ExportStatistics> previousStats,
             StatisticsRequestDto request) {
 
+        log.debug("Расчет метрик: текущая статистика - {} записей, предыдущая - {} записей", 
+            currentStats.size(), previousStats != null ? previousStats.size() : 0);
+
         Map<String, StatisticsComparisonDto.MetricValue> metrics = new HashMap<>();
 
         // Создаем карту поле -> значение для текущих и предыдущих данных
@@ -242,34 +259,58 @@ public class ExportStatisticsService {
                 .collect(Collectors.toMap(
                         ExportStatistics::getCountFieldName,
                         ExportStatistics::getCountValue,
-                        (v1, v2) -> v1 // в случае дубликатов берем первое значение
+                        (v1, v2) -> {
+                            log.debug("Дубликат поля в текущей статистике: {}, значения: {} и {}, выбираем первое", 
+                                ExportStatistics::getCountFieldName, v1, v2);
+                            return v1; // в случае дубликатов берем первое значение
+                        }
                 ));
 
         Map<String, Long> previousValues = previousStats != null ?
                 previousStats.stream().collect(Collectors.toMap(
                         ExportStatistics::getCountFieldName,
                         ExportStatistics::getCountValue,
-                        (v1, v2) -> v1
+                        (v1, v2) -> {
+                            log.debug("Дубликат поля в предыдущей статистике: {}, значения: {} и {}, выбираем первое", 
+                                ExportStatistics::getCountFieldName, v1, v2);
+                            return v1;
+                        }
                 )) : Collections.emptyMap();
+                
+        log.debug("Текущие значения полей: {}", currentValues);
+        log.debug("Предыдущие значения полей: {}", previousValues);
 
         // Для каждого поля вычисляем метрику
         for (Map.Entry<String, Long> entry : currentValues.entrySet()) {
             String fieldName = entry.getKey();
             Long currentValue = entry.getValue();
             Long previousValue = previousValues.get(fieldName);
+            
+            log.debug("Обрабатываем поле '{}': текущее={}, предыдущее={}", fieldName, currentValue, previousValue);
 
             // Вычисляем статистику изменений дат для данного поля
             StatisticsComparisonDto.DateModificationStats fieldDateModStats = 
                     calculateFieldDateModificationStats(currentStats, fieldName);
+            
+            if (fieldDateModStats != null) {
+                log.debug("Статистика изменений дат для поля '{}': измененено={}, всего={}, процент={}", 
+                    fieldName, fieldDateModStats.getModifiedCount(), fieldDateModStats.getTotalCount(), 
+                    fieldDateModStats.getModificationPercentage());
+            }
 
             StatisticsComparisonDto.MetricValue metric = calculateMetricValue(
                     currentValue, previousValue,
                     request.getWarningPercentage(), request.getCriticalPercentage(),
                     fieldDateModStats);
+                    
+            log.debug("Создана метрика для поля '{}': значение={}, изменение={}%, тип={}, уровень={}", 
+                fieldName, metric.getCurrentValue(), metric.getChangePercentage(), 
+                metric.getChangeType(), metric.getAlertLevel());
 
             metrics.put(fieldName, metric);
         }
-
+        
+        log.debug("Итого создано метрик: {}, поля: {}", metrics.size(), metrics.keySet());
         return metrics;
     }
 

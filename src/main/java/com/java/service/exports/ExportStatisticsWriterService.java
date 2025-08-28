@@ -60,7 +60,29 @@ public class ExportStatisticsWriterService {
 
         if (countFields.isEmpty()) {
             log.error("КРИТИЧЕСКАЯ ОШИБКА: Нет полей для подсчета в шаблоне ID: {} ({}). " +
-                "Исходные данные: '{}'", template.getId(), template.getTemplateName(), template.getStatisticsCountFields());
+                "Исходные данные: '{}'. Статистика не будет сохранена!", 
+                template.getId(), template.getTemplateName(), template.getStatisticsCountFields());
+            
+            // ВРЕМЕННОЕ РЕШЕНИЕ: создаем базовую статистику с количеством записей
+            log.warn("Применяем временное решение: создаем базовую статистику подсчета записей");
+            
+            try {
+                ExportStatistics basicStats = ExportStatistics.builder()
+                        .exportSession(session)
+                        .groupFieldName("ALL") 
+                        .groupFieldValue("ALL")
+                        .countFieldName("RECORD_COUNT") // специальное поле для общего подсчета записей
+                        .countValue((long) exportedData.size())
+                        .totalRecordsCount((long) exportedData.size())
+                        .dateModificationsCount(0L)
+                        .modificationType("FALLBACK") // помечаем как резервное решение
+                        .build();
+                        
+                statisticsRepository.save(basicStats);
+                log.info("Сохранена базовая статистика: {} записей для сессии {}", exportedData.size(), session.getId());
+            } catch (Exception e) {
+                log.error("Ошибка сохранения базовой статистики", e);
+            }
             return;
         }
 

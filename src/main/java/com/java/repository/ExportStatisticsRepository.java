@@ -25,8 +25,14 @@ public interface ExportStatisticsRepository extends JpaRepository<ExportStatisti
     /**
      * Получает статистику для нескольких сессий экспорта
      */
-    @Query("SELECT es FROM ExportStatistics es WHERE es.exportSession.id IN :sessionIds ORDER BY es.exportSession.startedAt DESC, es.groupFieldValue, es.countFieldName")
+    @Query("SELECT es FROM ExportStatistics es JOIN FETCH es.exportSession sess WHERE sess.id IN :sessionIds ORDER BY sess.startedAt DESC, es.groupFieldValue, es.countFieldName")
     List<ExportStatistics> findByExportSessionIds(@Param("sessionIds") List<Long> sessionIds);
+    
+    /**
+     * Получает статистику для нескольких сессий экспорта с упрощенным запросом для диагностики
+     */
+    @Query("SELECT es FROM ExportStatistics es WHERE es.exportSession.id IN :sessionIds")
+    List<ExportStatistics> findByExportSessionIdsSimple(@Param("sessionIds") List<Long> sessionIds);
 
     /**
      * Получает статистику для конкретной группы в сессии

@@ -373,6 +373,22 @@
     let currentCriticalThreshold = /*[[${criticalPercentage}]]*/ 20;
 
     document.addEventListener('DOMContentLoaded', () => {
+        console.log('Загрузка страницы статистики');
+        console.log('Данные статистики:', statisticsData);
+        console.log('Количество групп:', statisticsData ? statisticsData.length : 'нет данных');
+        
+        if (!statisticsData || statisticsData.length === 0) {
+            console.warn('ПРОБЛЕМА: Нет данных статистики для отображения');
+        } else {
+            console.log('Первая группа:', statisticsData[0]);
+            if (statisticsData[0] && statisticsData[0].operations) {
+                console.log('Операций в первой группе:', statisticsData[0].operations.length);
+                if (statisticsData[0].operations.length > 0) {
+                    console.log('Первая операция:', statisticsData[0].operations[0]);
+                }
+            }
+        }
+        
         addGroupStartClass();
         updateSummaryCounters();
         displayDateModifications();
