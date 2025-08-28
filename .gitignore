@@ -45,7 +45,31 @@ build/
 
 ### Application specific ###
 /logs/
+*.log
 /uploads/
 /temp/
 /data/
+
+# Временные и отладочные файлы
+temp-changes.txt
+debug_test.html
+validate-code.java
+*.html.temp
+
+# Документация (кроме README)
+ANALYTICS_FIXES.md
+PROFILES_GUIDE.md
+STATISTICS_ROADMAP.md
+TESTING.md
+add-extend-statistics.md
+refactor-plan.md
+service-refactor-plan.md
+ИНСТРУКЦИИ_ЗАПУСКА.md
+!README.md
+!CLAUDE.md
+
+# Batch файлы
+*.bat
+
+# Конфигурационные файлы среды разработки
 /application-dev.properties
