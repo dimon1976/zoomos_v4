@@ -29,28 +29,76 @@ public class ExportStatisticsService {
      */
     public List<StatisticsComparisonDto> calculateComparison(StatisticsRequestDto request) {
         log.info("Расчет статистики для операций: {}", request.getExportSessionIds());
+        log.debug("Детали запроса: templateId={}, exportSessionIds={}", request.getTemplateId(), request.getExportSessionIds());
 
         // Получаем шаблон
         ExportTemplate template = templateRepository.findByIdWithFieldsAndFilters(request.getTemplateId())
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
+        
+        log.debug("Найден шаблон ID: {}, название: {}, статистика включена: {}", 
+            template.getId(), template.getTemplateName(), template.getEnableStatistics());
 
         if (!Boolean.TRUE.equals(template.getEnableStatistics())) {
+            log.error("Статистика отключена для шаблона ID: {} ({})", template.getId(), template.getTemplateName());
             throw new IllegalArgumentException("Статистика не включена для данного шаблона");
         }
 
         // Получаем сессии экспорта
         List<ExportSession> sessions = getExportSessions(request.getExportSessionIds(), template);
+        log.debug("Найдено сессий экспорта: {}", sessions.size());
+        
         if (sessions.isEmpty()) {
             log.warn("Нет сессий экспорта для анализа");
             return Collections.emptyList();
         }
+        
+        // Логируем детали сессий
+        sessions.forEach(session -> log.debug("Сессия ID: {}, дата: {}, статус: {}", 
+            session.getId(), session.getStartedAt(), session.getStatus()));
 
         // Получаем сохранённую статистику для всех сессий
         List<Long> sessionIds = sessions.stream().map(ExportSession::getId).toList();
+        log.debug("Поиск статистики для сессий: {}", sessionIds);
+        
         List<ExportStatistics> allStatistics = statisticsRepository.findByExportSessionIds(sessionIds);
+        log.info("Найдено записей статистики: {} для {} сессий", allStatistics.size(), sessionIds.size());
+        
+        // Диагностика: проверяем каждую сессию отдельно
+        sessionIds.forEach(sessionId -> {
+            List<ExportStatistics> sessionStats = statisticsRepository.findByExportSessionId(sessionId);
+            log.debug("Сессия ID {}: найдено {} записей статистики", sessionId, sessionStats.size());
+            
+            if (!sessionStats.isEmpty()) {
+                log.debug("Первые записи статистики для сессии {}:", sessionId);
+                sessionStats.stream().limit(3).forEach(stat -> 
+                    log.debug("  - Группа: '{}' = '{}', Поле: '{}' = {}, Тип: '{}'", 
+                        stat.getGroupFieldName(), stat.getGroupFieldValue(),
+                        stat.getCountFieldName(), stat.getCountValue(),
+                        stat.getModificationType()));
+            }
+        });
 
         if (allStatistics.isEmpty()) {
-            log.warn("Нет сохранённой статистики для сессий: {}", sessionIds);
+            log.error("КРИТИЧЕСКАЯ ОШИБКА: Нет сохранённой статистики для сессий: {}", sessionIds);
+            
+            // Дополнительная диагностика
+            long totalStatisticsCount = statisticsRepository.count();
+            log.debug("Всего записей статистики в базе: {}", totalStatisticsCount);
+            
+            if (totalStatisticsCount > 0) {
+                log.debug("Проверяем наличие статистики для шаблона...");
+                // Попробуем найти любую статистику для данного шаблона
+                List<ExportSession> allSessionsForTemplate = sessionRepository.findByTemplate(template, 
+                    org.springframework.data.domain.Pageable.unpaged()).getContent();
+                log.debug("Всего сессий для шаблона {}: {}", template.getId(), allSessionsForTemplate.size());
+                
+                if (!allSessionsForTemplate.isEmpty()) {
+                    List<Long> allTemplateSessionIds = allSessionsForTemplate.stream().map(ExportSession::getId).toList();
+                    List<ExportStatistics> allTemplateStats = statisticsRepository.findByExportSessionIds(allTemplateSessionIds);
+                    log.debug("Статистика для всех сессий шаблона: {} записей", allTemplateStats.size());
+                }
+            }
+            
             return Collections.emptyList();
         }
 
@@ -210,9 +258,14 @@ public class ExportStatisticsService {
             Long currentValue = entry.getValue();
             Long previousValue = previousValues.get(fieldName);
 
+            // Вычисляем статистику изменений дат для данного поля
+            StatisticsComparisonDto.DateModificationStats fieldDateModStats = 
+                    calculateFieldDateModificationStats(currentStats, fieldName);
+
             StatisticsComparisonDto.MetricValue metric = calculateMetricValue(
                     currentValue, previousValue,
-                    request.getWarningPercentage(), request.getCriticalPercentage());
+                    request.getWarningPercentage(), request.getCriticalPercentage(),
+                    fieldDateModStats);
 
             metrics.put(fieldName, metric);
         }
@@ -221,15 +274,17 @@ public class ExportStatisticsService {
     }
 
     /**
-     * Вычисляет значение метрики с отклонением
+     * Вычисляет значение метрики с отклонением и статистикой изменений дат
      */
     private StatisticsComparisonDto.MetricValue calculateMetricValue(
-            Long currentValue, Long previousValue, Integer warningPercentage, Integer criticalPercentage) {
+            Long currentValue, Long previousValue, Integer warningPercentage, Integer criticalPercentage,
+            StatisticsComparisonDto.DateModificationStats dateModStats) {
 
         StatisticsComparisonDto.MetricValue.MetricValueBuilder metricBuilder =
                 StatisticsComparisonDto.MetricValue.builder()
                         .currentValue(currentValue)
-                        .previousValue(previousValue);
+                        .previousValue(previousValue)
+                        .dateModificationStats(dateModStats);
 
         if (previousValue == null || previousValue == 0) {
             return metricBuilder
@@ -304,12 +359,12 @@ public class ExportStatisticsService {
     }
 
     /**
-     * Вычисляет статистику изменений дат для операции
+     * Вычисляет статистику изменений дат для конкретного поля в группе
      */
-    private StatisticsComparisonDto.DateModificationStats calculateDateModificationStats(
-            List<ExportStatistics> sessionStats) {
+    private StatisticsComparisonDto.DateModificationStats calculateFieldDateModificationStats(
+            List<ExportStatistics> sessionStats, String fieldName) {
         
-        // Ищем запись с изменениями дат
+        // Ищем запись с изменениями дат для данной группы
         ExportStatistics dateModRecord = sessionStats.stream()
                 .filter(stat -> "DATE_MODIFICATIONS".equals(stat.getCountFieldName()))
                 .filter(stat -> "DATE_ADJUSTMENT".equals(stat.getModificationType()))
@@ -317,7 +372,52 @@ public class ExportStatisticsService {
                 .orElse(null);
         
         if (dateModRecord == null) {
-            // Нет данных об изменениях дат
+            // Нет данных об изменениях дат для данной группы
+            return null;
+        }
+        
+        Long modifiedCount = dateModRecord.getDateModificationsCount();
+        Long totalCount = dateModRecord.getTotalRecordsCount();
+        
+        if (totalCount == null || totalCount == 0) {
+            return null;
+        }
+        
+        double modificationPercentage = (modifiedCount.doubleValue() / totalCount.doubleValue()) * 100.0;
+        
+        // Определяем уровень предупреждения (если более 50% дат изменено - критическое)
+        StatisticsComparisonDto.AlertLevel alertLevel;
+        if (modificationPercentage >= 50.0) {
+            alertLevel = StatisticsComparisonDto.AlertLevel.CRITICAL;
+        } else if (modificationPercentage >= 25.0) {
+            alertLevel = StatisticsComparisonDto.AlertLevel.WARNING;
+        } else {
+            alertLevel = StatisticsComparisonDto.AlertLevel.NORMAL;
+        }
+        
+        return StatisticsComparisonDto.DateModificationStats.builder()
+                .modifiedCount(modifiedCount)
+                .totalCount(totalCount)
+                .modificationPercentage(modificationPercentage)
+                .alertLevel(alertLevel)
+                .build();
+    }
+
+    /**
+     * Вычисляет статистику изменений дат для конкретной группы и операции (устаревший метод, оставлен для совместимости)
+     */
+    private StatisticsComparisonDto.DateModificationStats calculateDateModificationStats(
+            List<ExportStatistics> sessionStats) {
+        
+        // Ищем запись с изменениями дат для данной группы
+        ExportStatistics dateModRecord = sessionStats.stream()
+                .filter(stat -> "DATE_MODIFICATIONS".equals(stat.getCountFieldName()))
+                .filter(stat -> "DATE_ADJUSTMENT".equals(stat.getModificationType()))
+                .findFirst()
+                .orElse(null);
+        
+        if (dateModRecord == null) {
+            // Нет данных об изменениях дат для данной группы
             return null;
         }
         

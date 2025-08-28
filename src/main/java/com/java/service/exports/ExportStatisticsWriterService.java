@@ -37,18 +37,30 @@ public class ExportStatisticsWriterService {
                                      List<Map<String, Object>> exportedData, 
                                      Map<String, Object> context) {
 
+        log.info("НАЧАЛО сохранения статистики для сессии ID: {}, шаблон ID: {}, записей данных: {}", 
+            session.getId(), template.getId(), exportedData != null ? exportedData.size() : 0);
+        log.debug("Контекст: {}", context != null ? context.keySet() : "null");
+
         // Проверяем, включена ли статистика для шаблона
         if (!Boolean.TRUE.equals(template.getEnableStatistics())) {
-            log.debug("Статистика отключена для шаблона ID: {}", template.getId());
+            log.warn("Статистика отключена для шаблона ID: {} ({}), пропускаем сохранение", 
+                template.getId(), template.getTemplateName());
             return;
         }
 
         // Получаем настройки статистики из шаблона
+        log.debug("Настройки статистики шаблона: statisticsCountFields='{}', statisticsGroupField='{}'", 
+            template.getStatisticsCountFields(), template.getStatisticsGroupField());
+            
         List<String> countFields = parseJsonStringList(template.getStatisticsCountFields());
         String groupField = template.getStatisticsGroupField();
+        
+        log.info("Парсинг настроек статистики: поля для подсчета: {}, поле группировки: '{}'", 
+            countFields, groupField);
 
         if (countFields.isEmpty()) {
-            log.warn("Нет полей для подсчета в шаблоне ID: {}", template.getId());
+            log.error("КРИТИЧЕСКАЯ ОШИБКА: Нет полей для подсчета в шаблоне ID: {} ({}). " +
+                "Исходные данные: '{}'", template.getId(), template.getTemplateName(), template.getStatisticsCountFields());
             return;
         }
 
@@ -82,6 +94,10 @@ public class ExportStatisticsWriterService {
         Integer dateModificationsCount = (Integer) context.get("dateModificationsCount");
         Integer totalProcessedRecords = (Integer) context.get("totalProcessedRecords");
         
+        // Получаем детализированную статистику изменений дат по группам
+        @SuppressWarnings("unchecked")
+        Map<String, Integer> dateModificationsByGroup = (Map<String, Integer>) context.get("dateModificationsByGroup");
+        
         // Для каждой группы подсчитываем статистику
         List<ExportStatistics> statisticsToSave = new ArrayList<>();
 
@@ -95,7 +111,10 @@ public class ExportStatisticsWriterService {
             for (String countField : countFields) {
                 // Получаем название колонки в экспортных данных
                 String countColumnName = getExportColumnName(countField, fieldMapping);
+                log.debug("Подсчет для поля '{}' -> колонка '{}' в группе '{}'", countField, countColumnName, groupValue);
+                
                 long countValue = countNonEmptyValues(groupRows, countColumnName);
+                log.debug("Результат подсчета для поля '{}': {} из {} записей", countField, countValue, groupRows.size());
 
                 ExportStatistics statistics = ExportStatistics.builder()
                         .exportSession(session)
@@ -110,34 +129,79 @@ public class ExportStatisticsWriterService {
 
                 statisticsToSave.add(statistics);
 
-                log.debug("Группа '{}', поле '{}' (колонка '{}'): {} значений",
-                        groupValue, countField, countColumnName, countValue);
+                log.debug("Создана запись статистики: Группа '{}', поле '{}' (колонка '{}'): {} значений из {} записей",
+                        groupValue, countField, countColumnName, countValue, groupRows.size());
+                        
+                // Диагностика: если значение 0, покажем примеры данных
+                if (countValue == 0 && log.isDebugEnabled() && !groupRows.isEmpty()) {
+                    log.debug("ВНИМАНИЕ: countValue=0 для поля '{}'. Примеры данных в группе '{}':", countField, groupValue);
+                    groupRows.stream().limit(2).forEach(row -> {
+                        Object value = row.get(countColumnName);
+                        log.debug("  Строка: колонка '{}' = '{}' (тип: {})", 
+                            countColumnName, value, value != null ? value.getClass().getSimpleName() : "null");
+                    });
+                    log.debug("Доступные колонки в первой строке: {}", 
+                        groupRows.isEmpty() ? "нет данных" : groupRows.get(0).keySet());
+                }
             }
             
-            // Если есть статистика изменений дат, сохраняем дополнительную запись
-            if (dateModificationsCount != null && dateModificationsCount > 0) {
+            // Если есть детализированная статистика изменений дат по группам, используем её
+            Integer groupDateModifications = null;
+            if (dateModificationsByGroup != null && !dateModificationsByGroup.isEmpty()) {
+                groupDateModifications = dateModificationsByGroup.get(groupValue);
+            }
+            // Fallback к общей статистике, если детализированной нет
+            else if (dateModificationsCount != null && dateModificationsCount > 0) {
+                groupDateModifications = dateModificationsCount;
+            }
+            
+            // Сохраняем статистику изменений дат для текущей группы
+            if (groupDateModifications != null && groupDateModifications > 0) {
                 ExportStatistics dateModStats = ExportStatistics.builder()
                         .exportSession(session)
                         .groupFieldName(groupField)
                         .groupFieldValue(groupValue)
                         .countFieldName("DATE_MODIFICATIONS") // специальное поле для изменений дат
-                        .countValue(dateModificationsCount.longValue())
+                        .countValue(groupDateModifications.longValue())
                         .totalRecordsCount(totalProcessedRecords != null ? totalProcessedRecords.longValue() : (long) groupRows.size())
-                        .dateModificationsCount(dateModificationsCount.longValue())
+                        .dateModificationsCount(groupDateModifications.longValue())
                         .modificationType("DATE_ADJUSTMENT")
                         .build();
                         
                 statisticsToSave.add(dateModStats);
                 
                 log.debug("Группа '{}': сохранена статистика изменений дат - {} из {} записей",
-                        groupValue, dateModificationsCount, totalProcessedRecords);
+                        groupValue, groupDateModifications, totalProcessedRecords);
             }
         }
 
         // Сохраняем всю статистику
-        statisticsRepository.saveAll(statisticsToSave);
-
-        log.info("Сохранено {} записей статистики для сессии ID: {}", statisticsToSave.size(), session.getId());
+        try {
+            List<ExportStatistics> savedStatistics = statisticsRepository.saveAll(statisticsToSave);
+            log.info("Успешно сохранено {} записей статистики для сессии ID: {}", savedStatistics.size(), session.getId());
+            
+            // Диагностика: проверим, что статистика действительно сохранилась
+            List<ExportStatistics> verificationStats = statisticsRepository.findByExportSessionId(session.getId());
+            log.debug("Верификация: найдено {} записей статистики в базе для сессии ID: {}", 
+                verificationStats.size(), session.getId());
+            
+            if (verificationStats.size() != savedStatistics.size()) {
+                log.error("ОШИБКА: Количество сохраненных записей ({}) не совпадает с найденными в базе ({})", 
+                    savedStatistics.size(), verificationStats.size());
+            }
+            
+            // Логируем первые несколько записей для диагностики
+            if (log.isDebugEnabled() && !verificationStats.isEmpty()) {
+                log.debug("Примеры сохраненной статистики:");
+                verificationStats.stream().limit(3).forEach(stat -> 
+                    log.debug("  ID: {}, Группа: '{}' = '{}', Поле: '{}' = {}, Тип: '{}'", 
+                        stat.getId(), stat.getGroupFieldName(), stat.getGroupFieldValue(),
+                        stat.getCountFieldName(), stat.getCountValue(), stat.getModificationType()));
+            }
+        } catch (Exception e) {
+            log.error("КРИТИЧЕСКАЯ ОШИБКА при сохранении статистики для сессии ID: {}", session.getId(), e);
+            throw e; // Перебрасываем исключение, чтобы не маскировать ошибку
+        }
     }
 
     /**
@@ -230,25 +294,41 @@ public class ExportStatisticsWriterService {
      */
     private long countNonEmptyValues(List<Map<String, Object>> rows, String fieldName) {
         log.debug("Подсчет значений для поля '{}' в {} строках", fieldName, rows.size());
-        if (!rows.isEmpty()) {
-            log.debug("Поле '{}' существует в данных: {}", fieldName, rows.get(0).containsKey(fieldName));
-        }
+        
         if (rows.isEmpty()) {
+            log.debug("Строки данных пустые, возвращаем 0");
             return 0L;
         }
 
         // Проверяем, есть ли такое поле в данных
         boolean fieldExists = rows.get(0).containsKey(fieldName);
+        log.debug("Поле '{}' существует в данных: {}", fieldName, fieldExists);
+        
         if (!fieldExists) {
-            log.warn("Поле '{}' не найдено в экспортных данных. Доступные поля: {}",
+            log.warn("ОШИБКА: Поле '{}' не найдено в экспортных данных. Доступные поля: {}",
                     fieldName, rows.get(0).keySet());
             return 0L;
         }
 
-        return rows.stream()
+        // Подсчитываем непустые значения
+        long nonEmptyCount = rows.stream()
                 .map(row -> row.get(fieldName))
                 .filter(this::isNotEmpty)
                 .count();
+                
+        log.debug("Поле '{}': {} непустых значений из {} всего", fieldName, nonEmptyCount, rows.size());
+        
+        // Диагностика: показать примеры значений
+        if (log.isDebugEnabled()) {
+            log.debug("Примеры значений поля '{}':", fieldName);
+            rows.stream().limit(3).forEach(row -> {
+                Object value = row.get(fieldName);
+                boolean isEmpty = !isNotEmpty(value);
+                log.debug("  '{}' -> пустое: {}", value, isEmpty);
+            });
+        }
+
+        return nonEmptyCount;
     }
 
     /**
@@ -260,7 +340,14 @@ public class ExportStatisticsWriterService {
         }
 
         String stringValue = value.toString().trim();
-        return !stringValue.isEmpty() && !"null".equalsIgnoreCase(stringValue);
+        boolean result = !stringValue.isEmpty() && !"null".equalsIgnoreCase(stringValue);
+        
+        // Диагностика только для первых нескольких вызовов
+        if (log.isTraceEnabled()) {
+            log.trace("isNotEmpty проверка: '{}' -> {}", value, result);
+        }
+        
+        return result;
     }
 
     /**

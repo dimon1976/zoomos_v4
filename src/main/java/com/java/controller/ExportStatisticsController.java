@@ -84,9 +84,11 @@ public class ExportStatisticsController {
             List<StatisticsComparisonDto> comparison = statisticsService.calculateComparison(request);
 
             if (comparison.isEmpty()) {
+                log.warn("Получен пустой результат статистики для запроса: {}", request);
                 redirectAttributes.addFlashAttribute("warningMessage",
-                        "Нет данных для анализа статистики");
-                return "redirect:/statistics/client/" + request.getTemplateId();
+                        "Нет данных для анализа статистики. Проверьте, что статистика сохранена для выбранных операций.");
+                // ИСПРАВЛЕНИЕ: используем clientId вместо templateId для редиректа
+                return "redirect:/statistics/client/" + (clientId != null ? clientId : request.getTemplateId());
             }
 
             // Добавляем данные в модель

@@ -39,6 +39,7 @@ public class StatisticsComparisonDto {
         private Double changePercentage; // процент изменения
         private ChangeType changeType; // UP, DOWN, STABLE
         private AlertLevel alertLevel; // NORMAL, WARNING, CRITICAL
+        private DateModificationStats dateModificationStats; // статистика изменений дат для конкретного поля
     }
 
     public enum ChangeType {

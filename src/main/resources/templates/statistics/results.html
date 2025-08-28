@@ -517,19 +517,25 @@
         const summary = document.getElementById('dateModificationsSummary');
         const content = document.getElementById('dateModificationsContent');
 
-        // Собираем статистику изменений дат из всех групп (только для последней операции)
+        // Собираем статистику изменений дат из всех групп и полей (для последней операции)
         const allDateMods = [];
         
         statisticsData.forEach(group => {
             if (group.operations && group.operations.length > 0) {
                 // Берем первую операцию (самую новую, т.к. отсортированы по убыванию даты)
                 const latestOperation = group.operations[0];
-                if (latestOperation.dateModificationStats) {
-                    allDateMods.push({
-                        group: group.groupFieldValue,
-                        operation: latestOperation.operationName,
-                        exportDate: latestOperation.exportDate,
-                        ...latestOperation.dateModificationStats
+                if (latestOperation.metrics) {
+                    // Проходим по всем метрикам и собираем статистику изменений дат
+                    Object.entries(latestOperation.metrics).forEach(([fieldName, metricValue]) => {
+                        if (metricValue.dateModificationStats) {
+                            allDateMods.push({
+                                group: group.groupFieldValue,
+                                field: fieldName,
+                                operation: latestOperation.operationName,
+                                exportDate: latestOperation.exportDate,
+                                ...metricValue.dateModificationStats
+                            });
+                        }
                     });
                 }
             }
@@ -580,6 +586,9 @@
                             <div class="d-flex justify-content-between align-items-start mb-1">
                                 <h6 class="card-title mb-0" style="font-size: 0.95rem;">${dateMod.group}</h6>
                                 ${alertBadge}
+                            </div>
+                            <div class="mb-1">
+                                <div class="small fw-bold text-secondary">${dateMod.field}</div>
                             </div>
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
