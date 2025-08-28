@@ -16,7 +16,7 @@
     <link th:href="@{/css/navigation.css}" rel="stylesheet">
 
     <!-- Стили для уведомлений -->
-    <th:block th:replace="fragments/notifications :: notification-styles"><!-- Стили уведомлений --></th:block>
+    <th:block th:replace="~{fragments/notifications :: notification-styles}"><!-- Стили уведомлений --></th:block>
 
     <!-- Дополнительные стили для конкретных страниц -->
     <th:block th:replace="${styles}"><!-- Стили будут здесь --></th:block>
@@ -108,7 +108,7 @@
 </main>
 
 <!-- Контейнер для уведомлений -->
-<th:block th:replace="fragments/notifications :: notifications"><!-- Уведомления --></th:block>
+<th:block th:replace="~{fragments/notifications :: notifications}"><!-- Уведомления --></th:block>
 
 <!-- Подвал -->
 <footer class="bg-light py-3 mt-5">
@@ -128,7 +128,7 @@
 <script th:src="@{/js/main.js}"></script>
 
 <!-- Скрипт для уведомлений -->
-<th:block th:replace="fragments/notifications :: notification-script"><!-- Скрипт уведомлений --></th:block>
+<th:block th:replace="~{fragments/notifications :: notification-script}"><!-- Скрипт уведомлений --></th:block>
 
 <!-- Дополнительные скрипты для конкретных страниц -->
 <th:block th:if="${scripts}" th:replace="${scripts}"><!-- Скрипты --></th:block>

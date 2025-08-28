@@ -192,4 +192,8 @@ public interface FileOperationRepository extends JpaRepository<FileOperation, Lo
             ORDER BY fo.file_type
             """, nativeQuery = true)
     List<String> getFileTypesForClient(@Param("clientId") Long clientId);
+    
+    // Найти операцию с загруженным клиентом для статуса
+    @Query("SELECT fo FROM FileOperation fo JOIN FETCH fo.client WHERE fo.id = :id")
+    Optional<FileOperation> findByIdWithClient(@Param("id") Long id);
 }
