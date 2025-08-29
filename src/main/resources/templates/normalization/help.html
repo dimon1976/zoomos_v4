@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html('Справка по нормализации данных', ~{::section}, ~{::script}, ~{::style}, 'Справка по нормализации', ~{::.page-actions})}">
+<head>
+    <title>Справка по нормализации данных</title>
+    <style>
+        .example-code {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            margin: 0.5rem 0;
+        }
+        .transformation-example {
+            padding: 0.25rem 0.5rem;
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            margin: 0.25rem 0;
+        }
+        .copy-btn {
+            position: relative;
+            float: right;
+            margin-top: -2rem;
+            margin-right: 0.5rem;
+        }
+        .section-divider {
+            border-top: 2px solid #dee2e6;
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions">
+    <button onclick="history.back()" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </button>
+</div>
+
+<section>
+    <div class="alert alert-primary">
+        <h4><i class="fas fa-magic me-2"></i>Справка по нормализации данных</h4>
+        <p class="mb-0">
+            Система нормализации позволяет автоматически преобразовывать данные при экспорте.
+            Это помогает привести данные к единому формату для анализа и обработки.
+        </p>
+    </div>
+
+    <!-- Оглавление -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="fas fa-list me-2"></i>Оглавление</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <ul>
+                        <li><a href="#volume-section">Нормализация объемов</a></li>
+                        <li><a href="#brand-section">Нормализация брендов</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <ul>
+                        <li><a href="#currency-section">Нормализация валют</a></li>
+                        <li><a href="#custom-section">Пользовательские правила</a></li>
+                        <li><a href="#examples-section">Практические примеры</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Нормализация объемов -->
+    <div id="volume-section" class="card mb-4">
+        <div class="card-header">
+            <h4><i class="fas fa-wine-bottle text-info me-2"></i>Нормализация объемов</h4>
+        </div>
+        <div class="card-body">
+            <p>Преобразует различные форматы записи объемов в числовое значение.</p>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Примеры преобразований:</h6>
+                    <div class="transformation-example"><code>0.7л</code> → <code>0.7</code></div>
+                    <div class="transformation-example"><code>0,7 л.</code> → <code>0.7</code></div>
+                    <div class="transformation-example"><code>500мл</code> → <code>500</code></div>
+                    <div class="transformation-example"><code>1 литр</code> → <code>1</code></div>
+                    <div class="transformation-example"><code>750 ml</code> → <code>750</code></div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Настройки по умолчанию:</h6>
+                    <div class="example-code">
+{
+  "extractNumeric": true,
+  "replaceCommaWithDot": true,
+  "removeUnits": ["л", "л.", "мл", "ml", " ", "."]
+}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                            onclick='copyToClipboard("{\"extractNumeric\": true, \"replaceCommaWithDot\": true, \"removeUnits\": [\"л\", \"л.\", \"мл\", \"ml\", \" \", \".\"]}")'>
+                        <i class="fas fa-copy"></i> Копировать
+                    </button>
+                </div>
+            </div>
+            
+            <h6 class="mt-4">Параметры конфигурации:</h6>
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Параметр</th>
+                        <th>Тип</th>
+                        <th>Описание</th>
+                        <th>По умолчанию</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>extractNumeric</code></td>
+                        <td>boolean</td>
+                        <td>Извлекать числовые значения из строки</td>
+                        <td>true</td>
+                    </tr>
+                    <tr>
+                        <td><code>replaceCommaWithDot</code></td>
+                        <td>boolean</td>
+                        <td>Заменять запятые на точки в числах</td>
+                        <td>true</td>
+                    </tr>
+                    <tr>
+                        <td><code>removeUnits</code></td>
+                        <td>array</td>
+                        <td>Список единиц измерения для удаления</td>
+                        <td>["л", "л.", "мл", "ml", " ", "."]</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h6>Пример кастомизации:</h6>
+            <div class="example-code">
+{
+  "extractNumeric": true,
+  "replaceCommaWithDot": true,
+  "removeUnits": ["л", "литр", "литра", "литров", "мл", "миллилитр", "ml", "l"]
+}
+            </div>
+            <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                    onclick='copyToClipboard("{\"extractNumeric\": true, \"replaceCommaWithDot\": true, \"removeUnits\": [\"л\", \"литр\", \"литра\", \"литров\", \"мл\", \"миллилитр\", \"ml\", \"l\"]}")'>
+                <i class="fas fa-copy"></i> Копировать
+            </button>
+        </div>
+    </div>
+
+    <!-- Нормализация брендов -->
+    <div id="brand-section" class="card mb-4">
+        <div class="card-header">
+            <h4><i class="fas fa-tag text-success me-2"></i>Нормализация брендов</h4>
+        </div>
+        <div class="card-body">
+            <p>Приводит названия брендов к единому формату, убирает лишние слова и нормализует регистр.</p>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Примеры преобразований:</h6>
+                    <div class="transformation-example"><code>The Macallan</code> → <code>Macallan</code></div>
+                    <div class="transformation-example"><code>JAMESON</code> → <code>Jameson</code></div>
+                    <div class="transformation-example"><code>jameson irish whiskey</code> → <code>Jameson Irish Whiskey</code></div>
+                    <div class="transformation-example"><code>Macallan, Edition №5</code> → <code>Macallan</code></div>
+                    <div class="transformation-example"><code>A Johnnie Walker</code> → <code>Johnnie Walker</code></div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Настройки по умолчанию:</h6>
+                    <div class="example-code">
+{
+  "removeArticles": ["The", "A", "An"],
+  "extractMainBrand": true,
+  "extractMainBrandSplitBy": ",",
+  "caseNormalization": "PROPER_CASE"
+}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                            onclick='copyToClipboard("{\"removeArticles\": [\"The\", \"A\", \"An\"], \"extractMainBrand\": true, \"extractMainBrandSplitBy\": \",\", \"caseNormalization\": \"PROPER_CASE\"}")'>
+                        <i class="fas fa-copy"></i> Копировать
+                    </button>
+                </div>
+            </div>
+            
+            <h6 class="mt-4">Параметры конфигурации:</h6>
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Параметр</th>
+                        <th>Тип</th>
+                        <th>Описание</th>
+                        <th>По умолчанию</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>removeArticles</code></td>
+                        <td>array</td>
+                        <td>Артикли для удаления в начале названия</td>
+                        <td>["The", "A", "An"]</td>
+                    </tr>
+                    <tr>
+                        <td><code>extractMainBrand</code></td>
+                        <td>boolean</td>
+                        <td>Извлекать основной бренд до разделителя</td>
+                        <td>true</td>
+                    </tr>
+                    <tr>
+                        <td><code>extractMainBrandSplitBy</code></td>
+                        <td>string</td>
+                        <td>Разделитель для извлечения основного бренда</td>
+                        <td>","</td>
+                    </tr>
+                    <tr>
+                        <td><code>caseNormalization</code></td>
+                        <td>string</td>
+                        <td>Тип нормализации регистра</td>
+                        <td>"PROPER_CASE"</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="alert alert-info">
+                <h6>Варианты нормализации регистра:</h6>
+                <ul class="mb-0">
+                    <li><strong>PROPER_CASE</strong> - Первые Буквы Заглавные</li>
+                    <li><strong>UPPER_CASE</strong> - ВСЕ ЗАГЛАВНЫЕ</li>
+                    <li><strong>LOWER_CASE</strong> - все строчные</li>
+                </ul>
+            </div>
+
+            <h6>Пример кастомизации:</h6>
+            <div class="example-code">
+{
+  "removeArticles": ["The", "A", "An", "Le", "La", "Der", "Die", "Das"],
+  "extractMainBrand": true,
+  "extractMainBrandSplitBy": " - ",
+  "caseNormalization": "UPPER_CASE"
+}
+            </div>
+            <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                    onclick='copyToClipboard("{\"removeArticles\": [\"The\", \"A\", \"An\", \"Le\", \"La\", \"Der\", \"Die\", \"Das\"], \"extractMainBrand\": true, \"extractMainBrandSplitBy\": \" - \", \"caseNormalization\": \"UPPER_CASE\"}")'>
+                <i class="fas fa-copy"></i> Копировать
+            </button>
+        </div>
+    </div>
+
+    <!-- Нормализация валют -->
+    <div id="currency-section" class="card mb-4">
+        <div class="card-header">
+            <h4><i class="fas fa-dollar-sign text-warning me-2"></i>Нормализация валют</h4>
+        </div>
+        <div class="card-body">
+            <p>Извлекает числовые значения из валютных строк, убирая символы и коды валют.</p>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Примеры преобразований:</h6>
+                    <div class="transformation-example"><code>100USD</code> → <code>100</code></div>
+                    <div class="transformation-example"><code>50EUR</code> → <code>50</code></div>
+                    <div class="transformation-example"><code>1500RUB</code> → <code>1500</code></div>
+                    <div class="transformation-example"><code>100 dollars</code> → <code>100</code></div>
+                    <div class="transformation-example"><code>75.50 руб</code> → <code>75.50</code></div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Настройки по умолчанию:</h6>
+                    <div class="example-code">
+{
+  "extractNumeric": true,
+  "replaceCommaWithDot": true,
+  "validateNumeric": true,
+  "removeCurrencySymbols": [
+    "$", "€", "£", "₽", "¥",
+    "USD", "EUR", "GBP", "RUB", "CNY",
+    "руб", "коп", "долл"
+  ]
+}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                            onclick='copyToClipboard("{\"extractNumeric\": true, \"replaceCommaWithDot\": true, \"validateNumeric\": true, \"removeCurrencySymbols\": [\"$\", \"€\", \"£\", \"₽\", \"USD\", \"EUR\", \"RUB\", \"GBP\", \"CNY\", \"руб\", \"коп\", \"долл\"]}")'>
+                        <i class="fas fa-copy"></i> Копировать
+                    </button>
+                </div>
+            </div>
+            
+            <h6 class="mt-4">Параметры конфигурации:</h6>
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Параметр</th>
+                        <th>Тип</th>
+                        <th>Описание</th>
+                        <th>По умолчанию</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>extractNumeric</code></td>
+                        <td>boolean</td>
+                        <td>Извлекать числовые значения из строки</td>
+                        <td>true</td>
+                    </tr>
+                    <tr>
+                        <td><code>replaceCommaWithDot</code></td>
+                        <td>boolean</td>
+                        <td>Заменять запятые на точки в числах</td>
+                        <td>true</td>
+                    </tr>
+                    <tr>
+                        <td><code>validateNumeric</code></td>
+                        <td>boolean</td>
+                        <td>Проверять, что результат является числом</td>
+                        <td>true</td>
+                    </tr>
+                    <tr>
+                        <td><code>removeCurrencySymbols</code></td>
+                        <td>array</td>
+                        <td>Список валютных символов и кодов для удаления</td>
+                        <td>["$", "€", "USD", "EUR", ...]</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="alert alert-info">
+                <h6>Особенности работы с валютами:</h6>
+                <ul class="mb-0">
+                    <li><strong>Текстовые коды</strong> предпочтительнее символов из-за проблем с кодировкой</li>
+                    <li><strong>Числовая валидация</strong> обеспечивает корректность результата</li>
+                    <li><strong>Поддержка дробей</strong> - автоматическая замена запятых на точки</li>
+                </ul>
+            </div>
+
+            <h6>Пример кастомизации:</h6>
+            <div class="example-code">
+{
+  "extractNumeric": true,
+  "replaceCommaWithDot": true,
+  "validateNumeric": false,
+  "removeCurrencySymbols": ["USD", "EUR", "RUB", "dollars", "euros", "рублей"]
+}
+            </div>
+            <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                    onclick='copyToClipboard("{\"extractNumeric\": true, \"replaceCommaWithDot\": true, \"validateNumeric\": false, \"removeCurrencySymbols\": [\"USD\", \"EUR\", \"RUB\", \"dollars\", \"euros\", \"рублей\"]}")'>
+                <i class="fas fa-copy"></i> Копировать
+            </button>
+        </div>
+    </div>
+
+    <!-- Пользовательские правила -->
+    <div id="custom-section" class="card mb-4">
+        <div class="card-header">
+            <h4><i class="fas fa-cog text-primary me-2"></i>Пользовательские правила</h4>
+        </div>
+        <div class="card-body">
+            <p>Создавайте собственные правила замены для любых специфических случаев.</p>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Формат 1: Список правил (пары)</h6>
+                    <p>Правила идут парами: [старое_значение, новое_значение, ...]</p>
+                    <div class="example-code">
+{
+  "customRules": [
+    "jameson irish whiskey", "Jameson",
+    "macallan 12 years", "Macallan",
+    "johnnie walker red", "Johnnie Walker"
+  ]
+}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                            onclick='copyToClipboard("{\"customRules\": [\"jameson irish whiskey\", \"Jameson\", \"macallan 12 years\", \"Macallan\", \"johnnie walker red\", \"Johnnie Walker\"]}")'>
+                        <i class="fas fa-copy"></i> Копировать
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <h6>Формат 2: Словарь замен</h6>
+                    <p>Более читаемый формат в виде объекта:</p>
+                    <div class="example-code">
+{
+  "replacementMap": {
+    "jameson irish whiskey": "Jameson",
+    "macallan 12 years": "Macallan",
+    "johnnie walker red": "Johnnie Walker"
+  }
+}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                            onclick='copyToClipboard("{\"replacementMap\": {\"jameson irish whiskey\": \"Jameson\", \"macallan 12 years\": \"Macallan\", \"johnnie walker red\": \"Johnnie Walker\"}}")'>
+                        <i class="fas fa-copy"></i> Копировать
+                    </button>
+                </div>
+            </div>
+
+            <h6 class="mt-4">Расширенные настройки:</h6>
+            <div class="example-code">
+{
+  "customRules": ["jameson", "Jameson", "macallan", "Macallan"],
+  "caseInsensitive": true,
+  "partialMatch": false
+}
+            </div>
+            <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                    onclick='copyToClipboard("{\"customRules\": [\"jameson\", \"Jameson\", \"macallan\", \"Macallan\"], \"caseInsensitive\": true, \"partialMatch\": false}")'>
+                <i class="fas fa-copy"></i> Копировать
+            </button>
+
+            <h6 class="mt-4">Параметры конфигурации:</h6>
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Параметр</th>
+                        <th>Тип</th>
+                        <th>Описание</th>
+                        <th>По умолчанию</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>customRules</code></td>
+                        <td>array</td>
+                        <td>Массив правил замены в парах [старое, новое, ...]</td>
+                        <td>[]</td>
+                    </tr>
+                    <tr>
+                        <td><code>replacementMap</code></td>
+                        <td>object</td>
+                        <td>Объект с правилами замены {старое: новое}</td>
+                        <td>{}</td>
+                    </tr>
+                    <tr>
+                        <td><code>caseInsensitive</code></td>
+                        <td>boolean</td>
+                        <td>Игнорировать регистр при поиске совпадений</td>
+                        <td>false</td>
+                    </tr>
+                    <tr>
+                        <td><code>partialMatch</code></td>
+                        <td>boolean</td>
+                        <td>Искать частичные совпадения (содержит подстроку)</td>
+                        <td>false</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Практические примеры -->
+    <div id="examples-section" class="card mb-4">
+        <div class="card-header">
+            <h4><i class="fas fa-lightbulb text-warning me-2"></i>Практические примеры</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Сценарий 1: Нормализация размеров одежды</h6>
+                    <div class="example-code">
+{
+  "customRules": [
+    "XS (44)", "XS",
+    "S (46)", "S",
+    "M (48-50)", "M",
+    "L (52)", "L",
+    "XL (54-56)", "XL"
+  ]
+}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                            onclick='copyToClipboard("{\"customRules\": [\"XS (44)\", \"XS\", \"S (46)\", \"S\", \"M (48-50)\", \"M\", \"L (52)\", \"L\", \"XL (54-56)\", \"XL\"]}")'>
+                        <i class="fas fa-copy"></i> Копировать
+                    </button>
+
+                    <h6 class="mt-4">Сценарий 2: Статусы товаров</h6>
+                    <div class="example-code">
+{
+  "replacementMap": {
+    "В наличии": "Available",
+    "Нет в наличии": "Out of Stock",
+    "Под заказ": "On Order",
+    "Снят с производства": "Discontinued"
+  }
+}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                            onclick='copyToClipboard("{\"replacementMap\": {\"В наличии\": \"Available\", \"Нет в наличии\": \"Out of Stock\", \"Под заказ\": \"On Order\", \"Снят с производства\": \"Discontinued\"}}")'>
+                        <i class="fas fa-copy"></i> Копировать
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <h6>Сценарий 3: Коды регионов</h6>
+                    <div class="example-code">
+{
+  "customRules": [
+    "Москва и МО", "MSK",
+    "Санкт-Петербург", "SPB",
+    "Екатеринburg", "EKB",
+    "Новосибирск", "NSK"
+  ],
+  "caseInsensitive": true
+}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                            onclick='copyToClipboard("{\"customRules\": [\"Москва и МО\", \"MSK\", \"Санкт-Петербург\", \"SPB\", \"Екатеринburg\", \"EKB\", \"Новосибирск\", \"NSK\"], \"caseInsensitive\": true}")'>
+                        <i class="fas fa-copy"></i> Копировать
+                    </button>
+
+                    <h6 class="mt-4">Сценарий 4: Частичное совпадение</h6>
+                    <p>Заменяет любые строки, содержащие ключевые слова:</p>
+                    <div class="example-code">
+{
+  "customRules": [
+    "скидка", "SALE",
+    "акция", "PROMO",
+    "новинка", "NEW"
+  ],
+  "caseInsensitive": true,
+  "partialMatch": true
+}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                            onclick='copyToClipboard("{\"customRules\": [\"скидка\", \"SALE\", \"акция\", \"PROMO\", \"новинка\", \"NEW\"], \"caseInsensitive\": true, \"partialMatch\": true}")'>
+                        <i class="fas fa-copy"></i> Копировать
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Важные замечания -->
+    <div class="alert alert-warning">
+        <h5><i class="fas fa-exclamation-triangle me-2"></i>Важные замечания</h5>
+        <ul class="mb-0">
+            <li>Если поле правил пустое, используются настройки по умолчанию для каждого типа</li>
+            <li>Правила применяются последовательно - первое найденное совпадение выигрывает</li>
+            <li>Используйте кнопку "Тест" для проверки правил перед сохранением</li>
+            <li>JSON должен быть корректно отформатирован, иначе правила не будут применены</li>
+            <li>Регистр важен при точном совпадении (если не включен caseInsensitive)</li>
+        </ul>
+    </div>
+</section>
+
+<script>
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            // Показать временное уведомление
+            const button = event.target.closest('button');
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check text-success"></i> Скопировано!';
+            button.classList.add('btn-success');
+            button.classList.remove('btn-outline-secondary');
+            
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-secondary');
+            }, 2000);
+        }).catch(err => {
+            console.error('Ошибка копирования: ', err);
+            alert('Не удалось скопировать в буфер обмена');
+        });
+    }
+
+    // Плавная прокрутка к якорям
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+        });
+    });
+</script>
+</body>
+</html>
