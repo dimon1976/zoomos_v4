@@ -56,4 +56,10 @@ public interface ExportSessionRepository extends JpaRepository<ExportSession, Lo
         return findLastUsedTemplatesByClientId(clientId, PageRequest.of(0, 1))
                 .stream().findFirst();
     }
+
+    @Query("SELECT es FROM ExportSession es LEFT JOIN FETCH es.template LEFT JOIN FETCH es.fileOperation WHERE es.id IN :ids")
+    List<ExportSession> findAllByIdsWithTemplate(@Param("ids") List<Long> ids);
+
+    @Query("SELECT es FROM ExportSession es LEFT JOIN FETCH es.template LEFT JOIN FETCH es.fileOperation WHERE es.template = :template")
+    Page<ExportSession> findByTemplateWithTemplate(@Param("template") ExportTemplate template, Pageable pageable);
 }

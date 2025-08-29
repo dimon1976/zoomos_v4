@@ -59,7 +59,7 @@ public class ExportStatisticsService {
                 .collect(Collectors.groupingBy(ExportStatistics::getGroupFieldValue));
 
         // Создаем сравнительную статистику
-        return createComparison(statisticsByGroup, sessions, request);
+        return createComparison(statisticsByGroup, sessions, request, template);
     }
 
     /**
@@ -68,7 +68,8 @@ public class ExportStatisticsService {
     private List<StatisticsComparisonDto> createComparison(
             Map<String, List<ExportStatistics>> statisticsByGroup,
             List<ExportSession> sessions,
-            StatisticsRequestDto request) {
+            StatisticsRequestDto request,
+            ExportTemplate template) {
 
         List<StatisticsComparisonDto> comparisons = new ArrayList<>();
 
@@ -102,7 +103,7 @@ public class ExportStatisticsService {
 
                             operationStats.add(StatisticsComparisonDto.OperationStatistics.builder()
                                     .exportSessionId(session.getId())
-                                    .operationName(generateOperationName(session, session.getTemplate()))
+                                    .operationName(generateOperationName(session, template))
                                     .exportDate(session.getStartedAt())
                                     .metrics(metrics)
                                     .dateModificationStats(dateModStats)
@@ -296,10 +297,10 @@ public class ExportStatisticsService {
     private List<ExportSession> getExportSessions(List<Long> sessionIds, ExportTemplate template) {
         if (sessionIds == null || sessionIds.isEmpty()) {
             // Если не выбраны конкретные сессии, берем все для данного шаблона
-            return sessionRepository.findByTemplate(template, org.springframework.data.domain.Pageable.unpaged())
+            return sessionRepository.findByTemplateWithTemplate(template, org.springframework.data.domain.Pageable.unpaged())
                     .getContent();
         } else {
-            return sessionRepository.findAllById(sessionIds);
+            return sessionRepository.findAllByIdsWithTemplate(sessionIds);
         }
     }
 
