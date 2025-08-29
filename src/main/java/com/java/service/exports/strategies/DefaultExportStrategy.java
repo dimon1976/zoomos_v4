@@ -3,8 +3,8 @@ package com.java.service.exports.strategies;
 import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateField;
 import com.java.service.normalization.NormalizationService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -17,10 +17,13 @@ import java.util.*;
  */
 @Component("defaultExportStrategy")
 @Slf4j
-@RequiredArgsConstructor
 public class DefaultExportStrategy implements ExportStrategy {
     
     private final NormalizationService normalizationService;
+    
+    public DefaultExportStrategy(@Qualifier("normalizationServiceImpl") NormalizationService normalizationService) {
+        this.normalizationService = normalizationService;
+    }
 
     @Override
     public String getName() {
