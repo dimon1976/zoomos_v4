@@ -23,7 +23,12 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(psql:*)",
-      "Read(E:\\/**)"
+      "Read(E:\\/**)",
+      "Bash(git checkout:*)",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_file_upload",
+      "mcp__playwright__browser_snapshot"
     ],
     "additionalDirectories": [
       "D:\\d D:\\project"

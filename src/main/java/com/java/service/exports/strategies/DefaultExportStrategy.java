@@ -2,6 +2,8 @@ package com.java.service.exports.strategies;
 
 import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateField;
+import com.java.service.exports.normalization.NormalizationService;
+import com.java.service.exports.normalization.NormalizationServiceFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,6 +20,8 @@ import java.util.*;
 @Slf4j
 @RequiredArgsConstructor
 public class DefaultExportStrategy implements ExportStrategy {
+    
+    private final NormalizationServiceFactory normalizationFactory;
 
     @Override
     public String getName() {
@@ -58,6 +62,11 @@ public class DefaultExportStrategy implements ExportStrategy {
                     value = row.get(toSnakeCase(entityFieldName));
                 }
 
+                // Применяем нормализацию если включена
+                if (value != null && field.getNormalizationEnabled() != null && field.getNormalizationEnabled()) {
+                    value = normalizeValue(value, field);
+                }
+                
                 // Применяем форматирование если указано
                 if (value != null && field.getDataFormat() != null) {
                     value = formatValue(value, field.getDataFormat());
@@ -105,5 +114,34 @@ public class DefaultExportStrategy implements ExportStrategy {
             log.warn("Ошибка форматирования значения: {}", e.getMessage());
         }
         return value;
+    }
+    
+    /**
+     * Нормализация значения согласно настройкам поля
+     */
+    private Object normalizeValue(Object value, ExportTemplateField field) {
+        try {
+            if (field.getNormalizationType() == null) {
+                log.debug("Тип нормализации не указан для поля: {}", field.getEntityFieldName());
+                return value;
+            }
+            
+            NormalizationService normalizer = normalizationFactory.getNormalizer(field.getNormalizationType());
+            if (normalizer == null) {
+                log.warn("Нормализатор не найден для типа: {}", field.getNormalizationType());
+                return value;
+            }
+            
+            Object normalizedValue = normalizer.normalize(value, field.getNormalizationRule());
+            
+            log.debug("Нормализация поля {}: {} -> {}", 
+                    field.getEntityFieldName(), value, normalizedValue);
+                    
+            return normalizedValue;
+            
+        } catch (Exception e) {
+            log.warn("Ошибка нормализации поля {}: {}", field.getEntityFieldName(), e.getMessage());
+            return value;
+        }
     }
 }
