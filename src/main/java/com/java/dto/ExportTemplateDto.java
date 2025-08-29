@@ -106,4 +106,24 @@ public class ExportTemplateDto {
     private String exportTypeLabel;
 
     private String operationNameSource; // FILE_NAME, TASK_NUMBER, CUSTOM
+    
+    /**
+     * Проверяет, есть ли поля с настройкой нормализации
+     */
+    public boolean hasNormalizationFields() {
+        return fields != null && fields.stream()
+                .anyMatch(field -> field.getNormalizationType() != null);
+    }
+    
+    /**
+     * Возвращает количество полей с настройкой нормализации
+     */
+    public long getNormalizationFieldsCount() {
+        if (fields == null) {
+            return 0;
+        }
+        return fields.stream()
+                .filter(field -> field.getNormalizationType() != null)
+                .count();
+    }
 }

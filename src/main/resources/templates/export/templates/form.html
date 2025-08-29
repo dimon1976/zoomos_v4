@@ -114,16 +114,17 @@
             </div>
             <div class="card-body">
                 <div th:if="${#lists.isEmpty(template.fields)}" class="text-center text-muted">Полей нет</div>
-                <div th:each="field, iterStat : *{fields}" class="row g-3 mb-3">
+                <div th:each="field, iterStat : *{fields}" class="row g-3 mb-3 p-3 border rounded">
                     <input type="hidden" th:field="*{fields[__${iterStat.index}__].id}" />
-                    <div class="col-md-4">
+                    <!-- Основные настройки поля -->
+                    <div class="col-md-3">
                         <label class="form-label required-field">Поле сущности</label>
                         <select class="form-select" th:field="*{fields[__${iterStat.index}__].entityFieldName}">
                             <option value="">-- Поле --</option>
                             <option th:each="f : ${availableFields}" th:value="${f}" th:text="${f}"></option>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label required-field">Колонка экспорта</label>
                         <input type="text" class="form-control" th:field="*{fields[__${iterStat.index}__].exportColumnName}">
                     </div>
@@ -131,14 +132,85 @@
                         <label class="form-label required-field">Порядок</label>
                         <input type="number" class="form-control" th:field="*{fields[__${iterStat.index}__].fieldOrder}">
                     </div>
-                    <div class="col-md-1 d-flex align-items-center">
+                    <div class="col-md-2 d-flex align-items-center">
                         <div class="form-check mt-4">
                             <input class="form-check-input" type="checkbox" th:field="*{fields[__${iterStat.index}__].isIncluded}">
                             <label class="form-check-label">Вкл.</label>
                         </div>
                     </div>
-                    <div class="col-md-1 d-flex align-items-center">
+                    <div class="col-md-2 d-flex align-items-center justify-content-end">
+                        <button type="button" class="btn btn-sm btn-outline-primary me-2 mt-4" 
+                                th:onclick="|toggleNormalization(${iterStat.index})|">
+                            <i class="fas fa-magic"></i> Нормализация
+                        </button>
                         <button type="submit" name="removeField" th:value="${iterStat.index}" class="btn btn-sm btn-danger mt-4">&times;</button>
+                    </div>
+                    
+                    <!-- Настройки нормализации -->
+                    <div class="col-12" th:id="|normalization-${iterStat.index}|" style="display: none;">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-magic text-primary me-2"></i>Настройки нормализации
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Тип нормализации</label>
+                                        <select class="form-select" th:field="*{fields[__${iterStat.index}__].normalizationType}"
+                                                th:onchange="|updateNormalizationPreview(${iterStat.index})|">
+                                            <option value="">-- Без нормализации --</option>
+                                            <option th:each="type : ${T(com.java.model.enums.NormalizationType).values()}"
+                                                    th:value="${type}" th:text="${type.displayName}">Тип</option>
+                                        </select>
+                                        <small class="form-text text-muted">
+                                            <strong>VOLUME:</strong> нормализует объемы (0.7л → 0.7)<br>
+                                            <strong>BRAND:</strong> нормализует бренды (The Macallan → Macallan)
+                                        </small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Правила нормализации (JSON)</label>
+                                        <textarea class="form-control" th:field="*{fields[__${iterStat.index}__].normalizationRule}"
+                                                  rows="3" placeholder='{"customRules": ["rule1", "rule2"]}'
+                                                  th:onchange="|updateNormalizationPreview(${iterStat.index})|"></textarea>
+                                        <small class="form-text text-muted">
+                                            Оставьте пустым для использования правил по умолчанию
+                                        </small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Предварительный просмотр</label>
+                                        <div class="border rounded p-2 bg-light" th:id="|preview-${iterStat.index}|" style="min-height: 80px;">
+                                            <small class="text-muted">Выберите тип нормализации для просмотра примеров</small>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary mt-2"
+                                                th:onclick="|testNormalization(${iterStat.index})|">
+                                            <i class="fas fa-flask"></i> Тест
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Быстрые настройки -->
+                                <div class="row mt-3">
+                                    <div class="col-12">
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <button type="button" class="btn btn-sm btn-outline-info"
+                                                    th:onclick="|setQuickNormalization(${iterStat.index}, 'VOLUME')|">
+                                                <i class="fas fa-wine-bottle"></i> Объемы
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-info"
+                                                    th:onclick="|setQuickNormalization(${iterStat.index}, 'BRAND')|">
+                                                <i class="fas fa-tag"></i> Бренды
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                    th:onclick="|clearNormalization(${iterStat.index})|">
+                                                <i class="fas fa-times"></i> Сбросить
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -373,6 +445,139 @@
         toggleSettings();
         toggleStatisticsSettings();
     });
+
+    // Функции для управления нормализацией
+    function toggleNormalization(index) {
+        const panel = document.getElementById(`normalization-${index}`);
+        if (panel) {
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+    }
+
+    function updateNormalizationPreview(index) {
+        const typeSelect = document.querySelector(`select[name="fields[${index}].normalizationType"]`);
+        const rulesTextarea = document.querySelector(`textarea[name="fields[${index}].normalizationRule"]`);
+        const preview = document.getElementById(`preview-${index}`);
+        
+        if (!typeSelect || !preview) return;
+        
+        const type = typeSelect.value;
+        let examples = '';
+        
+        switch (type) {
+            case 'VOLUME':
+                examples = `
+                    <strong>Примеры нормализации объемов:</strong><br>
+                    <small class="text-success">0.7л → 0.7</small><br>
+                    <small class="text-success">0,7 л. → 0.7</small><br>
+                    <small class="text-success">500мл → 500</small><br>
+                    <small class="text-success">1л → 1</small>
+                `;
+                break;
+            case 'BRAND':
+                examples = `
+                    <strong>Примеры нормализации брендов:</strong><br>
+                    <small class="text-success">The Macallan → Macallan</small><br>
+                    <small class="text-success">JAMESON → Jameson</small><br>
+                    <small class="text-success">jameson irish whiskey → Jameson</small><br>
+                    <small class="text-success">Macallan, Edition №5 → Macallan</small>
+                `;
+                break;
+            case 'CURRENCY':
+                examples = `
+                    <strong>Примеры нормализации валют:</strong><br>
+                    <small class="text-muted">Функция в разработке</small><br>
+                    <small class="text-success">$100 → 100</small><br>
+                    <small class="text-success">100USD → 100</small>
+                `;
+                break;
+            case 'CUSTOM':
+                examples = `
+                    <strong>Пользовательские правила:</strong><br>
+                    <small class="text-muted">Укажите JSON правила в поле слева</small><br>
+                    <small class="text-info">Примеры правил будут зависеть от вашей конфигурации</small>
+                `;
+                break;
+            default:
+                examples = '<small class="text-muted">Выберите тип нормализации для просмотра примеров</small>';
+        }
+        
+        preview.innerHTML = examples;
+        
+        // Показать панель нормализации если выбран тип
+        if (type && type !== '') {
+            const panel = document.getElementById(`normalization-${index}`);
+            if (panel && panel.style.display === 'none') {
+                panel.style.display = 'block';
+            }
+        }
+    }
+
+    function setQuickNormalization(index, type) {
+        const typeSelect = document.querySelector(`select[name="fields[${index}].normalizationType"]`);
+        const rulesTextarea = document.querySelector(`textarea[name="fields[${index}].normalizationRule"]`);
+        
+        if (typeSelect) {
+            typeSelect.value = type;
+            updateNormalizationPreview(index);
+        }
+        
+        if (rulesTextarea) {
+            rulesTextarea.value = ''; // Используем правила по умолчанию
+        }
+    }
+
+    function clearNormalization(index) {
+        const typeSelect = document.querySelector(`select[name="fields[${index}].normalizationType"]`);
+        const rulesTextarea = document.querySelector(`textarea[name="fields[${index}].normalizationRule"]`);
+        
+        if (typeSelect) {
+            typeSelect.value = '';
+        }
+        
+        if (rulesTextarea) {
+            rulesTextarea.value = '';
+        }
+        
+        updateNormalizationPreview(index);
+    }
+
+    async function testNormalization(index) {
+        const typeSelect = document.querySelector(`select[name="fields[${index}].normalizationType"]`);
+        const rulesTextarea = document.querySelector(`textarea[name="fields[${index}].normalizationRule"]`);
+        
+        if (!typeSelect || !typeSelect.value) {
+            alert('Выберите тип нормализации для тестирования');
+            return;
+        }
+        
+        const testInput = prompt('Введите значение для тестирования нормализации:');
+        if (!testInput) return;
+        
+        try {
+            const response = await fetch('/api/normalization/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    value: testInput,
+                    type: typeSelect.value,
+                    rule: rulesTextarea ? rulesTextarea.value : null
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.text();
+                alert(`Результат нормализации:\nВход: "${testInput}"\nВыход: "${result}"`);
+            } else {
+                alert('Ошибка тестирования нормализации');
+            }
+        } catch (error) {
+            console.error('Ошибка:', error);
+            alert('Ошибка подключения к серверу');
+        }
+    }
 </script>
 </body>
 </html>

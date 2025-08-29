@@ -184,6 +184,8 @@ public class ExportTemplateMapper {
                 .isIncluded(entity.getIsIncluded())
                 .dataFormat(entity.getDataFormat())
                 .transformationRule(entity.getTransformationRule())
+                .normalizationType(entity.getNormalizationType())
+                .normalizationRule(entity.getNormalizationRule())
                 .build();
     }
 
@@ -196,6 +198,8 @@ public class ExportTemplateMapper {
                 .isIncluded(dto.getIsIncluded())
                 .dataFormat(dto.getDataFormat())
                 .transformationRule(dto.getTransformationRule())
+                .normalizationType(dto.getNormalizationType())
+                .normalizationRule(dto.getNormalizationRule())
                 .build();
     }
 
