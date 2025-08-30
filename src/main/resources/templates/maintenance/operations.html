@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Ручные операции - Система обслуживания',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Ручные операции',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Ручные операции</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .operation-card {
+            transition: all 0.3s ease;
+            border: 1px solid #dee2e6;
+        }
+        .operation-card:hover {
+            border-color: #0d6efd;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .operation-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        .operation-button {
+            min-width: 140px;
+        }
+        .result-container {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .execution-log {
+            background-color: #f8f9fa;
+            border-left: 4px solid #0d6efd;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/maintenance" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Назад
+        </a>
+        <button type="button" class="btn btn-outline-danger" onclick="clearAllResults()">
+            <i class="fas fa-eraser"></i> Очистить результаты
+        </button>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Быстрые операции -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-bolt text-warning"></i>
+                            Быстрые операции
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Полная очистка -->
+                            <div class="col-md-4 mb-3">
+                                <div class="operation-card card h-100">
+                                    <div class="card-body text-center">
+                                        <div class="operation-icon text-success">
+                                            <i class="fas fa-broom"></i>
+                                        </div>
+                                        <h6>Полная очистка системы</h6>
+                                        <p class="small text-muted">Архивирование файлов + очистка БД + проверка системы</p>
+                                        <button type="button" class="btn btn-success operation-button" onclick="performFullCleanup()">
+                                            <i class="fas fa-play"></i> Выполнить
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Проверка системы -->
+                            <div class="col-md-4 mb-3">
+                                <div class="operation-card card h-100">
+                                    <div class="card-body text-center">
+                                        <div class="operation-icon text-info">
+                                            <i class="fas fa-stethoscope"></i>
+                                        </div>
+                                        <h6>Проверка системы</h6>
+                                        <p class="small text-muted">Диагностика состояния системы и генерация отчета</p>
+                                        <button type="button" class="btn btn-info operation-button" onclick="checkSystemHealth()">
+                                            <i class="fas fa-play"></i> Проверить
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Обновление статистики -->
+                            <div class="col-md-4 mb-3">
+                                <div class="operation-card card h-100">
+                                    <div class="card-body text-center">
+                                        <div class="operation-icon text-primary">
+                                            <i class="fas fa-chart-line"></i>
+                                        </div>
+                                        <h6>Обновление статистики</h6>
+                                        <p class="small text-muted">Сбор актуальной статистики файлов и БД</p>
+                                        <button type="button" class="btn btn-primary operation-button" onclick="refreshAllStats()">
+                                            <i class="fas fa-play"></i> Обновить
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Операции с файлами -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-folder text-primary"></i>
+                            Операции с файлами
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-primary" onclick="analyzeFiles()">
+                                <i class="fas fa-search"></i> Анализ дискового пространства
+                            </button>
+                            <button type="button" class="btn btn-outline-success" onclick="archiveOldFiles()">
+                                <i class="fas fa-archive"></i> Архивирование старых файлов
+                            </button>
+                            <button type="button" class="btn btn-outline-warning" onclick="findDuplicateFiles()">
+                                <i class="fas fa-copy"></i> Поиск дубликатов файлов
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Операции с БД -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-database text-success"></i>
+                            Операции с базой данных
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-info" onclick="getDatabaseStats()">
+                                <i class="fas fa-chart-bar"></i> Статистика базы данных
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" onclick="cleanupDatabase()">
+                                <i class="fas fa-trash"></i> Очистка старых данных
+                            </button>
+                            <button type="button" class="btn btn-outline-warning" onclick="analyzePerformance()">
+                                <i class="fas fa-tachometer-alt"></i> Анализ производительности
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Результаты операций -->
+        <div class="row" id="resultsSection" style="display: none;">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list-alt text-secondary"></i>
+                            Результаты операций
+                        </h5>
+                        <small class="text-muted" id="lastOperation">Последняя операция: -</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="result-container" id="operationResults">
+                            <!-- Результаты будут добавляться через JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+let operationCounter = 0;
+
+// Утилита для добавления результата операции
+function addOperationResult(title, content, type = 'info') {
+    operationCounter++;
+    const resultsContainer = document.getElementById('operationResults');
+    const timestamp = new Date().toLocaleTimeString('ru-RU');
+    
+    const resultHtml = `
+        <div class="execution-log mb-3" id="result-${operationCounter}">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong>[${timestamp}] ${title}</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="removeResult('result-${operationCounter}')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="alert alert-${type} mb-0">
+                ${content}
+            </div>
+        </div>
+    `;
+    
+    resultsContainer.insertAdjacentHTML('afterbegin', resultHtml);
+    document.getElementById('resultsSection').style.display = 'block';
+    document.getElementById('lastOperation').textContent = `Последняя операция: ${title} (${timestamp})`;
+    
+    // Прокручиваем к результатам
+    document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Удаление отдельного результата
+function removeResult(resultId) {
+    document.getElementById(resultId).remove();
+    
+    // Скрываем секцию если нет результатов
+    const resultsContainer = document.getElementById('operationResults');
+    if (!resultsContainer.children.length) {
+        document.getElementById('resultsSection').style.display = 'none';
+    }
+}
+
+// Очистка всех результатов
+function clearAllResults() {
+    document.getElementById('operationResults').innerHTML = '';
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('lastOperation').textContent = 'Последняя операция: -';
+}
+
+// Вспомогательная функция для выполнения операций
+async function executeOperation(button, title, url, options = {}) {
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Выполнение...';
+    
+    try {
+        const response = await fetch(url, options);
+        const data = await response.json();
+        
+        let resultContent = '';
+        if (typeof data === 'object') {
+            resultContent = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        } else {
+            resultContent = data.toString();
+        }
+        
+        addOperationResult(title, resultContent, response.ok ? 'success' : 'danger');
+        
+    } catch (error) {
+        console.error(`Ошибка выполнения операции "${title}":`, error);
+        addOperationResult(title, `Ошибка: ${error.message}`, 'danger');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// === БЫСТРЫЕ ОПЕРАЦИИ ===
+
+async function performFullCleanup() {
+    await executeOperation(event.target, 'Полная очистка системы', '/maintenance/cleanup', { method: 'POST' });
+}
+
+async function checkSystemHealth() {
+    await executeOperation(event.target, 'Проверка системы', '/maintenance/system/health');
+}
+
+async function refreshAllStats() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обновление...';
+    
+    try {
+        // Получаем статистику файлов
+        const filesResponse = await fetch('/maintenance/files/stats');
+        const filesData = await filesResponse.json();
+        
+        // Получаем статистику БД
+        const dbResponse = await fetch('/maintenance/database/stats');
+        const dbData = await dbResponse.json();
+        
+        const combinedResult = {
+            files: {
+                directories: filesData.length,
+                totalSize: filesData.reduce((sum, dir) => sum + dir.totalSizeBytes, 0),
+                totalFiles: filesData.reduce((sum, dir) => sum + dir.fileCount, 0)
+            },
+            database: {
+                totalSize: dbData.formattedTotalSize,
+                tables: dbData.totalTables,
+                indexes: dbData.totalIndexes,
+                activeConnections: dbData.activeConnections
+            },
+            timestamp: new Date().toISOString()
+        };
+        
+        addOperationResult('Обновление статистики', '<pre>' + JSON.stringify(combinedResult, null, 2) + '</pre>', 'info');
+        
+    } catch (error) {
+        console.error('Ошибка обновления статистики:', error);
+        addOperationResult('Обновление статистики', `Ошибка: ${error.message}`, 'danger');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// === ОПЕРАЦИИ С ФАЙЛАМИ ===
+
+async function analyzeFiles() {
+    await executeOperation(event.target, 'Анализ файлов', '/maintenance/files/stats');
+}
+
+async function archiveOldFiles() {
+    await executeOperation(event.target, 'Архивирование файлов', '/maintenance/files/archive', { method: 'POST' });
+}
+
+async function findDuplicateFiles() {
+    await executeOperation(event.target, 'Поиск дубликатов', '/maintenance/files/duplicates');
+}
+
+// === ОПЕРАЦИИ С БД ===
+
+async function getDatabaseStats() {
+    await executeOperation(event.target, 'Статистика БД', '/maintenance/database/stats');
+}
+
+async function cleanupDatabase() {
+    if (!confirm('Выполнить очистку базы данных? Будут удалены старые данные.')) {
+        return;
+    }
+    await executeOperation(event.target, 'Очистка БД', '/maintenance/database/cleanup', { method: 'POST' });
+}
+
+async function analyzePerformance() {
+    await executeOperation(event.target, 'Анализ производительности', '/maintenance/database/performance');
+}
+</script>
+</th:block>
+</html>

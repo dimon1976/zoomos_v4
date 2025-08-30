@@ -12,7 +12,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.util.HashMap;
 import java.util.List;
@@ -21,7 +21,7 @@ import java.util.Map;
 /**
  * Контроллер для системы обслуживания и мониторинга
  */
-@RestController
+@Controller
 @RequestMapping("/maintenance")
 @RequiredArgsConstructor
 @Slf4j
@@ -34,7 +34,15 @@ public class MaintenanceController {
     // === ГЛАВНАЯ СТРАНИЦА ОБСЛУЖИВАНИЯ ===
     
     @GetMapping
-    public ResponseEntity<Map<String, String>> index() {
+    public String index(Model model) {
+        log.debug("GET request to maintenance page");
+        model.addAttribute("pageTitle", "Система обслуживания");
+        return "maintenance/index";
+    }
+    
+    @GetMapping("/api")
+    @ResponseBody
+    public ResponseEntity<Map<String, String>> indexApi() {
         log.debug("GET request to maintenance API");
         Map<String, String> response = new HashMap<>();
         response.put("status", "active");
@@ -43,9 +51,40 @@ public class MaintenanceController {
         return ResponseEntity.ok(response);
     }
     
+    // === HTML СТРАНИЦЫ ===
+    
+    @GetMapping("/files")
+    public String filesPage(Model model) {
+        log.debug("GET request to files management page");
+        model.addAttribute("pageTitle", "Управление файлами");
+        return "maintenance/files";
+    }
+    
+    @GetMapping("/database")  
+    public String databasePage(Model model) {
+        log.debug("GET request to database maintenance page");
+        model.addAttribute("pageTitle", "Обслуживание БД");
+        return "maintenance/database";
+    }
+    
+    @GetMapping("/system")
+    public String systemPage(Model model) {
+        log.debug("GET request to system health page");
+        model.addAttribute("pageTitle", "Диагностика системы");
+        return "maintenance/system";
+    }
+    
+    @GetMapping("/operations")
+    public String operationsPage(Model model) {
+        log.debug("GET request to manual operations page");
+        model.addAttribute("pageTitle", "Ручные операции");
+        return "maintenance/operations";
+    }
+    
     // === FILE MANAGEMENT ENDPOINTS ===
     
     @GetMapping("/files/stats")
+    @ResponseBody
     public ResponseEntity<List<DirectoryStatsDto>> getFileStats() {
         log.info("Запрос статистики файлов через API");
         try {
@@ -59,6 +98,7 @@ public class MaintenanceController {
     }
     
     @PostMapping("/files/archive")
+    @ResponseBody
     public ResponseEntity<ArchiveResultDto> archiveFiles() {
         log.info("Запуск архивирования файлов через API");
         try {
@@ -72,6 +112,7 @@ public class MaintenanceController {
     }
     
     @GetMapping("/files/duplicates")
+    @ResponseBody
     public ResponseEntity<List<DuplicateFileDto>> findDuplicates() {
         log.info("Поиск дублей файлов через API");
         try {
@@ -87,6 +128,7 @@ public class MaintenanceController {
     // === DATABASE MAINTENANCE ENDPOINTS ===
     
     @GetMapping("/database/stats")
+    @ResponseBody
     public ResponseEntity<DatabaseStatsDto> getDatabaseStats() {
         log.info("Запрос статистики БД через API");
         try {
@@ -100,6 +142,7 @@ public class MaintenanceController {
     }
     
     @PostMapping("/database/cleanup")
+    @ResponseBody
     public ResponseEntity<DatabaseCleanupResultDto> cleanupDatabase() {
         log.info("Запуск очистки БД через API");
         try {
@@ -115,6 +158,7 @@ public class MaintenanceController {
     }
     
     @GetMapping("/database/performance")
+    @ResponseBody
     public ResponseEntity<List<QueryPerformanceDto>> getDatabasePerformance() {
         log.info("Анализ производительности БД через API");
         try {
@@ -130,6 +174,7 @@ public class MaintenanceController {
     // === SYSTEM HEALTH ENDPOINTS ===
     
     @GetMapping("/system/health")
+    @ResponseBody
     public ResponseEntity<SystemHealthDto> getSystemHealth() {
         log.info("Проверка состояния системы через API");
         try {
@@ -144,6 +189,7 @@ public class MaintenanceController {
     }
     
     @GetMapping("/system/resources")
+    @ResponseBody
     public ResponseEntity<SystemResourcesDto> getSystemResources() {
         log.info("Мониторинг ресурсов системы через API");
         try {
@@ -159,6 +205,7 @@ public class MaintenanceController {
     }
     
     @GetMapping("/system/report")
+    @ResponseBody
     public ResponseEntity<HealthCheckResultDto> getSystemReport() {
         log.info("Генерация диагностического отчета через API");
         try {
@@ -175,6 +222,7 @@ public class MaintenanceController {
     // === ОБЩИЙ CLEANUP ENDPOINT ===
     
     @PostMapping("/cleanup")
+    @ResponseBody
     public ResponseEntity<Map<String, Object>> performFullCleanup() {
         log.info("Запуск полной очистки системы через API");
         Map<String, Object> result = new HashMap<>();

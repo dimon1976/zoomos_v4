@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Система обслуживания',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Система обслуживания',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Система обслуживания</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .maintenance-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .maintenance-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-healthy { background-color: #28a745; }
+        .status-warning { background-color: #ffc107; }
+        .status-error { background-color: #dc3545; }
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-primary" onclick="location.reload()">
+            <i class="fas fa-sync-alt"></i> Обновить
+        </button>
+        <button type="button" class="btn btn-success" onclick="performFullCleanup()">
+            <i class="fas fa-broom"></i> Полная очистка
+        </button>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Обзор системы -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-heartbeat text-primary"></i>
+                            Состояние системы
+                        </h5>
+                        <span id="systemStatus" class="badge bg-secondary">
+                            <i class="fas fa-spinner fa-spin"></i> Загрузка...
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="systemMetrics">
+                            <!-- Метрики будут загружены через JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модули обслуживания -->
+        <div class="row">
+            <!-- Управление файлами -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card maintenance-card h-100">
+                    <div class="card-body text-center">
+                        <div class="mb-3">
+                            <i class="fas fa-folder-open fa-3x text-primary"></i>
+                        </div>
+                        <h5 class="card-title">Управление файлами</h5>
+                        <p class="card-text">Анализ дискового пространства, архивирование старых файлов и поиск дубликатов</p>
+                        <a href="/maintenance/files" class="btn btn-primary">
+                            <i class="fas fa-arrow-right"></i> Перейти
+                        </a>
+                    </div>
+                    <div class="card-footer bg-light">
+                        <small class="text-muted">
+                            <span class="status-indicator status-healthy"></span>
+                            Активно
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Обслуживание БД -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card maintenance-card h-100">
+                    <div class="card-body text-center">
+                        <div class="mb-3">
+                            <i class="fas fa-database fa-3x text-success"></i>
+                        </div>
+                        <h5 class="card-title">Обслуживание БД</h5>
+                        <p class="card-text">Очистка старых данных, анализ производительности запросов и оптимизация</p>
+                        <a href="/maintenance/database" class="btn btn-success">
+                            <i class="fas fa-arrow-right"></i> Перейти
+                        </a>
+                    </div>
+                    <div class="card-footer bg-light">
+                        <small class="text-muted">
+                            <span class="status-indicator status-healthy"></span>
+                            Активно
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Диагностика системы -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card maintenance-card h-100">
+                    <div class="card-body text-center">
+                        <div class="mb-3">
+                            <i class="fas fa-stethoscope fa-3x text-info"></i>
+                        </div>
+                        <h5 class="card-title">Диагностика системы</h5>
+                        <p class="card-text">Мониторинг состояния системы, проверка ресурсов и генерация отчетов</p>
+                        <a href="/maintenance/system" class="btn btn-info">
+                            <i class="fas fa-arrow-right"></i> Перейти
+                        </a>
+                    </div>
+                    <div class="card-footer bg-light">
+                        <small class="text-muted">
+                            <span class="status-indicator status-healthy"></span>
+                            Активно
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ручные операции -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card maintenance-card h-100">
+                    <div class="card-body text-center">
+                        <div class="mb-3">
+                            <i class="fas fa-tools fa-3x text-warning"></i>
+                        </div>
+                        <h5 class="card-title">Ручные операции</h5>
+                        <p class="card-text">Выполнение операций обслуживания в ручном режиме и мониторинг процессов</p>
+                        <a href="/maintenance/operations" class="btn btn-warning">
+                            <i class="fas fa-arrow-right"></i> Перейти
+                        </a>
+                    </div>
+                    <div class="card-footer bg-light">
+                        <small class="text-muted">
+                            <span class="status-indicator status-healthy"></span>
+                            Активно
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Недавние операции -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-history text-secondary"></i>
+                            Информация о системе
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <p><strong>Система обслуживания готова к работе</strong></p>
+                                <p class="mb-1">Доступные модули: управление файлами, обслуживание БД, диагностика системы</p>
+                                <p class="mb-0">Для выполнения операций перейдите в соответствующий модуль или используйте кнопку "Полная очистка"</p>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <div class="d-grid gap-2">
+                                    <a href="/maintenance/operations" class="btn btn-outline-primary">
+                                        <i class="fas fa-cogs"></i> Все операции
+                                    </a>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="loadSystemHealth()">
+                                        <i class="fas fa-chart-line"></i> Обновить статус
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+// Загрузка состояния системы при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    loadSystemHealth();
+});
+
+// Загрузка состояния системы
+async function loadSystemHealth() {
+    try {
+        const response = await fetch('/maintenance/system/health');
+        const health = await response.json();
+        
+        // Обновляем общий статус
+        const statusElement = document.getElementById('systemStatus');
+        if (health.overallStatus === 'HEALTHY') {
+            statusElement.className = 'badge bg-success';
+            statusElement.innerHTML = '<i class="fas fa-check-circle"></i> Система здорова';
+        } else {
+            statusElement.className = 'badge bg-warning';
+            statusElement.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ' + health.overallStatus;
+        }
+        
+        // Загружаем ресурсы системы
+        const resourcesResponse = await fetch('/maintenance/system/resources');
+        const resources = await resourcesResponse.json();
+        
+        // Обновляем метрики
+        document.getElementById('systemMetrics').innerHTML = `
+            <div class="col-md-3 text-center">
+                <div class="metric-value text-success">${health.systemScore.toFixed(1)}</div>
+                <small class="text-muted">Оценка системы</small>
+            </div>
+            <div class="col-md-3 text-center">
+                <div class="metric-value text-info">${resources.memoryUsagePercent.toFixed(1)}%</div>
+                <small class="text-muted">Использование памяти</small>
+            </div>
+            <div class="col-md-3 text-center">
+                <div class="metric-value text-primary">${resources.diskUsagePercent.toFixed(1)}%</div>
+                <small class="text-muted">Использование диска</small>
+            </div>
+            <div class="col-md-3 text-center">
+                <div class="metric-value text-secondary">${health.formattedUptime}</div>
+                <small class="text-muted">Время работы</small>
+            </div>
+        `;
+        
+    } catch (error) {
+        console.error('Ошибка загрузки состояния системы:', error);
+        document.getElementById('systemStatus').innerHTML = 
+            '<i class="fas fa-exclamation-circle"></i> Ошибка загрузки';
+        document.getElementById('systemStatus').className = 'badge bg-danger';
+    }
+}
+
+// Выполнение полной очистки системы
+async function performFullCleanup() {
+    if (!confirm('Выполнить полную очистку системы? Это может занять несколько минут.')) {
+        return;
+    }
+    
+    const button = document.querySelector('.btn-success');
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Выполнение...';
+    
+    try {
+        const response = await fetch('/maintenance/cleanup', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.overall.status === 'success') {
+            alert('Полная очистка выполнена успешно!\n\n' +
+                  'Архивировано файлов: ' + result.files.archivedFiles + '\n' +
+                  'Удалено записей БД: ' + result.database.deletedRecords);
+            loadSystemHealth(); // Обновляем статус
+        } else {
+            alert('Ошибка выполнения очистки: ' + result.overall.message);
+        }
+    } catch (error) {
+        alert('Ошибка выполнения очистки: ' + error.message);
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+</script>
+</th:block>
+</html>
