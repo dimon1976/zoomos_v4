@@ -92,7 +92,7 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p>Архивирование старых файлов (старше 30 дней) для освобождения дискового пространства.</p>
+                        <p>Архивирование старых файлов (старше <span th:text="${fileArchiveOldFilesDays}">30</span> дней) для освобождения дискового пространства.</p>
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-success action-button" onclick="archiveFiles()">
                                 <i class="fas fa-archive"></i> Архивировать файлы
@@ -127,6 +127,87 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Удаление заархивированных файлов -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-trash-alt text-danger"></i>
+                            Удаление архивов
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Удаление заархивированных файлов для освобождения дискового пространства.</p>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-danger action-button" onclick="deleteArchivedFiles()">
+                                <i class="fas fa-trash-alt"></i> Удалить архивы
+                            </button>
+                        </div>
+                        <div id="deleteArchivedResult" class="mt-3 d-none">
+                            <!-- Результат удаления архивов -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Удаление дубликатов -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-copy text-info"></i>
+                            Удаление дубликатов
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Удаление найденных дублирующихся файлов (оставляя один экземпляр каждого файла).</p>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-info action-button" onclick="deleteDuplicateFiles()">
+                                <i class="fas fa-copy"></i> Удалить дубликаты
+                            </button>
+                        </div>
+                        <div id="deleteDuplicatesResult" class="mt-3 d-none">
+                            <!-- Результат удаления дубликатов -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Очистка директорий -->
+            <div class="col-md-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-broom text-primary"></i>
+                            Очистка директорий
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Полная очистка рабочих и временных директорий от всех файлов.</p>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <button type="button" class="btn btn-outline-danger w-100" onclick="cleanDirectory('temp')">
+                                    <i class="fas fa-folder-minus"></i> Очистить temp
+                                </button>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="button" class="btn btn-outline-danger w-100" onclick="cleanDirectory('uploads')">
+                                    <i class="fas fa-folder-minus"></i> Очистить uploads
+                                </button>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="button" class="btn btn-danger w-100" onclick="cleanAllDirectories()">
+                                    <i class="fas fa-broom"></i> Очистить все
+                                </button>
+                            </div>
+                        </div>
+                        <div id="cleanDirectoriesResult" class="mt-3 d-none">
+                            <!-- Результат очистки директорий -->
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Результаты операций -->
@@ -150,6 +231,9 @@
 
 <th:block th:fragment="scripts">
 <script>
+// Настройки из application.properties
+window.fileArchiveOldFilesDays = /*[[${fileArchiveOldFilesDays}]]*/ 30;
+
 // Загрузка статистики при загрузке страницы
 document.addEventListener('DOMContentLoaded', function() {
     loadFileStats();
@@ -169,8 +253,17 @@ async function loadFileStats() {
         
         stats.forEach(stat => {
             const usagePercent = (stat.usagePercentage * 100).toFixed(4);
-            const lastModified = stat.lastModified ? 
-                new Date(stat.lastModified).toLocaleString('ru-RU') : 'Нет данных';
+            let lastModified = 'Нет данных';
+            if (stat.lastModified) {
+                try {
+                    const date = new Date(stat.lastModified);
+                    if (!isNaN(date.getTime())) {
+                        lastModified = date.toLocaleString('ru-RU');
+                    }
+                } catch (e) {
+                    console.warn('Ошибка обработки даты:', stat.lastModified, e);
+                }
+            }
             
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -230,7 +323,7 @@ async function archiveFiles() {
             resultDiv.className = 'mt-3 alert alert-warning';
             resultDiv.innerHTML = `
                 <h6><i class="fas fa-exclamation-triangle"></i> Файлы для архивирования не найдены</h6>
-                <p class="mb-0">Нет файлов старше 30 дней для архивирования</p>
+                <p class="mb-0">Нет файлов старше ${window.fileArchiveOldFilesDays} дней для архивирования</p>
             `;
         }
         
@@ -307,6 +400,200 @@ async function findDuplicates() {
         const resultDiv = document.getElementById('duplicatesResult');
         resultDiv.className = 'mt-3 alert alert-danger';
         resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка поиска</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// Удаление заархивированных файлов
+async function deleteArchivedFiles() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    if (!confirm('Удалить все заархивированные файлы? Это действие нельзя отменить!')) {
+        return;
+    }
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Удаление...';
+    
+    try {
+        const response = await fetch('/maintenance/files/delete-archived', { method: 'POST' });
+        const result = await response.json();
+        
+        const resultDiv = document.getElementById('deleteArchivedResult');
+        
+        if (result.success) {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Архивы удалены</h6>
+                <p class="mb-1">Удалено файлов: <strong>${result.deletedFiles}</strong></p>
+                <p class="mb-0">Освобождено места: <strong>${result.formattedFreedSpace}</strong></p>
+            `;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-warning';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-exclamation-triangle"></i> Архивы не найдены</h6>
+                <p class="mb-0">Нет заархивированных файлов для удаления</p>
+            `;
+        }
+        
+        resultDiv.classList.remove('d-none');
+        loadFileStats(); // Обновляем статистику
+        
+    } catch (error) {
+        console.error('Ошибка удаления архивов:', error);
+        const resultDiv = document.getElementById('deleteArchivedResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка удаления</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// Удаление дублирующихся файлов
+async function deleteDuplicateFiles() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    if (!confirm('Удалить дублирующиеся файлы? Будет оставлен только один экземпляр каждого файла!')) {
+        return;
+    }
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Удаление...';
+    
+    try {
+        const response = await fetch('/maintenance/files/delete-duplicates', { method: 'POST' });
+        const result = await response.json();
+        
+        const resultDiv = document.getElementById('deleteDuplicatesResult');
+        
+        if (result.success) {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Дубликаты удалены</h6>
+                <p class="mb-1">Удалено дубликатов: <strong>${result.deletedDuplicates}</strong></p>
+                <p class="mb-1">Оставлено уникальных файлов: <strong>${result.remainingFiles}</strong></p>
+                <p class="mb-0">Освобождено места: <strong>${result.formattedFreedSpace}</strong></p>
+            `;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-warning';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-exclamation-triangle"></i> Дубликаты не найдены</h6>
+                <p class="mb-0">Нет дублирующихся файлов для удаления</p>
+            `;
+        }
+        
+        resultDiv.classList.remove('d-none');
+        loadFileStats(); // Обновляем статистику
+        
+    } catch (error) {
+        console.error('Ошибка удаления дубликатов:', error);
+        const resultDiv = document.getElementById('deleteDuplicatesResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка удаления</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// Очистка конкретной директории
+async function cleanDirectory(directoryType) {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    if (!confirm(`Полностью очистить директорию ${directoryType}? Все файлы будут удалены!`)) {
+        return;
+    }
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Очистка...';
+    
+    try {
+        const response = await fetch(`/maintenance/files/clean-directory/${directoryType}`, { method: 'POST' });
+        const result = await response.json();
+        
+        const resultDiv = document.getElementById('cleanDirectoriesResult');
+        
+        if (result.success) {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Директория ${directoryType} очищена</h6>
+                <p class="mb-1">Удалено файлов: <strong>${result.deletedFiles}</strong></p>
+                <p class="mb-0">Освобождено места: <strong>${result.formattedFreedSpace}</strong></p>
+            `;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-warning';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-exclamation-triangle"></i> Директория пуста</h6>
+                <p class="mb-0">В директории ${directoryType} нет файлов для удаления</p>
+            `;
+        }
+        
+        resultDiv.classList.remove('d-none');
+        loadFileStats(); // Обновляем статистику
+        
+    } catch (error) {
+        console.error('Ошибка очистки директории:', error);
+        const resultDiv = document.getElementById('cleanDirectoriesResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка очистки</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// Очистка всех директорий
+async function cleanAllDirectories() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    if (!confirm('Полностью очистить все директории? ВСЕ файлы будут удалены!')) {
+        return;
+    }
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Очистка всех...';
+    
+    try {
+        const response = await fetch('/maintenance/files/clean-all-directories', { method: 'POST' });
+        const result = await response.json();
+        
+        const resultDiv = document.getElementById('cleanDirectoriesResult');
+        
+        if (result.success) {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Все директории очищены</h6>
+                <p class="mb-1">Удалено файлов: <strong>${result.totalDeletedFiles}</strong></p>
+                <p class="mb-1">Очищено директорий: <strong>${result.cleanedDirectories}</strong></p>
+                <p class="mb-0">Освобождено места: <strong>${result.formattedFreedSpace}</strong></p>
+            `;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-warning';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-exclamation-triangle"></i> Все директории уже пусты</h6>
+                <p class="mb-0">Нет файлов для удаления</p>
+            `;
+        }
+        
+        resultDiv.classList.remove('d-none');
+        loadFileStats(); // Обновляем статистику
+        
+    } catch (error) {
+        console.error('Ошибка полной очистки:', error);
+        const resultDiv = document.getElementById('cleanDirectoriesResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка полной очистки</h6><p class="mb-0">' + error.message + '</p>';
         resultDiv.classList.remove('d-none');
     } finally {
         button.disabled = false;

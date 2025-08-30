@@ -88,7 +88,7 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p>Удаление старых данных (сессии импорта/экспорта, завершенные операции старше 30 дней).</p>
+                        <p>Удаление старых данных (сессии импорта/экспорта, завершенные операции старше <span th:text="${databaseCleanupDays}">30</span> дней).</p>
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-danger" onclick="cleanupDatabase()">
                                 <i class="fas fa-broom"></i> Очистить БД

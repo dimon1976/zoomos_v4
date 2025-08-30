@@ -6,6 +6,7 @@ import com.java.service.maintenance.FileManagementService;
 import com.java.service.maintenance.SystemHealthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -30,6 +31,15 @@ public class MaintenanceController {
     private final FileManagementService fileManagementService;
     private final DatabaseMaintenanceService databaseMaintenanceService; 
     private final SystemHealthService systemHealthService;
+    
+    @Value("${database.maintenance.cleanup.old-data.days:120}")
+    private int databaseCleanupDays;
+    
+    @Value("${file.management.archive.max.size.gb:5}")
+    private int fileArchiveMaxSizeGb;
+    
+    @Value("${file.management.archive.old-files.days:30}")
+    private int fileArchiveOldFilesDays;
 
     // === ГЛАВНАЯ СТРАНИЦА ОБСЛУЖИВАНИЯ ===
     
@@ -57,6 +67,8 @@ public class MaintenanceController {
     public String filesPage(Model model) {
         log.debug("GET request to files management page");
         model.addAttribute("pageTitle", "Управление файлами");
+        model.addAttribute("fileArchiveMaxSizeGb", fileArchiveMaxSizeGb);
+        model.addAttribute("fileArchiveOldFilesDays", fileArchiveOldFilesDays);
         return "maintenance/files";
     }
     
@@ -64,6 +76,7 @@ public class MaintenanceController {
     public String databasePage(Model model) {
         log.debug("GET request to database maintenance page");
         model.addAttribute("pageTitle", "Обслуживание БД");
+        model.addAttribute("databaseCleanupDays", databaseCleanupDays);
         return "maintenance/database";
     }
     
@@ -121,6 +134,62 @@ public class MaintenanceController {
             return ResponseEntity.ok(duplicates);
         } catch (Exception e) {
             log.error("Ошибка поиска дублей файлов: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    @PostMapping("/files/delete-archived")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> deleteArchivedFiles() {
+        log.info("Удаление заархивированных файлов через API");
+        try {
+            Map<String, Object> result = fileManagementService.deleteArchivedFiles();
+            log.info("Удаление архивов завершено. Удалено файлов: {}", result.get("deletedFiles"));
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Ошибка удаления архивов: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    @PostMapping("/files/delete-duplicates")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> deleteDuplicateFiles() {
+        log.info("Удаление дубликатов файлов через API");
+        try {
+            Map<String, Object> result = fileManagementService.deleteDuplicateFiles();
+            log.info("Удаление дубликатов завершено. Удалено: {}", result.get("deletedDuplicates"));
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Ошибка удаления дубликатов: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    @PostMapping("/files/clean-directory/{directoryType}")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> cleanDirectory(@org.springframework.web.bind.annotation.PathVariable String directoryType) {
+        log.info("Очистка директории {} через API", directoryType);
+        try {
+            Map<String, Object> result = fileManagementService.cleanDirectory(directoryType);
+            log.info("Очистка директории {} завершена. Удалено файлов: {}", directoryType, result.get("deletedFiles"));
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Ошибка очистки директории {}: {}", directoryType, e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    @PostMapping("/files/clean-all-directories")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> cleanAllDirectories() {
+        log.info("Полная очистка всех директорий через API");
+        try {
+            Map<String, Object> result = fileManagementService.cleanAllDirectories();
+            log.info("Полная очистка завершена. Удалено файлов: {}", result.get("totalDeletedFiles"));
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Ошибка полной очистки директорий: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
