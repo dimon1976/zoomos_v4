@@ -186,7 +186,7 @@ public class DatabaseMaintenanceService {
 
     private int cleanupOldImportSessions(LocalDateTime cutoffDate) {
         try {
-            String sql = "DELETE FROM import_sessions WHERE created_at < :cutoffDate";
+            String sql = "DELETE FROM import_sessions WHERE started_at < :cutoffDate";
             Query query = entityManager.createNativeQuery(sql);
             query.setParameter("cutoffDate", cutoffDate);
             return query.executeUpdate();
@@ -198,7 +198,7 @@ public class DatabaseMaintenanceService {
 
     private int cleanupOldExportSessions(LocalDateTime cutoffDate) {
         try {
-            String sql = "DELETE FROM export_sessions WHERE created_at < :cutoffDate";
+            String sql = "DELETE FROM export_sessions WHERE started_at < :cutoffDate";
             Query query = entityManager.createNativeQuery(sql);
             query.setParameter("cutoffDate", cutoffDate);
             return query.executeUpdate();
@@ -210,7 +210,7 @@ public class DatabaseMaintenanceService {
 
     private int cleanupOldFileOperations(LocalDateTime cutoffDate) {
         try {
-            String sql = "DELETE FROM file_operations WHERE created_at < :cutoffDate AND status IN ('COMPLETED', 'FAILED')";
+            String sql = "DELETE FROM file_operations WHERE started_at < :cutoffDate AND status IN ('COMPLETED', 'FAILED')";
             Query query = entityManager.createNativeQuery(sql);
             query.setParameter("cutoffDate", cutoffDate);
             return query.executeUpdate();
