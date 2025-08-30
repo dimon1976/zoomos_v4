@@ -25,14 +25,28 @@ mvn test
 # Run specific test class
 mvn test -Dtest=ClassNameTest
 
-# Run application with specific profile
+# Run application with specific profiles
 mvn spring-boot:run -Dspring-boot.run.profiles=silent
+mvn spring-boot:run -Dspring-boot.run.profiles=verbose
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+
+# Quick start with existing JAR (fastest)
+java -jar target/file-processing-app-1.0-SNAPSHOT.jar --spring.profiles.active=silent
+
+# Run with batch scripts (Windows)
+start-dev.bat
 ```
 
 ### Database
 - PostgreSQL connection: `jdbc:postgresql://localhost:5432/zoomos_v4`
 - Flyway migrations in `src/main/resources/db/migration/`
 - Test profile uses H2 in-memory database
+
+### Application Profiles
+- **dev** (default): Moderate logging, DevTools enabled, reduced batch sizes
+- **silent**: Minimal logging for testing, same performance as dev
+- **verbose**: Maximum debugging with SQL logging and TRACE level
+- **prod**: Production optimized with file logging and maximum performance
 
 ## Architecture Overview
 
@@ -189,6 +203,8 @@ Real-time progress updates for long-running operations:
 ### Testing Stack
 - Spring Boot Test with H2 in-memory database for tests
 - Test profile automatically switches to H2 from PostgreSQL
+- Test classes in `src/test/java/com/java/service/`
+- Integration tests include FileAnalyzer, ImportBackslash, Normalization, and Operations
 
 ## Development Environment
 
@@ -197,7 +213,7 @@ Real-time progress updates for long-running operations:
 - **silent**: Minimal logging for production-like environment
 
 ### Server Configuration
-- **Port**: 8080 (default)
+- **Port**: 8080 (default), можно изменить на 8081 через CLAUDE.md инструкцию
 - **Hot Reload**: Spring DevTools enabled with LiveReload
 - **Thymeleaf**: Cache disabled for development
 
@@ -212,6 +228,7 @@ Real-time progress updates for long-running operations:
 * Это мой pet проект, не нужно стремится усложнять и использовать какие-то сложные паттерны проектирования.
 * Если чего-то не знаешь, не придумывай, так и говори.
 * Обязательно закрывать запущенный сервер после тестирования
+* Проектируем код по принципам KISS, YAGNI, MVP, Fail Fast, итеративная разработка.
 
 ## Current State Notes
 
