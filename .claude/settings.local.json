@@ -29,7 +29,8 @@
       "mcp__playwright__browser_handle_dialog",
       "mcp__playwright__browser_file_upload",
       "mcp__playwright__browser_snapshot",
-      "mcp__playwright__browser_evaluate"
+      "mcp__playwright__browser_evaluate",
+      "Bash(./mvnw:*)"
     ],
     "additionalDirectories": [
       "D:\\d D:\\project"

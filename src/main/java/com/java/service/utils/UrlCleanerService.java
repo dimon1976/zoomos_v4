@@ -3,22 +3,24 @@ package com.java.service.utils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.utils.UrlCleanerDto;
+import com.java.model.entity.ExportTemplate;
+import com.java.model.entity.ExportTemplateField;
 import com.java.model.entity.FileMetadata;
+import com.java.service.exports.FileGeneratorService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Сервис для очистки URL от UTM и реферальных параметров
@@ -28,6 +30,7 @@ import java.util.regex.Pattern;
 @Slf4j
 public class UrlCleanerService {
 
+    private final FileGeneratorService fileGeneratorService;
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
     // Список параметров для удаления
@@ -61,11 +64,94 @@ public class UrlCleanerService {
         
         List<UrlCleanResult> results = processData(data, dto);
         
-        if ("csv".equalsIgnoreCase(dto.getOutputFormat())) {
-            return generateCsvFile(results, dto);
-        } else {
-            return generateExcelFile(results);
+        // Создаем ExportTemplate из DTO
+        ExportTemplate template = createExportTemplate(dto);
+        
+        // Преобразуем результаты в Stream<Map<String, Object>>
+        Stream<Map<String, Object>> dataStream = results.stream()
+                .map(this::convertResultToMap);
+        
+        // Генерируем файл через FileGeneratorService
+        String fileName = "url-cleaner-result_" + System.currentTimeMillis();
+        try {
+            Path filePath = fileGeneratorService.generateFile(dataStream, results.size(), template, fileName);
+            return Files.readAllBytes(filePath);
+        } catch (Exception e) {
+            throw new IOException("Ошибка при генерации файла: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Создание ExportTemplate из DTO
+     */
+    private ExportTemplate createExportTemplate(UrlCleanerDto dto) {
+        ExportTemplate template = ExportTemplate.builder()
+                .name("URL Cleaner Export")
+                .description("Экспорт очищенных URL")
+                .fileFormat("excel".equalsIgnoreCase(dto.getOutputFormat()) ? "XLSX" : "CSV")
+                .csvDelimiter(dto.getCsvDelimiter())
+                .csvEncoding(dto.getCsvEncoding())
+                .csvQuoteChar("\"")
+                .csvIncludeHeader(true)
+                .fields(new ArrayList<>())
+                .build();
+        
+        // Добавляем поля на основе выбранных колонок
+        List<ExportTemplateField> fields = new ArrayList<>();
+        int orderIndex = 1;
+        
+        // Добавляем дополнительные колонки если они выбраны
+        if (dto.getIdColumn() != null) {
+            fields.add(createTemplateField(template, "ID", "ID", orderIndex++));
+        }
+        if (dto.getModelColumn() != null) {
+            fields.add(createTemplateField(template, "Model", "Model", orderIndex++));
+        }
+        if (dto.getBarcodeColumn() != null) {
+            fields.add(createTemplateField(template, "Barcode", "Barcode", orderIndex++));
+        }
+        
+        // Основные колонки URL (всегда присутствуют)
+        fields.add(createTemplateField(template, "Исходная URL", "Исходная URL", orderIndex++));
+        fields.add(createTemplateField(template, "Очищенная URL", "Очищенная URL", orderIndex++));
+        
+        template.setFields(fields);
+        return template;
+    }
+    
+    /**
+     * Создание поля для ExportTemplate
+     */
+    private ExportTemplateField createTemplateField(ExportTemplate template, String entityFieldName, String exportColumnName, int order) {
+        return ExportTemplateField.builder()
+                .template(template)
+                .entityFieldName(entityFieldName)
+                .exportColumnName(exportColumnName)
+                .fieldOrder(order)
+                .isIncluded(true)
+                .build();
+    }
+
+    /**
+     * Конвертация результата в Map для FileGenerator
+     */
+    private Map<String, Object> convertResultToMap(UrlCleanResult result) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        
+        if (result.getId() != null) {
+            map.put("ID", result.getId());
+        }
+        if (result.getModel() != null) {
+            map.put("Model", result.getModel());
+        }
+        if (result.getBarcode() != null) {
+            map.put("Barcode", result.getBarcode());
+        }
+        
+        map.put("Исходная URL", result.getOriginalUrl());
+        map.put("Очищенная URL", result.getCleanedUrl());
+        
+        return map;
     }
 
     /**
@@ -184,17 +270,28 @@ public class UrlCleanerService {
             // Специальная логика для market.yandex.ru
             boolean isYandexMarket = host != null && host.contains("market.yandex.ru");
             
+            log.debug("URL: {}, isYandexMarket: {}, preserveYandexSku: {}", urlString, isYandexMarket, dto.isPreserveYandexSku());
+            
             for (Map.Entry<String, String> param : params.entrySet()) {
                 String key = param.getKey();
                 boolean shouldKeep = false;
                 
-                // Сохранить sku для Yandex Market
+                // Сохранить sku для Yandex Market ТОЛЬКО если включена опция
                 if (isYandexMarket && dto.isPreserveYandexSku() && "sku".equals(key)) {
                     shouldKeep = true;
+                    log.debug("Сохраняю sku параметр для Yandex Market: {}={}", key, param.getValue());
+                }
+                // Удалить sku для Yandex Market если НЕ включена опция сохранения
+                else if (isYandexMarket && !dto.isPreserveYandexSku() && "sku".equals(key)) {
+                    shouldKeep = false;
+                    log.debug("Удаляю sku параметр для Yandex Market (опция отключена): {}={}", key, param.getValue());
                 }
                 // Проверить все остальные параметры на удаление
                 else if (!shouldRemoveParam(key, dto)) {
                     shouldKeep = true;
+                    log.debug("Сохраняю параметр: {}={}", key, param.getValue());
+                } else {
+                    log.debug("Удаляю параметр: {}={}", key, param.getValue());
                 }
                 
                 if (shouldKeep) {
@@ -253,15 +350,18 @@ public class UrlCleanerService {
     private boolean shouldRemoveParam(String paramName, UrlCleanerDto dto) {
         String lowerParam = paramName.toLowerCase();
         
-        if (dto.isRemoveUtmParams() && UTM_PARAMS.contains(lowerParam)) {
+        // Удаляем UTM параметры, если НЕ установлен флаг сохранения
+        if (!dto.isRemoveUtmParams() && UTM_PARAMS.contains(lowerParam)) {
             return true;
         }
         
-        if (dto.isRemoveReferralParams() && REFERRAL_PARAMS.contains(lowerParam)) {
+        // Удаляем реферальные параметры, если НЕ установлен флаг сохранения
+        if (!dto.isRemoveReferralParams() && REFERRAL_PARAMS.contains(lowerParam)) {
             return true;
         }
         
-        if (dto.isRemoveTrackingParams() && TRACKING_PARAMS.contains(lowerParam)) {
+        // Удаляем трекинговые параметры, если НЕ установлен флаг сохранения
+        if (!dto.isRemoveTrackingParams() && TRACKING_PARAMS.contains(lowerParam)) {
             return true;
         }
         
@@ -297,160 +397,6 @@ public class UrlCleanerService {
         }
     }
 
-    /**
-     * Генерация CSV файла
-     */
-    private byte[] generateCsvFile(List<UrlCleanResult> results, UrlCleanerDto dto) throws IOException {
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream();
-             OutputStreamWriter writer = new OutputStreamWriter(out, 
-                "UTF-8".equalsIgnoreCase(dto.getCsvEncoding()) ? StandardCharsets.UTF_8 : StandardCharsets.ISO_8859_1)) {
-            
-            String delimiter = dto.getCsvDelimiter();
-            
-            // Заголовки
-            List<String> headers = new ArrayList<>();
-            if (dto.getIdColumn() != null) headers.add("ID");
-            if (dto.getModelColumn() != null) headers.add("Model");
-            if (dto.getBarcodeColumn() != null) headers.add("Barcode");
-            headers.add("Исходная URL");
-            headers.add("Очищенная URL");
-            
-            writer.write(String.join(delimiter, headers) + "\n");
-            
-            // Данные
-            for (UrlCleanResult result : results) {
-                List<String> values = new ArrayList<>();
-                
-                if (dto.getIdColumn() != null) {
-                    values.add(escapeCSV(result.getId(), delimiter));
-                }
-                if (dto.getModelColumn() != null) {
-                    values.add(escapeCSV(result.getModel(), delimiter));
-                }
-                if (dto.getBarcodeColumn() != null) {
-                    values.add(escapeCSV(result.getBarcode(), delimiter));
-                }
-                values.add(escapeCSV(result.getOriginalUrl(), delimiter));
-                values.add(escapeCSV(result.getCleanedUrl(), delimiter));
-                
-                writer.write(String.join(delimiter, values) + "\n");
-            }
-            
-            writer.flush();
-            return out.toByteArray();
-        }
-    }
-
-    /**
-     * Экранирование значений для CSV
-     */
-    private String escapeCSV(String value, String delimiter) {
-        if (value == null) return "";
-        
-        if (value.contains(delimiter) || value.contains("\"") || value.contains("\n")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
-        }
-        
-        return value;
-    }
-
-    /**
-     * Генерация Excel файла
-     */
-    private byte[] generateExcelFile(List<UrlCleanResult> results) throws IOException {
-        
-        try (Workbook workbook = new XSSFWorkbook(); 
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            
-            Sheet sheet = workbook.createSheet("Результат очистки URL");
-            
-            CellStyle headerStyle = createHeaderStyle(workbook);
-            CellStyle dataStyle = createDataStyle(workbook);
-            
-            // Определяем заголовки
-            List<String> headers = new ArrayList<>();
-            boolean hasId = results.stream().anyMatch(r -> r.getId() != null);
-            boolean hasModel = results.stream().anyMatch(r -> r.getModel() != null);
-            boolean hasBarcode = results.stream().anyMatch(r -> r.getBarcode() != null);
-            
-            if (hasId) headers.add("ID");
-            if (hasModel) headers.add("Model");
-            if (hasBarcode) headers.add("Barcode");
-            headers.add("Исходная URL");
-            headers.add("Очищенная URL");
-            
-            // Заголовки
-            Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < headers.size(); i++) {
-                Cell cell = headerRow.createCell(i);
-                cell.setCellValue(headers.get(i));
-                cell.setCellStyle(headerStyle);
-            }
-            
-            // Данные
-            int rowIndex = 1;
-            for (UrlCleanResult result : results) {
-                Row dataRow = sheet.createRow(rowIndex++);
-                int colIndex = 0;
-                
-                if (hasId) {
-                    Cell cell = dataRow.createCell(colIndex++);
-                    cell.setCellValue(result.getId() != null ? result.getId() : "");
-                    cell.setCellStyle(dataStyle);
-                }
-                
-                if (hasModel) {
-                    Cell cell = dataRow.createCell(colIndex++);
-                    cell.setCellValue(result.getModel() != null ? result.getModel() : "");
-                    cell.setCellStyle(dataStyle);
-                }
-                
-                if (hasBarcode) {
-                    Cell cell = dataRow.createCell(colIndex++);
-                    cell.setCellValue(result.getBarcode() != null ? result.getBarcode() : "");
-                    cell.setCellStyle(dataStyle);
-                }
-                
-                Cell originalUrlCell = dataRow.createCell(colIndex++);
-                originalUrlCell.setCellValue(result.getOriginalUrl());
-                originalUrlCell.setCellStyle(dataStyle);
-                
-                Cell cleanedUrlCell = dataRow.createCell(colIndex);
-                cleanedUrlCell.setCellValue(result.getCleanedUrl());
-                cleanedUrlCell.setCellStyle(dataStyle);
-            }
-            
-            // Автоподбор ширины колонок
-            for (int i = 0; i < headers.size(); i++) {
-                sheet.autoSizeColumn(i);
-            }
-            
-            workbook.write(out);
-            return out.toByteArray();
-        }
-    }
-
-    /**
-     * Создание стиля для заголовков
-     */
-    private CellStyle createHeaderStyle(Workbook workbook) {
-        CellStyle style = workbook.createCellStyle();
-        Font font = workbook.createFont();
-        font.setBold(true);
-        style.setFont(font);
-        style.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
-        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        return style;
-    }
-
-    /**
-     * Создание стиля для данных
-     */
-    private CellStyle createDataStyle(Workbook workbook) {
-        CellStyle style = workbook.createCellStyle();
-        style.setWrapText(true);
-        return style;
-    }
 
     /**
      * Класс для хранения результата очистки URL

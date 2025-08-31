@@ -109,6 +109,9 @@ public class UrlCleanerController {
                                                BindingResult bindingResult,
                                                HttpSession session) {
         
+        log.debug("Received DTO: removeUtmParams={}, removeReferralParams={}, removeTrackingParams={}, preserveYandexSku={}", 
+                 dto.isRemoveUtmParams(), dto.isRemoveReferralParams(), dto.isRemoveTrackingParams(), dto.isPreserveYandexSku());
+        
         if (bindingResult.hasErrors()) {
             throw new IllegalArgumentException("Ошибка валидации параметров");
         }
