@@ -54,7 +54,7 @@ public class UtilsController {
             "description", "Удаление UTM-меток и реферальных параметров из ссылок",
             "icon", "fas fa-link",
             "url", "/utils/url-cleaner",
-            "status", "development"
+            "status", "ready"
         ));
         
         utilities.add(Map.of(

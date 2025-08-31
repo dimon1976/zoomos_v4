@@ -21,6 +21,7 @@ public class FileAnalysisResultDto {
     private String encoding;
     private String delimiter;
     private Integer totalColumns;
+    private Integer totalRows;
     private List<String> columnHeaders;
     private List<Map<String, String>> sampleData;
     private Boolean hasHeader;

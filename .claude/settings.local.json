@@ -26,7 +26,10 @@
       "Read(E:\\/**)",
       "Bash(git checkout:*)",
       "Read(D:\\project\\zoomos_v4/**)",
-      "mcp__playwright__browser_handle_dialog"
+      "mcp__playwright__browser_handle_dialog",
+      "mcp__playwright__browser_file_upload",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_evaluate"
     ],
     "additionalDirectories": [
       "D:\\d D:\\project"
