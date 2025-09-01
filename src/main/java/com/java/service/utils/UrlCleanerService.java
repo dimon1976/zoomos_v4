@@ -57,7 +57,8 @@ public class UrlCleanerService {
      */
     public byte[] processUrlCleaning(FileMetadata metadata, UrlCleanerDto dto) throws IOException {
         
-        List<List<String>> data = parseSampleData(metadata.getSampleData());
+        // Читаем полные данные файла, а не только sampleData
+        List<List<String>> data = readFullFileData(metadata);
         List<String> headers = parseHeaders(metadata.getColumnHeaders());
         
         if (data.isEmpty()) {
@@ -156,6 +157,105 @@ public class UrlCleanerService {
         map.put("Очищенная URL", result.getCleanedUrl());
         
         return map;
+    }
+
+    /**
+     * Чтение полных данных файла
+     */
+    private List<List<String>> readFullFileData(FileMetadata metadata) throws IOException {
+        if (metadata.getTempFilePath() == null) {
+            throw new IllegalArgumentException("Файл не найден на диске");
+        }
+
+        List<List<String>> data = new ArrayList<>();
+        String filename = metadata.getOriginalFilename().toLowerCase();
+        
+        if (filename.endsWith(".csv")) {
+            data = readCsvFile(metadata);
+        } else if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
+            data = readExcelFile(metadata);
+        } else {
+            throw new IllegalArgumentException("Неподдерживаемый формат файла");
+        }
+
+        log.info("Прочитано {} строк из файла {}", data.size(), metadata.getOriginalFilename());
+        return data;
+    }
+
+    /**
+     * Чтение CSV файла
+     */
+    private List<List<String>> readCsvFile(FileMetadata metadata) throws IOException {
+        List<List<String>> data = new ArrayList<>();
+        
+        try (java.io.Reader reader = java.nio.file.Files.newBufferedReader(java.nio.file.Paths.get(metadata.getTempFilePath()), 
+                java.nio.charset.Charset.forName(metadata.getDetectedEncoding() != null ? metadata.getDetectedEncoding() : "UTF-8"));
+             com.opencsv.CSVReader csvReader = new com.opencsv.CSVReaderBuilder(reader)
+                .withCSVParser(new com.opencsv.CSVParserBuilder()
+                    .withSeparator(metadata.getDetectedDelimiter() != null ? metadata.getDetectedDelimiter().charAt(0) : ';')
+                    .withQuoteChar(metadata.getDetectedQuoteChar() != null ? metadata.getDetectedQuoteChar().charAt(0) : '"')
+                    .build())
+                .build()) {
+
+            String[] line;
+            boolean isFirstLine = true;
+            try {
+                while ((line = csvReader.readNext()) != null) {
+                    if (isFirstLine && line.length == 1 && (line[0] == null || line[0].trim().isEmpty())) {
+                        isFirstLine = false;
+                        continue; // Пропускаем пустую первую строку
+                    }
+                    isFirstLine = false;
+                    data.add(Arrays.asList(line));
+                }
+            } catch (com.opencsv.exceptions.CsvValidationException e) {
+                throw new IOException("Ошибка чтения CSV файла: " + e.getMessage(), e);
+            }
+        }
+        
+        return data;
+    }
+
+    /**
+     * Чтение Excel файла
+     */
+    private List<List<String>> readExcelFile(FileMetadata metadata) throws IOException {
+        List<List<String>> data = new ArrayList<>();
+        
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(metadata.getTempFilePath());
+             org.apache.poi.ss.usermodel.Workbook workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(fis)) {
+            
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0); // Читаем первый лист
+            
+            for (org.apache.poi.ss.usermodel.Row row : sheet) {
+                List<String> rowData = new ArrayList<>();
+                for (org.apache.poi.ss.usermodel.Cell cell : row) {
+                    String cellValue = "";
+                    if (cell != null) {
+                        switch (cell.getCellType()) {
+                            case STRING:
+                                cellValue = cell.getStringCellValue();
+                                break;
+                            case NUMERIC:
+                                cellValue = String.valueOf(cell.getNumericCellValue());
+                                break;
+                            case BOOLEAN:
+                                cellValue = String.valueOf(cell.getBooleanCellValue());
+                                break;
+                            case FORMULA:
+                                cellValue = cell.getCellFormula();
+                                break;
+                            default:
+                                cellValue = "";
+                        }
+                    }
+                    rowData.add(cellValue);
+                }
+                data.add(rowData);
+            }
+        }
+        
+        return data;
     }
 
     /**

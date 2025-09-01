@@ -59,11 +59,11 @@ public class UtilsController {
         
         utilities.add(Map.of(
             "id", "link-extractor",
-            "title", "Извлечение ссылок",
+            "title", "Сбор ссылок с ID",
             "description", "Поиск и сбор всех ссылок из файла с привязкой к ID",
-            "icon", "fas fa-search",
+            "icon", "fas fa-link",
             "url", "/utils/link-extractor", 
-            "status", "development"
+            "status", "ready"
         ));
         
         utilities.add(Map.of(
