@@ -14,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 
 import java.io.*;
 import java.net.SocketTimeoutException;
@@ -301,9 +303,6 @@ public class RedirectCollectorService {
         factory.setConnectTimeout(timeoutMs);
         factory.setReadTimeout(timeoutMs);
         
-        // Отключаем автоматическое следование редиректам, чтобы обрабатывать их вручную
-        factory.setInstanceFollowRedirects(false);
-        
         RestTemplate restTemplate = new RestTemplate(factory);
         
         log.debug("RestTemplate настроен с таймаутом {} секунд", timeoutSeconds);
@@ -319,75 +318,47 @@ public class RedirectCollectorService {
         result.setRedirectCount(0);
         
         try {
-            String currentUrl = originalUrl;
-            int redirectCount = 0;
+            log.info("Начинаем обработку URL: {}", originalUrl);
             
-            log.debug("Начинаем следование редиректам для URL: {}", originalUrl);
+            java.net.URL url = new java.net.URL(originalUrl);
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
             
-            while (redirectCount <= maxRedirects) {
-                try {
-                    log.debug("Попытка #{}, URL: {}", redirectCount + 1, currentUrl);
-                    
-                    // Используем GET запрос вместо HEAD для большей совместимости
-                    ResponseEntity<String> response = restTemplate.exchange(currentUrl, HttpMethod.GET, null, String.class);
-                    
-                    int statusCode = response.getStatusCodeValue();
-                    log.debug("Получен статус: {} для URL: {}", statusCode, currentUrl);
-                    
-                    // Если нет редиректа - это финальный URL
-                    if (!isRedirectStatus(statusCode)) {
-                        result.setFinalUrl(currentUrl);
-                        result.setStatus("SUCCESS");
-                        result.setRedirectCount(redirectCount);
-                        log.debug("Найден финальный URL: {} после {} редиректов", currentUrl, redirectCount);
-                        return result;
-                    }
-                    
-                    // Получаем URL редиректа
-                    String locationHeader = response.getHeaders().getFirst("Location");
-                    log.debug("Location header: {}", locationHeader);
-                    
-                    if (locationHeader == null || locationHeader.isEmpty()) {
-                        result.setFinalUrl(currentUrl);
-                        result.setStatus("SUCCESS");
-                        result.setRedirectCount(redirectCount);
-                        log.debug("Нет Location header, считаем финальным: {}", currentUrl);
-                        return result;
-                    }
-                    
-                    // Обрабатываем относительные URL
-                    if (locationHeader.startsWith("/")) {
-                        try {
-                            java.net.URL url = new java.net.URL(currentUrl);
-                            locationHeader = url.getProtocol() + "://" + url.getHost() + 
-                                           (url.getPort() != -1 ? ":" + url.getPort() : "") + locationHeader;
-                        } catch (Exception e) {
-                            log.debug("Ошибка обработки относительного URL: {}", e.getMessage());
-                        }
-                    }
-                    
-                    currentUrl = locationHeader;
-                    redirectCount++;
-                    
-                    log.debug("Редирект #{}: {}", redirectCount, currentUrl);
-                    
-                } catch (Exception e) {
-                    log.debug("Ошибка HTTP запроса для {}: {}", currentUrl, e.getMessage());
-                    result.setFinalUrl(currentUrl);
-                    result.setStatus("ERROR");
-                    result.setRedirectCount(redirectCount);
-                    return result;
-                }
-            }
+            // Настраиваем соединение
+            connection.setRequestMethod("HEAD");
+            connection.setConnectTimeout(timeoutSeconds * 1000);
+            connection.setReadTimeout(timeoutSeconds * 1000);
+            connection.setInstanceFollowRedirects(true); // Разрешаем автоматические редиректы
             
-            // Достигнут максимум редиректов
-            result.setFinalUrl(currentUrl);
-            result.setStatus("MAX_REDIRECTS");
-            result.setRedirectCount(redirectCount);
-            log.debug("Достигнут максимум редиректов ({}): {}", maxRedirects, currentUrl);
+            // Добавляем User-Agent чтобы избежать блокировки
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             
+            // Выполняем запрос
+            int responseCode = connection.getResponseCode();
+            String finalUrl = connection.getURL().toString();
+            
+            result.setFinalUrl(finalUrl);
+            result.setStatus("SUCCESS");
+            result.setRedirectCount(0); // HttpURLConnection не предоставляет количество редиректов
+            
+            log.info("Обработан URL: {} -> {}, статус: {}", originalUrl, finalUrl, responseCode);
+            
+        } catch (java.net.SocketTimeoutException e) {
+            log.info("Таймаут для URL: {}", originalUrl);
+            result.setFinalUrl(originalUrl);
+            result.setStatus("TIMEOUT");
+            result.setRedirectCount(0);
+        } catch (java.net.UnknownHostException e) {
+            log.info("Неизвестный хост для URL: {}", originalUrl);
+            result.setFinalUrl(originalUrl);
+            result.setStatus("UNKNOWN_HOST");
+            result.setRedirectCount(0);
+        } catch (java.io.IOException e) {
+            log.info("IO ошибка для URL {}: {}", originalUrl, e.getMessage());
+            result.setFinalUrl(originalUrl);
+            result.setStatus("IO_ERROR");
+            result.setRedirectCount(0);
         } catch (Exception e) {
-            log.error("Неожиданная ошибка при обработке URL {}: {}", originalUrl, e.getMessage(), e);
+            log.error("Ошибка при обработке URL {}: {}", originalUrl, e.getMessage());
             result.setFinalUrl(originalUrl);
             result.setStatus("ERROR");
             result.setRedirectCount(0);
