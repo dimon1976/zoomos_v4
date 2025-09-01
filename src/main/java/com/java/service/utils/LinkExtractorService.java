@@ -40,12 +40,28 @@ public class LinkExtractorService {
      * Обработка извлечения ссылок
      */
     public byte[] processLinkExtraction(FileMetadata metadata, LinkExtractorDto dto) throws IOException {
+        log.info("=== НАЧАЛО ОБРАБОТКИ ИЗВЛЕЧЕНИЯ ССЫЛОК ===");
+        log.info("Файл: {}", metadata.getOriginalFilename());
+        log.info("ID колонка: {}", dto.getIdColumn());
+        log.info("Формат вывода: {}", dto.getOutputFormat());
         
         // Читаем полные данные файла, а не только sampleData
         List<List<String>> data = readFullFileData(metadata);
+        log.info("Прочитано строк из файла: {}", data.size());
         
         if (data.isEmpty()) {
             throw new IllegalArgumentException("Файл не содержит данных для обработки");
+        }
+
+        // Логируем первые несколько строк для проверки
+        if (data.size() > 0) {
+            log.info("Первая строка (заголовки): {}", data.get(0));
+            if (data.size() > 1) {
+                log.info("Вторая строка (данные): {}", data.get(1));
+            }
+            if (data.size() > 2) {
+                log.info("Третья строка (данные): {}", data.get(2));
+            }
         }
 
         validateColumns(data, dto);
@@ -113,8 +129,8 @@ public class LinkExtractorService {
     private Map<String, Object> convertResultToMap(LinkExtractResult result) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("ID", result.getId());
-        map.put("URL", result.getUrl());
-        map.put("Источник", result.getSourceColumn());
+        map.put("Найденная ссылка", result.getUrl());
+        map.put("Колонка источника", result.getSourceColumn());
         return map;
     }
 
@@ -253,28 +269,42 @@ public class LinkExtractorService {
      */
     private List<LinkExtractResult> extractLinks(List<List<String>> data, LinkExtractorDto dto) {
         List<LinkExtractResult> results = new ArrayList<>();
+        log.info("=== НАЧАЛО ИЗВЛЕЧЕНИЯ ССЫЛОК ===");
+        log.info("Всего строк для обработки: {}", data.size());
         
+        int rowIndex = 0;
         for (List<String> row : data) {
+            log.debug("Обработка строки {}: {}", rowIndex, row);
+            
             if (row.size() <= dto.getIdColumn()) {
+                log.debug("Строка {} пропущена: размер {} меньше ID колонки {}", rowIndex, row.size(), dto.getIdColumn());
+                rowIndex++;
                 continue;
             }
 
             String id = getColumnValue(row, dto.getIdColumn());
+            log.debug("ID из строки {}: '{}'", rowIndex, id);
             
             if (isEmpty(id)) {
-                log.debug("Пропущена строка с пустым ID");
+                log.debug("Пропущена строка {} с пустым ID", rowIndex);
+                rowIndex++;
                 continue;
             }
 
             // Поиск URL во всех колонках строки (кроме колонки ID)
+            int urlsFoundInRow = 0;
             for (int columnIndex = 0; columnIndex < row.size(); columnIndex++) {
                 if (columnIndex == dto.getIdColumn()) {
+                    log.debug("Пропускаем ID колонку {}", columnIndex);
                     continue; // Пропускаем колонку ID
                 }
                 
                 String cellValue = getColumnValue(row, columnIndex);
+                log.debug("Значение колонки {} в строке {}: '{}'", columnIndex, rowIndex, cellValue);
+                
                 if (!isEmpty(cellValue)) {
                     List<String> urls = extractUrlsFromText(cellValue);
+                    log.debug("Найдено {} URL в колонке {}: {}", urls.size(), columnIndex, urls);
                     
                     for (String url : urls) {
                         LinkExtractResult result = new LinkExtractResult();
@@ -282,12 +312,17 @@ public class LinkExtractorService {
                         result.setUrl(url);
                         result.setSourceColumn("Колонка " + (columnIndex + 1));
                         results.add(result);
+                        urlsFoundInRow++;
+                        log.debug("Добавлен результат: ID={}, URL={}, Колонка={}", id, url, columnIndex + 1);
                     }
                 }
             }
+            log.debug("В строке {} найдено {} URL", rowIndex, urlsFoundInRow);
+            rowIndex++;
         }
         
         log.info("Обработано строк: {}, найдено ссылок: {}", data.size(), results.size());
+        log.info("=== ОКОНЧАНИЕ ИЗВЛЕЧЕНИЯ ССЫЛОК ===");
         
         return results;
     }
