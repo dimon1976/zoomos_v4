@@ -44,8 +44,12 @@ public class UrlCleanerService {
     );
     
     private static final Set<String> TRACKING_PARAMS = Set.of(
-        "cpc", "cpm", "cpa", "sponsored", "do-waremd5", "nid", "ogV", "clid",
-        "yclid", "from", "track", "tracking", "tracker", "_ga", "_gl", "mc_cid", "mc_eid"
+        "cpc", "cpm", "cpa", "sponsored", "do-waremd5", "nid", "ogv", "clid",
+        "yclid", "from", "track", "tracking", "tracker", "_ga", "_gl", "mc_cid", "mc_eid",
+        "q", "query", "search", "keyword", "kw", "s", "term", "text", 
+        "sessionid", "sid", "jsessionid", "phpsessid", "sessid",
+        "_gid", "_gat", "__utma", "__utmb", "__utmc", "__utmt", "__utmz",
+        "WT.mc_id", "wt_mc", "pk_campaign", "pk_kwd", "pk_medium", "pk_source"
     );
 
     /**
@@ -350,18 +354,18 @@ public class UrlCleanerService {
     private boolean shouldRemoveParam(String paramName, UrlCleanerDto dto) {
         String lowerParam = paramName.toLowerCase();
         
-        // Удаляем UTM параметры, если НЕ установлен флаг сохранения
-        if (!dto.isRemoveUtmParams() && UTM_PARAMS.contains(lowerParam)) {
+        // Удаляем UTM параметры, если установлен флаг удаления
+        if (dto.isRemoveUtmParams() && UTM_PARAMS.contains(lowerParam)) {
             return true;
         }
         
-        // Удаляем реферальные параметры, если НЕ установлен флаг сохранения
-        if (!dto.isRemoveReferralParams() && REFERRAL_PARAMS.contains(lowerParam)) {
+        // Удаляем реферальные параметры, если установлен флаг удаления
+        if (dto.isRemoveReferralParams() && REFERRAL_PARAMS.contains(lowerParam)) {
             return true;
         }
         
-        // Удаляем трекинговые параметры, если НЕ установлен флаг сохранения
-        if (!dto.isRemoveTrackingParams() && TRACKING_PARAMS.contains(lowerParam)) {
+        // Удаляем трекинговые параметры, если установлен флаг удаления
+        if (dto.isRemoveTrackingParams() && TRACKING_PARAMS.contains(lowerParam)) {
             return true;
         }
         

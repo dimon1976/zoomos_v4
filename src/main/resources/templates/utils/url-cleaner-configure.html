@@ -218,7 +218,6 @@
                                 <div class="col-md-6">
                                     <div class="cleaning-option">
                                         <div class="form-check">
-                                            <input type="hidden" name="removeUtmParams" value="false">
                                             <input class="form-check-input" type="checkbox" th:field="*{removeUtmParams}">
                                             <label class="form-check-label option-header" th:for="${#ids.next('removeUtmParams')}">
                                                 Удалить UTM параметры
@@ -232,7 +231,6 @@
                                 <div class="col-md-6">
                                     <div class="cleaning-option">
                                         <div class="form-check">
-                                            <input type="hidden" name="removeReferralParams" value="false">
                                             <input class="form-check-input" type="checkbox" th:field="*{removeReferralParams}">
                                             <label class="form-check-label option-header" th:for="${#ids.next('removeReferralParams')}">
                                                 Удалить реферальные параметры
@@ -246,7 +244,6 @@
                                 <div class="col-md-6">
                                     <div class="cleaning-option">
                                         <div class="form-check">
-                                            <input type="hidden" name="removeTrackingParams" value="false">
                                             <input class="form-check-input" type="checkbox" th:field="*{removeTrackingParams}">
                                             <label class="form-check-label option-header" th:for="${#ids.next('removeTrackingParams')}">
                                                 Удалить отслеживающие параметры
@@ -260,7 +257,6 @@
                                 <div class="col-md-6">
                                     <div class="cleaning-option">
                                         <div class="form-check">
-                                            <input type="hidden" name="preserveYandexSku" value="false">
                                             <input class="form-check-input" type="checkbox" th:field="*{preserveYandexSku}">
                                             <label class="form-check-label option-header" th:for="${#ids.next('preserveYandexSku')}">
                                                 Сохранить sku для Yandex Market
