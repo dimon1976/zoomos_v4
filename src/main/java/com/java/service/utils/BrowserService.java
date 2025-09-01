@@ -61,7 +61,7 @@ public class BrowserService {
             int redirectCount = 0;
             
             // Ждем полной загрузки страницы
-            Thread.sleep(3000);
+            Thread.sleep(20000);
             log.info("Проверяем URL после начальной загрузки: {}", driver.getCurrentUrl());
             
             // Пытаемся найти и выполнить возможные JavaScript редиректы
@@ -89,20 +89,12 @@ public class BrowserService {
                 log.warn("Ошибка при выполнении JavaScript проверки: {}", jsEx.getMessage());
             }
             
-            // Ждём и отслеживаем изменения URL с несколькими проверками
-            for (int attempt = 1; attempt <= 6; attempt++) {
+            // Ждём и отслеживаем изменения URL с максимум 2 попытками
+            for (int attempt = 1; attempt <= 2; attempt++) {
                 log.info("Попытка {}: ожидаем редирект для {}", attempt, currentUrl);
                 
-                // Увеличиваем время ожидания: 5s, 8s, 12s, 15s, 20s, 25s
-                int waitTime;
-                switch (attempt) {
-                    case 1: waitTime = 5000; break;   // 5 секунд - оптимально для lenta.com
-                    case 2: waitTime = 8000; break;   // 8 секунд - для медленных редиректов
-                    case 3: waitTime = 12000; break;  // 12 секунд
-                    case 4: waitTime = 15000; break;  // 15 секунд
-                    case 5: waitTime = 20000; break;  // 20 секунд
-                    default: waitTime = 25000; break; // 25 секунд
-                }
+                // Время ожидания: 3s, 5s
+                int waitTime = attempt == 1 ? 3000 : 5000;
                 
                 Thread.sleep(waitTime);
                 
@@ -127,8 +119,8 @@ public class BrowserService {
                     break;
                 }
                 
-                // Если это важная попытка, дополнительно проверяем JavaScript
-                if (attempt == 2 || attempt == 4) {
+                // На второй попытке дополнительно проверяем JavaScript
+                if (attempt == 2) {
                     try {
                         Object currentJsUrl = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
                             "return window.location.href;"
@@ -190,40 +182,33 @@ public class BrowserService {
         WebDriverManager.chromedriver().setup();
         
         ChromeOptions options = new ChromeOptions();
-        
-        // Временно отключаем headless для лучшей работы с JS редиректами
-        // options.addArguments("--headless"); 
-        
-        // Базовые настройки
+
+        // === КЛЮЧЕВЫЕ ОПЦИИ ДЛЯ МАСКИРОВКИ ===
+        // 1. Отключаем флаг автоматизации, который показывает плашку "браузером управляет..."
+        options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation"});
+        // 2. Отключаем Blink-фичу, которая позволяет сайтам определять автоматизацию
+        options.addArguments("--disable-blink-features=AutomationControlled");
+        // 3. Устанавливаем "человеческий" User-Agent
+        options.addArguments("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+        // === ДОПОЛНИТЕЛЬНЫЕ ОПЦИИ ДЛЯ СТАБИЛЬНОСТИ И СОВМЕСТИМОСТИ ===
         options.addArguments("--no-sandbox");
         options.addArguments("--disable-dev-shm-usage");
         options.addArguments("--disable-gpu");
         options.addArguments("--window-size=1920,1080");
-        
-        // Современный User-Agent
-        options.addArguments("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-        
-        // Настройки для лучшей работы с JavaScript
-        options.addArguments("--enable-javascript");
         options.addArguments("--allow-running-insecure-content");
         options.addArguments("--disable-web-security");
-        options.addArguments("--disable-features=VizDisplayCompositor");
-        options.addArguments("--disable-extensions");
-        options.addArguments("--disable-plugins");
         
-        // Настройки загрузки страниц
-        options.addArguments("--page-load-strategy=normal");
-        
-        // Добавляем поддержку cookies
-        options.addArguments("--enable-cookies");
-        
+        // Включаем headless режим для фоновой работы
+        // options.addArguments("--headless");
+
         ChromeDriver driver = new ChromeDriver(options);
         
         // Устанавливаем таймауты
         driver.manage().timeouts()
                 .pageLoadTimeout(Duration.ofSeconds(timeoutSeconds))
-                .implicitlyWait(Duration.ofSeconds(10)) // Увеличиваем время ожидания
-                .scriptTimeout(Duration.ofSeconds(30)); // Добавляем таймаут для скриптов
+                .implicitlyWait(Duration.ofSeconds(10))
+                .scriptTimeout(Duration.ofSeconds(30));
         
         return driver;
     }

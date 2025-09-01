@@ -481,8 +481,8 @@ public class RedirectCollectorService {
             String currentUrl = originalUrl;
             int redirectCount = 0;
             
-            // Ручное следование редиректам для точного контроля
-            while (redirectCount <= maxRedirects) {
+            // Ручное следование редиректам для точного контроля (максимум 3 попытки)
+            while (redirectCount <= Math.min(maxRedirects, 3)) {
                 java.net.URL url = new java.net.URL(currentUrl);
                 java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
                 
@@ -492,10 +492,21 @@ public class RedirectCollectorService {
                 connection.setReadTimeout(timeoutSeconds * 1000);
                 connection.setInstanceFollowRedirects(false); // Отключаем автоматические редиректы
                 
-                // Добавляем User-Agent
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-                connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-                connection.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3");
+                // Добавляем реалистичные заголовки браузера для обхода блокировок
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
+                connection.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+                connection.setRequestProperty("Accept-Encoding", "gzip, deflate, br");
+                connection.setRequestProperty("DNT", "1");
+                connection.setRequestProperty("Connection", "keep-alive");
+                connection.setRequestProperty("Upgrade-Insecure-Requests", "1");
+                connection.setRequestProperty("Sec-Fetch-Dest", "document");
+                connection.setRequestProperty("Sec-Fetch-Mode", "navigate");
+                connection.setRequestProperty("Sec-Fetch-Site", "none");
+                connection.setRequestProperty("Sec-Fetch-User", "?1");
+                connection.setRequestProperty("sec-ch-ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"");
+                connection.setRequestProperty("sec-ch-ua-mobile", "?0");
+                connection.setRequestProperty("sec-ch-ua-platform", "\"Windows\"");
                 
                 int responseCode = connection.getResponseCode();
                 log.info("Шаг {}: {} -> статус {}", redirectCount, currentUrl, responseCode);
@@ -614,11 +625,23 @@ public class RedirectCollectorService {
     }
 
     /**
-     * Чтение содержимого HTTP-ответа
+     * Чтение содержимого HTTP-ответа с обработкой сжатия
      */
     private String readResponseContent(java.net.HttpURLConnection connection) throws IOException {
+        java.io.InputStream inputStream;
+        
+        // Обрабатываем сжатие gzip/deflate
+        String encoding = connection.getContentEncoding();
+        if ("gzip".equalsIgnoreCase(encoding)) {
+            inputStream = new java.util.zip.GZIPInputStream(connection.getInputStream());
+        } else if ("deflate".equalsIgnoreCase(encoding)) {
+            inputStream = new java.util.zip.InflaterInputStream(connection.getInputStream());
+        } else {
+            inputStream = connection.getInputStream();
+        }
+        
         try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.InputStreamReader(connection.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8))) {
             StringBuilder content = new StringBuilder();
             String line;
             int linesRead = 0;
