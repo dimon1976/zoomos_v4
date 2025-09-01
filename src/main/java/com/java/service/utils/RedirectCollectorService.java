@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -257,7 +258,7 @@ public class RedirectCollectorService {
         
         int rowIndex = 0;
         for (List<String> row : data) {
-            log.debug("Обработка строки {}: {}", rowIndex, row);
+            log.info("Обработка строки {}: {}", rowIndex, row);
             
             if (row.size() <= dto.getUrlColumn()) {
                 log.debug("Строка {} пропущена: размер {} меньше URL колонки {}", rowIndex, row.size(), dto.getUrlColumn());
@@ -266,7 +267,7 @@ public class RedirectCollectorService {
             }
 
             String originalUrl = getColumnValue(row, dto.getUrlColumn());
-            log.debug("URL из строки {}: '{}'", rowIndex, originalUrl);
+            log.info("URL из строки {}: '{}'", rowIndex, originalUrl);
             
             if (isEmpty(originalUrl) || !isValidUrl(originalUrl)) {
                 log.debug("Пропущена строка {} с некорректным URL", rowIndex);
@@ -277,7 +278,7 @@ public class RedirectCollectorService {
             RedirectResult result = followRedirects(originalUrl, dto.getMaxRedirects(), dto.getTimeoutSeconds(), restTemplate);
             results.add(result);
             
-            log.debug("Добавлен результат: исходный={}, финальный={}, статус={}, редиректов={}", 
+            log.info("Добавлен результат: исходный={}, финальный={}, статус={}, редиректов={}", 
                 result.getOriginalUrl(), result.getFinalUrl(), result.getStatus(), result.getRedirectCount());
             
             rowIndex++;
@@ -293,11 +294,19 @@ public class RedirectCollectorService {
      * Создание настроенного RestTemplate с таймаутами
      */
     private RestTemplate createConfiguredRestTemplate(int timeoutSeconds) {
-        RestTemplate restTemplate = new RestTemplate();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         
-        // Настраиваем таймауты для HTTP клиента
-        restTemplate.getRequestFactory();
+        // Настраиваем таймауты в миллисекундах
+        int timeoutMs = timeoutSeconds * 1000;
+        factory.setConnectTimeout(timeoutMs);
+        factory.setReadTimeout(timeoutMs);
         
+        // Отключаем автоматическое следование редиректам, чтобы обрабатывать их вручную
+        factory.setInstanceFollowRedirects(false);
+        
+        RestTemplate restTemplate = new RestTemplate(factory);
+        
+        log.debug("RestTemplate настроен с таймаутом {} секунд", timeoutSeconds);
         return restTemplate;
     }
 
@@ -313,29 +322,54 @@ public class RedirectCollectorService {
             String currentUrl = originalUrl;
             int redirectCount = 0;
             
-            while (redirectCount < maxRedirects) {
+            log.debug("Начинаем следование редиректам для URL: {}", originalUrl);
+            
+            while (redirectCount <= maxRedirects) {
                 try {
-                    ResponseEntity<String> response = restTemplate.exchange(currentUrl, HttpMethod.HEAD, null, String.class);
+                    log.debug("Попытка #{}, URL: {}", redirectCount + 1, currentUrl);
+                    
+                    // Используем GET запрос вместо HEAD для большей совместимости
+                    ResponseEntity<String> response = restTemplate.exchange(currentUrl, HttpMethod.GET, null, String.class);
+                    
+                    int statusCode = response.getStatusCodeValue();
+                    log.debug("Получен статус: {} для URL: {}", statusCode, currentUrl);
                     
                     // Если нет редиректа - это финальный URL
-                    if (!isRedirectStatus(response.getStatusCodeValue())) {
+                    if (!isRedirectStatus(statusCode)) {
                         result.setFinalUrl(currentUrl);
                         result.setStatus("SUCCESS");
                         result.setRedirectCount(redirectCount);
+                        log.debug("Найден финальный URL: {} после {} редиректов", currentUrl, redirectCount);
                         return result;
                     }
                     
                     // Получаем URL редиректа
                     String locationHeader = response.getHeaders().getFirst("Location");
+                    log.debug("Location header: {}", locationHeader);
+                    
                     if (locationHeader == null || locationHeader.isEmpty()) {
                         result.setFinalUrl(currentUrl);
                         result.setStatus("SUCCESS");
                         result.setRedirectCount(redirectCount);
+                        log.debug("Нет Location header, считаем финальным: {}", currentUrl);
                         return result;
+                    }
+                    
+                    // Обрабатываем относительные URL
+                    if (locationHeader.startsWith("/")) {
+                        try {
+                            java.net.URL url = new java.net.URL(currentUrl);
+                            locationHeader = url.getProtocol() + "://" + url.getHost() + 
+                                           (url.getPort() != -1 ? ":" + url.getPort() : "") + locationHeader;
+                        } catch (Exception e) {
+                            log.debug("Ошибка обработки относительного URL: {}", e.getMessage());
+                        }
                     }
                     
                     currentUrl = locationHeader;
                     redirectCount++;
+                    
+                    log.debug("Редирект #{}: {}", redirectCount, currentUrl);
                     
                 } catch (Exception e) {
                     log.debug("Ошибка HTTP запроса для {}: {}", currentUrl, e.getMessage());
@@ -350,9 +384,10 @@ public class RedirectCollectorService {
             result.setFinalUrl(currentUrl);
             result.setStatus("MAX_REDIRECTS");
             result.setRedirectCount(redirectCount);
+            log.debug("Достигнут максимум редиректов ({}): {}", maxRedirects, currentUrl);
             
         } catch (Exception e) {
-            log.error("Неожиданная ошибка при обработке URL {}: {}", originalUrl, e.getMessage());
+            log.error("Неожиданная ошибка при обработке URL {}: {}", originalUrl, e.getMessage(), e);
             result.setFinalUrl(originalUrl);
             result.setStatus("ERROR");
             result.setRedirectCount(0);
