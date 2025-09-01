@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Сбор финальных ссылок',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Сбор финальных ссылок',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Сбор финальных ссылок</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .upload-area {
+            border: 2px dashed #28a745;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #20c997;
+            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        }
+        .feature-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #17a2b8;
+        }
+        .process-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(45deg, #17a2b8, #20c997);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            margin: 0 auto 15px;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Описание утилиты -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="feature-card">
+                    <div class="process-icon">
+                        <i class="fas fa-external-link-alt"></i>
+                    </div>
+                    <h4>Сбор финальных URL после редиректов</h4>
+                    <p class="mb-0">
+                        Утилита проходит по каждой ссылке из файла, следует всем редиректам 
+                        и возвращает финальный URL. Полезно для получения реальных адресов 
+                        сокращённых ссылок.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Предупреждение -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="warning-box">
+                    <i class="fas fa-exclamation-triangle text-warning mr-2"></i>
+                    <strong>Внимание:</strong> Обработка может занять значительное время, 
+                    так как выполняются HTTP запросы к каждой ссылке. Рекомендуется 
+                    использовать небольшие файлы (до 100 ссылок).
+                </div>
+            </div>
+        </div>
+
+        <!-- Форма загрузки -->
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-upload mr-2"></i>
+                            Загрузка файла
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        
+                        <!-- Сообщения об ошибках -->
+                        <div th:if="${errorMessage}" class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle mr-2"></i>
+                            <span th:text="${errorMessage}"></span>
+                        </div>
+
+                        <form method="post" enctype="multipart/form-data" action="/utils/redirect-collector/upload">
+                            <div class="upload-area mb-4">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-success mb-3"></i>
+                                <h5>Выберите файл с ссылками</h5>
+                                <p class="text-muted mb-3">
+                                    Поддерживаемые форматы: CSV, Excel (XLS/XLSX)<br>
+                                    Максимальный размер: 1200 MB
+                                </p>
+                                <input type="file" 
+                                       id="file" 
+                                       name="file" 
+                                       class="form-control-file" 
+                                       accept=".csv,.xlsx,.xls" 
+                                       required>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-lg btn-block">
+                                <i class="fas fa-upload mr-2"></i>
+                                Загрузить и анализировать
+                            </button>
+                        </form>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Процесс работы -->
+        <div class="row mt-5">
+            <div class="col-12">
+                <h4 class="mb-4 text-center">Как это работает</h4>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center">
+                    <div class="process-icon mx-auto">
+                        <span class="badge badge-light">1</span>
+                    </div>
+                    <h6>Загрузите файл</h6>
+                    <p class="small text-muted">CSV или Excel файл со ссылками</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center">
+                    <div class="process-icon mx-auto">
+                        <span class="badge badge-light">2</span>
+                    </div>
+                    <h6>Выберите колонку</h6>
+                    <p class="small text-muted">Укажите колонку с исходными URL</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center">
+                    <div class="process-icon mx-auto">
+                        <span class="badge badge-light">3</span>
+                    </div>
+                    <h6>Настройте параметры</h6>
+                    <p class="small text-muted">Максимум редиректов и таймаут</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center">
+                    <div class="process-icon mx-auto">
+                        <span class="badge badge-light">4</span>
+                    </div>
+                    <h6>Получите результат</h6>
+                    <p class="small text-muted">Файл с финальными ссылками</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a href="/utils" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left mr-2"></i>
+        К списку утилит
+    </a>
+</th:block>
+
+<th:block th:fragment="scripts">
+    <script>
+        // Улучшение UX для загрузки файла
+        document.getElementById('file').addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name || 'Файл не выбран';
+            const uploadArea = e.target.closest('.upload-area');
+            const infoText = uploadArea.querySelector('p');
+            if (e.target.files[0]) {
+                infoText.innerHTML = '<strong>Выбран файл:</strong> ' + fileName;
+                uploadArea.style.borderColor = '#28a745';
+            }
+        });
+
+        // Показать загрузку при отправке формы
+        document.querySelector('form').addEventListener('submit', function() {
+            const button = document.querySelector('button[type="submit"]');
+            button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Анализируем файл...';
+            button.disabled = true;
+        });
+    </script>
+</th:block>
+
+</html>

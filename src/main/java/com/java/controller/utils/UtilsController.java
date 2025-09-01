@@ -72,7 +72,7 @@ public class UtilsController {
             "description", "Получение финальных URL после всех редиректов",
             "icon", "fas fa-external-link-alt",
             "url", "/utils/redirect-collector",
-            "status", "development"
+            "status", "ready"
         ));
         
         return utilities;
