@@ -182,6 +182,12 @@
             <appender-ref ref="File" />
         </logger>
 
+        <!-- Специальный логгер для LinkExtractorService -->
+        <logger name="com.java.service.utils.LinkExtractorService" level="DEBUG" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
         <!-- Логгер для репозиториев -->
         <logger name="my.java.repository" level="WARN" additivity="false">
             <appender-ref ref="Console" />
@@ -196,6 +202,22 @@
 
         <!-- Минимальный уровень логирования -->
         <root level="WARN">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+            <appender-ref ref="ErrorFile" />
+        </root>
+    </springProfile>
+
+    <!-- ============ ПРОФИЛЬ DEV ============ -->
+    <springProfile name="dev">
+        <!-- Специальный логгер для LinkExtractorService -->
+        <logger name="com.java.service.utils.LinkExtractorService" level="DEBUG" additivity="false">
+            <appender-ref ref="Console" />
+            <appender-ref ref="File" />
+        </logger>
+
+        <!-- Общий уровень логирования для разработки -->
+        <root level="INFO">
             <appender-ref ref="Console" />
             <appender-ref ref="File" />
             <appender-ref ref="ErrorFile" />

@@ -320,27 +320,73 @@ public class RedirectCollectorService {
         try {
             log.info("Начинаем обработку URL: {}", originalUrl);
             
-            java.net.URL url = new java.net.URL(originalUrl);
-            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
+            String currentUrl = originalUrl;
+            int redirectCount = 0;
             
-            // Настраиваем соединение
-            connection.setRequestMethod("HEAD");
-            connection.setConnectTimeout(timeoutSeconds * 1000);
-            connection.setReadTimeout(timeoutSeconds * 1000);
-            connection.setInstanceFollowRedirects(true); // Разрешаем автоматические редиректы
+            // Ручное следование редиректам для точного контроля
+            while (redirectCount <= maxRedirects) {
+                java.net.URL url = new java.net.URL(currentUrl);
+                java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
+                
+                // Настраиваем соединение
+                connection.setRequestMethod("HEAD");
+                connection.setConnectTimeout(timeoutSeconds * 1000);
+                connection.setReadTimeout(timeoutSeconds * 1000);
+                connection.setInstanceFollowRedirects(false); // Отключаем автоматические редиректы
+                
+                // Добавляем User-Agent
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                
+                int responseCode = connection.getResponseCode();
+                log.info("Шаг {}: {} -> статус {}", redirectCount, currentUrl, responseCode);
+                
+                // Проверяем, нужен ли редирект
+                if (!isRedirectStatus(responseCode)) {
+                    // Финальный URL найден
+                    result.setFinalUrl(currentUrl);
+                    result.setStatus("SUCCESS");
+                    result.setRedirectCount(redirectCount);
+                    log.info("Финальный URL: {} после {} редиректов", currentUrl, redirectCount);
+                    return result;
+                }
+                
+                // Получаем Location header для редиректа
+                String locationHeader = connection.getHeaderField("Location");
+                log.info("Location header: {}", locationHeader);
+                
+                if (locationHeader == null || locationHeader.isEmpty()) {
+                    // Нет Location header - считаем текущий URL финальным
+                    result.setFinalUrl(currentUrl);
+                    result.setStatus("SUCCESS");  
+                    result.setRedirectCount(redirectCount);
+                    log.info("Нет Location header, считаем финальным: {}", currentUrl);
+                    return result;
+                }
+                
+                // Обрабатываем относительные URL
+                if (locationHeader.startsWith("/")) {
+                    java.net.URL baseUrl = new java.net.URL(currentUrl);
+                    locationHeader = baseUrl.getProtocol() + "://" + baseUrl.getHost() +
+                                   (baseUrl.getPort() != -1 ? ":" + baseUrl.getPort() : "") + locationHeader;
+                    log.info("Преобразован относительный URL: {}", locationHeader);
+                } else if (!locationHeader.startsWith("http://") && !locationHeader.startsWith("https://")) {
+                    java.net.URL baseUrl = new java.net.URL(currentUrl);
+                    locationHeader = baseUrl.getProtocol() + "://" + baseUrl.getHost() +
+                                   (baseUrl.getPort() != -1 ? ":" + baseUrl.getPort() : "") + "/" + locationHeader;
+                    log.info("Преобразован относительный URL: {}", locationHeader);
+                }
+                
+                currentUrl = locationHeader;
+                redirectCount++;
+                
+                connection.disconnect();
+            }
             
-            // Добавляем User-Agent чтобы избежать блокировки
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-            
-            // Выполняем запрос
-            int responseCode = connection.getResponseCode();
-            String finalUrl = connection.getURL().toString();
-            
-            result.setFinalUrl(finalUrl);
-            result.setStatus("SUCCESS");
-            result.setRedirectCount(0); // HttpURLConnection не предоставляет количество редиректов
-            
-            log.info("Обработан URL: {} -> {}, статус: {}", originalUrl, finalUrl, responseCode);
+            // Достигнут лимит редиректов
+            result.setFinalUrl(currentUrl);
+            result.setStatus("MAX_REDIRECTS");
+            result.setRedirectCount(redirectCount);
+            log.info("Достигнут лимит редиректов ({}): {}", maxRedirects, currentUrl);
             
         } catch (java.net.SocketTimeoutException e) {
             log.info("Таймаут для URL: {}", originalUrl);

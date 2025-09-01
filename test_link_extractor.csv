@@ -1,0 +1,11 @@
+ID,Название,Описание,Ссылка,Примечания
+12345,Товар 1,"Описание товара https://example.com/item1 с дополнительной информацией",https://shop.ru/product/123,"Основная ссылка"
+67890,Товар 2,Простое описание товара,https://market.ru/item/456,https://reviews.com/product/456
+55123,Товар 3,"Товар со множественными ссылками: https://store1.com/abc и https://store2.com/def",,Несколько URL в одной ячейке
+99001,Товар 4,"Текст без ссылок",,"Нет ссылок"
+44321,Товар 5,https://primary-shop.com/item/789,"Дополнительная информация: https://support.com/help/789, контакты https://company.ru/contacts",Ссылка в описании и примечаниях
+77788,Товар 6,"Товар с поддержкой, см. https://help.center/product/999",https://main-store.com/product/999,
+11223,Товар 7,"Обзор на https://blog.example.com/review/777",https://shop-online.ru/item/777,"Отзывы: https://reviews.site/product/777"
+33445,Товар 8,Обычное описание товара,https://catalog.com/product/888,
+22334,Товар 9,"Товар доступен по адресу https://newstore.com/item/999, также https://backup.store.com/product/999",https://main.shop.ru/999,Резервные ссылки
+88776,Товар 10,Финальный товар списка,https://final-shop.com/last-product,Последний элемент
