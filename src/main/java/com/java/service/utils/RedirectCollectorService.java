@@ -35,8 +35,58 @@ import java.util.stream.Stream;
 public class RedirectCollectorService {
 
     private final FileGeneratorService fileGeneratorService;
+    private final BrowserService browserService;
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
+    /**
+     * Интерфейс для callback прогресса
+     */
+    @FunctionalInterface
+    public interface ProgressCallback {
+        void onProgress(int current, int total, String message);
+    }
+    
+    /**
+     * Обработка сбора редиректов с прогресс-уведомлениями
+     */
+    public String processRedirectCollectionWithProgress(RedirectCollectorDto dto, ProgressCallback progressCallback) throws Exception {
+        log.info("=== НАЧАЛО АСИНХРОННОЙ ОБРАБОТКИ СБОРА РЕДИРЕКТОВ ===");
+        log.info("URL колонка: {}", dto.getUrlColumn());
+        log.info("Максимум редиректов: {}, Таймаут: {} сек", dto.getMaxRedirects(), dto.getTimeoutSeconds());
+        
+        progressCallback.onProgress(0, 100, "Читаем данные файла...");
+        
+        // Читаем данные из временного файла
+        List<List<String>> data = readTempFileData(dto.getTempFilePath());
+        log.info("Прочитано строк из файла: {}", data.size());
+        
+        if (data.isEmpty()) {
+            throw new IllegalArgumentException("Файл не содержит данных для обработки");
+        }
+
+        progressCallback.onProgress(10, 100, "Валидация данных...");
+        validateColumnsFromDto(data, dto);
+        
+        progressCallback.onProgress(20, 100, "Начинаем сбор редиректов...");
+        List<RedirectResult> results = collectRedirectsWithProgress(data, dto, progressCallback);
+        
+        progressCallback.onProgress(90, 100, "Генерируем результирующий файл...");
+        
+        // Создаем ExportTemplate из DTO
+        ExportTemplate template = createExportTemplate(dto);
+        
+        // Преобразуем результаты в Stream<Map<String, Object>>
+        Stream<Map<String, Object>> dataStream = results.stream()
+                .map(this::convertResultToMap);
+        
+        // Генерируем файл через FileGeneratorService
+        String fileName = "redirect-collector-result_" + System.currentTimeMillis();
+        Path filePath = fileGeneratorService.generateFile(dataStream, results.size(), template, fileName);
+        
+        log.info("=== ОКОНЧАНИЕ АСИНХРОННОЙ ОБРАБОТКИ СБОРА РЕДИРЕКТОВ ===");
+        return filePath.toString();
+    }
+
     /**
      * Обработка сбора редиректов
      */
@@ -277,7 +327,15 @@ public class RedirectCollectorService {
                 continue;
             }
 
+            // Пытаемся сначала стандартный HTTP подход
             RedirectResult result = followRedirects(originalUrl, dto.getMaxRedirects(), dto.getTimeoutSeconds(), restTemplate);
+            
+            // Если редиректов не найдено, пробуем браузерный подход
+            if (result.getRedirectCount() == 0 && browserService.isBrowserAvailable()) {
+                log.info("HTTP редиректы не найдены, используем браузер для URL: {}", originalUrl);
+                result = followRedirectsWithBrowser(originalUrl, dto.getTimeoutSeconds());
+            }
+            
             results.add(result);
             
             log.info("Добавлен результат: исходный={}, финальный={}, статус={}, редиректов={}", 
@@ -290,6 +348,106 @@ public class RedirectCollectorService {
         log.info("=== ОКОНЧАНИЕ СБОРА РЕДИРЕКТОВ ===");
         
         return results;
+    }
+
+    /**
+     * Сбор редиректов из данных с прогресс-уведомлениями
+     */
+    private List<RedirectResult> collectRedirectsWithProgress(List<List<String>> data, RedirectCollectorDto dto, ProgressCallback progressCallback) {
+        List<RedirectResult> results = new ArrayList<>();
+        log.info("=== НАЧАЛО СБОРА РЕДИРЕКТОВ С ПРОГРЕССОМ ===");
+        log.info("Всего строк для обработки: {}", data.size());
+        
+        RestTemplate restTemplate = createConfiguredRestTemplate(dto.getTimeoutSeconds());
+        
+        int rowIndex = 0;
+        int totalRows = data.size();
+        
+        for (List<String> row : data) {
+            // Обновляем прогресс (20% до 80% для обработки URL)
+            int progress = 20 + (int) ((rowIndex * 60.0) / totalRows);
+            progressCallback.onProgress(progress, 100, 
+                String.format("Обрабатываем URL %d из %d...", rowIndex + 1, totalRows));
+            
+            log.info("Обработка строки {}: {}", rowIndex, row);
+            
+            if (row.size() <= dto.getUrlColumn()) {
+                log.debug("Строка {} пропущена: размер {} меньше URL колонки {}", rowIndex, row.size(), dto.getUrlColumn());
+                rowIndex++;
+                continue;
+            }
+
+            String originalUrl = getColumnValue(row, dto.getUrlColumn());
+            log.info("URL из строки {}: '{}'", rowIndex, originalUrl);
+            
+            if (isEmpty(originalUrl) || !isValidUrl(originalUrl)) {
+                log.debug("Пропущена строка {} с некорректным URL", rowIndex);
+                rowIndex++;
+                continue;
+            }
+
+            // Пытаемся сначала стандартный HTTP подход
+            RedirectResult result = followRedirects(originalUrl, dto.getMaxRedirects(), dto.getTimeoutSeconds(), restTemplate);
+            
+            // Если редиректов не найдено, пробуем браузерный подход
+            if (result.getRedirectCount() == 0 && browserService.isBrowserAvailable()) {
+                log.info("HTTP редиректы не найдены, используем браузер для URL: {}", originalUrl);
+                progressCallback.onProgress(progress, 100, 
+                    String.format("Запускаем браузер для URL %d из %d...", rowIndex + 1, totalRows));
+                result = followRedirectsWithBrowser(originalUrl, dto.getTimeoutSeconds());
+            }
+            
+            results.add(result);
+            
+            log.info("Добавлен результат: исходный={}, финальный={}, статус={}, редиректов={}", 
+                result.getOriginalUrl(), result.getFinalUrl(), result.getStatus(), result.getRedirectCount());
+            
+            rowIndex++;
+        }
+        
+        log.info("Обработано строк: {}, собрано результатов: {}", data.size(), results.size());
+        log.info("=== ОКОНЧАНИЕ СБОРА РЕДИРЕКТОВ С ПРОГРЕССОМ ===");
+        
+        return results;
+    }
+
+    /**
+     * Чтение данных из временного файла
+     */
+    private List<List<String>> readTempFileData(String tempFilePath) throws IOException {
+        if (tempFilePath == null) {
+            throw new IllegalArgumentException("Путь к временному файлу не указан");
+        }
+        
+        Path path = Path.of(tempFilePath);
+        if (!Files.exists(path)) {
+            throw new IOException("Временный файл не найден: " + tempFilePath);
+        }
+        
+        // Используем существующий метод чтения, но адаптируем его для временного файла
+        try (InputStream inputStream = Files.newInputStream(path)) {
+            if (tempFilePath.endsWith(".xlsx") || tempFilePath.endsWith(".xls")) {
+                return readExcelData(inputStream);
+            } else {
+                return readCsvData(inputStream);
+            }
+        }
+    }
+
+    /**
+     * Валидация колонок из DTO
+     */
+    private void validateColumnsFromDto(List<List<String>> data, RedirectCollectorDto dto) {
+        if (data.isEmpty()) {
+            throw new IllegalArgumentException("Файл не содержит данных");
+        }
+        
+        List<String> firstRow = data.get(0);
+        if (firstRow.size() <= dto.getUrlColumn()) {
+            throw new IllegalArgumentException(
+                String.format("Указанная URL колонка (%d) больше количества колонок в файле (%d)", 
+                    dto.getUrlColumn(), firstRow.size()));
+        }
     }
 
     /**
@@ -328,58 +486,65 @@ public class RedirectCollectorService {
                 java.net.URL url = new java.net.URL(currentUrl);
                 java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
                 
-                // Настраиваем соединение
-                connection.setRequestMethod("HEAD");
+                // Настраиваем соединение для GET запроса
+                connection.setRequestMethod("GET");
                 connection.setConnectTimeout(timeoutSeconds * 1000);
                 connection.setReadTimeout(timeoutSeconds * 1000);
                 connection.setInstanceFollowRedirects(false); // Отключаем автоматические редиректы
                 
                 // Добавляем User-Agent
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+                connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+                connection.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3");
                 
                 int responseCode = connection.getResponseCode();
                 log.info("Шаг {}: {} -> статус {}", redirectCount, currentUrl, responseCode);
                 
-                // Проверяем, нужен ли редирект
-                if (!isRedirectStatus(responseCode)) {
-                    // Финальный URL найден
-                    result.setFinalUrl(currentUrl);
-                    result.setStatus("SUCCESS");
-                    result.setRedirectCount(redirectCount);
-                    log.info("Финальный URL: {} после {} редиректов", currentUrl, redirectCount);
-                    return result;
+                // Проверяем HTTP-редиректы
+                if (isRedirectStatus(responseCode)) {
+                    // Получаем Location header для редиректа
+                    String locationHeader = connection.getHeaderField("Location");
+                    log.info("HTTP редирект - Location header: {}", locationHeader);
+                    
+                    if (locationHeader != null && !locationHeader.isEmpty()) {
+                        // Обрабатываем относительные URL
+                        currentUrl = resolveUrl(currentUrl, locationHeader);
+                        redirectCount++;
+                        connection.disconnect();
+                        continue;
+                    }
                 }
                 
-                // Получаем Location header для редиректа
-                String locationHeader = connection.getHeaderField("Location");
-                log.info("Location header: {}", locationHeader);
-                
-                if (locationHeader == null || locationHeader.isEmpty()) {
-                    // Нет Location header - считаем текущий URL финальным
+                // Если это не HTTP-редирект или нет Location header, проверяем содержимое страницы
+                if (responseCode == 200) {
+                    String htmlContent = readResponseContent(connection);
+                    connection.disconnect();
+                    
+                    // Ищем JavaScript или meta-refresh редиректы
+                    String redirectUrl = findJavaScriptRedirect(htmlContent, currentUrl);
+                    
+                    if (redirectUrl != null && !redirectUrl.equals(currentUrl)) {
+                        log.info("JavaScript редирект найден: {}", redirectUrl);
+                        currentUrl = redirectUrl;
+                        redirectCount++;
+                        continue;
+                    } else {
+                        // Нет редиректов - это финальный URL
+                        result.setFinalUrl(currentUrl);
+                        result.setStatus("SUCCESS");
+                        result.setRedirectCount(redirectCount);
+                        log.info("Финальный URL: {} после {} редиректов", currentUrl, redirectCount);
+                        return result;
+                    }
+                } else {
+                    // Нет Location header и не 200 статус - считаем текущий URL финальным
                     result.setFinalUrl(currentUrl);
                     result.setStatus("SUCCESS");  
                     result.setRedirectCount(redirectCount);
-                    log.info("Нет Location header, считаем финальным: {}", currentUrl);
+                    log.info("Статус {}, считаем финальным: {}", responseCode, currentUrl);
+                    connection.disconnect();
                     return result;
                 }
-                
-                // Обрабатываем относительные URL
-                if (locationHeader.startsWith("/")) {
-                    java.net.URL baseUrl = new java.net.URL(currentUrl);
-                    locationHeader = baseUrl.getProtocol() + "://" + baseUrl.getHost() +
-                                   (baseUrl.getPort() != -1 ? ":" + baseUrl.getPort() : "") + locationHeader;
-                    log.info("Преобразован относительный URL: {}", locationHeader);
-                } else if (!locationHeader.startsWith("http://") && !locationHeader.startsWith("https://")) {
-                    java.net.URL baseUrl = new java.net.URL(currentUrl);
-                    locationHeader = baseUrl.getProtocol() + "://" + baseUrl.getHost() +
-                                   (baseUrl.getPort() != -1 ? ":" + baseUrl.getPort() : "") + "/" + locationHeader;
-                    log.info("Преобразован относительный URL: {}", locationHeader);
-                }
-                
-                currentUrl = locationHeader;
-                redirectCount++;
-                
-                connection.disconnect();
             }
             
             // Достигнут лимит редиректов
@@ -446,6 +611,238 @@ public class RedirectCollectorService {
      */
     private boolean isEmpty(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    /**
+     * Чтение содержимого HTTP-ответа
+     */
+    private String readResponseContent(java.net.HttpURLConnection connection) throws IOException {
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(connection.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+            StringBuilder content = new StringBuilder();
+            String line;
+            int linesRead = 0;
+            while ((line = reader.readLine()) != null && linesRead < 500) { // Ограничиваем чтение для производительности
+                content.append(line).append("\n");
+                linesRead++;
+            }
+            return content.toString();
+        }
+    }
+
+    /**
+     * Поиск JavaScript или meta-refresh редиректов в HTML
+     */
+    private String findJavaScriptRedirect(String htmlContent, String currentUrl) {
+        if (htmlContent == null || htmlContent.isEmpty()) {
+            return null;
+        }
+        
+        // Ищем meta refresh
+        String metaRedirect = findMetaRefreshRedirect(htmlContent, currentUrl);
+        if (metaRedirect != null) {
+            return metaRedirect;
+        }
+        
+        // Ищем JavaScript редиректы
+        return findJavaScriptLocationRedirect(htmlContent, currentUrl);
+    }
+
+    /**
+     * Поиск meta refresh редиректов
+     */
+    private String findMetaRefreshRedirect(String htmlContent, String currentUrl) {
+        java.util.regex.Pattern metaPattern = java.util.regex.Pattern.compile(
+            "(?i)<meta[^>]*http-equiv=[\"']refresh[\"'][^>]*content=[\"']\\d+;\\s*url=([^\"']+)[\"'][^>]*>",
+            java.util.regex.Pattern.CASE_INSENSITIVE
+        );
+        
+        java.util.regex.Matcher matcher = metaPattern.matcher(htmlContent);
+        if (matcher.find()) {
+            String redirectUrl = matcher.group(1);
+            log.info("Meta refresh редирект найден: {}", redirectUrl);
+            return resolveUrl(currentUrl, redirectUrl);
+        }
+        
+        return null;
+    }
+
+    /**
+     * Поиск JavaScript location редиректов
+     */
+    private String findJavaScriptLocationRedirect(String htmlContent, String currentUrl) {
+        // Ищем различные варианты JavaScript редиректов
+        String[] patterns = {
+            "(?i)window\\.location\\s*=\\s*[\"']([^\"']+)[\"']",
+            "(?i)window\\.location\\.href\\s*=\\s*[\"']([^\"']+)[\"']",
+            "(?i)document\\.location\\s*=\\s*[\"']([^\"']+)[\"']",
+            "(?i)location\\.href\\s*=\\s*[\"']([^\"']+)[\"']",
+            "(?i)location\\s*=\\s*[\"']([^\"']+)[\"']"
+        };
+        
+        for (String patternStr : patterns) {
+            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(patternStr);
+            java.util.regex.Matcher matcher = pattern.matcher(htmlContent);
+            if (matcher.find()) {
+                String redirectUrl = matcher.group(1);
+                log.info("JavaScript редирект найден: {}", redirectUrl);
+                return resolveUrl(currentUrl, redirectUrl);
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Разрешение относительных URL
+     */
+    private String resolveUrl(String baseUrl, String url) {
+        try {
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                return url; // Абсолютный URL
+            }
+            
+            java.net.URL base = new java.net.URL(baseUrl);
+            
+            if (url.startsWith("/")) {
+                // Абсолютный путь относительно корня
+                return base.getProtocol() + "://" + base.getHost() + 
+                       (base.getPort() != -1 ? ":" + base.getPort() : "") + url;
+            } else {
+                // Относительный путь
+                java.net.URL resolved = new java.net.URL(base, url);
+                return resolved.toString();
+            }
+        } catch (Exception e) {
+            log.warn("Ошибка при разрешении URL: base={}, url={}", baseUrl, url, e);
+            return url; // Возвращаем как есть
+        }
+    }
+
+    /**
+     * Следование по редиректам с использованием браузера
+     */
+    private RedirectResult followRedirectsWithBrowser(String originalUrl, int timeoutSeconds) {
+        RedirectResult result = new RedirectResult();
+        result.setOriginalUrl(originalUrl);
+        
+        try {
+            log.info("Используем браузер для обработки URL: {}", originalUrl);
+            
+            BrowserService.BrowserResult browserResult = browserService.getUrlWithBrowser(originalUrl, timeoutSeconds);
+            
+            result.setFinalUrl(browserResult.getFinalUrl());
+            result.setStatus(browserResult.getStatus());
+            result.setRedirectCount(browserResult.getRedirectCount());
+            
+            if ("ERROR".equals(browserResult.getStatus())) {
+                log.warn("Ошибка браузера для URL {}: {}", originalUrl, browserResult.getErrorMessage());
+            } else {
+                log.info("Браузер обработал URL: {} -> {}", originalUrl, browserResult.getFinalUrl());
+            }
+            
+        } catch (Exception e) {
+            log.error("Критическая ошибка при использовании браузера для URL {}: {}", originalUrl, e.getMessage());
+            result.setFinalUrl(originalUrl);
+            result.setStatus("BROWSER_ERROR");
+            result.setRedirectCount(0);
+        }
+        
+        return result;
+    }
+
+    /**
+     * Чтение Excel данных из InputStream
+     */
+    private List<List<String>> readExcelData(InputStream inputStream) throws IOException {
+        List<List<String>> data = new ArrayList<>();
+        
+        try (org.apache.poi.ss.usermodel.Workbook workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(inputStream)) {
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0);
+            
+            for (org.apache.poi.ss.usermodel.Row row : sheet) {
+                List<String> rowData = new ArrayList<>();
+                for (org.apache.poi.ss.usermodel.Cell cell : row) {
+                    rowData.add(getCellValueAsString(cell));
+                }
+                data.add(rowData);
+            }
+        }
+        
+        return data;
+    }
+
+    /**
+     * Чтение CSV данных из InputStream
+     */
+    private List<List<String>> readCsvData(InputStream inputStream) throws IOException {
+        List<List<String>> data = new ArrayList<>();
+        
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                // Простая обработка CSV - разделение по запятым с учетом кавычек
+                List<String> rowData = parseCsvLine(line);
+                data.add(rowData);
+            }
+        }
+        
+        return data;
+    }
+
+    /**
+     * Простой парсер CSV строки
+     */
+    private List<String> parseCsvLine(String line) {
+        List<String> result = new ArrayList<>();
+        boolean inQuotes = false;
+        StringBuilder currentField = new StringBuilder();
+        
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == ',' && !inQuotes) {
+                result.add(currentField.toString().trim());
+                currentField = new StringBuilder();
+            } else {
+                currentField.append(c);
+            }
+        }
+        
+        result.add(currentField.toString().trim());
+        return result;
+    }
+
+    /**
+     * Получение значения ячейки как строки (используется существующим кодом)
+     */
+    private String getCellValueAsString(org.apache.poi.ss.usermodel.Cell cell) {
+        if (cell == null) return "";
+        
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue();
+            case NUMERIC:
+                if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
+                    return cell.getLocalDateTimeCellValue().toString();
+                } else {
+                    // Форматируем числа без научной нотации
+                    double numericValue = cell.getNumericCellValue();
+                    if (numericValue == Math.floor(numericValue)) {
+                        return String.valueOf((long) numericValue);
+                    } else {
+                        return String.valueOf(numericValue);
+                    }
+                }
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                return cell.getCellFormula();
+            default:
+                return "";
+        }
     }
 
     /**

@@ -4,6 +4,7 @@ import com.java.dto.utils.RedirectCollectorDto;
 import com.java.model.entity.FileMetadata;
 import com.java.service.file.FileAnalyzerService;
 import com.java.service.utils.RedirectCollectorService;
+import com.java.service.utils.AsyncRedirectCollectorService;
 import com.java.util.ControllerUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 
 /**
  * Контроллер для утилиты сбора финальных URL после редиректов
@@ -36,6 +38,7 @@ public class RedirectCollectorController {
     private final FileAnalyzerService fileAnalyzerService;
     private final ControllerUtils controllerUtils;
     private final RedirectCollectorService redirectCollectorService;
+    private final AsyncRedirectCollectorService asyncRedirectCollectorService;
 
     /**
      * Главная страница утилиты
@@ -164,6 +167,52 @@ public class RedirectCollectorController {
         } finally {
             // Очищаем сессию
             session.removeAttribute("redirectCollectorMetadata");
+        }
+    }
+
+    /**
+     * Асинхронная обработка файла с WebSocket уведомлениями
+     */
+    @PostMapping("/process-async")
+    @ResponseBody
+    public ResponseEntity<?> processRedirectsAsync(@Valid @RequestBody RedirectCollectorDto dto,
+                                                 BindingResult bindingResult) {
+        log.debug("POST request to /utils/redirect-collector/process-async with dto: {}", dto);
+
+        if (bindingResult.hasErrors()) {
+            log.debug("Validation errors in redirect collector DTO: {}", bindingResult.getAllErrors());
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Ошибки валидации: " + bindingResult.getFieldError().getDefaultMessage()));
+        }
+
+        if (dto.getTempFilePath() == null) {
+            log.debug("No temp file path provided for async redirect collector");
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Временный файл не найден. Пожалуйста, загрузите файл заново."));
+        }
+
+        try {
+            // Генерируем уникальный ID операции
+            String operationId = "redirect-" + System.currentTimeMillis() + "-" + 
+                                Math.round(Math.random() * 1000);
+            
+            log.info("Запуск асинхронного сбора редиректов с ID операции: {}", operationId);
+            
+            // Запускаем асинхронную обработку
+            asyncRedirectCollectorService.startAsyncRedirectCollection(operationId, dto);
+
+            // Возвращаем ID операции для отслеживания прогресса
+            return ResponseEntity.ok()
+                .body(Map.of(
+                    "operationId", operationId,
+                    "message", "Сбор редиректов начат. Следите за прогрессом через WebSocket.",
+                    "websocketTopic", "/topic/redirect-progress/" + operationId
+                ));
+
+        } catch (Exception e) {
+            log.error("Error starting async redirect collection", e);
+            return ResponseEntity.internalServerError()
+                .body(Map.of("error", "Ошибка запуска: " + e.getMessage()));
         }
     }
 }

@@ -30,7 +30,9 @@
       "mcp__playwright__browser_file_upload",
       "mcp__playwright__browser_snapshot",
       "mcp__playwright__browser_evaluate",
-      "Bash(./mvnw:*)"
+      "Bash(./mvnw:*)",
+      "mcp__context7__get-library-docs",
+      "Bash(/bashes)"
     ],
     "additionalDirectories": [
       "D:\\d D:\\project"
