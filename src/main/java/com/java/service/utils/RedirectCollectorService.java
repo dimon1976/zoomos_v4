@@ -39,6 +39,7 @@ public class RedirectCollectorService {
     private final FileGeneratorService fileGeneratorService;
     private final BrowserService browserService;
     private final AntiBlockConfig antiBlockConfig;
+    private final AntiBlockService antiBlockService;
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
     /**
@@ -306,43 +307,50 @@ public class RedirectCollectorService {
      */
     private List<RedirectResult> collectRedirects(List<List<String>> data, RedirectCollectorDto dto) {
         List<RedirectResult> results = new ArrayList<>();
+        int totalRows = data.size();
+        int validUrlCount = 0;
+        
         log.info("=== НАЧАЛО СБОРА РЕДИРЕКТОВ ===");
-        log.info("Всего строк для обработки: {}", data.size());
+        log.info("📊 Всего строк для обработки: {}", totalRows);
+        
+        // Подсчитаем количество валидных URL для корректного отображения прогресса
+        for (List<String> row : data) {
+            String url = getColumnValue(row, dto.getUrlColumn());
+            if (!isEmpty(url) && isValidUrl(url)) {
+                validUrlCount++;
+            }
+        }
+        log.info("📋 Найдено валидных URL: {}", validUrlCount);
         
         RestTemplate restTemplate = createConfiguredRestTemplate(dto.getTimeoutSeconds());
         
         int rowIndex = 0;
-        for (List<String> row : data) {
-            log.info("Обработка строки {}: {}", rowIndex, row);
-            
+        int processedCount = 0;
+        
+        for (List<String> row : data) {            
             if (row.size() <= dto.getUrlColumn()) {
-                log.debug("Строка {} пропущена: размер {} меньше URL колонки {}", rowIndex, row.size(), dto.getUrlColumn());
+                log.debug("⏭️ Строка {} пропущена: размер {} меньше URL колонки {}", rowIndex + 1, row.size(), dto.getUrlColumn() + 1);
                 rowIndex++;
                 continue;
             }
 
             String originalUrl = getColumnValue(row, dto.getUrlColumn());
-            log.info("URL из строки {}: '{}'", rowIndex, originalUrl);
             
             if (isEmpty(originalUrl) || !isValidUrl(originalUrl)) {
-                log.debug("Пропущена строка {} с некорректным URL", rowIndex);
+                log.debug("⏭️ Пропущена строка {} с некорректным URL", rowIndex + 1);
                 rowIndex++;
                 continue;
             }
 
-            // Пытаемся сначала стандартный HTTP подход
-            RedirectResult result = followRedirects(originalUrl, dto.getMaxRedirects(), dto.getTimeoutSeconds(), restTemplate);
-            
-            // Если редиректов не найдено, пробуем браузерный подход
-            if (result.getRedirectCount() == 0 && browserService.isBrowserAvailable()) {
-                log.info("HTTP редиректы не найдены, используем браузер для URL: {}", originalUrl);
-                result = followRedirectsWithBrowser(originalUrl, dto.getTimeoutSeconds());
-            }
+            // Используем AntiBlockService с автоматическим переключением стратегий
+            RedirectResult result = antiBlockService.processUrlWithFallback(originalUrl, dto.getMaxRedirects(), dto.getTimeoutSeconds(), processedCount, validUrlCount);
             
             results.add(result);
+            processedCount++;
             
-            log.info("Добавлен результат: исходный={}, финальный={}, статус={}, редиректов={}", 
-                result.getOriginalUrl(), result.getFinalUrl(), result.getStatus(), result.getRedirectCount());
+            log.info("✅ Результат [{}]: статус={}, редиректов={}, финальный={}", 
+                processedCount + "/" + validUrlCount, result.getStatus(), result.getRedirectCount(), 
+                result.getFinalUrl());
             
             rowIndex++;
         }
@@ -358,19 +366,31 @@ public class RedirectCollectorService {
      */
     private List<RedirectResult> collectRedirectsWithProgress(List<List<String>> data, RedirectCollectorDto dto, ProgressCallback progressCallback) {
         List<RedirectResult> results = new ArrayList<>();
+        int totalRows = data.size();
+        int validUrlCount = 0;
+        
         log.info("=== НАЧАЛО СБОРА РЕДИРЕКТОВ С ПРОГРЕССОМ ===");
-        log.info("Всего строк для обработки: {}", data.size());
+        log.info("📊 Всего строк для обработки: {}", totalRows);
+        
+        // Подсчитаем количество валидных URL для корректного отображения прогресса
+        for (List<String> row : data) {
+            String url = getColumnValue(row, dto.getUrlColumn());
+            if (!isEmpty(url) && isValidUrl(url)) {
+                validUrlCount++;
+            }
+        }
+        log.info("📋 Найдено валидных URL: {}", validUrlCount);
         
         RestTemplate restTemplate = createConfiguredRestTemplate(dto.getTimeoutSeconds());
         
         int rowIndex = 0;
-        int totalRows = data.size();
+        int processedCount = 0;
         
         for (List<String> row : data) {
-            // Обновляем прогресс (20% до 80% для обработки URL)
-            int progress = 20 + (int) ((rowIndex * 60.0) / totalRows);
+            // Обновляем прогресс (20% до 80% для обработки URL)  
+            int progress = 20 + (int) ((rowIndex * 60.0) / data.size());
             progressCallback.onProgress(progress, 100, 
-                String.format("Обрабатываем URL %d из %d...", rowIndex + 1, totalRows));
+                String.format("Обрабатываем URL %d из %d...", rowIndex + 1, data.size()));
             
             log.info("Обработка строки {}: {}", rowIndex, row);
             
@@ -389,21 +409,15 @@ public class RedirectCollectorService {
                 continue;
             }
 
-            // Пытаемся сначала стандартный HTTP подход
-            RedirectResult result = followRedirects(originalUrl, dto.getMaxRedirects(), dto.getTimeoutSeconds(), restTemplate);
-            
-            // Если редиректов не найдено, пробуем браузерный подход
-            if (result.getRedirectCount() == 0 && browserService.isBrowserAvailable()) {
-                log.info("HTTP редиректы не найдены, используем браузер для URL: {}", originalUrl);
-                progressCallback.onProgress(progress, 100, 
-                    String.format("Запускаем браузер для URL %d из %d...", rowIndex + 1, totalRows));
-                result = followRedirectsWithBrowser(originalUrl, dto.getTimeoutSeconds());
-            }
+            // Используем AntiBlockService с автоматическим переключением стратегий
+            RedirectResult result = antiBlockService.processUrlWithFallback(originalUrl, dto.getMaxRedirects(), dto.getTimeoutSeconds(), processedCount, validUrlCount);
             
             results.add(result);
+            processedCount++;
             
-            log.info("Добавлен результат: исходный={}, финальный={}, статус={}, редиректов={}", 
-                result.getOriginalUrl(), result.getFinalUrl(), result.getStatus(), result.getRedirectCount());
+            log.info("✅ Результат [{}]: статус={}, редиректов={}, финальный={}", 
+                processedCount + "/" + validUrlCount, result.getStatus(), result.getRedirectCount(), 
+                result.getFinalUrl());
             
             rowIndex++;
         }

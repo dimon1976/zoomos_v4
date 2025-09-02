@@ -34,7 +34,8 @@
       "mcp__context7__get-library-docs",
       "Bash(/bashes)",
       "mcp__playwright__browser_press_key",
-      "Bash(jar:*)"
+      "Bash(jar:*)",
+      "WebSearch"
     ],
     "additionalDirectories": [
       "D:\\d D:\\project"

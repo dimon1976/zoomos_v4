@@ -1,0 +1,202 @@
+package com.java.service.utils;
+
+import com.java.config.AntiBlockConfig;
+import com.microsoft.playwright.*;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+
+/**
+ * Продвинутая браузерная стратегия на основе Playwright для обхода блокировок
+ */
+// @Service  // Временно отключено пока не исправим Playwright API
+@RequiredArgsConstructor
+@Slf4j
+public class PlaywrightBrowserStrategy implements AntiBlockStrategy {
+    
+    private final AntiBlockConfig antiBlockConfig;
+    
+    private static final List<String> USER_AGENTS = Arrays.asList(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:119.0) Gecko/20100101 Firefox/119.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:119.0) Gecko/20100101 Firefox/119.0"
+    );
+    
+    @Override
+    public String getStrategyName() {
+        return "PlaywrightBrowser";
+    }
+    
+    @Override
+    public int getPriority() {
+        return 4; // Самая продвинутая стратегия, используется в крайнем случае
+    }
+    
+    @Override
+    public boolean isAvailable() {
+        try {
+            // Простая проверка доступности Playwright
+            Playwright playwright = Playwright.create();
+            playwright.close();
+            return true;
+        } catch (Exception e) {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.warn("PlaywrightBrowserStrategy недоступна: {}", e.getMessage());
+            }
+            return false;
+        }
+    }
+    
+    @Override
+    public RedirectCollectorService.RedirectResult processUrl(String originalUrl, int maxRedirects, int timeoutSeconds) {
+        RedirectCollectorService.RedirectResult result = new RedirectCollectorService.RedirectResult();
+        result.setOriginalUrl(originalUrl);
+        result.setRedirectCount(0);
+        
+        Playwright playwright = null;
+        Browser browser = null;
+        BrowserContext context = null;
+        Page page = null;
+        
+        try {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.info("🎭 PlaywrightBrowser: Запуск для URL: {}", originalUrl);
+            }
+            
+            long startTime = System.currentTimeMillis();
+            
+            // Создаем Playwright инстанс
+            playwright = Playwright.create();
+            
+            // Выбираем случайный браузер (Chrome или Firefox)
+            String browserType = ThreadLocalRandom.current().nextBoolean() ? "chromium" : "firefox";
+            
+            if (browserType.equals("chromium")) {
+                browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
+                    .setHeadless(true)
+                    .setArgs(Arrays.asList(
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--disable-software-rasterizer",
+                        "--disable-background-timer-throttling",
+                        "--disable-backgrounding-occluded-windows",
+                        "--disable-renderer-backgrounding"
+                    )));
+            } else {
+                browser = playwright.firefox().launch(new BrowserType.LaunchOptions()
+                    .setHeadless(true));
+            }
+            
+            // Создаем контекст с реалистичными параметрами
+            String userAgent = USER_AGENTS.get(ThreadLocalRandom.current().nextInt(USER_AGENTS.size()));
+            
+            context = browser.newContext(new Browser.NewContextOptions()
+                .setUserAgent(userAgent)
+                .setViewportSize(1920, 1080)
+                .setLocale("ru-RU")
+                .setTimezoneId("Europe/Moscow"));
+            
+            // Настраиваем дополнительные заголовки
+            context.setExtraHTTPHeaders(java.util.Map.of(
+                "Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept-Encoding", "gzip, deflate, br",
+                "DNT", "1",
+                "Connection", "keep-alive",
+                "Upgrade-Insecure-Requests", "1",
+                "Sec-Fetch-Dest", "document",
+                "Sec-Fetch-Mode", "navigate",
+                "Sec-Fetch-Site", "none",
+                "Sec-Fetch-User", "?1"
+            ));
+            
+            page = context.newPage();
+            
+            // Устанавливаем таймаут
+            page.setDefaultTimeout(timeoutSeconds * 1000);
+            page.setDefaultNavigationTimeout(timeoutSeconds * 1000);
+            
+            String initialUrl = originalUrl;
+            int redirectCount = 0;
+            
+            try {
+                // Переходим на страницу
+                Response response = page.navigate(originalUrl, new Page.NavigateOptions()
+                    .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
+                    .setTimeout(timeoutSeconds * 1000));
+                
+                // Ждем загрузки страницы и возможных JS редиректов
+                page.waitForTimeout(3000);
+                
+                String finalUrl = page.url();
+                
+                // Подсчитываем редиректы по разности URL
+                if (!initialUrl.equals(finalUrl)) {
+                    redirectCount = 1; // Упрощенный подсчет
+                }
+                
+                result.setFinalUrl(finalUrl);
+                result.setStatus(response != null && response.ok() ? "SUCCESS" : "HTTP_" + (response != null ? response.status() : "ERROR"));
+                result.setRedirectCount(redirectCount);
+                
+                long elapsedTime = System.currentTimeMillis() - startTime;
+                
+                if (antiBlockConfig.isLogStrategies()) {
+                    log.info("🎭 PlaywrightBrowser: URL: {} | Browser: {} | Status: {} | Time: {}ms | Final: {} | Redirects: {}", 
+                            originalUrl, browserType, result.getStatus(), elapsedTime, 
+                            result.getFinalUrl(), result.getRedirectCount());
+                }
+                
+            } catch (PlaywrightException e) {
+                String errorMsg = e.getMessage().toLowerCase();
+                String status = "PLAYWRIGHT_ERROR";
+                
+                if (errorMsg.contains("timeout")) {
+                    status = "PLAYWRIGHT_TIMEOUT";
+                } else if (errorMsg.contains("net::err_blocked_by_client") || 
+                          errorMsg.contains("net::err_access_denied") ||
+                          errorMsg.contains("403") || errorMsg.contains("401")) {
+                    status = "PLAYWRIGHT_BLOCKED";
+                }
+                
+                result.setFinalUrl(originalUrl);
+                result.setStatus(status);
+                result.setRedirectCount(0);
+                
+                if (antiBlockConfig.isLogStrategies()) {
+                    long elapsedTime = System.currentTimeMillis() - startTime;
+                    log.warn("🎭 PlaywrightBrowser: URL: {} | Browser: {} | Error: {} | Time: {}ms", 
+                            originalUrl, browserType, e.getMessage(), elapsedTime);
+                }
+            }
+            
+        } catch (Exception e) {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.error("🎭 PlaywrightBrowser: Критическая ошибка для URL {}: {}", originalUrl, e.getMessage());
+            }
+            
+            result.setFinalUrl(originalUrl);
+            result.setStatus("PLAYWRIGHT_EXCEPTION");
+            result.setRedirectCount(0);
+            
+        } finally {
+            // Освобождаем ресурсы
+            try {
+                if (page != null) page.close();
+                if (context != null) context.close();
+                if (browser != null) browser.close();
+                if (playwright != null) playwright.close();
+            } catch (Exception e) {
+                log.debug("Ошибка при закрытии Playwright ресурсов: {}", e.getMessage());
+            }
+        }
+        
+        return result;
+    }
+}

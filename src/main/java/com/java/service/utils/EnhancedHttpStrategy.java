@@ -22,13 +22,39 @@ import java.util.concurrent.ThreadLocalRandom;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class EnhancedHttpStrategy {
+public class EnhancedHttpStrategy implements AntiBlockStrategy {
     
     private final AntiBlockConfig antiBlockConfig;
+    
+    @Override
+    public String getStrategyName() {
+        return "EnhancedHttp";
+    }
+    
+    @Override
+    public int getPriority() {
+        return 2; // Вторая по приоритету
+    }
+    
+    @Override
+    public boolean isAvailable() {
+        try {
+            // Проверяем доступность Apache HttpClient классов
+            Class.forName("org.apache.hc.client5.http.impl.classic.HttpClients");
+            Class.forName("org.apache.hc.client5.http.ssl.TlsSocketStrategy");
+            return true;
+        } catch (ClassNotFoundException e) {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.warn("EnhancedHttpStrategy недоступна: отсутствуют зависимости Apache HttpClient - {}", e.getMessage());
+            }
+            return false;
+        }
+    }
     
     /**
      * Обработка URL с улучшенными HTTP заголовками и cookie management
      */
+    @Override
     public RedirectCollectorService.RedirectResult processUrl(String originalUrl, int maxRedirects, int timeoutSeconds) {
         RedirectCollectorService.RedirectResult result = new RedirectCollectorService.RedirectResult();
         result.setOriginalUrl(originalUrl);

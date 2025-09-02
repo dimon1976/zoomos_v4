@@ -139,9 +139,41 @@ public class BrowserService {
             
             String finalUrl = currentUrl;
             
-            log.info("Браузер завершил обработку: {} -> {}", originalUrl, finalUrl);
+            // Проверяем содержимое страницы на наличие ошибок блокировки
+            String pageStatus = "SUCCESS";
+            String errorMessage = null;
             
-            return new BrowserResult(finalUrl, "SUCCESS", null, redirectCount);
+            try {
+                String pageSource = driver.getPageSource();
+                String title = driver.getTitle();
+                
+                // Проверяем признаки блокировки/ошибки
+                if (title != null && (title.contains("403") || title.contains("Error") || title.contains("Forbidden"))) {
+                    pageStatus = "BLOCKED";
+                    errorMessage = "Page title indicates blocking: " + title;
+                } else if (pageSource != null) {
+                    String sourceLower = pageSource.toLowerCase();
+                    if (sourceLower.contains("403 error") || 
+                        sourceLower.contains("forbidden") || 
+                        sourceLower.contains("доступ к сайту запрещен") ||
+                        sourceLower.contains("access denied") ||
+                        (sourceLower.contains("403") && sourceLower.contains("error"))) {
+                        pageStatus = "BLOCKED";
+                        errorMessage = "Page content indicates 403 blocking";
+                    }
+                }
+                
+                if (pageStatus.equals("BLOCKED")) {
+                    log.warn("Обнаружена блокировка на странице: URL={}, Title={}", finalUrl, title);
+                }
+                
+            } catch (Exception e) {
+                log.warn("Не удалось проанализировать содержимое страницы: {}", e.getMessage());
+            }
+            
+            log.info("Браузер завершил обработку: {} -> {} (статус: {})", originalUrl, finalUrl, pageStatus);
+            
+            return new BrowserResult(finalUrl, pageStatus, errorMessage, redirectCount);
             
         } catch (Exception e) {
             log.error("Ошибка при работе с браузером для URL {}: {}", originalUrl, e.getMessage());
@@ -239,15 +271,19 @@ public class BrowserService {
     }
 
     /**
-     * Проверка доступности браузеров
+     * Проверка доступности браузеров (быстрая проверка без создания драйвера)
      */
     public boolean isBrowserAvailable() {
         try {
-            WebDriver testDriver = createWebDriver(5);
-            testDriver.quit();
+            // Быстрая проверка: проверяем только доступность классов Selenium
+            Class.forName("org.openqa.selenium.WebDriver");
+            Class.forName("org.openqa.selenium.chrome.ChromeDriver");
+            Class.forName("io.github.bonigarcia.wdm.WebDriverManager");
+            
+            log.debug("Selenium классы доступны, BrowserService считается доступным");
             return true;
         } catch (Exception e) {
-            log.warn("Браузеры недоступны: {}", e.getMessage());
+            log.warn("Браузеры недоступны: отсутствуют необходимые классы - {}", e.getMessage());
             return false;
         }
     }
