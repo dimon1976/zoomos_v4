@@ -3,6 +3,7 @@ package com.java.service.utils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.utils.RedirectCollectorDto;
+import com.java.config.AntiBlockConfig;
 import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateField;
 import com.java.model.entity.FileMetadata;
@@ -24,6 +25,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Stream;
 
 /**
@@ -36,6 +38,7 @@ public class RedirectCollectorService {
 
     private final FileGeneratorService fileGeneratorService;
     private final BrowserService browserService;
+    private final AntiBlockConfig antiBlockConfig;
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
     /**
@@ -492,8 +495,12 @@ public class RedirectCollectorService {
                 connection.setReadTimeout(timeoutSeconds * 1000);
                 connection.setInstanceFollowRedirects(false); // Отключаем автоматические редиректы
                 
-                // Добавляем реалистичные заголовки браузера для обхода блокировок
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                // Ротация User-Agent для обхода блокировок
+                String selectedUserAgent = getRandomUserAgent();
+                connection.setRequestProperty("User-Agent", selectedUserAgent);
+                
+                // Добавляем Referer для имитации перехода с поисковика
+                connection.setRequestProperty("Referer", getRandomReferer());
                 connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
                 connection.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
                 connection.setRequestProperty("Accept-Encoding", "gzip, deflate, br");
@@ -508,8 +515,15 @@ public class RedirectCollectorService {
                 connection.setRequestProperty("sec-ch-ua-mobile", "?0");
                 connection.setRequestProperty("sec-ch-ua-platform", "\"Windows\"");
                 
+                long startTime = System.currentTimeMillis();
                 int responseCode = connection.getResponseCode();
-                log.info("Шаг {}: {} -> статус {}", redirectCount, currentUrl, responseCode);
+                long elapsedTime = System.currentTimeMillis() - startTime;
+                
+                // Логирование согласно стандарту
+                if (antiBlockConfig.isLogStrategies()) {
+                    log.info("URL: {} | Strategy: SimpleHttp | Status: {} | Time: {}ms | UserAgent: {}", 
+                             currentUrl, responseCode, elapsedTime, selectedUserAgent.substring(0, Math.min(50, selectedUserAgent.length())) + "...");
+                }
                 
                 // Проверяем HTTP-редиректы
                 if (isRedirectStatus(responseCode)) {
@@ -888,5 +902,33 @@ public class RedirectCollectorService {
         
         public int getRedirectCount() { return redirectCount; }
         public void setRedirectCount(int redirectCount) { this.redirectCount = redirectCount; }
+    }
+    
+    /**
+     * Получение случайного User-Agent для ротации
+     */
+    private String getRandomUserAgent() {
+        List<String> userAgents = antiBlockConfig.getUserAgents();
+        if (userAgents.isEmpty()) {
+            // Fallback на стандартный User-Agent
+            return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+        }
+        int randomIndex = ThreadLocalRandom.current().nextInt(userAgents.size());
+        return userAgents.get(randomIndex);
+    }
+    
+    /**
+     * Получение случайного Referer для имитации перехода с поисковиков
+     */
+    private String getRandomReferer() {
+        String[] referers = {
+            "https://www.google.com/",
+            "https://www.google.ru/",
+            "https://yandex.ru/",
+            "https://www.bing.com/",
+            "https://duckduckgo.com/"
+        };
+        int randomIndex = ThreadLocalRandom.current().nextInt(referers.length);
+        return referers[randomIndex];
     }
 }
