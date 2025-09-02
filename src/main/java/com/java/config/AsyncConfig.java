@@ -99,4 +99,24 @@ public class AsyncConfig {
 
         return executor;
     }
+
+    /**
+     * Пул потоков для утилит (долгосрочные операции)
+     */
+    @Bean(name = "utilsTaskExecutor")
+    public Executor utilsTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(10);
+        executor.setThreadNamePrefix("UtilsExecutor-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(300); // 5 минут на завершение
+        executor.initialize();
+
+        log.info("Инициализирован пул потоков для утилит: core=1, max=2, queue=10");
+
+        return executor;
+    }
 }

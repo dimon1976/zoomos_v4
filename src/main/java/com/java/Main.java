@@ -37,7 +37,7 @@ public class Main {
     @EventListener(ApplicationReadyEvent.class)
     public void logApplicationStartup() {
         String activeProfiles = Arrays.toString(environment.getActiveProfiles());
-        String port = environment.getProperty("server.port", "8080");
+        String port = environment.getProperty("server.port", "8081");
         String appName = environment.getProperty("spring.application.name", "Обработка файлов");
 
         log.info("----------------------------------------------------------");

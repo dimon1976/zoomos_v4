@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Обслуживание БД - Система обслуживания',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Обслуживание базы данных',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Обслуживание БД</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .db-metric {
+            text-align: center;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 0.375rem;
+            margin-bottom: 1rem;
+        }
+        .db-metric .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #0d6efd;
+        }
+        .performance-table th,
+        .performance-table td {
+            vertical-align: middle;
+        }
+        .recommendation-text {
+            font-style: italic;
+            color: #6c757d;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/maintenance" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Назад
+        </a>
+        <button type="button" class="btn btn-outline-primary" onclick="loadDatabaseStats()">
+            <i class="fas fa-sync-alt"></i> Обновить
+        </button>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Статистика базы данных -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-database text-primary"></i>
+                            Статистика базы данных
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="dbStatsLoading" class="text-center p-4">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            <p class="mt-2">Загрузка статистики...</p>
+                        </div>
+                        <div id="dbStatsContainer" class="d-none">
+                            <div class="row" id="dbMetrics">
+                                <!-- Метрики будут загружены через JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Операции обслуживания -->
+        <div class="row mb-4">
+            <!-- Очистка БД -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-broom text-danger"></i>
+                            Очистка базы данных
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Удаление старых данных (сессии импорта/экспорта, завершенные операции старше <span th:text="${databaseCleanupDays}">30</span> дней).</p>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-danger" onclick="cleanupDatabase()">
+                                <i class="fas fa-broom"></i> Очистить БД
+                            </button>
+                        </div>
+                        <div id="cleanupResult" class="mt-3 d-none">
+                            <!-- Результат очистки -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Анализ производительности -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-tachometer-alt text-info"></i>
+                            Анализ производительности
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Анализ производительности запросов и выявление медленных операций.</p>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-info" onclick="analyzePerformance()">
+                                <i class="fas fa-chart-line"></i> Анализировать
+                            </button>
+                        </div>
+                        <div id="performanceResult" class="mt-3 d-none">
+                            <!-- Результат анализа -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Размеры таблиц -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-table text-secondary"></i>
+                            Размеры таблиц
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="tablesLoading" class="text-center p-4">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span class="ms-2">Загрузка информации о таблицах...</span>
+                        </div>
+                        <div id="tablesContainer" class="d-none">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Таблица</th>
+                                            <th>Размер</th>
+                                            <th>Доля от общего размера</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tablesTable">
+                                        <!-- Данные будут загружены через JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+// Загрузка статистики при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    loadDatabaseStats();
+});
+
+// Загрузка статистики БД
+async function loadDatabaseStats() {
+    try {
+        document.getElementById('dbStatsLoading').classList.remove('d-none');
+        document.getElementById('dbStatsContainer').classList.add('d-none');
+        document.getElementById('tablesLoading').classList.remove('d-none');
+        document.getElementById('tablesContainer').classList.add('d-none');
+        
+        const response = await fetch('/maintenance/database/stats');
+        const stats = await response.json();
+        
+        // Обновляем основные метрики
+        document.getElementById('dbMetrics').innerHTML = `
+            <div class="col-md-2">
+                <div class="db-metric">
+                    <div class="metric-value">${stats.formattedTotalSize}</div>
+                    <small class="text-muted">Общий размер БД</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="db-metric">
+                    <div class="metric-value">${stats.totalTables}</div>
+                    <small class="text-muted">Таблиц</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="db-metric">
+                    <div class="metric-value">${stats.totalIndexes}</div>
+                    <small class="text-muted">Индексов</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="db-metric">
+                    <div class="metric-value">${stats.activeConnections}</div>
+                    <small class="text-muted">Активных подключений</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="db-metric">
+                    <div class="metric-value">${stats.cacheHitRatio.toFixed(1)}%</div>
+                    <small class="text-muted">Cache Hit Ratio</small>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="db-metric">
+                    <div class="metric-value">${stats.lastVacuum ? new Date(stats.lastVacuum).toLocaleDateString('ru-RU') : 'Н/Д'}</div>
+                    <small class="text-muted">Последний VACUUM</small>
+                </div>
+            </div>
+        `;
+        
+        // Обновляем таблицу размеров таблиц
+        const tablesBody = document.getElementById('tablesTable');
+        tablesBody.innerHTML = '';
+        
+        // Сортируем таблицы по размеру
+        const sortedTables = Object.entries(stats.tableSizes)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10); // Показываем только топ-10
+        
+        sortedTables.forEach(([tableName, sizeBytes]) => {
+            const percentage = (sizeBytes / stats.totalSizeBytes * 100).toFixed(2);
+            const formattedSize = stats.formattedTableSizes[tableName];
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><code>${tableName}</code></td>
+                <td><strong>${formattedSize}</strong></td>
+                <td>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar ${percentage > 50 ? 'bg-warning' : 'bg-info'}" 
+                             style="width: ${percentage}%">${percentage}%</div>
+                    </div>
+                </td>
+            `;
+            tablesBody.appendChild(row);
+        });
+        
+        document.getElementById('dbStatsLoading').classList.add('d-none');
+        document.getElementById('dbStatsContainer').classList.remove('d-none');
+        document.getElementById('tablesLoading').classList.add('d-none');
+        document.getElementById('tablesContainer').classList.remove('d-none');
+        
+    } catch (error) {
+        console.error('Ошибка загрузки статистики БД:', error);
+        document.getElementById('dbStatsLoading').innerHTML = 
+            '<div class="alert alert-danger">Ошибка загрузки статистики БД</div>';
+        document.getElementById('tablesLoading').innerHTML = 
+            '<div class="alert alert-danger">Ошибка загрузки информации о таблицах</div>';
+    }
+}
+
+// Очистка БД
+async function cleanupDatabase() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    if (!confirm('Выполнить очистку базы данных? Будут удалены старые данные.')) {
+        return;
+    }
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Очистка...';
+    
+    try {
+        const response = await fetch('/maintenance/database/cleanup', { method: 'POST' });
+        const result = await response.json();
+        
+        const resultDiv = document.getElementById('cleanupResult');
+        
+        if (result.success) {
+            const totalDeleted = result.deletedImportSessions + result.deletedExportSessions + 
+                               result.deletedFileOperations + result.deletedOrphanedRecords;
+            
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Очистка выполнена</h6>
+                <div class="row">
+                    <div class="col-sm-6">
+                        <p class="mb-1">Сессий импорта: <strong>${result.deletedImportSessions}</strong></p>
+                        <p class="mb-1">Сессий экспорта: <strong>${result.deletedExportSessions}</strong></p>
+                    </div>
+                    <div class="col-sm-6">
+                        <p class="mb-1">Файловых операций: <strong>${result.deletedFileOperations}</strong></p>
+                        <p class="mb-1">Orphaned записей: <strong>${result.deletedOrphanedRecords}</strong></p>
+                    </div>
+                </div>
+                <p class="mb-1">Всего удалено записей: <strong>${totalDeleted}</strong></p>
+                <p class="mb-0">Освобождено места: <strong>${result.formattedFreedSpace}</strong></p>
+                <small class="text-muted">Время выполнения: ${new Date(result.cleanupTime).toLocaleString('ru-RU')}</small>
+            `;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-warning';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-exclamation-triangle"></i> Нет данных для очистки</h6>
+                <p class="mb-0">Не найдено старых данных для удаления</p>
+            `;
+        }
+        
+        resultDiv.classList.remove('d-none');
+        loadDatabaseStats(); // Обновляем статистику
+        
+    } catch (error) {
+        console.error('Ошибка очистки БД:', error);
+        const resultDiv = document.getElementById('cleanupResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка очистки</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// Анализ производительности
+async function analyzePerformance() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ...';
+    
+    try {
+        const response = await fetch('/maintenance/database/performance');
+        const performance = await response.json();
+        
+        const resultDiv = document.getElementById('performanceResult');
+        
+        if (performance.length > 0) {
+            let performanceHtml = `
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-chart-line"></i> Анализ производительности запросов</h6>
+                    <p class="mb-0">Найдено запросов для анализа: ${performance.length}</p>
+                </div>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm performance-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Запрос</th>
+                                <th>Среднее время</th>
+                                <th>Максимальное время</th>
+                                <th>Количество вызовов</th>
+                                <th>Рекомендация</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            performance.forEach(query => {
+                const isSlowQuery = query.slowQuery;
+                const rowClass = isSlowQuery ? 'table-warning' : '';
+                const queryText = query.query.length > 60 ? query.query.substring(0, 60) + '...' : query.query;
+                
+                performanceHtml += `
+                    <tr class="${rowClass}">
+                        <td><code style="font-size: 0.8rem;">${queryText}</code></td>
+                        <td><strong>${query.avgExecutionTimeMs}мс</strong></td>
+                        <td>${query.maxExecutionTimeMs}мс</td>
+                        <td><span class="badge bg-secondary">${query.callCount}</span></td>
+                        <td class="recommendation-text">${query.recommendation || 'Оптимально'}</td>
+                    </tr>
+                `;
+            });
+            
+            performanceHtml += '</tbody></table></div>';
+            resultDiv.innerHTML = performanceHtml;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Анализ завершен</h6>
+                <p class="mb-0">Проблем с производительностью не обнаружено</p>
+            `;
+        }
+        
+        resultDiv.classList.remove('d-none');
+        
+    } catch (error) {
+        console.error('Ошибка анализа производительности:', error);
+        const resultDiv = document.getElementById('performanceResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка анализа</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+</script>
+</th:block>
+</html>

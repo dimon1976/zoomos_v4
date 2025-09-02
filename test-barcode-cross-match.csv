@@ -1,0 +1,6 @@
+ID,Исходные штрихкоды,Справочные штрихкоды,URL
+PROD001,"1234567890123,5678901234567",4567890123456,https://product001.example.com
+PROD002,2345678901234,5678901234567,https://product002.example.com
+PROD003,3456789012345,1234567890123,https://product003.example.com
+PROD004,4567890123456,2345678901234,https://product004.example.com
+PROD005,5678901234567,3456789012345,https://product005.example.com

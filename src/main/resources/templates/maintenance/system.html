@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Диагностика системы - Система обслуживания',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Диагностика системы',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Диагностика системы</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .system-metric {
+            text-align: center;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 0.5rem;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .metric-healthy { color: #28a745; }
+        .metric-warning { color: #ffc107; }
+        .metric-danger { color: #dc3545; }
+        .metric-info { color: #17a2b8; }
+        .health-card {
+            transition: all 0.3s ease;
+        }
+        .health-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .circular-progress {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1rem;
+        }
+        .circular-progress svg {
+            transform: rotate(-90deg);
+        }
+        .circular-progress .progress-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/maintenance" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Назад
+        </a>
+        <button type="button" class="btn btn-outline-primary" onclick="loadSystemHealth()">
+            <i class="fas fa-sync-alt"></i> Обновить
+        </button>
+        <button type="button" class="btn btn-outline-info" onclick="generateReport()">
+            <i class="fas fa-file-medical-alt"></i> Отчет
+        </button>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Общее состояние системы -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card health-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-heartbeat text-danger"></i>
+                            Общее состояние системы
+                        </h5>
+                        <span id="overallStatus" class="badge bg-secondary">
+                            <i class="fas fa-spinner fa-spin"></i> Проверка...
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <div id="healthLoading" class="text-center p-4">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            <p class="mt-2">Проверка состояния системы...</p>
+                        </div>
+                        <div id="healthContainer" class="d-none">
+                            <div class="row">
+                                <div class="col-md-3 text-center">
+                                    <div class="circular-progress">
+                                        <svg width="80" height="80" viewBox="0 0 80 80">
+                                            <circle cx="40" cy="40" r="35" fill="none" stroke="#e9ecef" stroke-width="6"/>
+                                            <circle id="scoreCircle" cx="40" cy="40" r="35" fill="none" stroke-width="6" 
+                                                   stroke-dasharray="220" stroke-dashoffset="220"/>
+                                        </svg>
+                                        <div class="progress-value" id="scoreValue">0</div>
+                                    </div>
+                                    <small class="text-muted">Оценка системы</small>
+                                </div>
+                                <div class="col-md-9">
+                                    <div class="row" id="systemComponents">
+                                        <!-- Компоненты будут загружены через JavaScript -->
+                                    </div>
+                                    <div class="mt-3">
+                                        <p id="systemRecommendation" class="mb-0 text-muted font-italic">
+                                            <!-- Рекомендация будет загружена -->
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ресурсы системы -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card health-card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-server text-primary"></i>
+                            Использование ресурсов
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="resourcesLoading" class="text-center p-4">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span class="ms-2">Загрузка информации о ресурсах...</span>
+                        </div>
+                        <div id="resourcesContainer" class="d-none">
+                            <div class="row" id="resourceMetrics">
+                                <!-- Метрики ресурсов будут загружены через JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Диагностический отчет -->
+        <div class="row" id="reportSection" style="display: none;">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-file-medical text-info"></i>
+                            Диагностический отчет
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <pre id="reportContent" class="bg-light p-3 rounded" style="font-size: 0.9rem; white-space: pre-wrap;"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+// Загрузка данных при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    loadSystemHealth();
+});
+
+// Загрузка состояния системы
+async function loadSystemHealth() {
+    try {
+        document.getElementById('healthLoading').classList.remove('d-none');
+        document.getElementById('healthContainer').classList.add('d-none');
+        document.getElementById('resourcesLoading').classList.remove('d-none');
+        document.getElementById('resourcesContainer').classList.add('d-none');
+        
+        // Загружаем общее состояние
+        const healthResponse = await fetch('/maintenance/system/health');
+        const health = await healthResponse.json();
+        
+        // Загружаем ресурсы
+        const resourcesResponse = await fetch('/maintenance/system/resources');
+        const resources = await resourcesResponse.json();
+        
+        // Обновляем общий статус
+        const statusElement = document.getElementById('overallStatus');
+        if (health.overallStatus === 'HEALTHY') {
+            statusElement.className = 'badge bg-success';
+            statusElement.innerHTML = '<i class="fas fa-check-circle"></i> Система здорова';
+        } else {
+            statusElement.className = 'badge bg-warning';
+            statusElement.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ' + health.overallStatus;
+        }
+        
+        // Обновляем круговую диаграмму оценки
+        updateScoreCircle(health.systemScore);
+        
+        // Обновляем компоненты системы
+        document.getElementById('systemComponents').innerHTML = Object.entries(health.componentStatuses)
+            .map(([component, status]) => `
+                <div class="col-md-4 mb-2">
+                    <div class="d-flex align-items-center">
+                        <div class="status-indicator me-2" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${status === 'OK' || status === 'CONNECTED' ? '#28a745' : '#ffc107'}"></div>
+                        <span class="text-capitalize"><strong>${translateComponent(component)}:</strong> ${translateStatus(status)}</span>
+                    </div>
+                </div>
+            `).join('');
+        
+        // Обновляем рекомендацию
+        document.getElementById('systemRecommendation').textContent = health.recommendation;
+        
+        // Обновляем метрики ресурсов
+        document.getElementById('resourceMetrics').innerHTML = `
+            <div class="col-lg-3 col-md-6">
+                <div class="system-metric">
+                    <div class="metric-value metric-${resources.cpuUsagePercent > 80 ? 'danger' : resources.cpuUsagePercent > 60 ? 'warning' : 'healthy'}">${resources.cpuUsagePercent.toFixed(1)}%</div>
+                    <small class="text-muted">Процессор</small>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <div class="system-metric">
+                    <div class="metric-value metric-${resources.memoryUsagePercent > 85 ? 'danger' : resources.memoryUsagePercent > 70 ? 'warning' : 'healthy'}">${resources.memoryUsagePercent.toFixed(1)}%</div>
+                    <small class="text-muted">Память (${resources.formattedUsedMemory} / ${resources.formattedTotalMemory})</small>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <div class="system-metric">
+                    <div class="metric-value metric-${resources.diskUsagePercent > 90 ? 'danger' : resources.diskUsagePercent > 80 ? 'warning' : 'healthy'}">${resources.diskUsagePercent.toFixed(1)}%</div>
+                    <small class="text-muted">Диск (свободно ${resources.formattedFreeDisk})</small>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <div class="system-metric">
+                    <div class="metric-value metric-info">${health.formattedUptime}</div>
+                    <small class="text-muted">Время работы</small>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('healthLoading').classList.add('d-none');
+        document.getElementById('healthContainer').classList.remove('d-none');
+        document.getElementById('resourcesLoading').classList.add('d-none');
+        document.getElementById('resourcesContainer').classList.remove('d-none');
+        
+    } catch (error) {
+        console.error('Ошибка загрузки состояния системы:', error);
+        document.getElementById('healthLoading').innerHTML = 
+            '<div class="alert alert-danger">Ошибка загрузки состояния системы</div>';
+        document.getElementById('resourcesLoading').innerHTML = 
+            '<div class="alert alert-danger">Ошибка загрузки ресурсов системы</div>';
+    }
+}
+
+// Обновление круговой диаграммы оценки
+function updateScoreCircle(score) {
+    const circle = document.getElementById('scoreCircle');
+    const scoreValue = document.getElementById('scoreValue');
+    
+    const circumference = 2 * Math.PI * 35;
+    const offset = circumference - (score / 100 * circumference);
+    
+    circle.style.strokeDashoffset = offset;
+    
+    if (score >= 80) {
+        circle.style.stroke = '#28a745';
+    } else if (score >= 60) {
+        circle.style.stroke = '#ffc107';
+    } else {
+        circle.style.stroke = '#dc3545';
+    }
+    
+    scoreValue.textContent = Math.round(score);
+}
+
+// Генерация диагностического отчета
+async function generateReport() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Генерация...';
+    
+    try {
+        const response = await fetch('/maintenance/system/report');
+        const report = await response.json();
+        
+        document.getElementById('reportContent').textContent = report.details;
+        document.getElementById('reportSection').style.display = 'block';
+        
+        // Прокручиваем к отчету
+        document.getElementById('reportSection').scrollIntoView({ behavior: 'smooth' });
+        
+    } catch (error) {
+        console.error('Ошибка генерации отчета:', error);
+        alert('Ошибка генерации диагностического отчета: ' + error.message);
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// Вспомогательные функции для перевода
+function translateComponent(component) {
+    const translations = {
+        'database': 'База данных',
+        'memory': 'Память',
+        'disk': 'Диск',
+        'cpu': 'Процессор'
+    };
+    return translations[component] || component;
+}
+
+function translateStatus(status) {
+    const translations = {
+        'OK': 'Норма',
+        'CONNECTED': 'Подключена',
+        'WARNING': 'Предупреждение',
+        'ERROR': 'Ошибка'
+    };
+    return translations[status] || status;
+}
+</script>
+</th:block>
+</html>

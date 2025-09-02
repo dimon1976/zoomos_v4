@@ -137,14 +137,14 @@
                                     <label class="form-check-label w-100"
                                            th:for="${'export' + export.id}">
                                         <h6 class="mb-1">
-                                            Экспорт #<span th:text="${export.id}">1</span>
+                                            Операция #<span th:text="${export.fileOperation.id}">1</span>
                                         </h6>
                                         <p class="text-muted mb-1" th:text="${export.template.id}">
                                             Шаблон
                                         </p>
                                         <small class="text-muted">
                                             <i class="fas fa-calendar me-1"></i>
-                                            <span th:text="${#temporals.format(export.startedAt, 'dd.MM.yyyy HH:mm')}">
+                                            <span th:text="${#temporals.format(export.fileOperation.startedAt, 'dd.MM.yyyy HH:mm', T(java.time.ZoneId).systemDefault())}">
                                                 01.01.2025 10:00
                                             </span>
                                         </small>

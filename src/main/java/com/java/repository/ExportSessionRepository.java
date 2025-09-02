@@ -27,6 +27,9 @@ public interface ExportSessionRepository extends JpaRepository<ExportSession, Lo
     @Query("SELECT es FROM ExportSession es WHERE es.template.client.id = :clientId ORDER BY es.startedAt DESC")
     Page<ExportSession> findByClientId(@Param("clientId") Long clientId, Pageable pageable);
 
+    @Query("SELECT es FROM ExportSession es LEFT JOIN FETCH es.template LEFT JOIN FETCH es.fileOperation WHERE es.template.client.id = :clientId ORDER BY es.startedAt DESC")
+    Page<ExportSession> findByClientIdWithTemplate(@Param("clientId") Long clientId, Pageable pageable);
+
     @Query("SELECT es FROM ExportSession es WHERE es.template = :template AND es.startedAt BETWEEN :from AND :to")
     List<ExportSession> findByTemplateAndDateRange(@Param("template") ExportTemplate template,
                                                    @Param("from") ZonedDateTime from,
@@ -62,4 +65,7 @@ public interface ExportSessionRepository extends JpaRepository<ExportSession, Lo
 
     @Query("SELECT es FROM ExportSession es LEFT JOIN FETCH es.template LEFT JOIN FETCH es.fileOperation WHERE es.template = :template")
     Page<ExportSession> findByTemplateWithTemplate(@Param("template") ExportTemplate template, Pageable pageable);
+
+    @Query("SELECT es FROM ExportSession es LEFT JOIN FETCH es.template LEFT JOIN FETCH es.fileOperation WHERE es.fileOperation.id = :fileOperationId")
+    Optional<ExportSession> findByFileOperationIdWithTemplate(@Param("fileOperationId") Long fileOperationId);
 }

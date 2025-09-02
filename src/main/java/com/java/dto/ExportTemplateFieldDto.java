@@ -1,5 +1,6 @@
 package com.java.dto;
 
+import com.java.model.enums.NormalizationType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -30,4 +31,9 @@ public class ExportTemplateFieldDto {
     private String dataFormat; // Формат для дат/чисел
 
     private String transformationRule; // JSON правила трансформации
+    
+    // Поля нормализации
+    private NormalizationType normalizationType;
+    
+    private String normalizationRule; // JSON с правилами нормализации
 }

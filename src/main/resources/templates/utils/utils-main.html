@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Утилиты',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Утилиты',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Утилиты</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .utility-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .utility-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-ready { background-color: #28a745; }
+        .status-development { background-color: #ffc107; }
+        .status-disabled { background-color: #6c757d; }
+        .utility-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-primary" onclick="location.reload()">
+            <i class="fas fa-sync-alt"></i> Обновить
+        </button>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Описание системы утилит -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-info-circle text-primary"></i>
+                            О системе утилит
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <p><strong>Система утилит для обработки файлов</strong></p>
+                                <p class="mb-1">Набор специализированных инструментов для работы с данными без сохранения в базу данных.</p>
+                                <p class="mb-0">Все утилиты работают по принципу: загрузил файл → настроил параметры → получил результат.</p>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <div class="d-flex flex-column gap-2">
+                                    <div><i class="fas fa-file-upload text-muted"></i> Загрузка до 1200MB</div>
+                                    <div><i class="fas fa-clock text-muted"></i> Обработка без сохранения</div>
+                                    <div><i class="fas fa-download text-muted"></i> Результат сразу на скачивание</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Список утилит -->
+        <div class="row">
+            <div th:each="utility : ${utilities}" class="col-md-6 col-lg-3 mb-4">
+                <div class="card utility-card h-100" 
+                     th:classappend="${utility.status == 'disabled'} ? 'bg-light' : ''">
+                    <div class="card-body text-center">
+                        <div class="utility-icon" 
+                             th:classappend="${utility.status == 'ready'} ? 'text-success' : (${utility.status == 'development'} ? 'text-warning' : 'text-muted')">
+                            <i th:class="${utility.icon}"></i>
+                        </div>
+                        <h5 class="card-title" th:text="${utility.title}">Название утилиты</h5>
+                        <p class="card-text" th:text="${utility.description}">Описание утилиты</p>
+                        <div th:switch="${utility.status}">
+                            <a th:case="ready" 
+                               th:href="${utility.url}" 
+                               class="btn btn-success">
+                                <i class="fas fa-arrow-right"></i> Использовать
+                            </a>
+                            <button th:case="development" 
+                                    type="button" 
+                                    class="btn btn-warning" 
+                                    disabled>
+                                <i class="fas fa-hammer"></i> В разработке
+                            </button>
+                            <button th:case="disabled" 
+                                    type="button" 
+                                    class="btn btn-secondary" 
+                                    disabled>
+                                <i class="fas fa-ban"></i> Недоступно
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-light">
+                        <small class="text-muted">
+                            <span class="status-indicator" 
+                                  th:classappend="'status-' + ${utility.status}"></span>
+                            <span th:switch="${utility.status}">
+                                <span th:case="ready">Готово к использованию</span>
+                                <span th:case="development">В разработке</span>
+                                <span th:case="disabled">Отключено</span>
+                            </span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Инструкция по использованию -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-book text-secondary"></i>
+                            Как использовать утилиты
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 text-center mb-3">
+                                <div class="display-6 text-primary mb-2">1</div>
+                                <h6>Выбор утилиты</h6>
+                                <p class="small text-muted">Нажмите на нужную утилиту из списка выше</p>
+                            </div>
+                            <div class="col-md-3 text-center mb-3">
+                                <div class="display-6 text-success mb-2">2</div>
+                                <h6>Загрузка файла</h6>
+                                <p class="small text-muted">Загрузите файл для обработки (Excel, CSV)</p>
+                            </div>
+                            <div class="col-md-3 text-center mb-3">
+                                <div class="display-6 text-warning mb-2">3</div>
+                                <h6>Настройка параметров</h6>
+                                <p class="small text-muted">Выберите нужные колонки и параметры обработки</p>
+                            </div>
+                            <div class="col-md-3 text-center mb-3">
+                                <div class="display-6 text-info mb-2">4</div>
+                                <h6>Получение результата</h6>
+                                <p class="small text-muted">Скачайте готовый файл с результатами</p>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="text-center">
+                            <small class="text-muted">
+                                <i class="fas fa-shield-alt"></i> 
+                                Все файлы обрабатываются локально и не сохраняются на сервере после завершения операции
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Система утилит загружена');
+    // Добавить сюда дополнительную логику при необходимости
+});
+</script>
+</th:block>
+</html>

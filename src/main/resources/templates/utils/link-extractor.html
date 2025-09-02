@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Сбор ссылок с ID',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Сбор ссылок с ID',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Сбор ссылок с ID</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .upload-area {
+            border: 2px dashed #28a745;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #20c997;
+            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        }
+        .feature-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #28a745;
+        }
+        .process-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(45deg, #28a745, #20c997);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            margin: 0 auto 15px;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> К утилитам
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Описание утилиты -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-link"></i>
+                            Сбор ссылок с привязкой к ID
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-3">
+                            Утилита автоматически найдет все ссылки в файле и свяжет их с соответствующими ID.
+                            Поиск ведется по всем колонкам в каждой строке.
+                        </p>
+                        
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="process-icon">
+                                    <i class="fas fa-upload"></i>
+                                </div>
+                                <h6 class="text-center">1. Загрузка</h6>
+                                <p class="text-center text-muted small">
+                                    Загрузите Excel или CSV файл с данными
+                                </p>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="process-icon">
+                                    <i class="fas fa-columns"></i>
+                                </div>
+                                <h6 class="text-center">2. Настройка</h6>
+                                <p class="text-center text-muted small">
+                                    Выберите колонку с идентификаторами
+                                </p>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="process-icon">
+                                    <i class="fas fa-search"></i>
+                                </div>
+                                <h6 class="text-center">3. Поиск</h6>
+                                <p class="text-center text-muted small">
+                                    Автоматический поиск ссылок во всех колонках
+                                </p>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="process-icon">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <h6 class="text-center">4. Результат</h6>
+                                <p class="text-center text-muted small">
+                                    Файл с парами "ID - найденная ссылка"
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Загрузка файла -->
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">
+                            <i class="fas fa-file-upload text-primary"></i>
+                            Шаг 1: Загрузка файла
+                        </h5>
+
+                        <form th:action="@{/utils/link-extractor/upload}" method="post" enctype="multipart/form-data">
+                            <div class="upload-area">
+                                <div class="mb-3">
+                                    <i class="fas fa-cloud-upload-alt fa-3x text-success mb-3"></i>
+                                    <h5>Выберите файл для обработки</h5>
+                                    <p class="text-muted">
+                                        Поддерживаются форматы: Excel (.xlsx, .xls) и CSV
+                                    </p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <input type="file" class="form-control form-control-lg" name="file" 
+                                           accept=".xlsx,.xls,.csv" required>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-success btn-lg">
+                                    <i class="fas fa-upload"></i> Загрузить и проанализировать
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Требования к файлу -->
+        <div class="row mt-4">
+            <div class="col-lg-8 mx-auto">
+                <div class="feature-card">
+                    <h6>
+                        <i class="fas fa-info-circle text-info"></i>
+                        Требования к файлу
+                    </h6>
+                    <ul class="mb-0">
+                        <li>Файл должен содержать колонку с идентификаторами (ID)</li>
+                        <li>Ссылки могут находиться в любых колонках</li>
+                        <li>Поддерживаются ссылки вида http:// и https://</li>
+                        <li>В одной ячейке может быть несколько ссылок</li>
+                        <li>Максимальный размер файла: 1200MB</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Примеры -->
+        <div class="row mt-4">
+            <div class="col-lg-8 mx-auto">
+                <div class="feature-card">
+                    <h6>
+                        <i class="fas fa-lightbulb text-warning"></i>
+                        Что произойдет с данными
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Исходные данные:</strong>
+                            <div class="small text-muted mt-1">
+                                ID: 12345<br>
+                                Описание: Товар https://example.com/item1<br>
+                                Цена: 1000 руб.<br>
+                                Ссылка: https://shop.ru/product/123
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Результат:</strong>
+                            <div class="small text-muted mt-1">
+                                12345 | https://example.com/item1 | Колонка 2<br>
+                                12345 | https://shop.ru/product/123 | Колонка 4
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Обработка формы загрузки
+    const form = document.querySelector('form');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const fileInput = form.querySelector('input[type="file"]');
+    
+    form.addEventListener('submit', function(e) {
+        if (!fileInput.files.length) {
+            e.preventDefault();
+            alert('Выберите файл для загрузки');
+            return;
+        }
+        
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ файла...';
+    });
+    
+    // Показ имени выбранного файла
+    fileInput.addEventListener('change', function() {
+        const fileName = this.files[0]?.name;
+        if (fileName) {
+            const info = document.createElement('div');
+            info.className = 'alert alert-info mt-2';
+            info.innerHTML = `<i class="fas fa-file"></i> Выбран файл: <strong>${fileName}</strong>`;
+            
+            const existing = form.querySelector('.alert');
+            if (existing) existing.remove();
+            
+            this.parentNode.appendChild(info);
+        }
+    });
+});
+</script>
+</th:block>
+</html>

@@ -1,5 +1,6 @@
 package com.java.model.entity;
 
+import com.java.model.enums.NormalizationType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -41,4 +42,12 @@ public class ExportTemplateField {
 
     @Column(name = "transformation_rule")
     private String transformationRule; // JSON с правилами
+
+    // Поля нормализации
+    @Enumerated(EnumType.STRING)
+    @Column(name = "normalization_type")
+    private NormalizationType normalizationType;
+
+    @Column(name = "normalization_rule", length = 1000)
+    private String normalizationRule; // JSON с правилами нормализации
 }

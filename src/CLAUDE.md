@@ -25,14 +25,29 @@ mvn test
 # Run specific test class
 mvn test -Dtest=ClassNameTest
 
-# Run application with specific profile
+# Run application with specific profiles
 mvn spring-boot:run -Dspring-boot.run.profiles=silent
+mvn spring-boot:run -Dspring-boot.run.profiles=verbose
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+
+# Quick start with existing JAR (fastest)
+java -jar target/file-processing-app-1.0-SNAPSHOT.jar --spring.profiles.active=silent
+
+# Run with batch scripts (Windows)
+start-dev.bat
 ```
 
 ### Database
 - PostgreSQL connection: `jdbc:postgresql://localhost:5432/zoomos_v4`
 - Flyway migrations in `src/main/resources/db/migration/`
 - Test profile uses H2 in-memory database
+- **Important**: JPA DDL auto is disabled (`spring.jpa.hibernate.ddl-auto=none`)
+
+### Application Profiles
+- **dev** (default): Moderate logging, DevTools enabled, reduced batch sizes
+- **silent**: Minimal logging for testing, same performance as dev
+- **verbose**: Maximum debugging with SQL logging and TRACE level
+- **prod**: Production optimized with file logging and maximum performance
 
 ## Architecture Overview
 
@@ -71,6 +86,11 @@ The application follows a request-driven processing model with three main flows:
 /clients/{clientId}/statistics     # Client statistics
 /clients/{clientId}/operations     # Operation history
 /clients/{clientId}/import/templates/{templateId}  # Template CRUD
+/maintenance                       # Maintenance system overview
+/maintenance/files                 # File maintenance operations
+/maintenance/database              # Database maintenance operations  
+/maintenance/system                # System health monitoring
+/maintenance/operations            # Scheduled maintenance operations
 ```
 
 **Breadcrumb System**
@@ -97,6 +117,13 @@ The application follows a request-driven processing model with three main flows:
 - `EntityPersistenceService` - Database operations for imported data
 - `DuplicateCheckService` - Duplicate detection and handling
 - `ExportDataService` - Data retrieval for exports
+
+**Maintenance Services**
+- `MaintenanceSchedulerService` - Automated maintenance tasks with @Scheduled annotations
+- `MaintenanceNotificationService` - Real-time notifications via WebSocket
+- `DatabaseMaintenanceService` - Database optimization and cleanup operations
+- `FileMaintenanceService` - File system maintenance and archival
+- `SystemHealthService` - System health monitoring and diagnostics
 
 ## Configuration System
 
@@ -129,6 +156,30 @@ spring.servlet.multipart.max-request-size=1200MB
 application.upload.dir=data/upload
 application.export.dir=data/upload/exports
 application.temp.dir=data/temp
+```
+
+### Maintenance System Configuration
+```properties
+# Maintenance scheduler (disabled by default for safety)
+maintenance.scheduler.enabled=false
+
+# Scheduled tasks with cron expressions
+maintenance.scheduler.file-archive.cron=0 0 2 * * *           # Daily at 02:00
+maintenance.scheduler.database-cleanup.cron=0 0 3 * * SUN     # Weekly Sunday at 03:00
+maintenance.scheduler.health-check.cron=0 0 * * * *           # Hourly
+maintenance.scheduler.performance-analysis.cron=0 0 1 * * MON # Weekly Monday at 01:00
+maintenance.scheduler.full-maintenance.cron=0 0 4 1 * *       # Monthly 1st at 04:00
+
+# File and database maintenance
+file.management.archive.enabled=true
+file.management.archive.max.size.gb=5
+database.maintenance.cleanup.old-data.days=120
+database.maintenance.performance.slow-query-threshold=1000
+
+# System health thresholds
+system.health.cpu.warning-threshold=80.0
+system.health.memory.warning-threshold=85.0
+system.health.disk.warning-threshold=90.0
 ```
 
 ## Data Model
@@ -189,6 +240,8 @@ Real-time progress updates for long-running operations:
 ### Testing Stack
 - Spring Boot Test with H2 in-memory database for tests
 - Test profile automatically switches to H2 from PostgreSQL
+- Test classes in `src/test/java/com/java/service/`
+- Integration tests include FileAnalyzer, ImportBackslash, Normalization, and Operations
 
 ## Development Environment
 
@@ -197,7 +250,7 @@ Real-time progress updates for long-running operations:
 - **silent**: Minimal logging for production-like environment
 
 ### Server Configuration
-- **Port**: 8080 (default)
+- **Port**: 8081 (configured in application.properties)
 - **Hot Reload**: Spring DevTools enabled with LiveReload
 - **Thymeleaf**: Cache disabled for development
 
@@ -212,15 +265,20 @@ Real-time progress updates for long-running operations:
 * Это мой pet проект, не нужно стремится усложнять и использовать какие-то сложные паттерны проектирования.
 * Если чего-то не знаешь, не придумывай, так и говори.
 * Обязательно закрывать запущенный сервер после тестирования
+* Проектируем код по принципам KISS, YAGNI, MVP, Fail Fast, итеративная разработка.
 
 ## Current State Notes
 
-**Active Refactoring** (as of 2025-08-24)
-- Navigation refactoring from tab-based to separate pages is actively ongoing
-- Converting client interface from tabs to individual pages with proper URLs  
-- Template CRUD operations are being implemented with new URL structure
-- All existing business logic is preserved during UI restructuring
-- Focus on simplicity over complex design patterns (это пет-проект)
+**Recently Completed** (as of 2025-08-30)
+- **Maintenance System**: Complete automated maintenance system with web interface
+  - Web interface at `/maintenance` with 5 pages (index, files, database, system, operations)
+  - Scheduled tasks with configurable cron expressions  
+  - Real-time WebSocket notifications for maintenance operations
+  - Profile-based configuration for dev/prod environments
+  - Safety: scheduler disabled by default (`maintenance.scheduler.enabled=false`)
+- **Database Configuration**: JPA DDL auto disabled for production stability
+- **Navigation**: Completed transition from tab-based to page-based navigation
+- **Template CRUD**: Full CRUD operations implemented with proper URL structure
 
 **Refactoring Completed**
 - Eliminated controller duplication with `ControllerUtils`

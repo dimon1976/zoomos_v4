@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Сопоставление штрихкодов',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Сопоставление штрихкодов',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Сопоставление штрихкодов</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .upload-zone {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 3rem;
+            text-align: center;
+            transition: border-color 0.3s ease;
+            background-color: #f8f9fa;
+        }
+        .upload-zone:hover {
+            border-color: #007bff;
+            background-color: #e7f3ff;
+        }
+        .upload-zone.dragover {
+            border-color: #007bff;
+            background-color: #e7f3ff;
+        }
+        .file-icon {
+            font-size: 4rem;
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+        .utility-info {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Назад к утилитам
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Информация об утилите -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card utility-info">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-2 text-center">
+                                <i class="fas fa-barcode display-1 text-primary"></i>
+                            </div>
+                            <div class="col-md-10">
+                                <h4 class="mb-2">Сопоставление штрихкодов</h4>
+                                <p class="mb-1">Утилита находит соответствия между штрихкодами в одном файле и создает результирующий файл с парами ID-штрихкод-URL.</p>
+                                <div class="d-flex gap-4 mt-3">
+                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Поддержка множественных штрихкодов через запятую</small>
+                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Валидация 13-символьных штрихкодов</small>
+                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Экспорт в Excel формат</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Сообщения об ошибках/успехе -->
+        <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span th:text="${error}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+
+        <div th:if="${success}" class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle"></i>
+            <span th:text="${success}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+
+        <!-- Загрузка файла -->
+        <div class="row">
+            <div class="col-md-8 mx-auto">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-upload text-primary"></i>
+                            Шаг 1: Загрузка файла
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="uploadForm" method="post" action="/utils/barcode-match/upload" enctype="multipart/form-data">
+                            <div class="upload-zone" id="uploadZone">
+                                <div class="file-icon">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                </div>
+                                <h5>Перетащите файл сюда или нажмите для выбора</h5>
+                                <p class="text-muted mb-3">Поддерживаемые форматы: Excel (.xlsx, .xls), CSV (.csv)</p>
+                                <input type="file" 
+                                       class="form-control" 
+                                       id="file" 
+                                       name="file" 
+                                       accept=".csv,.xlsx,.xls" 
+                                       style="display: none;" 
+                                       required>
+                                <button type="button" class="btn btn-outline-primary" id="selectFileBtn">
+                                    <i class="fas fa-folder-open"></i> Выбрать файл
+                                </button>
+                            </div>
+                            
+                            <div id="fileInfo" class="mt-3" style="display: none;">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-file"></i>
+                                    <span id="fileName"></span>
+                                    <span id="fileSize" class="text-muted"></span>
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2 mt-4">
+                                <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
+                                    <i class="fas fa-analyze"></i> Анализировать файл
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Инструкция -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-info-circle text-info"></i>
+                            Требования к файлу
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-table text-primary"></i> Структура файла</h6>
+                                <ul class="list-unstyled small">
+                                    <li><i class="fas fa-check text-success"></i> Первая строка - заголовки колонок</li>
+                                    <li><i class="fas fa-check text-success"></i> Колонка с ID записей</li>
+                                    <li><i class="fas fa-check text-success"></i> Колонка со штрихкодами</li>
+                                    <li><i class="fas fa-check text-success"></i> Колонка с URL</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-barcode text-warning"></i> Формат штрихкодов</h6>
+                                <ul class="list-unstyled small">
+                                    <li><i class="fas fa-check text-success"></i> 13 символов (цифры)</li>
+                                    <li><i class="fas fa-check text-success"></i> Несколько ШК через запятую: "1234567890123,9876543210987"</li>
+                                    <li><i class="fas fa-times text-danger"></i> Неверные ШК будут пропущены</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-download text-success"></i> Результат</h6>
+                                <ul class="list-unstyled small">
+                                    <li><i class="fas fa-check text-success"></i> Excel файл с тремя колонками</li>
+                                    <li><i class="fas fa-check text-success"></i> ID | Штрихкод | URL</li>
+                                    <li><i class="fas fa-check text-success"></i> Отдельная строка для каждого ШК</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('file');
+    const selectFileBtn = document.getElementById('selectFileBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    
+    // Клик по зоне загрузки
+    uploadZone.addEventListener('click', function() {
+        fileInput.click();
+    });
+    
+    // Клик по кнопке выбора файла
+    selectFileBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        fileInput.click();
+    });
+    
+    // Изменение файла
+    fileInput.addEventListener('change', function() {
+        handleFileSelection(this.files[0]);
+    });
+    
+    // Drag & Drop
+    uploadZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadZone.classList.add('dragover');
+    });
+    
+    uploadZone.addEventListener('dragleave', function() {
+        uploadZone.classList.remove('dragover');
+    });
+    
+    uploadZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            handleFileSelection(files[0]);
+        }
+    });
+    
+    function handleFileSelection(file) {
+        if (!file) return;
+        
+        // Проверка типа файла
+        const allowedTypes = ['.csv', '.xlsx', '.xls'];
+        const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+        
+        if (!allowedTypes.includes(fileExtension)) {
+            alert('Поддерживаются только файлы форматов: ' + allowedTypes.join(', '));
+            return;
+        }
+        
+        // Отображение информации о файле
+        fileName.textContent = file.name;
+        fileSize.textContent = '(' + formatFileSize(file.size) + ')';
+        fileInfo.style.display = 'block';
+        uploadBtn.disabled = false;
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    // Показать спиннер при отправке
+    document.getElementById('uploadForm').addEventListener('submit', function() {
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализируется...';
+        uploadBtn.disabled = true;
+    });
+});
+</script>
+</th:block>
+</html>

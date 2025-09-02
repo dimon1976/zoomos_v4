@@ -2,8 +2,9 @@ package com.java.service.exports.strategies;
 
 import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateField;
-import lombok.RequiredArgsConstructor;
+import com.java.service.normalization.NormalizationService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -16,8 +17,13 @@ import java.util.*;
  */
 @Component("defaultExportStrategy")
 @Slf4j
-@RequiredArgsConstructor
 public class DefaultExportStrategy implements ExportStrategy {
+    
+    private final NormalizationService normalizationService;
+    
+    public DefaultExportStrategy(@Qualifier("normalizationServiceImpl") NormalizationService normalizationService) {
+        this.normalizationService = normalizationService;
+    }
 
     @Override
     public String getName() {
@@ -58,6 +64,11 @@ public class DefaultExportStrategy implements ExportStrategy {
                     value = row.get(toSnakeCase(entityFieldName));
                 }
 
+                // Применяем нормализацию если указано
+                if (value != null && field.getNormalizationType() != null) {
+                    value = normalizeValue(value, field);
+                }
+                
                 // Применяем форматирование если указано
                 if (value != null && field.getDataFormat() != null) {
                     value = formatValue(value, field.getDataFormat());
@@ -84,6 +95,22 @@ public class DefaultExportStrategy implements ExportStrategy {
         return value.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
     }
 
+    /**
+     * Нормализация значения согласно правилам поля
+     */
+    private Object normalizeValue(Object value, ExportTemplateField field) {
+        if (value == null || field.getNormalizationType() == null) {
+            return value;
+        }
+        
+        try {
+            return normalizationService.normalize(value, field.getNormalizationType(), field.getNormalizationRule());
+        } catch (Exception e) {
+            log.warn("Ошибка нормализации поля '{}': {}", field.getEntityFieldName(), e.getMessage());
+            return value; // Возвращаем исходное значение в случае ошибки
+        }
+    }
+    
     /**
      * Форматирование значения согласно указанному формату
      */

@@ -40,7 +40,9 @@ public class FileMetadataMapper {
 
         // Парсим JSON поля
         dto.setColumnHeaders(parseJsonArray(entity.getColumnHeaders()));
-        dto.setSampleData(parseSampleData(entity.getSampleData()));
+        List<Map<String, String>> sampleData = parseSampleData(entity.getSampleData());
+        dto.setSampleData(sampleData);
+        dto.setTotalRows(sampleData.size()); // Устанавливаем количество строк на основе примеров данных
 
         return dto;
     }

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Настройка колонок - Сбор ссылок',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Настройка колонок',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Настройка колонок - Сбор ссылок</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .column-selector {
+            margin-bottom: 1.5rem;
+        }
+        .column-help {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+        .preview-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .process-button {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            border: none;
+            padding: 0.75rem 2rem;
+            font-size: 1.1rem;
+        }
+        .csv-options {
+            display: none;
+        }
+        .csv-options.show {
+            display: block;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <form th:action="@{/utils/link-extractor/cancel}" method="post" style="display: inline;">
+            <button type="submit" class="btn btn-outline-secondary">
+                <i class="fas fa-times"></i> Отменить
+            </button>
+        </form>
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> К утилитам
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Информация о файле -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Шаг 2: Настройка колонок</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Выберите колонку с идентификаторами. Поиск ссылок будет производиться во всех остальных колонках.</p>
+                        <div class="row">
+                            <div class="col-auto">
+                                <i class="fas fa-file-alt"></i>
+                                <strong>Файл:</strong> <span th:text="${fileMetadata.filename}">имя файла</span>
+                            </div>
+                            <div class="col-auto">
+                                | <strong>Строк:</strong> <span th:text="${fileMetadata.totalRows}">0</span>
+                            </div>
+                            <div class="col-auto">
+                                | <strong>Колонок:</strong> <span th:text="${fileMetadata.totalColumns}">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <form th:action="@{/utils/link-extractor/process}" method="post" th:object="${linkExtractorDto}" id="configForm">
+                            
+                            <h5 class="mb-4">Выбор колонок</h5>
+                            
+                            <!-- ID Column (Required) -->
+                            <div class="column-selector">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label">
+                                            <i class="fas fa-tag text-danger"></i>
+                                            Колонка ID *
+                                        </label>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <select class="form-select" th:field="*{idColumn}" required>
+                                            <option value="">Выберите колонку...</option>
+                                            <option th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
+                                                    th:value="${iterStat.index}" 
+                                                    th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                                Колонка
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="column-help">Идентификаторы записей</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <!-- Output Format -->
+                            <h6 class="mb-3">
+                                <i class="fas fa-download text-success"></i>
+                                Формат результата
+                            </h6>
+                            
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label class="form-label">Формат файла</label>
+                                    <select class="form-select" th:field="*{outputFormat}" id="outputFormat">
+                                        <option value="csv">CSV (UTF-8)</option>
+                                        <option value="excel">Excel (.xlsx)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 csv-options" id="csvDelimiterGroup">
+                                    <label class="form-label">Разделитель</label>
+                                    <select class="form-select" th:field="*{csvDelimiter}">
+                                        <option value=";">Точка с запятой (;)</option>
+                                        <option value=",">Запятая (,)</option>
+                                        <option value="|">Вертикальная черта (|)</option>
+                                        <option value="&#9;">Табуляция</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 csv-options" id="csvEncodingGroup">
+                                    <label class="form-label">Кодировка</label>
+                                    <select class="form-select" th:field="*{csvEncoding}">
+                                        <option value="UTF-8">UTF-8</option>
+                                        <option value="Windows-1251">Windows-1251</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="text-end mt-4">
+                                <button type="submit" class="btn btn-success process-button" id="processBtn" disabled>
+                                    <i class="fas fa-magic"></i> Собрать ссылки и скачать
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- What will happen -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="fas fa-info-circle text-info"></i>
+                            Что произойдет
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <ul class="mb-0">
+                            <li>Поиск ссылок (http:// и https://) во всех колонках каждой строки</li>
+                            <li>Исключение колонки ID из поиска</li>
+                            <li>Обработка нескольких ссылок в одной ячейке</li>
+                            <li>Связывание каждой найденной ссылки с ID строки</li>
+                            <li>Создание файла с тремя колонками: ID, Ссылка, Источник</li>
+                            <li>Автоматическое скачивание результата</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview -->
+            <div class="col-md-4">
+                <div class="card sticky-top" style="top: 20px;">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-eye text-primary"></i>
+                            Предварительный просмотр
+                        </h5>
+                        <small class="text-muted">
+                            Показано первых <span th:text="${#lists.size(fileMetadata.sampleData)}">5</span> 
+                            из <span th:text="${fileMetadata.totalRows}">5</span> строк
+                        </small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="preview-table">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
+                                            th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                            Заголовок
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="row : ${fileMetadata.sampleData}">
+                                        <td th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
+                                            th:text="${row['column_' + iterStat.index]}" 
+                                            class="text-truncate" style="max-width: 150px;">
+                                            Значение
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const idColumn = document.querySelector('select[name="idColumn"]');
+    const outputFormat = document.getElementById('outputFormat');
+    const csvOptions = document.querySelectorAll('.csv-options');
+    const processBtn = document.getElementById('processBtn');
+
+    // Validation function
+    function validateForm() {
+        const idSelected = idColumn.value !== '';
+        processBtn.disabled = !idSelected;
+        console.log('Validation:', {idSelected});
+    }
+
+    // Handle output format change
+    function toggleCsvOptions() {
+        const isCsv = outputFormat.value === 'csv';
+        csvOptions.forEach(option => {
+            if (isCsv) {
+                option.classList.add('show');
+            } else {
+                option.classList.remove('show');
+            }
+        });
+    }
+
+    // Event listeners
+    idColumn.addEventListener('change', validateForm);
+    outputFormat.addEventListener('change', toggleCsvOptions);
+
+    // Initialize
+    validateForm();
+    toggleCsvOptions();
+
+    // Form submission
+    document.getElementById('configForm').addEventListener('submit', function(e) {
+        processBtn.disabled = true;
+        processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обработка...';
+        
+        // Reset button after file download (since it's synchronous)
+        setTimeout(() => {
+            processBtn.disabled = false;
+            processBtn.innerHTML = '<i class="fas fa-download"></i> Собрать ссылки и скачать';
+            // Redirect back to main page after successful processing
+            window.location.href = '/utils/link-extractor';
+        }, 2000);
+    });
+});
+</script>
+</th:block>
+</html>

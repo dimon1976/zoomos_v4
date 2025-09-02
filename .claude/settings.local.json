@@ -23,7 +23,18 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(psql:*)",
-      "Read(E:\\/**)"
+      "Read(E:\\/**)",
+      "Bash(git checkout:*)",
+      "Read(D:\\project\\zoomos_v4/**)",
+      "mcp__playwright__browser_handle_dialog",
+      "mcp__playwright__browser_file_upload",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_evaluate",
+      "Bash(./mvnw:*)",
+      "mcp__context7__get-library-docs",
+      "Bash(/bashes)",
+      "mcp__playwright__browser_press_key",
+      "Bash(jar:*)"
     ],
     "additionalDirectories": [
       "D:\\d D:\\project"

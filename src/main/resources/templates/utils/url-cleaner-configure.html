@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Настройка колонок - Очистка URL',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Настройка колонок',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Настройка колонок - Очистка URL</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .column-selector {
+            margin-bottom: 1.5rem;
+        }
+        .column-help {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+        .preview-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .process-button {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            border: none;
+            padding: 0.75rem 2rem;
+            font-size: 1.1rem;
+        }
+        .csv-options {
+            display: none;
+        }
+        .csv-options.show {
+            display: block;
+        }
+        .cleaning-option {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 0.375rem;
+            background: #f8f9fa;
+        }
+        .option-header {
+            font-weight: 600;
+            color: #495057;
+        }
+        .option-description {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <form th:action="@{/utils/url-cleaner/cancel}" method="post" style="display: inline;">
+            <button type="submit" class="btn btn-outline-secondary">
+                <i class="fas fa-times"></i> Отменить
+            </button>
+        </form>
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> К утилитам
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Информация о файле -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Шаг 2: Настройка колонок</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Укажите, в какой колонке находятся URL для очистки, и выберите дополнительные колонки при необходимости.</p>
+                        <div class="row">
+                            <div class="col-auto">
+                                <i class="fas fa-file-alt"></i>
+                                <strong>Файл:</strong> <span th:text="${fileMetadata.filename}">имя файла</span>
+                            </div>
+                            <div class="col-auto">
+                                | <strong>Строк:</strong> <span th:text="${fileMetadata.totalRows}">0</span>
+                            </div>
+                            <div class="col-auto">
+                                | <strong>Колонок:</strong> <span th:text="${fileMetadata.totalColumns}">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <form th:action="@{/utils/url-cleaner/process}" method="post" th:object="${urlCleanerDto}" id="configForm">
+                            
+                            <h5 class="mb-4">Выбор колонок</h5>
+                            
+                            <!-- URL Column (Required) -->
+                            <div class="column-selector">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label">
+                                            <i class="fas fa-link text-danger"></i>
+                                            Колонка URL *
+                                        </label>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <select class="form-select" th:field="*{urlColumn}" required>
+                                            <option value="">Выберите колонку...</option>
+                                            <option th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
+                                                    th:value="${iterStat.index}" 
+                                                    th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                                Колонка
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="column-help">Ссылки для очистки</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ID Column (Optional) -->
+                            <div class="column-selector">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label">
+                                            <i class="fas fa-tag text-secondary"></i>
+                                            Колонка ID
+                                        </label>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <select class="form-select" th:field="*{idColumn}">
+                                            <option value="">Не выбрано</option>
+                                            <option th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
+                                                    th:value="${iterStat.index}" 
+                                                    th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                                Колонка
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="column-help">Идентификаторы записей</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Model Column (Optional) -->
+                            <div class="column-selector">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label">
+                                            <i class="fas fa-cube text-secondary"></i>
+                                            Колонка Model
+                                        </label>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <select class="form-select" th:field="*{modelColumn}">
+                                            <option value="">Не выбрано</option>
+                                            <option th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
+                                                    th:value="${iterStat.index}" 
+                                                    th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                                Колонка
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="column-help">Модель товара</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Barcode Column (Optional) -->
+                            <div class="column-selector">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label">
+                                            <i class="fas fa-barcode text-secondary"></i>
+                                            Колонка Barcode
+                                        </label>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <select class="form-select" th:field="*{barcodeColumn}">
+                                            <option value="">Не выбрано</option>
+                                            <option th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
+                                                    th:value="${iterStat.index}" 
+                                                    th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                                Колонка
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="column-help">Штрихкод товара</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <!-- Cleaning Options -->
+                            <h5 class="mb-4">
+                                <i class="fas fa-cog text-primary"></i>
+                                Настройки очистки
+                            </h5>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="cleaning-option">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" th:field="*{removeUtmParams}">
+                                            <label class="form-check-label option-header" th:for="${#ids.next('removeUtmParams')}">
+                                                Удалить UTM параметры
+                                            </label>
+                                        </div>
+                                        <div class="option-description">
+                                            utm_source, utm_medium, utm_campaign, utm_term, utm_content
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="cleaning-option">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" th:field="*{removeReferralParams}">
+                                            <label class="form-check-label option-header" th:for="${#ids.next('removeReferralParams')}">
+                                                Удалить реферальные параметры
+                                            </label>
+                                        </div>
+                                        <div class="option-description">
+                                            ref, affiliate_id, partner_id, gclid, fbclid, источники трафика
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="cleaning-option">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" th:field="*{removeTrackingParams}">
+                                            <label class="form-check-label option-header" th:for="${#ids.next('removeTrackingParams')}">
+                                                Удалить отслеживающие параметры
+                                            </label>
+                                        </div>
+                                        <div class="option-description">
+                                            cpc, sponsored, do-waremd5, clid, yclid, _ga, tracking параметры
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="cleaning-option">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" th:field="*{preserveYandexSku}">
+                                            <label class="form-check-label option-header" th:for="${#ids.next('preserveYandexSku')}">
+                                                Сохранить sku для Yandex Market
+                                            </label>
+                                        </div>
+                                        <div class="option-description">
+                                            Специальное исключение для market.yandex.ru - параметр sku не удаляется
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <!-- Output Format -->
+                            <h6 class="mb-3">
+                                <i class="fas fa-download text-success"></i>
+                                Формат результата
+                            </h6>
+                            
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label class="form-label">Формат файла</label>
+                                    <select class="form-select" th:field="*{outputFormat}" id="outputFormat">
+                                        <option value="csv">CSV (UTF-8)</option>
+                                        <option value="excel">Excel (.xlsx)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 csv-options" id="csvDelimiterGroup">
+                                    <label class="form-label">Разделитель</label>
+                                    <select class="form-select" th:field="*{csvDelimiter}">
+                                        <option value=";">Точка с запятой (;)</option>
+                                        <option value=",">Запятая (,)</option>
+                                        <option value="|">Вертикальная черта (|)</option>
+                                        <option value="&#9;">Табуляция</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 csv-options" id="csvEncodingGroup">
+                                    <label class="form-label">Кодировка</label>
+                                    <select class="form-select" th:field="*{csvEncoding}">
+                                        <option value="UTF-8">UTF-8</option>
+                                        <option value="Windows-1251">Windows-1251</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="text-end mt-4">
+                                <button type="submit" class="btn btn-success process-button" id="processBtn" disabled>
+                                    <i class="fas fa-magic"></i> Обработать и скачать
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- What will happen -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="fas fa-info-circle text-info"></i>
+                            Что произойдет
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <ul class="mb-0">
+                            <li>Извлечение URL из выбранной колонки</li>
+                            <li>Валидация URL (проверка корректности)</li>
+                            <li>Удаление выбранных типов параметров</li>
+                            <li>Сохранение параметра sku для Yandex Market (при включении опции)</li>
+                            <li>Создание файла с исходными и очищенными URL</li>
+                            <li>Автоматическое скачивание результата</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview -->
+            <div class="col-md-4">
+                <div class="card sticky-top" style="top: 20px;">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-eye text-primary"></i>
+                            Предварительный просмотр
+                        </h5>
+                        <small class="text-muted">
+                            Показано первых <span th:text="${#lists.size(fileMetadata.sampleData)}">5</span> 
+                            из <span th:text="${fileMetadata.totalRows}">5</span> строк
+                        </small>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="preview-table">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
+                                            th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                            Заголовок
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="row : ${fileMetadata.sampleData}">
+                                        <td th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
+                                            th:text="${row['column_' + iterStat.index]}" 
+                                            class="text-truncate" style="max-width: 150px;">
+                                            Значение
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const urlColumn = document.querySelector('select[name="urlColumn"]');
+    const idColumn = document.querySelector('select[name="idColumn"]');
+    const modelColumn = document.querySelector('select[name="modelColumn"]');
+    const barcodeColumn = document.querySelector('select[name="barcodeColumn"]');
+    const outputFormat = document.getElementById('outputFormat');
+    const csvOptions = document.querySelectorAll('.csv-options');
+    const processBtn = document.getElementById('processBtn');
+
+    // Validation function
+    function validateForm() {
+        const urlSelected = urlColumn.value !== '';
+        // Только непустые значения для проверки уникальности
+        const selectedColumns = [urlColumn.value, idColumn.value, modelColumn.value, barcodeColumn.value].filter(v => v !== '' && v !== null);
+        const uniqueColumns = new Set(selectedColumns);
+        const hasUniqueColumns = selectedColumns.length === uniqueColumns.size;
+
+        processBtn.disabled = !urlSelected || !hasUniqueColumns;
+        console.log('Validation:', {urlSelected, selectedColumns, hasUniqueColumns});
+
+        // Visual feedback for duplicate selections
+        [urlColumn, idColumn, modelColumn, barcodeColumn].forEach(select => {
+            const value = select.value;
+            if (value !== '' && selectedColumns.filter(v => v === value).length > 1) {
+                select.classList.add('is-invalid');
+            } else {
+                select.classList.remove('is-invalid');
+            }
+        });
+    }
+
+    // Handle output format change
+    function toggleCsvOptions() {
+        const isCsv = outputFormat.value === 'csv';
+        csvOptions.forEach(option => {
+            if (isCsv) {
+                option.classList.add('show');
+            } else {
+                option.classList.remove('show');
+            }
+        });
+    }
+
+    // Event listeners
+    [urlColumn, idColumn, modelColumn, barcodeColumn].forEach(select => {
+        select.addEventListener('change', validateForm);
+    });
+
+    outputFormat.addEventListener('change', toggleCsvOptions);
+
+    // Initialize
+    validateForm();
+    toggleCsvOptions();
+
+    // Form submission
+    document.getElementById('configForm').addEventListener('submit', function(e) {
+        processBtn.disabled = true;
+        processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обработка...';
+        
+        // Reset button after file download (since it's synchronous)
+        setTimeout(() => {
+            processBtn.disabled = false;
+            processBtn.innerHTML = '<i class="fas fa-download"></i> Обработать и скачать';
+            // Redirect back to main page after successful processing
+            window.location.href = '/utils/url-cleaner';
+        }, 2000);
+    });
+});
+</script>
+</th:block>
+</html>
