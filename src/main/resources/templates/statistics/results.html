@@ -236,8 +236,8 @@
                 <th th:each="operation : ${comparison[0].operations}"
                     class="operation-header">
                     <div>
-                        <div th:text="'Экспорт #' + ${operation.exportSessionId}">Экспорт #1</div>
-                        <small th:text="${#temporals.format(operation.exportDate, 'dd.MM HH:mm')}">
+                        <div th:text="'Операция #' + ${operation.operationId}">Операция #1</div>
+                        <small th:text="${#temporals.format(operation.exportDate, 'dd.MM HH:mm', T(java.time.ZoneId).systemDefault())}">
                             01.01 10:00
                         </small>
                     </div>
@@ -333,9 +333,9 @@
                             <div th:each="operation : ${group.operations}" class="col-md-4 mb-3">
                                 <div class="card">
                                     <div class="card-header">
-                                        <h6 class="mb-0">Экспорт #<span th:text="${operation.exportSessionId}">1</span></h6>
+                                        <h6 class="mb-0">Операция #<span th:text="${operation.operationId}">1</span></h6>
                                         <small class="text-muted"
-                                               th:text="${#temporals.format(operation.exportDate, 'dd.MM.yyyy HH:mm')}">01.01.2025 10:00</small>
+                                               th:text="${#temporals.format(operation.exportDate, 'dd.MM.yyyy HH:mm', T(java.time.ZoneId).systemDefault())}">01.01.2025 10:00</small>
                                     </div>
                                     <div class="card-body">
                                         <div th:each="metric : ${operation.metrics}" class="mb-2">

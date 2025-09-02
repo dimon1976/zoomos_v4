@@ -103,6 +103,7 @@ public class ExportStatisticsService {
 
                             operationStats.add(StatisticsComparisonDto.OperationStatistics.builder()
                                     .exportSessionId(session.getId())
+                                    .operationId(session.getFileOperation().getId())
                                     .operationName(generateOperationName(session, template))
                                     .exportDate(session.getStartedAt())
                                     .metrics(metrics)

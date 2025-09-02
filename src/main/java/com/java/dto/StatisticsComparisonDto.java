@@ -23,6 +23,7 @@ public class StatisticsComparisonDto {
     @AllArgsConstructor
     public static class OperationStatistics {
         private Long exportSessionId;
+        private Long operationId; // ID файловой операции
         private String operationName;
         private java.time.ZonedDateTime exportDate;
         private Map<String, MetricValue> metrics; // поле -> значение с отклонением

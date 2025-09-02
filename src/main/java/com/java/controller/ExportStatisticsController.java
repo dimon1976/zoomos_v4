@@ -45,8 +45,8 @@ public class ExportStatisticsController {
     public String showStatisticsSetup(@PathVariable Long clientId, Model model) {
         log.debug("GET запрос на настройку статистики для клиента ID: {}", clientId);
 
-        // Получаем последние экспорты клиента
-        Page<ExportSession> recentExports = sessionRepository.findByClientId(
+        // Получаем последние экспорты клиента с загруженными данными fileOperation
+        Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
                 clientId,
                 PageRequest.of(0, settingsService.getMaxOperations(),
                         Sort.by(Sort.Direction.DESC, "startedAt"))
@@ -210,6 +210,51 @@ public class ExportStatisticsController {
                     "error", e.getMessage()
             );
         }
+    }
+
+
+    /**
+     * Диагностический endpoint для проверки данных
+     */
+    @GetMapping("/debug-data/client/{clientId}")
+    @ResponseBody
+    public Map<String, Object> debugData(@PathVariable Long clientId) {
+        log.debug("Диагностика данных для клиента ID: {}", clientId);
+
+        Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
+                clientId,
+                PageRequest.of(0, settingsService.getMaxOperations(),
+                        Sort.by(Sort.Direction.DESC, "startedAt"))
+        );
+
+        Map<String, Object> result = new java.util.HashMap<>();
+        result.put("exportsCount", recentExports.getContent().size());
+        
+        for (ExportSession export : recentExports.getContent()) {
+            if (export.getFileOperation().getId() == 258L) {
+                result.put("export258_sessionId", export.getId());
+                result.put("export258_sessionStarted", export.getStartedAt());
+                result.put("export258_sessionStarted_formatted", 
+                    export.getStartedAt().toString());
+                result.put("export258_fileOpId", export.getFileOperation().getId());
+                result.put("export258_fileOpStarted", export.getFileOperation().getStartedAt());
+                result.put("export258_fileOpStarted_formatted", 
+                    export.getFileOperation().getStartedAt().toString());
+                
+                // Добавим системную информацию
+                result.put("serverTimeZone", java.util.TimeZone.getDefault().getID());
+                result.put("currentServerTime", java.time.Instant.now().toString());
+                
+                // Проверим разницу во времени
+                long timeDifference = export.getStartedAt().toInstant().toEpochMilli() - 
+                                    export.getFileOperation().getStartedAt().toInstant().toEpochMilli();
+                result.put("timeDifferenceMs", timeDifference);
+                
+                break;
+            }
+        }
+        
+        return result;
     }
 
     /**

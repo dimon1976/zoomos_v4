@@ -32,7 +32,9 @@
       "mcp__playwright__browser_evaluate",
       "Bash(./mvnw:*)",
       "mcp__context7__get-library-docs",
-      "Bash(/bashes)"
+      "Bash(/bashes)",
+      "mcp__playwright__browser_press_key",
+      "Bash(jar:*)"
     ],
     "additionalDirectories": [
       "D:\\d D:\\project"
