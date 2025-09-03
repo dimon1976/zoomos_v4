@@ -5,8 +5,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 
 /**
@@ -53,8 +56,8 @@ public class SimpleHttpStrategy implements AntiBlockStrategy {
                 URL url = new URL(currentUrl);
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 
-                // Настраиваем базовые параметры
-                connection.setRequestMethod("HEAD"); // Используем HEAD для быстрой проверки
+                // Настраиваем параметры для более надежной проверки
+                connection.setRequestMethod("GET"); // Используем GET для полной проверки
                 connection.setConnectTimeout(timeoutSeconds * 1000);
                 connection.setReadTimeout(timeoutSeconds * 1000);
                 connection.setInstanceFollowRedirects(false); // Обрабатываем редиректы вручную
@@ -71,23 +74,51 @@ public class SimpleHttpStrategy implements AntiBlockStrategy {
                                 currentUrl, responseCode, elapsedTime);
                     }
                     
-                    // Проверяем редиректы
+                    // 1. РЕДИРЕКТЫ - проверяем статус-коды 3xx
                     if (isRedirectStatus(responseCode)) {
                         String location = connection.getHeaderField("Location");
                         if (location != null && !location.isEmpty()) {
-                            currentUrl = resolveUrl(currentUrl, location);
+                            String resolvedUrl = resolveUrl(currentUrl, location);
                             redirectCount++;
                             
                             if (antiBlockConfig.isLogStrategies()) {
-                                log.info("SimpleHttp redirect: {} -> {}", originalUrl, currentUrl);
+                                log.info("SimpleHttp redirect [{}]: {} -> {}", redirectCount, currentUrl, resolvedUrl);
                             }
+                            
+                            currentUrl = resolvedUrl;
                             continue;
                         }
                     }
                     
-                    // Финальный результат
+                    // 2. БЛОКИРОВКИ - явные коды
+                    if (responseCode == 403 || responseCode == 401 || responseCode == 429) {
+                        result.setFinalUrl(currentUrl);
+                        result.setStatus(PageStatus.FORBIDDEN.toString());
+                        result.setRedirectCount(redirectCount);
+                        return result;
+                    }
+                    
+                    // 3. НЕ НАЙДЕНО
+                    if (responseCode == 404) {
+                        result.setFinalUrl(currentUrl);
+                        result.setStatus(PageStatus.NOT_FOUND.toString());
+                        result.setRedirectCount(redirectCount);
+                        return result;
+                    }
+                    
+                    // 4. УСПЕХ - читаем содержимое для дополнительной проверки
+                    if (responseCode >= 200 && responseCode < 300) {
+                        String contentStatus = checkContentForBlocking(connection);
+                        
+                        result.setFinalUrl(currentUrl);
+                        result.setStatus(contentStatus.equals("SUCCESS") ? PageStatus.SUCCESS.toString() : PageStatus.ERROR.toString());
+                        result.setRedirectCount(redirectCount);
+                        return result;
+                    }
+                    
+                    // 5. ВСЕ ОСТАЛЬНОЕ
                     result.setFinalUrl(currentUrl);
-                    result.setStatus(responseCode == 200 ? "SUCCESS" : "HTTP_" + responseCode);
+                    result.setStatus(PageStatus.ERROR.toString());
                     result.setRedirectCount(redirectCount);
                     return result;
                     
@@ -98,9 +129,16 @@ public class SimpleHttpStrategy implements AntiBlockStrategy {
             
             // Достигнут лимит редиректов
             result.setFinalUrl(currentUrl);
-            result.setStatus("MAX_REDIRECTS");
+            result.setStatus(PageStatus.MAX_REDIRECTS.toString());
             result.setRedirectCount(redirectCount);
             
+        } catch (SocketTimeoutException e) {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.warn("SimpleHttp timeout for URL {}: {}", originalUrl, e.getMessage());
+            }
+            result.setFinalUrl(originalUrl);
+            result.setStatus(PageStatus.TIMEOUT.toString());
+            result.setRedirectCount(0);
         } catch (IOException e) {
             if (antiBlockConfig.isLogStrategies()) {
                 log.warn("SimpleHttp error for URL {}: {}", originalUrl, e.getMessage());
@@ -108,14 +146,14 @@ public class SimpleHttpStrategy implements AntiBlockStrategy {
             
             // Определяем тип ошибки
             String errorMessage = e.getMessage().toLowerCase();
-            String status = "ERROR";
+            String status = PageStatus.ERROR.toString();
             
             if (errorMessage.contains("timeout")) {
-                status = "TIMEOUT";
+                status = PageStatus.TIMEOUT.toString();
             } else if (errorMessage.contains("refused") || errorMessage.contains("unreachable")) {
-                status = "CONNECTION_REFUSED";
+                status = PageStatus.IO_ERROR.toString();
             } else if (errorMessage.contains("unknown host")) {
-                status = "UNKNOWN_HOST";
+                status = PageStatus.UNKNOWN_HOST.toString();
             }
             
             result.setFinalUrl(originalUrl);
@@ -124,7 +162,7 @@ public class SimpleHttpStrategy implements AntiBlockStrategy {
         } catch (Exception e) {
             log.error("SimpleHttp critical error for URL {}: {}", originalUrl, e.getMessage());
             result.setFinalUrl(originalUrl);
-            result.setStatus("ERROR");
+            result.setStatus(PageStatus.ERROR.toString());
             result.setRedirectCount(0);
         } finally {
             // Восстанавливаем глобальную настройку
@@ -154,6 +192,52 @@ public class SimpleHttpStrategy implements AntiBlockStrategy {
     private boolean isRedirectStatus(int statusCode) {
         return statusCode == 301 || statusCode == 302 || statusCode == 303 || 
                statusCode == 307 || statusCode == 308;
+    }
+    
+    /**
+     * Проверка содержимого страницы на признаки блокировок
+     */
+    private String checkContentForBlocking(HttpURLConnection connection) {
+        try {
+            StringBuilder content = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                String line;
+                int linesRead = 0;
+                // Читаем только начало страницы для быстроты
+                while ((line = reader.readLine()) != null && linesRead < 50) {
+                    content.append(line.toLowerCase()).append(" ");
+                    linesRead++;
+                    if (content.length() > 5000) break; // Ограничиваем размер
+                }
+            }
+            
+            String pageContent = content.toString();
+            
+            // Ищем признаки блокировок и капч
+            if (pageContent.contains("captcha") ||
+                pageContent.contains("access denied") ||
+                pageContent.contains("cloudflare") ||
+                pageContent.contains("blocked") ||
+                pageContent.contains("forbidden") ||
+                pageContent.contains("ray id") ||
+                pageContent.contains("ddos protection") ||
+                pageContent.contains("security check")) {
+                
+                if (antiBlockConfig.isLogStrategies()) {
+                    log.warn("Detected potential blocking in content for URL");
+                }
+                return "BLOCKED";
+            }
+            
+            return "SUCCESS";
+            
+        } catch (IOException e) {
+            // Если не можем прочитать содержимое, считаем успешным
+            if (antiBlockConfig.isLogStrategies()) {
+                log.debug("Cannot read content for blocking check: {}", e.getMessage());
+            }
+            return "SUCCESS";
+        }
     }
     
     /**

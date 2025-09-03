@@ -163,9 +163,7 @@ public class AntiBlockService {
         if (result == null) return false;
         
         String status = result.getStatus();
-        return "SUCCESS".equals(status) || 
-               "HTTP_200".equals(status) ||
-               (status != null && status.startsWith("HTTP_2"));
+        return PageStatus.SUCCESS.toString().equals(status);
     }
     
     /**
@@ -175,11 +173,9 @@ public class AntiBlockService {
         if (result == null) return false;
         
         String status = result.getStatus();
-        return "HTTP_403".equals(status) || 
-               "HTTP_401".equals(status) ||
-               "HTTP_429".equals(status) ||
-               "BLOCKED".equals(status) ||
-               "TIMEOUT".equals(status);
+        return PageStatus.FORBIDDEN.toString().equals(status) || 
+               PageStatus.TIMEOUT.toString().equals(status) ||
+               (status != null && status.contains("BLOCKED"));
     }
     
     /**

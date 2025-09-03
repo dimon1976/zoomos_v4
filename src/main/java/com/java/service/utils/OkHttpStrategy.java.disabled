@@ -1,0 +1,388 @@
+package com.java.service.utils;
+
+import com.java.config.AntiBlockConfig;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import okhttp3.HttpUrl;
+import okhttp3.Cookie;
+import okhttp3.CookieJar;
+import okhttp3.Protocol;
+import org.springframework.stereotype.Service;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.security.cert.X509Certificate;
+import java.time.Duration;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Надежная HTTP стратегия на базе OkHttp с полным контролем редиректов
+ */
+// @Service // Временно отключено из-за проблем с зависимостями
+@RequiredArgsConstructor
+@Slf4j
+public class OkHttpStrategy implements AntiBlockStrategy {
+    
+    private final AntiBlockConfig antiBlockConfig;
+    private OkHttpClient client;
+    
+    @Override
+    public String getStrategyName() {
+        return "OkHttp";
+    }
+    
+    @Override
+    public int getPriority() {
+        return 0; // Наивысший приоритет - самый надежный
+    }
+    
+    @Override
+    public boolean isAvailable() {
+        try {
+            Class.forName("okhttp3.OkHttpClient");
+            initializeClient();
+            return true;
+        } catch (ClassNotFoundException | NoClassDefFoundError e) {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.warn("OkHttpStrategy недоступна: отсутствуют зависимости OkHttp - {}", e.getMessage());
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("Ошибка инициализации OkHttpStrategy: {}", e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Инициализация OkHttp клиента с настройками для обхода блокировок
+     */
+    private void initializeClient() {
+        try {
+            // Создаем trust manager для всех SSL сертификатов
+            TrustManager[] trustAllCerts = new TrustManager[] {
+                new X509TrustManager() {
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+                    
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+                    
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[]{};
+                    }
+                }
+            };
+            
+            SSLContext sslContext = SSLContext.getInstance("SSL");
+            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+            
+            // Конфигурируем клиент для максимальной совместимости
+            OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .followRedirects(false) // КРИТИЧНО: отключаем автоматические редиректы
+                .followSslRedirects(false)
+                .sslSocketFactory(sslContext.getSocketFactory(), (X509TrustManager) trustAllCerts[0])
+                .hostnameVerifier((hostname, session) -> true)
+                .cookieJar(new CookieJar() {
+                    @Override
+                    public void saveFromResponse(HttpUrl url, java.util.List<Cookie> cookies) {
+                        // Простое сохранение cookie в памяти
+                    }
+                    
+                    @Override
+                    public java.util.List<Cookie> loadForRequest(HttpUrl url) {
+                        return new java.util.ArrayList<>();
+                    }
+                });
+            
+            // Добавляем поддержку HTTP/2 и HTTP/1.1
+            builder.protocols(java.util.Arrays.asList(
+                Protocol.HTTP_2, Protocol.HTTP_1_1
+            ));
+            
+            this.client = builder.build();
+            
+        } catch (Exception e) {
+            log.warn("Ошибка инициализации OkHttpClient: {}", e.getMessage());
+            // Fallback на базовый клиент
+            this.client = new OkHttpClient.Builder()
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build();
+        }
+    }
+    
+    @Override
+    public RedirectCollectorService.RedirectResult processUrl(String originalUrl, int maxRedirects, int timeoutSeconds) {
+        if (client == null) {
+            initializeClient();
+        }
+        
+        RedirectCollectorService.RedirectResult result = new RedirectCollectorService.RedirectResult();
+        result.setOriginalUrl(originalUrl);
+        result.setRedirectCount(0);
+        
+        try {
+            String currentUrl = originalUrl;
+            int redirectCount = 0;
+            long startTime = System.currentTimeMillis();
+            
+            while (redirectCount <= maxRedirects) {
+                Request.Builder requestBuilder = new Request.Builder()
+                    .url(currentUrl)
+                    .get();
+                
+                // Настраиваем реалистичные заголовки
+                setupRealisticHeaders(requestBuilder);
+                
+                Request request = requestBuilder.build();
+                
+                try (Response response = client.newCall(request).execute()) {
+                    int statusCode = response.code();
+                    long elapsedTime = System.currentTimeMillis() - startTime;
+                    
+                    if (antiBlockConfig.isLogStrategies()) {
+                        log.info("URL: {} | Strategy: OkHttp | Status: {} | Time: {}ms | Protocol: {}", 
+                                currentUrl, statusCode, elapsedTime, response.protocol());
+                    }
+                    
+                    // 1. РЕДИРЕКТЫ - точная проверка 3xx статусов
+                    if (isRedirectStatus(statusCode)) {
+                        String location = response.header("Location");
+                        if (location != null && !location.isEmpty()) {
+                            String resolvedUrl = resolveUrl(currentUrl, location);
+                            redirectCount++;
+                            
+                            if (antiBlockConfig.isLogStrategies()) {
+                                log.info("OkHttp redirect [{}]: {} -> {}", redirectCount, currentUrl, resolvedUrl);
+                            }
+                            
+                            currentUrl = resolvedUrl;
+                            continue;
+                        }
+                    }
+                    
+                    // 2. БЛОКИРОВКИ - проверяем коды доступа
+                    if (statusCode == 403 || statusCode == 401 || statusCode == 429) {
+                        result.setFinalUrl(currentUrl);
+                        result.setStatus(PageStatus.FORBIDDEN.toString());
+                        result.setRedirectCount(redirectCount);
+                        return result;
+                    }
+                    
+                    // 3. НЕ НАЙДЕНО
+                    if (statusCode == 404) {
+                        result.setFinalUrl(currentUrl);
+                        result.setStatus(PageStatus.NOT_FOUND.toString());
+                        result.setRedirectCount(redirectCount);
+                        return result;
+                    }
+                    
+                    // 4. УСПЕХ - дополнительная проверка содержимого
+                    if (statusCode >= 200 && statusCode < 300) {
+                        boolean isBlocked = checkResponseForBlocking(response);
+                        
+                        result.setFinalUrl(currentUrl);
+                        result.setStatus(isBlocked ? PageStatus.FORBIDDEN.toString() : PageStatus.SUCCESS.toString());
+                        result.setRedirectCount(redirectCount);
+                        return result;
+                    }
+                    
+                    // 5. ВСЕ ОСТАЛЬНОЕ - серверные ошибки и прочее
+                    result.setFinalUrl(currentUrl);
+                    result.setStatus(PageStatus.ERROR.toString());
+                    result.setRedirectCount(redirectCount);
+                    return result;
+                }
+            }
+            
+            // Достигнут лимит редиректов
+            result.setFinalUrl(currentUrl);
+            result.setStatus(PageStatus.MAX_REDIRECTS.toString());
+            result.setRedirectCount(redirectCount);
+            
+        } catch (java.net.SocketTimeoutException | java.net.ConnectException e) {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.warn("OkHttp timeout/connection for URL {}: {}", originalUrl, e.getMessage());
+            }
+            result.setFinalUrl(originalUrl);
+            result.setStatus(PageStatus.TIMEOUT.toString());
+            result.setRedirectCount(0);
+        } catch (java.net.UnknownHostException e) {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.warn("OkHttp unknown host for URL {}: {}", originalUrl, e.getMessage());
+            }
+            result.setFinalUrl(originalUrl);
+            result.setStatus(PageStatus.UNKNOWN_HOST.toString());
+            result.setRedirectCount(0);
+        } catch (IOException e) {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.warn("OkHttp IO error for URL {}: {}", originalUrl, e.getMessage());
+            }
+            result.setFinalUrl(originalUrl);
+            result.setStatus(PageStatus.IO_ERROR.toString());
+            result.setRedirectCount(0);
+        } catch (Exception e) {
+            log.error("OkHttp critical error for URL {}: {}", originalUrl, e.getMessage());
+            result.setFinalUrl(originalUrl);
+            result.setStatus(PageStatus.ERROR.toString());
+            result.setRedirectCount(0);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Настройка реалистичных заголовков для имитации браузера
+     */
+    private void setupRealisticHeaders(Request.Builder requestBuilder) {
+        String userAgent = getRandomUserAgent();
+        
+        requestBuilder
+            .header("User-Agent", userAgent)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+            .header("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7")
+            .header("Accept-Encoding", "gzip, deflate, br")
+            .header("DNT", "1")
+            .header("Connection", "keep-alive")
+            .header("Upgrade-Insecure-Requests", "1")
+            .header("Sec-Fetch-Dest", "document")
+            .header("Sec-Fetch-Mode", "navigate")
+            .header("Sec-Fetch-Site", "none")
+            .header("Sec-Fetch-User", "?1")
+            .header("Cache-Control", "max-age=0")
+            .header("Referer", getRandomReferer());
+        
+        // Chrome-specific headers для дополнительной аутентичности
+        if (userAgent.contains("Chrome")) {
+            requestBuilder
+                .header("sec-ch-ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"")
+                .header("sec-ch-ua-mobile", "?0")
+                .header("sec-ch-ua-platform", "\"Windows\"");
+        }
+    }
+    
+    /**
+     * Проверка ответа на признаки блокировки
+     */
+    private boolean checkResponseForBlocking(Response response) {
+        try {
+            // Проверяем заголовки
+            String server = response.header("Server", "").toLowerCase();
+            String xPoweredBy = response.header("X-Powered-By", "").toLowerCase();
+            
+            if (server.contains("cloudflare") || server.contains("ddos-guard") ||
+                xPoweredBy.contains("cloudflare")) {
+                return true;
+            }
+            
+            // Проверяем содержимое (первые 2KB)
+            ResponseBody body = response.body();
+            if (body != null) {
+                String content = body.string();
+                if (content.length() > 2048) {
+                    content = content.substring(0, 2048);
+                }
+                content = content.toLowerCase();
+                
+                // Ищем ключевые слова блокировки
+                return content.contains("captcha") ||
+                       content.contains("access denied") ||
+                       content.contains("cloudflare") ||
+                       content.contains("blocked") ||
+                       content.contains("forbidden") ||
+                       content.contains("ray id") ||
+                       content.contains("ddos protection") ||
+                       content.contains("security check") ||
+                       content.contains("доступ запрещен") ||
+                       content.contains("доступ ограничен");
+            }
+            
+        } catch (IOException e) {
+            if (antiBlockConfig.isLogStrategies()) {
+                log.debug("Cannot read response body for blocking check: {}", e.getMessage());
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Получение случайного User-Agent
+     */
+    private String getRandomUserAgent() {
+        var userAgents = antiBlockConfig.getUserAgents();
+        if (userAgents.isEmpty()) {
+            // Fallback на реалистичные User-Agent'ы
+            String[] fallbackUserAgents = {
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            };
+            return fallbackUserAgents[ThreadLocalRandom.current().nextInt(fallbackUserAgents.length)];
+        }
+        return userAgents.get(ThreadLocalRandom.current().nextInt(userAgents.size()));
+    }
+    
+    /**
+     * Получение случайного Referer
+     */
+    private String getRandomReferer() {
+        String[] referers = {
+            "https://www.google.com/",
+            "https://www.google.ru/",
+            "https://yandex.ru/",
+            "https://www.bing.com/",
+            "https://duckduckgo.com/",
+            "https://mail.ru/",
+            "https://rambler.ru/"
+        };
+        return referers[ThreadLocalRandom.current().nextInt(referers.length)];
+    }
+    
+    /**
+     * Проверка статуса на редирект
+     */
+    private boolean isRedirectStatus(int statusCode) {
+        return statusCode == 301 || statusCode == 302 || statusCode == 303 || 
+               statusCode == 307 || statusCode == 308;
+    }
+    
+    /**
+     * Разрешение относительных URL
+     */
+    private String resolveUrl(String baseUrl, String location) {
+        if (location.startsWith("http://") || location.startsWith("https://")) {
+            return location;
+        }
+        
+        try {
+            HttpUrl baseHttpUrl = HttpUrl.parse(baseUrl);
+            if (baseHttpUrl == null) {
+                return location;
+            }
+            
+            HttpUrl resolved = baseHttpUrl.resolve(location);
+            return resolved != null ? resolved.toString() : location;
+            
+        } catch (Exception e) {
+            log.warn("Error resolving URL: base={}, location={}", baseUrl, location);
+            return location;
+        }
+    }
+}

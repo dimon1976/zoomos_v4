@@ -106,7 +106,7 @@ public class EnhancedHttpStrategy implements AntiBlockStrategy {
                     
                     // Успешно получили финальный URL
                     result.setFinalUrl(currentUrl);
-                    result.setStatus(statusCode == HttpStatus.SC_SUCCESS ? "SUCCESS" : "HTTP_" + statusCode);
+                    result.setStatus(statusCode == HttpStatus.SC_SUCCESS ? PageStatus.SUCCESS.toString() : PageStatus.ERROR.toString());
                     result.setRedirectCount(redirectCount);
                     return result;
                     
@@ -120,13 +120,13 @@ public class EnhancedHttpStrategy implements AntiBlockStrategy {
             
             // Достигнут лимит редиректов
             result.setFinalUrl(currentUrl);
-            result.setStatus("MAX_REDIRECTS");
+            result.setStatus(PageStatus.MAX_REDIRECTS.toString());
             result.setRedirectCount(redirectCount);
             
         } catch (Exception e) {
             log.error("EnhancedHttp critical error for URL {}: {}", originalUrl, e.getMessage());
             result.setFinalUrl(originalUrl);
-            result.setStatus("ERROR");
+            result.setStatus(PageStatus.ERROR.toString());
             result.setRedirectCount(0);
         }
         
