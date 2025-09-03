@@ -66,7 +66,7 @@
                         </div>
                         <div class="col-md-3">
                             <strong>Строк:</strong><br>
-                            <span th:text="${#lists.size(metadata.sampleData)}">100</span>
+                            <span th:text="${metadata.sampleData != null ? 'Данные доступны' : 'N/A'}">100</span>
                         </div>
                         <div class="col-md-3">
                             <strong>Колонок:</strong><br>

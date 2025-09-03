@@ -57,11 +57,17 @@ public class BrowserService {
             // Переходим на страницу
             log.info("Загружаем страницу: {}", originalUrl);
             driver.get(originalUrl);
+            
+            // Проверяем что страница загрузилась
+            if (driver.getCurrentUrl() == null) {
+                throw new RuntimeException("Страница не загрузилась, currentUrl = null");
+            }
+            
             String currentUrl = originalUrl;
             int redirectCount = 0;
             
-            // Ждем полной загрузки страницы
-            Thread.sleep(20000);
+            // Ждем полной загрузки страницы (сокращаем время)
+            Thread.sleep(3000);
             log.info("Проверяем URL после начальной загрузки: {}", driver.getCurrentUrl());
             
             // Пытаемся найти и выполнить возможные JavaScript редиректы
@@ -93,8 +99,8 @@ public class BrowserService {
             for (int attempt = 1; attempt <= 2; attempt++) {
                 log.info("Попытка {}: ожидаем редирект для {}", attempt, currentUrl);
                 
-                // Время ожидания: 3s, 5s
-                int waitTime = attempt == 1 ? 3000 : 5000;
+                // Время ожидания: 2s, 3s
+                int waitTime = attempt == 1 ? 2000 : 3000;
                 
                 Thread.sleep(waitTime);
                 
@@ -107,7 +113,7 @@ public class BrowserService {
                     redirectCount++;
                     
                     // Дополнительно ждём после редиректа на случай цепочки редиректов
-                    Thread.sleep(3000);
+                    Thread.sleep(1000);
                     
                     // Проверяем ещё раз
                     String finalCheck = driver.getCurrentUrl();
@@ -232,7 +238,7 @@ public class BrowserService {
         options.addArguments("--disable-web-security");
         
         // Включаем headless режим для фоновой работы
-        // options.addArguments("--headless");
+        options.addArguments("--headless");
 
         ChromeDriver driver = new ChromeDriver(options);
         

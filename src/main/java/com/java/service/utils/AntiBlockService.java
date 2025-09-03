@@ -1,8 +1,10 @@
 package com.java.service.utils;
 
 import com.java.config.AntiBlockConfig;
+import com.java.service.RedirectStatisticsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -19,6 +21,9 @@ public class AntiBlockService {
     
     private final AntiBlockConfig antiBlockConfig;
     private final List<AntiBlockStrategy> strategies;
+    
+    @Autowired(required = false)
+    private RedirectStatisticsService statisticsService;
     
     /**
      * Инициализация с логированием доступных стратегий
@@ -91,6 +96,9 @@ public class AntiBlockService {
                 
                 RedirectCollectorService.RedirectResult result = strategy.processUrl(originalUrl, maxRedirects, timeoutSeconds);
                 long elapsedTime = System.currentTimeMillis() - startTime;
+                
+                // Сохраняем статистику
+                saveStatistics(originalUrl, result.getFinalUrl(), strategy.getStrategyName(), result, elapsedTime);
                 
                 if (isSuccessfulResult(result)) {
                     if (antiBlockConfig.isLogStrategies()) {
@@ -184,5 +192,20 @@ public class AntiBlockService {
         result.setStatus(status);
         result.setRedirectCount(0);
         return result;
+    }
+    
+    /**
+     * Сохранение статистики обработки URL
+     */
+    private void saveStatistics(String originalUrl, String finalUrl, String strategyName, 
+                               RedirectCollectorService.RedirectResult result, long processingTime) {
+        if (statisticsService != null) {
+            try {
+                statisticsService.saveRedirectResult(originalUrl, finalUrl, strategyName, result, processingTime);
+            } catch (Exception e) {
+                // Не должны падать из-за проблем со статистикой
+                log.debug("Ошибка сохранения статистики: {}", e.getMessage());
+            }
+        }
     }
 }

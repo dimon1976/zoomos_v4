@@ -10,6 +10,7 @@
 2. **Согласование → Реализация → Подтверждение** - цикл для каждой задачи
 3. **Итеративная разработка** - каждая итерация тестируется и коммитится
 4. **Обновление прогресса** - отмечай выполненные чекбоксы в тасклисте
+5. **Источник для тестирования** - используй файл 'test_redirect.csv'
 
 ---
 
@@ -118,7 +119,11 @@ mvn clean compile
 mvn spring-boot:run
 
 # Тестирование функционала
-# (указать конкретные URL для проверки в каждой итерации)
+https://goldapple.ru/qr/19000180718 -> https://goldapple.ru/19000180718-elixir-intense
+https://goldapple.ru/qr/19000180719 ->  https://goldapple.ru/19000180719-elixir-precious
+https://lenta.com/product/vino-igristoe-bio-bio-bubbles-organic-bel-bryut-italiya-075l-521969/ -> https://lenta.com/product/vino-igristoe-bel-bryut-italiya-075l-521969/
+https://lenta.com/product/vino-igristoe-prochie-tovary-prosekko-ekstra-drajj-bel-bryut-italiya-075l-675845/ -> https://lenta.com/product/vino-igristoe-prosekko-ekstra-drajj-bel-bryut-italiya-075l-675845/
+
 
 # Коммит изменений
 git add .
