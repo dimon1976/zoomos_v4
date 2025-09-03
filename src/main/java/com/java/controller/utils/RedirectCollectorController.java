@@ -6,6 +6,8 @@ import com.java.service.file.FileAnalyzerService;
 import com.java.service.utils.RedirectCollectorService;
 import com.java.service.utils.AsyncRedirectCollectorService;
 import com.java.util.ControllerUtils;
+import com.java.mapper.FileMetadataMapper;
+import com.java.dto.FileAnalysisResultDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
@@ -98,8 +100,10 @@ public class RedirectCollectorController {
             return "redirect:/utils/redirect-collector";
         }
 
+        FileAnalysisResultDto analysisResult = FileMetadataMapper.toAnalysisDto(metadata);
+        
         model.addAttribute("pageTitle", "Настройка сбора редиректов");
-        model.addAttribute("metadata", metadata);
+        model.addAttribute("metadata", analysisResult);
         model.addAttribute("redirectCollectorDto", RedirectCollectorDto.builder()
             .maxRedirects(5)
             .timeoutSeconds(10)

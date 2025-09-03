@@ -62,7 +62,7 @@
                     <div class="row">
                         <div class="col-md-3">
                             <strong>Имя файла:</strong><br>
-                            <span th:text="${metadata.originalFilename}">example.csv</span>
+                            <span th:text="${metadata.filename}">example.csv</span>
                         </div>
                         <div class="col-md-3">
                             <strong>Строк:</strong><br>
@@ -74,7 +74,7 @@
                         </div>
                         <div class="col-md-3">
                             <strong>Кодировка:</strong><br>
-                            <span th:text="${metadata.detectedEncoding}">UTF-8</span>
+                            <span th:text="${metadata.encoding}">UTF-8</span>
                         </div>
                     </div>
                 </div>
@@ -99,9 +99,9 @@
                                 <label for="urlColumn">Колонка с исходными ссылками *</label>
                                 <select id="urlColumn" name="urlColumn" class="form-control" th:field="*{urlColumn}" required>
                                     <option value="">-- Выберите колонку --</option>
-                                    <option th:each="column, iter : ${metadata.sampleData[0]}" 
-                                            th:value="${iter.index}" 
-                                            th:text="${'Колонка ' + (iter.index + 1) + ': ' + column}">
+                                    <option th:each="header, iterStat : ${metadata.columnHeaders}" 
+                                            th:value="${iterStat.index}" 
+                                            th:text="${iterStat.index + 1} + '. ' + ${header}">
                                         Колонка 1: Название
                                     </option>
                                 </select>
@@ -115,9 +115,9 @@
                                          th:if="${rowStat.index < 5}" 
                                          class="column-item">
                                         <small class="text-muted">Строка [[${rowStat.index + 1}]]:</small>
-                                        <div th:each="cell, cellStat : ${row}">
-                                            <span class="badge badge-light mr-1">[[${cellStat.index + 1}]]</span>
-                                            <span th:text="${cell}" class="mr-2">данные</span>
+                                        <div th:each="header, iterStat : ${metadata.columnHeaders}">
+                                            <span class="badge badge-light mr-1">[[${iterStat.index + 1}]]</span>
+                                            <span th:text="${row['column_' + iterStat.index]}" class="mr-2">данные</span>
                                         </div>
                                     </div>
                                 </div>

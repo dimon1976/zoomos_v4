@@ -40,6 +40,10 @@ public class SimpleHttpStrategy implements AntiBlockStrategy {
         result.setOriginalUrl(originalUrl);
         result.setRedirectCount(0);
         
+        // Глобально отключаем автоматические редиректы
+        boolean originalFollowRedirects = HttpURLConnection.getFollowRedirects();
+        HttpURLConnection.setFollowRedirects(false);
+        
         try {
             String currentUrl = originalUrl;
             int redirectCount = 0;
@@ -50,7 +54,7 @@ public class SimpleHttpStrategy implements AntiBlockStrategy {
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 
                 // Настраиваем базовые параметры
-                connection.setRequestMethod("GET");
+                connection.setRequestMethod("HEAD"); // Используем HEAD для быстрой проверки
                 connection.setConnectTimeout(timeoutSeconds * 1000);
                 connection.setReadTimeout(timeoutSeconds * 1000);
                 connection.setInstanceFollowRedirects(false); // Обрабатываем редиректы вручную
@@ -122,6 +126,9 @@ public class SimpleHttpStrategy implements AntiBlockStrategy {
             result.setFinalUrl(originalUrl);
             result.setStatus("ERROR");
             result.setRedirectCount(0);
+        } finally {
+            // Восстанавливаем глобальную настройку
+            HttpURLConnection.setFollowRedirects(originalFollowRedirects);
         }
         
         return result;

@@ -39,7 +39,8 @@
       "Bash(find:*)",
       "Bash(chcp:*)",
       "Bash(export:*)",
-      "Bash(tasklist)"
+      "Bash(tasklist)",
+      "Read(\\/**)"
     ],
     "additionalDirectories": [
       "D:\\d D:\\project"
