@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Read(/E:\\workspace\\zoomos_v4\\src/**)"
+      "Bash(mvn compile:*)",
+      "Bash(mvn test:*)"
     ],
     "deny": [],
     "ask": []

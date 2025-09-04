@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Поиск финальных ссылок',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Поиск финальных ссылок',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Поиск финальных ссылок</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .upload-area {
+            border: 2px dashed #dc3545;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #c82333;
+            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        }
+        .feature-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #dc3545;
+        }
+        .process-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(45deg, #dc3545, #c82333);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            margin: 0 auto 15px;
+        }
+        .strategy-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            border-radius: 0.25rem;
+            margin: 0.125rem;
+        }
+        .strategy-curl { background-color: #28a745; color: white; }
+        .strategy-playwright { background-color: #007bff; color: white; }
+        .strategy-httpclient { background-color: #6c757d; color: white; }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> К утилитам
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Описание утилиты -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-external-link-alt"></i>
+                            Поиск финальных ссылок после редиректов
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-3">
+                            Утилита следует по HTTP редиректам и определяет финальные URL с защитой от антиботных систем.
+                            Использует многоуровневую систему стратегий для обхода блокировок.
+                        </p>
+                        
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="process-icon">
+                                    <i class="fas fa-upload"></i>
+                                </div>
+                                <h6 class="text-center">1. Загрузка</h6>
+                                <p class="text-center text-muted small">
+                                    Загрузите файл с URL для обработки
+                                </p>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="process-icon">
+                                    <i class="fas fa-cogs"></i>
+                                </div>
+                                <h6 class="text-center">2. Настройка</h6>
+                                <p class="text-center text-muted small">
+                                    Выберите колонки и параметры обработки
+                                </p>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="process-icon">
+                                    <i class="fas fa-route"></i>
+                                </div>
+                                <h6 class="text-center">3. Обработка</h6>
+                                <p class="text-center text-muted small">
+                                    Автоматическое следование по редиректам
+                                </p>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="process-icon">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <h6 class="text-center">4. Результат</h6>
+                                <p class="text-center text-muted small">
+                                    Файл с финальными URL и статистикой
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <!-- Стратегии обработки -->
+                        <div class="mt-4">
+                            <h6><i class="fas fa-shield-alt text-info"></i> Стратегии защиты от антибот систем:</h6>
+                            <div class="mt-2">
+                                <span class="strategy-badge strategy-curl">
+                                    <i class="fas fa-terminal"></i> cURL - основная стратегия
+                                </span>
+                                <span class="strategy-badge strategy-playwright">
+                                    <i class="fas fa-browser"></i> Playwright - обход блокировок
+                                </span>
+                                <span class="strategy-badge strategy-httpclient">
+                                    <i class="fas fa-code"></i> HttpClient - резервная
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Загрузка файла -->
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">
+                            <i class="fas fa-file-upload text-primary"></i>
+                            Шаг 1: Загрузка файла
+                        </h5>
+
+                        <form th:action="@{/utils/redirect-finder/upload}" method="post" enctype="multipart/form-data">
+                            <div class="upload-area">
+                                <div class="mb-3">
+                                    <i class="fas fa-cloud-upload-alt fa-3x text-danger mb-3"></i>
+                                    <h5>Выберите файл с URL для обработки</h5>
+                                    <p class="text-muted">
+                                        Поддерживаются форматы: Excel (.xlsx, .xls) и CSV
+                                    </p>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <input type="file" class="form-control form-control-lg" name="file" 
+                                           accept=".xlsx,.xls,.csv" required>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-danger btn-lg">
+                                    <i class="fas fa-upload"></i> Загрузить и проанализировать
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Требования к файлу -->
+        <div class="row mt-4">
+            <div class="col-lg-8 mx-auto">
+                <div class="feature-card">
+                    <h6>
+                        <i class="fas fa-info-circle text-info"></i>
+                        Требования к файлу
+                    </h6>
+                    <ul class="mb-0">
+                        <li>Файл должен содержать колонку с URL (обязательно)</li>
+                        <li>Колонки ID и Модель опциональны</li>
+                        <li>URL должны начинаться с http:// или https://</li>
+                        <li>Поддерживается до 20 редиректов на URL</li>
+                        <li>Максимальный размер файла: 1200MB</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Примеры -->
+        <div class="row mt-4">
+            <div class="col-lg-8 mx-auto">
+                <div class="feature-card">
+                    <h6>
+                        <i class="fas fa-lightbulb text-warning"></i>
+                        Пример обработки
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Исходные данные:</strong>
+                            <div class="small text-muted mt-1">
+                                ID: 12345<br>
+                                URL: https://short.ly/abc123<br>
+                                Модель: Товар А
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Результат:</strong>
+                            <div class="small text-muted mt-1">
+                                ID: 12345<br>
+                                Финальный URL: https://shop.example.com/product/12345<br>
+                                Редиректов: 2 | Статус: OK | Стратегия: curl
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Предупреждения -->
+        <div class="row mt-4">
+            <div class="col-lg-8 mx-auto">
+                <div class="alert alert-warning">
+                    <h6><i class="fas fa-exclamation-triangle"></i> Важно знать</h6>
+                    <ul class="mb-0">
+                        <li>Обработка большого количества URL может занять значительное время</li>
+                        <li>Некоторые сайты могут блокировать автоматические запросы</li>
+                        <li>Для заблокированных URL автоматически используется браузерная стратегия</li>
+                        <li>В результате указывается какая стратегия была использована</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Обработка формы загрузки
+    const form = document.querySelector('form');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const fileInput = form.querySelector('input[type="file"]');
+    
+    form.addEventListener('submit', function(e) {
+        if (!fileInput.files.length) {
+            e.preventDefault();
+            alert('Выберите файл для загрузки');
+            return;
+        }
+        
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ файла...';
+    });
+    
+    // Показ имени выбранного файла
+    fileInput.addEventListener('change', function() {
+        const fileName = this.files[0]?.name;
+        if (fileName) {
+            const info = document.createElement('div');
+            info.className = 'alert alert-info mt-2';
+            info.innerHTML = `<i class="fas fa-file"></i> Выбран файл: <strong>${fileName}</strong>`;
+            
+            const existing = form.querySelector('.alert');
+            if (existing) existing.remove();
+            
+            this.parentNode.appendChild(info);
+        }
+    });
+});
+</script>
+</th:block>
+</html>

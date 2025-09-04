@@ -66,6 +66,14 @@ public class UtilsController {
             "status", "ready"
         ));
         
+        utilities.add(Map.of(
+            "id", "redirect-finder",
+            "title", "Поиск финальных ссылок",
+            "description", "Получение финальных URL после обработки HTTP редиректов с защитой от антиботов",
+            "icon", "fas fa-external-link-alt",
+            "url", "/utils/redirect-finder",
+            "status", "ready"
+        ));
         
         return utilities;
     }

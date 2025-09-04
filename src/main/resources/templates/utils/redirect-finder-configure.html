@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+      th:replace="~{layout/main :: html(
+        title='Настройка колонок - Поиск редиректов',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Настройка обработки редиректов',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Настройка колонок - Поиск редиректов</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .column-selector {
+            margin-bottom: 1.5rem;
+        }
+        .column-help {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+        .preview-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .process-button {
+            background: linear-gradient(45deg, #dc3545, #c82333);
+            border: none;
+            padding: 0.75rem 2rem;
+            font-size: 1.1rem;
+        }
+        .advanced-options {
+            display: none;
+        }
+        .advanced-options.show {
+            display: block;
+        }
+        .strategy-info {
+            background-color: #f8f9fa;
+            border-left: 4px solid #17a2b8;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <form th:action="@{/utils/redirect-finder/cancel}" method="post" style="display: inline;">
+            <button type="submit" class="btn btn-outline-secondary">
+                <i class="fas fa-times"></i> Отменить
+            </button>
+        </form>
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> К утилитам
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        
+        <!-- Информация о файле -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Шаг 2: Настройка обработки редиректов</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Выберите колонку с URL для обработки редиректов. Колонки ID и Модель опциональны.</p>
+                        <div class="row">
+                            <div class="col-auto">
+                                <i class="fas fa-file-alt"></i>
+                                <strong>Файл:</strong> <span th:text="${fileMetadata.filename}">имя файла</span>
+                            </div>
+                            <div class="col-auto">
+                                | <strong>Строк:</strong> <span th:text="${fileMetadata.totalRows}">0</span>
+                            </div>
+                            <div class="col-auto">
+                                | <strong>Колонок:</strong> <span th:text="${fileMetadata.totalColumns}">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <form th:action="@{/utils/redirect-finder/process}" method="post" th:object="${redirectFinderDto}" id="configForm">
+                            
+                            <h5 class="mb-4">Выбор колонок</h5>
+                            
+                            <!-- URL Column (Required) -->
+                            <div class="column-selector">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label">
+                                            <i class="fas fa-link text-danger"></i>
+                                            Колонка URL *
+                                        </label>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <select class="form-select" th:field="*{urlColumn}" required>
+                                            <option value="">Выберите колонку...</option>
+                                            <option th:each="column,iterStat : ${fileMetadata.columnHeaders}" 
+                                                    th:value="${iterStat.index}" 
+                                                    th:text="|${iterStat.index}: ${column}|">
+                                                0: Колонка
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="column-help">Обязательно</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ID Column (Optional) -->
+                            <div class="column-selector">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label">
+                                            <i class="fas fa-tag text-secondary"></i>
+                                            Колонка ID
+                                        </label>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <select class="form-select" th:field="*{idColumn}">
+                                            <option value="">Нет ID</option>
+                                            <option th:each="column,iterStat : ${fileMetadata.columnHeaders}" 
+                                                    th:value="${iterStat.index}" 
+                                                    th:text="|${iterStat.index}: ${column}|">
+                                                0: Колонка
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="column-help">Опционально</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Model Column (Optional) -->
+                            <div class="column-selector">
+                                <div class="row align-items-center">
+                                    <div class="col-md-3">
+                                        <label class="form-label">
+                                            <i class="fas fa-cube text-secondary"></i>
+                                            Колонка Модель
+                                        </label>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <select class="form-select" th:field="*{modelColumn}">
+                                            <option value="">Нет модели</option>
+                                            <option th:each="column,iterStat : ${fileMetadata.columnHeaders}" 
+                                                    th:value="${iterStat.index}" 
+                                                    th:text="|${iterStat.index}: ${column}|">
+                                                0: Колонка
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="column-help">Опционально</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <!-- Advanced Parameters -->
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0">Параметры обработки</h5>
+                                <button type="button" class="btn btn-outline-info btn-sm" id="toggleAdvanced">
+                                    <i class="fas fa-cog"></i> Дополнительные настройки
+                                </button>
+                            </div>
+
+                            <!-- Basic Parameters -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Максимум редиректов</label>
+                                    <select class="form-select" th:field="*{maxRedirects}">
+                                        <option value="3">3 редиректа</option>
+                                        <option value="5" selected>5 редиректов (рекомендуется)</option>
+                                        <option value="10">10 редиректов</option>
+                                        <option value="20">20 редиректов</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Таймаут на URL</label>
+                                    <select class="form-select" th:field="*{timeoutMs}">
+                                        <option value="5000">5 секунд</option>
+                                        <option value="10000" selected>10 секунд (рекомендуется)</option>
+                                        <option value="15000">15 секунд</option>
+                                        <option value="30000">30 секунд</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Advanced Options -->
+                            <div class="advanced-options" id="advancedOptions">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" th:field="*{usePlaywright}" id="usePlaywright">
+                                                    <label class="form-check-label" for="usePlaywright">
+                                                        <i class="fas fa-browser text-primary"></i>
+                                                        Принудительно использовать браузер
+                                                    </label>
+                                                    <div class="form-text">Использовать Playwright вместо curl для всех URL</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Формат результата</label>
+                                                <select class="form-select" th:field="*{outputFormat}">
+                                                    <option value="csv" selected>CSV файл</option>
+                                                    <option value="xlsx">Excel файл</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Strategy Information -->
+                            <div class="strategy-info">
+                                <h6><i class="fas fa-info-circle"></i> Стратегии обработки</h6>
+                                <div class="row text-small">
+                                    <div class="col-md-4">
+                                        <strong>1. cURL</strong><br>
+                                        <span class="text-muted">Основная стратегия, быстро и эффективно</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>2. Playwright</strong><br>
+                                        <span class="text-muted">При блокировке cURL, использует браузер</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>3. HttpClient</strong><br>
+                                        <span class="text-muted">Резервная стратегия</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Submit Section -->
+                            <div class="d-flex justify-content-center mt-4">
+                                <button type="submit" class="btn btn-danger process-button">
+                                    <i class="fas fa-external-link-alt"></i>
+                                    Начать обработку редиректов
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">
+                        <h6 class="mb-0">Предварительный просмотр</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="preview-table">
+                            <table class="table table-sm table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th th:each="header,iterStat : ${fileMetadata.columnHeaders}"
+                                            th:text="|${iterStat.index}:${#strings.abbreviate(header,10)}|">
+                                            0:Column
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="row : ${fileMetadata.sampleRows}">
+                                        <td th:each="cell : ${row}" 
+                                            th:text="${#strings.abbreviate(cell?.toString(),15)}"
+                                            class="text-truncate">
+                                            Sample data
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Warning -->
+                <div class="alert alert-warning mt-3">
+                    <h6><i class="fas fa-exclamation-triangle"></i> Внимание</h6>
+                    <ul class="mb-0 small">
+                        <li>Большое количество URL увеличивает время обработки</li>
+                        <li>Заблокированные сайты обрабатываются через браузер</li>
+                        <li>В результате указывается статус каждого URL</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('configForm');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const toggleBtn = document.getElementById('toggleAdvanced');
+    const advancedOptions = document.getElementById('advancedOptions');
+    
+    // Toggle advanced options
+    toggleBtn.addEventListener('click', function() {
+        advancedOptions.classList.toggle('show');
+        const icon = this.querySelector('i');
+        if (advancedOptions.classList.contains('show')) {
+            icon.className = 'fas fa-chevron-up';
+            this.innerHTML = '<i class="fas fa-chevron-up"></i> Скрыть настройки';
+        } else {
+            icon.className = 'fas fa-cog';
+            this.innerHTML = '<i class="fas fa-cog"></i> Дополнительные настройки';
+        }
+    });
+    
+    // Form submission
+    form.addEventListener('submit', function(e) {
+        const urlColumn = form.querySelector('[name="urlColumn"]').value;
+        
+        if (!urlColumn) {
+            e.preventDefault();
+            alert('Выберите колонку с URL');
+            return;
+        }
+        
+        // Show loading state
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обработка редиректов...';
+        
+        // Estimate processing time
+        const rowCount = parseInt(document.querySelector('[th\\:text="${fileMetadata.totalRows}"]')?.textContent || '0');
+        if (rowCount > 100) {
+            const estimatedTime = Math.ceil(rowCount * 2 / 60); // ~2 sec per URL
+            const timeText = estimatedTime > 1 ? `~${estimatedTime} мин` : '~1 мин';
+            submitBtn.innerHTML += ` (примерно ${timeText})`;
+        }
+    });
+    
+    // Column selection helpers
+    const urlSelect = form.querySelector('[name="urlColumn"]');
+    const idSelect = form.querySelector('[name="idColumn"]');
+    const modelSelect = form.querySelector('[name="modelColumn"]');
+    
+    // Auto-detect URL column
+    urlSelect.addEventListener('focus', function() {
+        if (!this.value) {
+            const options = this.querySelectorAll('option');
+            for (let option of options) {
+                const text = option.textContent.toLowerCase();
+                if (text.includes('url') || text.includes('ссылка') || text.includes('link')) {
+                    option.selected = true;
+                    break;
+                }
+            }
+        }
+    });
+    
+    // Auto-detect ID column
+    idSelect.addEventListener('focus', function() {
+        if (!this.value) {
+            const options = this.querySelectorAll('option');
+            for (let option of options) {
+                const text = option.textContent.toLowerCase();
+                if (text.includes('id') || text.includes('ид') || text.includes('код')) {
+                    option.selected = true;
+                    break;
+                }
+            }
+        }
+    });
+});
+</script>
+</th:block>
+</html>
