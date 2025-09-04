@@ -40,7 +40,10 @@
       "Bash(chcp:*)",
       "Bash(export:*)",
       "Bash(tasklist)",
-      "Read(\\/**)"
+      "Read(\\/**)",
+      "Read(/D:\\project\\zoomos_v4\\src\\main\\java\\com\\java\\controller\\utils/**)",
+      "Read(/D:\\project\\zoomos_v4/**)",
+      "Read(/D:\\project\\zoomos_v4/**)"
     ],
     "additionalDirectories": [
       "D:\\d D:\\project"

@@ -66,23 +66,6 @@ public class UtilsController {
             "status", "ready"
         ));
         
-        utilities.add(Map.of(
-            "id", "redirect-collector",
-            "title", "Сбор финальных ссылок",
-            "description", "Получение финальных URL после всех редиректов",
-            "icon", "fas fa-external-link-alt",
-            "url", "/utils/redirect-collector",
-            "status", "ready"
-        ));
-        
-        utilities.add(Map.of(
-            "id", "redirect-statistics",
-            "title", "Статистика редиректов",
-            "description", "Анализ эффективности стратегий обхода блокировок",
-            "icon", "fas fa-chart-line",
-            "url", "/utils/redirect-statistics",
-            "status", "ready"
-        ));
         
         return utilities;
     }
