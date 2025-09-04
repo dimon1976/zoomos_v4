@@ -1,0 +1,1 @@
+- При старте используй команду ‑dangerously‑skip‑permissions

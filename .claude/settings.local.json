@@ -1,53 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(java:*)",
-      "Bash(where mvn)",
-      "Bash(./run-test.bat)",
-      "mcp__playwright__browser_wait_for",
-      "mcp__playwright__browser_install",
-      "mcp__playwright__browser_navigate",
-      "mcp__playwright__browser_click",
-      "Bash(mvn:*)",
-      "Bash(wmic process where:*)",
-      "Bash(timeout:*)",
-      "Bash(ping:*)",
-      "Bash(curl:*)",
-      "Bash(taskkill:*)",
-      "mcp__playwright__browser_take_screenshot",
-      "mcp__playwright__browser_network_requests",
-      "mcp__playwright__browser_select_option",
-      "mcp__playwright__browser_console_messages",
-      "mcp__playwright__browser_close",
-      "Bash(start-dev.bat)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(psql:*)",
-      "Read(E:\\/**)",
-      "Bash(git checkout:*)",
-      "Read(D:\\project\\zoomos_v4/**)",
-      "mcp__playwright__browser_handle_dialog",
-      "mcp__playwright__browser_file_upload",
-      "mcp__playwright__browser_snapshot",
-      "mcp__playwright__browser_evaluate",
-      "Bash(./mvnw:*)",
-      "mcp__context7__get-library-docs",
-      "Bash(/bashes)",
-      "mcp__playwright__browser_press_key",
-      "Bash(jar:*)",
-      "WebSearch",
-      "Bash(find:*)",
-      "Bash(chcp:*)",
-      "Bash(export:*)",
-      "Bash(tasklist)",
-      "Read(\\/**)",
-      "Read(/D:\\project\\zoomos_v4\\src\\main\\java\\com\\java\\controller\\utils/**)",
-      "Read(/D:\\project\\zoomos_v4/**)",
-      "Read(/D:\\project\\zoomos_v4/**)"
+      "Read(/E:\\workspace\\zoomos_v4\\src/**)"
     ],
-    "additionalDirectories": [
-      "D:\\d D:\\project"
-    ]
-  },
-  "outputStyle": "default"
+    "deny": [],
+    "ask": []
+  }
 }
