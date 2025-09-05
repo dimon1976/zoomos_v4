@@ -67,7 +67,7 @@ public class HttpClientStrategy implements RedirectStrategy {
             
             long endTime = System.currentTimeMillis();
             
-            log.info("URL: {} → {} (HTTP: {}, время: {}ms, стратегия: httpclient)", 
+            log.info("URL: {} → {} (HTTP: {}, время: {}ms, стратегия: HttpClientStrategy)", 
                     url, finalUrl, httpCode, endTime - startTime);
             
             PageStatus status = determineStatus(httpCode, redirectCount, responseBody);
@@ -153,6 +153,6 @@ public class HttpClientStrategy implements RedirectStrategy {
     
     @Override
     public String getStrategyName() {
-        return "httpclient";
+        return "HttpClientStrategy";
     }
 }
