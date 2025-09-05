@@ -17,6 +17,10 @@ import java.util.*;
 import java.util.stream.Stream;
 import java.util.stream.Collectors;
 
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+
 /**
  * Основной сервис для обработки HTTP редиректов с использованием Strategy Pattern
  */
@@ -103,9 +107,81 @@ public class RedirectFinderService {
     }
     
     private List<List<String>> readExcelFile(FileMetadata metadata) throws IOException {
-        // TODO: Реализация чтения Excel файлов
-        log.warn("Чтение Excel файлов пока не реализовано для redirect-finder");
-        throw new UnsupportedOperationException("Excel files not yet supported");
+        List<List<String>> data = new ArrayList<>();
+        Path filePath = Path.of(metadata.getTempFilePath());
+        
+        try (InputStream fis = Files.newInputStream(filePath)) {
+            Workbook workbook;
+            
+            // Определяем тип файла по расширению
+            String filename = metadata.getOriginalFilename().toLowerCase();
+            if (filename.endsWith(".xlsx")) {
+                workbook = new XSSFWorkbook(fis);
+            } else if (filename.endsWith(".xls")) {
+                workbook = new HSSFWorkbook(fis);
+            } else {
+                throw new IllegalArgumentException("Неподдерживаемый формат Excel файла: " + filename);
+            }
+            
+            // Работаем с первым листом
+            Sheet sheet = workbook.getSheetAt(0);
+            
+            for (Row row : sheet) {
+                List<String> rowData = new ArrayList<>();
+                
+                // Проходим по всем ячейкам в строке
+                for (int i = 0; i < row.getLastCellNum(); i++) {
+                    Cell cell = row.getCell(i);
+                    String cellValue = "";
+                    
+                    if (cell != null) {
+                        switch (cell.getCellType()) {
+                            case STRING:
+                                cellValue = cell.getStringCellValue();
+                                break;
+                            case NUMERIC:
+                                if (DateUtil.isCellDateFormatted(cell)) {
+                                    cellValue = cell.getDateCellValue().toString();
+                                } else {
+                                    // Преобразуем число в строку без десятичных знаков
+                                    double numericValue = cell.getNumericCellValue();
+                                    if (numericValue == (long) numericValue) {
+                                        cellValue = String.valueOf((long) numericValue);
+                                    } else {
+                                        cellValue = String.valueOf(numericValue);
+                                    }
+                                }
+                                break;
+                            case BOOLEAN:
+                                cellValue = String.valueOf(cell.getBooleanCellValue());
+                                break;
+                            case FORMULA:
+                                cellValue = cell.getCellFormula();
+                                break;
+                            case BLANK:
+                            default:
+                                cellValue = "";
+                                break;
+                        }
+                    }
+                    
+                    rowData.add(cellValue.trim());
+                }
+                
+                // Добавляем строку только если она не пустая
+                if (!rowData.isEmpty() && rowData.stream().anyMatch(s -> !s.isEmpty())) {
+                    data.add(rowData);
+                }
+            }
+            
+            workbook.close();
+            
+        } catch (Exception e) {
+            log.error("Ошибка чтения Excel файла: {}", metadata.getOriginalFilename(), e);
+            throw new IOException("Ошибка чтения Excel файла: " + e.getMessage(), e);
+        }
+        
+        return data;
     }
     
     private List<RedirectResult> processUrls(List<List<String>> rawData, RedirectFinderDto dto, FileMetadata metadata) {
@@ -215,7 +291,7 @@ public class RedirectFinderService {
                         .build();
     }
     
-    private String getColumnValue(List<String> row, Integer columnIndex) {
+    String getColumnValue(List<String> row, Integer columnIndex) {
         if (columnIndex == null || columnIndex < 0 || columnIndex >= row.size()) {
             return null;
         }
@@ -225,8 +301,8 @@ public class RedirectFinderService {
     }
     
     private void enhanceResultWithRowData(RedirectResult result, String id, String model) {
-        // Пока RedirectResult не содержит поля id и model
-        // Можно расширить модель при необходимости
+        result.setId(id);
+        result.setModel(model);
         log.debug("Дополнительные данные: id={}, model={} для URL: {}", id, model, result.getOriginalUrl());
     }
     
@@ -274,11 +350,13 @@ public class RedirectFinderService {
         StringBuilder csv = new StringBuilder();
         
         // Заголовки
-        csv.append("Исходный URL,Финальный URL,Количество редиректов,Статус,Стратегия,Время (мс),HTTP код,Ошибка\n");
+        csv.append("ID,Модель,Исходный URL,Финальный URL,Количество редиректов,Статус,Стратегия,Время (мс),HTTP код,Ошибка\n");
         
         // Данные
         for (RedirectResult result : results) {
-            csv.append(String.format("\"%s\",\"%s\",%d,\"%s\",\"%s\",%d,%d,\"%s\"\n",
+            csv.append(String.format("\"%s\",\"%s\",\"%s\",\"%s\",%d,\"%s\",\"%s\",%d,%d,\"%s\"\n",
+                    escapeCsv(result.getId() != null ? result.getId() : ""),
+                    escapeCsv(result.getModel() != null ? result.getModel() : ""),
                     escapeCsv(result.getOriginalUrl()),
                     escapeCsv(result.getFinalUrl()),
                     result.getRedirectCount() != null ? result.getRedirectCount() : 0,

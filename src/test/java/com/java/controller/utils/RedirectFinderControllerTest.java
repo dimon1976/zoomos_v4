@@ -68,8 +68,8 @@ class RedirectFinderControllerTest {
             .totalRows(2)
             .build();
 
-        when(controllerUtils.analyzeFile(any(MockMultipartFile.class)))
-            .thenReturn(analysisResult);
+        when(fileAnalyzerService.analyzeFile(any(MockMultipartFile.class)))
+            .thenReturn(FileMetadata.builder().build());
 
         // When & Then
         mockMvc.perform(multipart("/utils/redirect-finder/upload")
@@ -89,7 +89,7 @@ class RedirectFinderControllerTest {
             "".getBytes()
         );
 
-        when(controllerUtils.analyzeFile(any(MockMultipartFile.class)))
+        when(fileAnalyzerService.analyzeFile(any(MockMultipartFile.class)))
             .thenThrow(new IllegalArgumentException("Файл пустой"));
 
         // When & Then
@@ -264,8 +264,8 @@ class RedirectFinderControllerTest {
             .totalRows(1001)
             .build();
 
-        when(controllerUtils.analyzeFile(any(MockMultipartFile.class)))
-            .thenReturn(analysisResult);
+        when(fileAnalyzerService.analyzeFile(any(MockMultipartFile.class)))
+            .thenReturn(FileMetadata.builder().build());
 
         // When & Then
         mockMvc.perform(multipart("/utils/redirect-finder/upload")

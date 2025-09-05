@@ -6,6 +6,8 @@ import lombok.Data;
 @Data
 @Builder
 public class RedirectResult {
+    private String id;              // ID из исходного файла
+    private String model;           // Модель из исходного файла
     private String originalUrl;
     private String finalUrl;
     private Integer redirectCount;
