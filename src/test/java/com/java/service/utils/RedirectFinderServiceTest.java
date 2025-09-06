@@ -4,10 +4,10 @@ import com.java.dto.utils.RedirectFinderDto;
 import com.java.model.entity.FileMetadata;
 import com.java.model.utils.PageStatus;
 import com.java.model.utils.RedirectResult;
+import com.java.service.exports.FileGeneratorService;
 import com.java.service.utils.redirect.CurlStrategy;
 import com.java.service.utils.redirect.HttpClientStrategy;
 import com.java.service.utils.redirect.RedirectStrategy;
-import com.java.service.exports.FileGeneratorService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,8 +20,6 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 /**
  * Интеграционные тесты для RedirectFinderService
@@ -31,10 +29,10 @@ class RedirectFinderServiceTest {
 
     @Mock
     private FileGeneratorService fileGeneratorService;
-    
+
     @Mock
     private RedirectStrategy mockStrategy;
-    
+
     private RedirectFinderService redirectFinderService;
     private CurlStrategy curlStrategy;
     private HttpClientStrategy httpClientStrategy;
@@ -43,11 +41,11 @@ class RedirectFinderServiceTest {
     void setUp() {
         curlStrategy = new CurlStrategy();
         httpClientStrategy = new HttpClientStrategy();
-        
+
         // Используем реальные стратегии для интеграционного тестирования
         redirectFinderService = new RedirectFinderService(
-            List.of(curlStrategy, httpClientStrategy),
-            fileGeneratorService
+                List.of(curlStrategy, httpClientStrategy),
+                fileGeneratorService
         );
     }
 
@@ -56,10 +54,10 @@ class RedirectFinderServiceTest {
         // Given
         Path tempFile = createTestCsvFile();
         FileMetadata metadata = FileMetadata.builder()
-            .originalFilename("test_redirect.csv")
-            .tempFilePath(tempFile.toString())
-            .fileSize(Files.size(tempFile))
-            .build();
+                .originalFilename("test_redirect.csv")
+                .tempFilePath(tempFile.toString())
+                .fileSize(Files.size(tempFile))
+                .build();
 
         RedirectFinderDto dto = new RedirectFinderDto();
         dto.setUrlColumn(1); // Вторая колонка (URL)
@@ -76,7 +74,7 @@ class RedirectFinderServiceTest {
         String csvContent = new String(result);
         assertThat(csvContent).contains("ID,Модель,Исходный URL,Финальный URL");
         // CSV должен содержать заголовки и данные
-        
+
         // Cleanup
         Files.deleteIfExists(tempFile);
     }
@@ -86,10 +84,10 @@ class RedirectFinderServiceTest {
         // Given
         Path tempFile = createTestCsvFile();
         FileMetadata metadata = FileMetadata.builder()
-            .originalFilename("test.csv")
-            .tempFilePath(tempFile.toString())
-            .fileSize(Files.size(tempFile))
-            .build();
+                .originalFilename("test.csv")
+                .tempFilePath(tempFile.toString())
+                .fileSize(Files.size(tempFile))
+                .build();
 
         RedirectFinderDto dto = new RedirectFinderDto();
         dto.setUrlColumn(10); // Несуществующая колонка
@@ -98,9 +96,9 @@ class RedirectFinderServiceTest {
 
         // When & Then
         assertThatThrownBy(() -> redirectFinderService.processRedirectFinding(metadata, dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Указанная колонка URL");
-        
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Указанная колонка URL");
+
         // Cleanup
         Files.deleteIfExists(tempFile);
     }
@@ -110,19 +108,19 @@ class RedirectFinderServiceTest {
         // Given
         Path tempFile = createEmptyFile();
         FileMetadata metadata = FileMetadata.builder()
-            .originalFilename("empty.csv")
-            .tempFilePath(tempFile.toString())
-            .fileSize(0L)
-            .build();
+                .originalFilename("empty.csv")
+                .tempFilePath(tempFile.toString())
+                .fileSize(0L)
+                .build();
 
         RedirectFinderDto dto = new RedirectFinderDto();
         dto.setUrlColumn(0);
 
         // When & Then
         assertThatThrownBy(() -> redirectFinderService.processRedirectFinding(metadata, dto))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("не содержит данных");
-        
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("не содержит данных");
+
         // Cleanup
         Files.deleteIfExists(tempFile);
     }
@@ -132,8 +130,8 @@ class RedirectFinderServiceTest {
         // Given
         Path tempFile = createTestCsvFile();
         FileMetadata metadata = FileMetadata.builder()
-            .tempFilePath(tempFile.toString())
-            .build();
+                .tempFilePath(tempFile.toString())
+                .build();
 
         RedirectFinderDto dto = new RedirectFinderDto();
         dto.setUrlColumn(1);
@@ -141,8 +139,8 @@ class RedirectFinderServiceTest {
 
         // When - no exception should be thrown
         assertThatCode(() -> redirectFinderService.processRedirectFinding(metadata, dto))
-            .doesNotThrowAnyException();
-        
+                .doesNotThrowAnyException();
+
         // Cleanup
         Files.deleteIfExists(tempFile);
     }
@@ -154,7 +152,7 @@ class RedirectFinderServiceTest {
 
         // Можем протестировать стратегию напрямую
         RedirectResult actualResult = curlStrategy.followRedirects(
-            "https://www.google.com", 5, 5000
+                "https://www.google.com", 5, 5000
         );
 
         // Then
@@ -170,7 +168,7 @@ class RedirectFinderServiceTest {
     void testProcessUrlsWithStrategies_ErrorHandling() {
         // Given - тестируем с недоступным URL
         RedirectResult result = curlStrategy.followRedirects(
-            "http://nonexistent-domain-12345.com", 5, 2000
+                "http://nonexistent-domain-12345.com", 5, 2000
         );
 
         // Then
@@ -184,10 +182,10 @@ class RedirectFinderServiceTest {
     void testStrategySelection_CurlFirst_ThenHttpClient() {
         // Проверяем что стратегии отсортированы по приоритету
         List<RedirectStrategy> strategies = List.of(curlStrategy, httpClientStrategy);
-        
+
         // CurlStrategy должна иметь более высокий приоритет (меньшее число)
         assertThat(curlStrategy.getPriority()).isLessThan(httpClientStrategy.getPriority());
-        
+
         // Проверяем что обе стратегии могут обработать обычный URL
         assertThat(curlStrategy.canHandle("https://google.com", null)).isTrue();
         assertThat(httpClientStrategy.canHandle("https://google.com", null)).isTrue();
@@ -198,10 +196,10 @@ class RedirectFinderServiceTest {
         // Given
         Path tempFile = createTestCsvFileWithModelColumn();
         FileMetadata metadata = FileMetadata.builder()
-            .originalFilename("test_with_model.csv")
-            .tempFilePath(tempFile.toString())
-            .fileSize(Files.size(tempFile))
-            .build();
+                .originalFilename("test_with_model.csv")
+                .tempFilePath(tempFile.toString())
+                .fileSize(Files.size(tempFile))
+                .build();
 
         RedirectFinderDto dto = new RedirectFinderDto();
         dto.setUrlColumn(2); // Третья колонка (URL)
@@ -217,7 +215,7 @@ class RedirectFinderServiceTest {
         assertThat(result).isNotNull();
         String csvContent = new String(result);
         assertThat(csvContent).contains("ID,Модель,Исходный URL,Финальный URL");
-        
+
         // Cleanup
         Files.deleteIfExists(tempFile);
     }
@@ -227,8 +225,8 @@ class RedirectFinderServiceTest {
     private Path createTestCsvFile() throws IOException {
         Path tempFile = Files.createTempFile("test_redirect", ".csv");
         String csvContent = "id,url\n" +
-                           "1,https://www.google.com\n" +
-                           "2,https://github.com\n";
+                "1,https://www.google.com\n" +
+                "2,https://github.com\n";
         Files.write(tempFile, csvContent.getBytes());
         return tempFile;
     }
@@ -236,8 +234,8 @@ class RedirectFinderServiceTest {
     private Path createTestCsvFileWithModelColumn() throws IOException {
         Path tempFile = Files.createTempFile("test_redirect_model", ".csv");
         String csvContent = "id,model,url\n" +
-                           "1,ProductA,https://www.google.com\n" +
-                           "2,ProductB,https://github.com\n";
+                "1,ProductA,https://www.google.com\n" +
+                "2,ProductB,https://github.com\n";
         Files.write(tempFile, csvContent.getBytes());
         return tempFile;
     }

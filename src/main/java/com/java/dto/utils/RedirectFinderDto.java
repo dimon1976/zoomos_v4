@@ -29,6 +29,10 @@ public class RedirectFinderDto {
     @Max(value = 60000, message = "Таймаут не может превышать 60 секунд")
     private Integer timeoutMs = 10000;
     
+    @Min(value = 0, message = "Задержка не может быть отрицательной")
+    @Max(value = 30000, message = "Задержка не может превышать 30 секунд")
+    private Integer delayMs = 0;
+    
     private Boolean usePlaywright = false;
     
     private String outputFormat = "csv";
@@ -36,7 +40,8 @@ public class RedirectFinderDto {
     // Конструктор с умолчаниями для удобства
     public RedirectFinderDto() {
         this.maxRedirects = 5;
-        this.timeoutMs = 10000; 
+        this.timeoutMs = 10000;
+        this.delayMs = 0;
         this.usePlaywright = false;
         this.outputFormat = "csv";
     }

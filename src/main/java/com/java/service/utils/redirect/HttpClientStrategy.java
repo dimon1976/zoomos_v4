@@ -153,6 +153,6 @@ public class HttpClientStrategy implements RedirectStrategy {
     
     @Override
     public String getStrategyName() {
-        return "HttpClientStrategy";
+        return "httpclient";
     }
 }

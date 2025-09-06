@@ -15,7 +15,18 @@
       "mcp__playwright__browser_snapshot",
       "mcp__playwright__browser_evaluate",
       "mcp__playwright__browser_close",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(taskkill:*)",
+      "Bash(java:*)",
+      "Bash(where java)",
+      "Bash(\"C:\\Program Files\\Common Files\\Oracle\\Java\\javapath\\java.exe\" -version)",
+      "Bash(dir:*)",
+      "Bash(\"c:\\java\\jdk17\\bin\\java.exe\" -version)",
+      "Bash(timeout:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(netstat:*)",
+      "mcp__playwright__browser_wait_for"
     ],
     "deny": [],
     "ask": []

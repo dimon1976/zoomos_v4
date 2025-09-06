@@ -42,7 +42,10 @@ public class FileMetadataMapper {
         dto.setColumnHeaders(parseJsonArray(entity.getColumnHeaders()));
         List<Map<String, String>> sampleData = parseSampleData(entity.getSampleData());
         dto.setSampleData(sampleData);
-        dto.setTotalRows(sampleData.size()); // Устанавливаем количество строк на основе примеров данных
+        
+        // Для утилит мы не знаем точного количества строк, поэтому показываем "более X строк"
+        // где X - количество примеров данных
+        dto.setTotalRows(Math.max(sampleData.size(), 10)); // Минимум 10 строк для отображения
 
         return dto;
     }

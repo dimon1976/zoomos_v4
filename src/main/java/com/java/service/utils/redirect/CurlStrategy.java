@@ -33,20 +33,36 @@ public class CurlStrategy implements RedirectStrategy {
                 return buildErrorResult(url, startTime, "URL не может быть пустым");
             }
             
-            String[] command = {
-                "curl", "-L", "-s", 
-                "-w", "\n---CURL-METADATA---\n%{url_effective}|%{num_redirects}|%{http_code}",
+            return followRedirectsManually(url, maxRedirects, timeoutMs, startTime);
+            
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Обработка URL прервана: {}", url, e);
+            return buildErrorResult(url, startTime, "Обработка прервана");
+        } catch (Exception e) {
+            log.error("Ошибка выполнения curl для URL: {}", url, e);
+            return buildErrorResult(url, startTime, "Ошибка curl: " + e.getMessage());
+        }
+    }
+    
+    private RedirectResult followRedirectsManually(String currentUrl, int maxRedirects, int timeoutMs, long startTime) throws Exception {
+        String originalUrl = currentUrl;
+        int redirectCount = 0;
+        Integer initialRedirectCode = null; // Сохраняем первоначальный HTTP код редиректа
+        
+        for (int i = 0; i <= maxRedirects; i++) {
+            log.debug("Проверяем URL (попытка {}): {}", i + 1, currentUrl);
+            
+            // Получаем заголовки (без User-Agent для обхода блокировок)
+            String[] headerCommand = {
+                "curl", "-I", "-s", 
                 "--connect-timeout", "5",
                 "--max-time", String.valueOf(timeoutMs / 1000),
-                "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "--max-redirs", String.valueOf(maxRedirects),
                 "--insecure",
-                url
+                currentUrl
             };
             
-            log.debug("Выполняем команду curl: {}", String.join(" ", command));
-            
-            ProcessBuilder pb = new ProcessBuilder(command);
+            ProcessBuilder pb = new ProcessBuilder(headerCommand);
             pb.redirectErrorStream(true);
             Process process = pb.start();
             
@@ -62,91 +78,120 @@ public class CurlStrategy implements RedirectStrategy {
             boolean finished = process.waitFor(timeoutMs + 5000, TimeUnit.MILLISECONDS);
             if (!finished) {
                 process.destroyForcibly();
-                return buildErrorResult(url, startTime, "Превышен таймаут выполнения curl");
+                return buildErrorResult(originalUrl, startTime, "Превышен таймаут выполнения curl");
             }
             
             int exitCode = process.exitValue();
-            String result = output.toString().trim();
-            
-            log.debug("Curl завершен с кодом: {}, результат: {}", exitCode, result);
-            
             if (exitCode != 0) {
-                return buildErrorResult(url, startTime, "Curl завершился с ошибкой: " + result);
+                return buildErrorResult(originalUrl, startTime, "Curl завершился с ошибкой: " + output.toString());
             }
             
-            return parseResult(url, result, startTime);
+            String result = output.toString().trim();
+            log.debug("Curl заголовки: {}", result);
             
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.error("Обработка URL прервана: {}", url, e);
-            return buildErrorResult(url, startTime, "Обработка прервана");
-        } catch (Exception e) {
-            log.error("Ошибка выполнения curl для URL: {}", url, e);
-            return buildErrorResult(url, startTime, "Ошибка curl: " + e.getMessage());
-        }
-    }
-    
-    private RedirectResult parseResult(String originalUrl, String curlOutput, long startTime) {
-        try {
-            String content = "";
-            String metadata = "";
+            // Парсим HTTP код
+            int httpCode = extractHttpCode(result);
             
-            // Разделяем контент и метаданные по маркеру
-            int metadataIndex = curlOutput.indexOf("---CURL-METADATA---");
-            if (metadataIndex != -1) {
-                content = curlOutput.substring(0, metadataIndex).trim();
-                metadata = curlOutput.substring(metadataIndex + "---CURL-METADATA---".length()).trim();
-            } else {
-                // Fallback: пробуем найти последнюю строку с тремя частями
-                String[] lines = curlOutput.split("\n");
-                for (int i = lines.length - 1; i >= 0; i--) {
-                    if (lines[i].split("\\|").length == 3) {
-                        metadata = lines[i];
-                        content = String.join("\n", java.util.Arrays.copyOf(lines, i));
-                        break;
+            // Проверяем, есть ли редирект
+            if (httpCode >= 300 && httpCode < 400) {
+                String location = extractLocation(result);
+                if (location != null && !location.isEmpty()) {
+                    // Сохраняем первоначальный HTTP код редиректа
+                    if (initialRedirectCode == null) {
+                        initialRedirectCode = httpCode;
                     }
+                    redirectCount++;
+                    String nextUrl = resolveUrl(currentUrl, location);
+                    log.info("Редирект {}: {} -> {} (HTTP {})", redirectCount, currentUrl, nextUrl, httpCode);
+                    currentUrl = nextUrl;
+                    continue;
                 }
             }
             
-            if (metadata.isEmpty()) {
-                log.warn("Не найдены метаданные curl для URL: {}", originalUrl);
-                return buildErrorResult(originalUrl, startTime, "Не найдены метаданные curl");
-            }
-            
-            // Парсим метаданные: finalUrl|redirectCount|httpCode
-            String[] parts = metadata.split("\\|");
-            if (parts.length != 3) {
-                log.warn("Неожиданный формат метаданных curl: {}", metadata);
-                return buildErrorResult(originalUrl, startTime, "Неожиданный формат метаданных");
-            }
-            
-            String finalUrl = parts[0].trim();
-            int redirectCount = Integer.parseInt(parts[1].trim());
-            int httpCode = Integer.parseInt(parts[2].trim());
-            
+            // Нет редиректа - это финальный URL
             long endTime = System.currentTimeMillis();
             
             log.info("URL: {} → {} (редиректов: {}, HTTP: {}, время: {}ms, стратегия: curl)", 
-                    originalUrl, finalUrl, redirectCount, httpCode, endTime - startTime);
+                    originalUrl, currentUrl, redirectCount, httpCode, endTime - startTime);
             
-            PageStatus status = determineStatus(httpCode, redirectCount, content, finalUrl, originalUrl);
+            PageStatus status = determineStatus(httpCode, redirectCount, "", currentUrl, originalUrl);
+            
+            // Используем первоначальный HTTP код редиректа, если он был, иначе финальный
+            int reportHttpCode = (initialRedirectCode != null) ? initialRedirectCode : httpCode;
             
             return RedirectResult.builder()
                     .originalUrl(originalUrl)
-                    .finalUrl(finalUrl)
+                    .finalUrl(currentUrl)
                     .redirectCount(redirectCount)
                     .status(status)
-                    .httpCode(httpCode)
+                    .httpCode(reportHttpCode)
                     .startTime(startTime)
                     .endTime(endTime)
                     .strategy(getStrategyName())
                     .build();
-                    
+        }
+        
+        // Слишком много редиректов
+        return buildErrorResult(originalUrl, startTime, "Превышено максимальное количество редиректов: " + maxRedirects);
+    }
+    
+    private int extractHttpCode(String curlOutput) {
+        try {
+            // Ищем первую строку с HTTP статусом
+            String[] lines = curlOutput.split("\n");
+            for (String line : lines) {
+                if (line.startsWith("HTTP/") && line.contains(" ")) {
+                    String[] parts = line.split(" ");
+                    if (parts.length >= 2) {
+                        log.debug("Найден HTTP статус: {}", parts[1]);
+                        return Integer.parseInt(parts[1]);
+                    }
+                }
+            }
         } catch (Exception e) {
-            log.error("Ошибка парсинга результата curl для URL: {}", originalUrl, e);
-            return buildErrorResult(originalUrl, startTime, "Ошибка парсинга: " + e.getMessage());
+            log.warn("Не удалось извлечь HTTP код из: {}", curlOutput, e);
+        }
+        log.warn("HTTP код не найден в выводе curl");
+        return 0;
+    }
+    
+    private String extractLocation(String curlOutput) {
+        String[] lines = curlOutput.split("\n");
+        for (String line : lines) {
+            if (line.toLowerCase().startsWith("location:")) {
+                return line.substring("location:".length()).trim();
+            }
+        }
+        return null;
+    }
+    
+    private String resolveUrl(String baseUrl, String location) {
+        try {
+            if (location.startsWith("http://") || location.startsWith("https://")) {
+                return location;
+            }
+            
+            java.net.URL base = new java.net.URL(baseUrl);
+            if (location.startsWith("/")) {
+                return base.getProtocol() + "://" + base.getHost() + 
+                       (base.getPort() != -1 && base.getPort() != 80 && base.getPort() != 443 ? ":" + base.getPort() : "") + 
+                       location;
+            } else {
+                String path = base.getPath();
+                if (!path.endsWith("/")) {
+                    int lastSlash = path.lastIndexOf("/");
+                    path = path.substring(0, lastSlash + 1);
+                }
+                return base.getProtocol() + "://" + base.getHost() + 
+                       (base.getPort() != -1 && base.getPort() != 80 && base.getPort() != 443 ? ":" + base.getPort() : "") + 
+                       path + location;
+            }
+        } catch (Exception e) {
+            log.error("Ошибка резолва URL: base={}, location={}", baseUrl, location, e);
+            return location;
         }
     }
+    
     
     private PageStatus determineStatus(int httpCode, int redirectCount, String content, 
                                      String finalUrl, String originalUrl) {

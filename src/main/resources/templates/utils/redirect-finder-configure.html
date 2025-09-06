@@ -202,6 +202,28 @@
                                     </select>
                                 </div>
                             </div>
+                            
+                            <!-- Delay Parameter -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">
+                                        <i class="fas fa-clock text-warning"></i>
+                                        Задержка между запросами
+                                    </label>
+                                    <select class="form-select" th:field="*{delayMs}">
+                                        <option value="0" selected>Без задержки</option>
+                                        <option value="500">0.5 секунды</option>
+                                        <option value="1000">1 секунда (рекомендуется)</option>
+                                        <option value="2000">2 секунды</option>
+                                        <option value="3000">3 секунды</option>
+                                        <option value="5000">5 секунд</option>
+                                    </select>
+                                    <div class="form-text">
+                                        <i class="fas fa-info-circle"></i>
+                                        Задержка помогает избежать блокировки при обработке большого количества URL
+                                    </div>
+                                </div>
+                            </div>
 
                             <!-- Advanced Options -->
                             <div class="advanced-options" id="advancedOptions">
@@ -279,11 +301,16 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr th:each="row : ${fileMetadata.sampleRows}">
-                                        <td th:each="cell : ${row}" 
-                                            th:text="${#strings.abbreviate(cell?.toString(),15)}"
+                                    <tr th:each="row : ${fileMetadata.sampleData}" th:if="${row != null}">
+                                        <td th:each="cell : ${row.values()}" 
+                                            th:text="${#strings.abbreviate(cell?.toString() ?: '',15)}"
                                             class="text-truncate">
                                             Sample data
+                                        </td>
+                                    </tr>
+                                    <tr th:if="${#lists.isEmpty(fileMetadata.sampleData)}">
+                                        <td th:colspan="${fileMetadata.totalColumns}" class="text-center text-muted">
+                                            Нет данных для предварительного просмотра
                                         </td>
                                     </tr>
                                 </tbody>

@@ -34,6 +34,24 @@ class CurlStrategyTest {
     }
     
     @Test
+    void testGoogleRedirect() {
+        // http://google.com - должен редиректить на http://www.google.com/
+        String testUrl = "http://google.com";
+        
+        RedirectResult result = curlStrategy.followRedirects(testUrl, 10, 10000);
+        
+        assertThat(result).isNotNull();
+        assertThat(result.getOriginalUrl()).isEqualTo(testUrl);
+        assertThat(result.getStatus()).isEqualTo(PageStatus.REDIRECT);
+        assertThat(result.getFinalUrl()).isNotNull();
+        assertThat(result.getFinalUrl()).contains("www.google.com");
+        assertThat(result.getRedirectCount()).isGreaterThan(0);
+        assertThat(result.getProcessingTimeMs()).isLessThan(10000L);
+        assertThat(result.getStrategy()).isEqualTo("curl");
+        assertThat(result.getHttpCode()).isEqualTo(200);
+    }
+    
+    @Test
     void testLentaRedirect() {
         // https://lenta.com/product/vino-igristoe-bio-bio-bubbles-organic-bel-bryut-italiya-075l-521969/
         // -> https://lenta.com/product/vino-igristoe-bel-bryut-italiya-075l/

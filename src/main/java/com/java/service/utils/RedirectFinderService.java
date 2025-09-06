@@ -4,6 +4,9 @@ import com.java.dto.utils.RedirectFinderDto;
 import com.java.model.entity.FileMetadata;
 import com.java.model.utils.PageStatus;
 import com.java.model.utils.RedirectResult;
+import com.java.model.utils.RedirectExportTemplate;
+import com.java.model.utils.RedirectUrlData;
+import com.java.model.utils.RedirectProcessingRequest;
 import com.java.service.exports.FileGeneratorService;
 import com.java.service.utils.redirect.RedirectStrategy;
 import lombok.RequiredArgsConstructor;
@@ -260,9 +263,20 @@ public class RedirectFinderService {
             lastResult = result;
             
             // Если получили успешный результат или не можем улучшить - возвращаем
-            if (result.getStatus() == PageStatus.OK || 
-                result.getStatus() == PageStatus.REDIRECT ||
+            if (result.getStatus() == PageStatus.REDIRECT ||
                 result.getStatus() == PageStatus.NOT_FOUND) {
+                return result;
+            }
+            
+            // Для статуса OK проверяем: если это curl и URL не изменился, 
+            // возможно есть JavaScript-редирект - пробуем Playwright
+            if (result.getStatus() == PageStatus.OK) {
+                if ("curl".equals(strategy.getStrategyName()) && 
+                    url.equals(result.getFinalUrl()) && 
+                    !dto.getUsePlaywright()) {
+                    log.debug("Curl вернул OK без изменения URL, возможен JS-редирект. Пробуем Playwright.");
+                    continue; // Продолжаем к следующей стратегии (Playwright)
+                }
                 return result;
             }
             
@@ -347,6 +361,55 @@ public class RedirectFinderService {
     }
     
     private byte[] generateCsvFile(List<RedirectResult> results) {
+        try {
+            // Определяем какие колонки включать на основе наличия данных
+            boolean hasId = results.stream().anyMatch(r -> r.getId() != null && !r.getId().trim().isEmpty());
+            boolean hasModel = results.stream().anyMatch(r -> r.getModel() != null && !r.getModel().trim().isEmpty());
+            
+            // Создаем шаблон экспорта с правильными настройками
+            RedirectExportTemplate exportTemplate = RedirectExportTemplate.create(hasId, hasModel, "ID", "Модель");
+            
+            // Конвертируем результаты в Stream<Map<String, Object>>
+            Stream<Map<String, Object>> dataStream = results.stream().map(this::convertToMap);
+            
+            // Генерируем файл с помощью FileGeneratorService
+            String fileName = "redirect-finder-result_" + java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".csv";
+            
+            Path filePath = fileGeneratorService.generateFile(
+                dataStream, 
+                results.size(), 
+                exportTemplate.toExportTemplate(), 
+                fileName
+            );
+            
+            // Читаем файл в byte[] 
+            return Files.readAllBytes(filePath);
+            
+        } catch (Exception e) {
+            log.error("Ошибка генерации CSV файла через FileGeneratorService", e);
+            // Fallback на старый метод в случае ошибки
+            return generateCsvFileOld(results);
+        }
+    }
+    
+    private Map<String, Object> convertToMap(RedirectResult result) {
+        Map<String, Object> map = new HashMap<>();
+        // Ключи Map должны соответствовать exportColumnName в ExportTemplateField
+        map.put("ID", result.getId() != null ? result.getId() : "");
+        map.put("Модель", result.getModel() != null ? result.getModel() : "");
+        map.put("Исходный URL", result.getOriginalUrl());
+        map.put("Финальный URL", result.getFinalUrl());
+        map.put("Количество редиректов", result.getRedirectCount() != null ? result.getRedirectCount() : 0);
+        map.put("Статус", result.getStatus().getDescription());
+        map.put("Стратегия", result.getStrategy());
+        map.put("Время (мс)", result.getProcessingTimeMs() != null ? result.getProcessingTimeMs() : 0);
+        map.put("HTTP код", result.getHttpCode() != null ? result.getHttpCode() : 0);
+        map.put("Ошибка", result.getErrorMessage() != null ? result.getErrorMessage() : "");
+        return map;
+    }
+    
+    private byte[] generateCsvFileOld(List<RedirectResult> results) {
         StringBuilder csv = new StringBuilder();
         
         // Заголовки
@@ -377,5 +440,146 @@ public class RedirectFinderService {
         }
         // Экранируем кавычки в CSV
         return value.replace("\"", "\"\"");
+    }
+
+    /**
+     * Функциональный интерфейс для колбэка прогресса
+     */
+    @FunctionalInterface
+    public interface ProgressCallback {
+        void onProgress(int processed, int total);
+    }
+
+    /**
+     * Обработка списка URL с поддержкой прогресса и задержки
+     */
+    public List<RedirectResult> processRedirects(List<RedirectUrlData> urls, int maxRedirects, int timeoutMs, 
+                                               int delayMs, ProgressCallback progressCallback) {
+        List<RedirectResult> results = new ArrayList<>();
+        
+        // Получаем стратегии в порядке приоритета
+        List<RedirectStrategy> sortedStrategies = strategies.stream()
+                .sorted(Comparator.comparingInt(RedirectStrategy::getPriority))
+                .collect(Collectors.toList());
+        
+        log.info("Начинаем асинхронную обработку {} URLs с задержкой {}мс", urls.size(), delayMs);
+        
+        for (int i = 0; i < urls.size(); i++) {
+            RedirectUrlData urlData = urls.get(i);
+            
+            try {
+                if (urlData.getUrl() == null || urlData.getUrl().trim().isEmpty()) {
+                    log.warn("Пропускаем URL {} - пустое значение", i + 1);
+                    continue;
+                }
+                
+                log.debug("Обрабатываем URL {} из {}: {}", i + 1, urls.size(), urlData.getUrl());
+                
+                RedirectResult result = processUrlWithStrategies(urlData.getUrl(), sortedStrategies, maxRedirects, timeoutMs);
+                
+                // Добавляем дополнительные поля
+                result.setId(urlData.getId());
+                result.setModel(urlData.getModel());
+                
+                results.add(result);
+                
+                // Уведомляем о прогрессе
+                if (progressCallback != null) {
+                    progressCallback.onProgress(i + 1, urls.size());
+                }
+                
+                // Задержка между запросами (кроме последнего)
+                if (delayMs > 0 && i < urls.size() - 1) {
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Прервана обработка URL на элементе {}", i + 1);
+                        break;
+                    }
+                }
+                
+            } catch (Exception e) {
+                log.error("Ошибка обработки URL {}: {}", i + 1, e.getMessage(), e);
+                
+                // Добавляем результат с ошибкой
+                RedirectResult errorResult = buildAsyncErrorResult(urlData.getUrl(), e.getMessage());
+                errorResult.setId(urlData.getId());
+                errorResult.setModel(urlData.getModel());
+                results.add(errorResult);
+                
+                if (progressCallback != null) {
+                    progressCallback.onProgress(i + 1, urls.size());
+                }
+            }
+        }
+        
+        log.info("Завершена асинхронная обработка {} URLs, получено {} результатов", urls.size(), results.size());
+        return results;
+    }
+
+    /**
+     * Обработка одного URL с параметрами
+     */
+    private RedirectResult processUrlWithStrategies(String url, List<RedirectStrategy> strategies, int maxRedirects, int timeoutMs) {
+        for (RedirectStrategy strategy : strategies) {
+            if (!strategy.canHandle(url, null)) {
+                continue;
+            }
+            
+            try {
+                return strategy.followRedirects(url, maxRedirects, timeoutMs);
+            } catch (Exception e) {
+                log.warn("Стратегия {} не смогла обработать URL {}: {}", 
+                        strategy.getStrategyName(), url, e.getMessage());
+            }
+        }
+        
+        return buildAsyncErrorResult(url, "Все стратегии не смогли обработать URL");
+    }
+
+    private RedirectResult buildAsyncErrorResult(String url, String errorMessage) {
+        return RedirectResult.builder()
+                .originalUrl(url)
+                .finalUrl(url)
+                .redirectCount(0)
+                .status(PageStatus.ERROR)
+                .errorMessage(errorMessage)
+                .startTime(System.currentTimeMillis())
+                .endTime(System.currentTimeMillis())
+                .strategy("error")
+                .build();
+    }
+
+    /**
+     * Генерация файла результатов для асинхронной обработки
+     */
+    public byte[] generateResultFile(List<RedirectResult> results, RedirectProcessingRequest request, String fileName) {
+        try {
+            // Создаем шаблон экспорта
+            RedirectExportTemplate exportTemplate = RedirectExportTemplate.create(
+                    request.isIncludeId(), 
+                    request.isIncludeModel(),
+                    request.getIdColumnName(), 
+                    request.getModelColumnName()
+            );
+            
+            // Конвертируем результаты в Stream<Map<String, Object>>
+            Stream<Map<String, Object>> dataStream = results.stream().map(this::convertToMap);
+            
+            // Генерируем файл
+            Path filePath = fileGeneratorService.generateFile(
+                    dataStream, 
+                    results.size(), 
+                    exportTemplate.toExportTemplate(), 
+                    fileName
+            );
+            
+            return Files.readAllBytes(filePath);
+            
+        } catch (Exception e) {
+            log.error("Ошибка генерации файла результатов", e);
+            throw new RuntimeException("Ошибка генерации файла: " + e.getMessage(), e);
+        }
     }
 }
