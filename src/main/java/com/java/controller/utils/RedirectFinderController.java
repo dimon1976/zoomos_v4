@@ -6,6 +6,8 @@ import com.java.mapper.FileMetadataMapper;
 import com.java.model.entity.FileMetadata;
 import com.java.service.file.FileAnalyzerService;
 import com.java.service.utils.RedirectFinderService;
+import com.java.service.utils.redirect.AsyncRedirectService;
+import com.java.model.utils.RedirectProcessingRequest;
 import com.java.util.ControllerUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +40,7 @@ public class RedirectFinderController {
     private final FileAnalyzerService fileAnalyzerService;
     private final ControllerUtils controllerUtils;
     private final RedirectFinderService redirectFinderService;
+    private final AsyncRedirectService asyncRedirectService;
 
     /**
      * Главная страница утилиты
@@ -107,7 +110,55 @@ public class RedirectFinderController {
     }
 
     /**
-     * Обработка файла
+     * Асинхронная обработка файла (рекомендуемый способ)
+     */
+    @PostMapping("/process-async")
+    @ResponseBody
+    public ResponseEntity<String> processFileAsync(@Valid @ModelAttribute RedirectFinderDto dto,
+                                                  BindingResult bindingResult,
+                                                  HttpSession session) {
+        
+        log.info("Запускаем асинхронную обработку редиректов");
+        log.debug("Async DTO: urlColumn={}, maxRedirects={}, timeout={}, delayMs={}", 
+                 dto.getUrlColumn(), dto.getMaxRedirects(), dto.getTimeoutMs(), dto.getDelayMs());
+        
+        if (bindingResult.hasErrors()) {
+            log.error("Validation errors: {}", bindingResult.getAllErrors());
+            return ResponseEntity.badRequest()
+                    .body("Ошибка валидации параметров: " + 
+                          bindingResult.getAllErrors().get(0).getDefaultMessage());
+        }
+
+        FileMetadata metadata = (FileMetadata) session.getAttribute("redirectFinderFile");
+        if (metadata == null) {
+            return ResponseEntity.badRequest().body("Файл не найден в сессии");
+        }
+
+        try {
+            log.info("Подготовка данных для асинхронной обработки: {}", metadata.getOriginalFilename());
+            
+            // Подготовка запроса
+            RedirectProcessingRequest request = redirectFinderService.prepareAsyncRequest(metadata, dto);
+            
+            // Очистка сессии (файл уже обработан)
+            session.removeAttribute("redirectFinderFile");
+            
+            // Запуск асинхронной обработки
+            asyncRedirectService.processRedirectsAsync(request);
+            
+            log.info("Асинхронная обработка запущена для файла: {}", metadata.getOriginalFilename());
+            
+            return ResponseEntity.ok("Обработка запущена! Вы можете перейти к другим задачам. Уведомление о завершении придёт автоматически.");
+                    
+        } catch (Exception e) {
+            log.error("Failed to start async redirect processing for file: {}", metadata.getOriginalFilename(), e);
+            return ResponseEntity.status(500)
+                    .body("Ошибка при запуске обработки: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Обработка файла (синхронная - для малых файлов)
      */
     @PostMapping("/process")
     public ResponseEntity<Resource> processFile(@Valid @ModelAttribute RedirectFinderDto dto,

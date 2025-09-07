@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Стратегия обработки редиректов через Playwright
@@ -52,6 +53,20 @@ public class PlaywrightStrategy implements RedirectStrategy {
             int redirectCount = 0;
             String initialUrl = url;
             String finalUrl = url;
+            AtomicReference<Integer> initialRedirectCode = new AtomicReference<>(); // Для сохранения первоначального HTTP кода редиректа
+            
+            // Слушатель для перехвата запросов и отслеживания редиректов
+            page.onResponse(response -> {
+                int statusCode = response.status();
+                String responseUrl = response.url();
+                log.debug("Response: {} -> HTTP {}", responseUrl, statusCode);
+                
+                // Сохраняем первый код редиректа
+                if ((statusCode >= 300 && statusCode < 400) && initialRedirectCode.get() == null) {
+                    initialRedirectCode.set(statusCode);
+                    log.debug("Сохранен первоначальный код редиректа: {}", statusCode);
+                }
+            });
             
             try {
                 log.debug("Playwright: навигация к URL: {}", url);
@@ -85,9 +100,12 @@ public class PlaywrightStrategy implements RedirectStrategy {
                     log.debug("Обнаружен редирект: {} -> {}", initialUrl, finalUrl);
                 }
                 
-                // Проверка статуса HTTP
-                int statusCode = response != null ? response.status() : 200;
-                log.debug("HTTP статус: {}", statusCode);
+                // Получаем финальный статус HTTP
+                int finalStatusCode = response != null ? response.status() : 200;
+                log.debug("Финальный HTTP статус: {}", finalStatusCode);
+                
+                // Используем первоначальный код редиректа, если он был, иначе финальный
+                int reportHttpCode = (initialRedirectCode.get() != null) ? initialRedirectCode.get() : finalStatusCode;
                 
                 // Получение содержимого страницы для проверки блокировки
                 String pageContent = page.content();
@@ -109,7 +127,7 @@ public class PlaywrightStrategy implements RedirectStrategy {
                 
                 // Определение статуса результата
                 PageStatus status;
-                if (statusCode >= 400) {
+                if (finalStatusCode >= 400) {
                     status = PageStatus.NOT_FOUND;
                 } else if (redirectCount > 0) {
                     status = PageStatus.REDIRECT;
@@ -117,14 +135,15 @@ public class PlaywrightStrategy implements RedirectStrategy {
                     status = PageStatus.OK;
                 }
                 
-                log.info("Playwright: успешная обработка URL: {} -> {} (редиректов: {})", 
-                        originalUrl, finalUrl, redirectCount);
+                log.info("Playwright: успешная обработка URL: {} -> {} (редиректов: {}, HTTP: {})", 
+                        originalUrl, finalUrl, redirectCount, reportHttpCode);
                 
                 return RedirectResult.builder()
                         .originalUrl(originalUrl)
                         .finalUrl(finalUrl)
                         .redirectCount(redirectCount)
                         .status(status)
+                        .httpCode(reportHttpCode)  // Используем правильный HTTP код
                         .errorMessage(null)
                         .startTime(startTime)
                         .endTime(System.currentTimeMillis())
