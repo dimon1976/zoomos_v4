@@ -7,6 +7,8 @@ import com.java.model.entity.ImportSession;
 import com.java.service.file.FileAnalyzerService;
 import com.java.service.imports.AsyncImportService;
 import com.java.service.imports.ImportTemplateService;
+import com.java.service.validation.FileValidationService;
+import com.java.service.validation.ValidationException;
 import com.java.repository.FileOperationRepository;
 import com.java.repository.ImportSessionRepository;
 import com.java.util.PathResolver;
@@ -42,6 +44,7 @@ public class ImportController {
     private final ImportSessionRepository sessionRepository;
     private final PathResolver pathResolver;
     private final ControllerUtils controllerUtils;
+    private final FileValidationService fileValidationService;
 
     // Временное хранилище для связи файлов с анализом
     private final Map<String, AnalysisSession> analysisSessions = new ConcurrentHashMap<>();
@@ -76,6 +79,16 @@ public class ImportController {
             // Сохраняем файлы и анализируем их
             for (MultipartFile file : files) {
                 if (!file.isEmpty()) {
+                    // Валидация файла перед анализом
+                    try {
+                        fileValidationService.validateFile(file);
+                        log.debug("Файл {} прошел валидацию", file.getOriginalFilename());
+                    } catch (ValidationException e) {
+                        log.warn("Файл {} не прошел валидацию: {}", file.getOriginalFilename(), e.getMessage());
+                        redirectAttributes.addFlashAttribute("errorMessage",
+                            "Ошибка валидации файла " + file.getOriginalFilename() + ": " + e.getMessage());
+                        return "redirect:/import/" + clientId;
+                    }
                     var metadata = fileAnalyzerService.analyzeFile(file, "import_" + clientId);
                     Path savedPath = Path.of(metadata.getTempFilePath());
 

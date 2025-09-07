@@ -9,6 +9,8 @@ import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.service.exports.strategies.ExportStrategy;
 import com.java.service.exports.strategies.ExportStrategyFactory;
+import com.java.service.validation.BusinessValidationService;
+import com.java.service.validation.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,6 +41,7 @@ public class ExportProcessorService {
     private final ExportStatisticsWriterService statisticsWriterService;
     private final ExportProgressService progressService;
     private final JdbcTemplate jdbcTemplate;
+    private final BusinessValidationService businessValidationService;
 
     // Флаги отмены для каждой сессии
     private final Map<Long, AtomicBoolean> cancellationFlags = new HashMap<>();
@@ -54,10 +57,27 @@ public class ExportProcessorService {
         cancellationFlags.put(session.getId(), cancelled);
 
         try {
+            // Валидация перед началом обработки экспорта
+            ExportTemplate template = session.getTemplate();
+            FileOperation operation = session.getFileOperation();
+            
+            if (template != null) {
+                businessValidationService.validateTemplate(template);
+                log.debug("Шаблон экспорта {} повторно валидирован", template.getName());
+            }
+            
+            // Валидация операционных данных
+            if (request.getOperationIds() != null && !request.getOperationIds().isEmpty()) {
+                for (Long operationId : request.getOperationIds()) {
+                    if (operationId != null && operationId <= 0) {
+                        throw new ValidationException("Некорректный ID операции: " + operationId);
+                    }
+                }
+                log.debug("IDs операций для экспорта прошли валидацию: {}", request.getOperationIds());
+            }
+            
             // ✅ ОТПРАВЛЯЕМ НАЧАЛЬНОЕ ОБНОВЛЕНИЕ
             updateSessionStatus(session, ExportStatus.PROCESSING);
-
-            ExportTemplate template = session.getTemplate();
 
             // 1. Загружаем данные
             log.info("Загрузка данных для экспорта");

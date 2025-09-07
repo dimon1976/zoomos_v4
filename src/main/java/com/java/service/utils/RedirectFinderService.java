@@ -11,6 +11,8 @@ import com.java.service.exports.FileGeneratorService;
 import com.java.service.notification.NotificationService;
 import com.java.service.utils.redirect.RedirectStrategy;
 import com.java.service.utils.redirect.RedirectProgressDto;
+import com.java.service.validation.FileValidationService;
+import com.java.service.validation.ValidationException;
 import com.java.dto.NotificationDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,12 +44,38 @@ public class RedirectFinderService {
     private final FileGeneratorService fileGeneratorService;
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final FileValidationService fileValidationService;
     
     /**
      * Подготовка данных для асинхронной обработки
      */
     public RedirectProcessingRequest prepareAsyncRequest(FileMetadata metadata, RedirectFinderDto dto) {
         try {
+            // Валидация входных параметров
+            if (metadata == null) {
+                throw new ValidationException("Метаданные файла не могут быть null");
+            }
+            
+            if (dto == null) {
+                throw new ValidationException("Параметры обработки не могут быть null");
+            }
+            
+            // Валидация параметров запроса
+            if (dto.getMaxRedirects() != null && (dto.getMaxRedirects() < 1 || dto.getMaxRedirects() > 10)) {
+                throw new ValidationException("Максимальное количество редиректов должно быть от 1 до 10");
+            }
+            
+            if (dto.getTimeoutMs() != null && (dto.getTimeoutMs() < 1000 || dto.getTimeoutMs() > 60000)) {
+                throw new ValidationException("Таймаут должен быть от 1000 до 60000 мс");
+            }
+            
+            if (dto.getDelayMs() != null && (dto.getDelayMs() < 0 || dto.getDelayMs() > 5000)) {
+                throw new ValidationException("Задержка должна быть от 0 до 5000 мс");
+            }
+            
+            log.debug("Параметры обработки редиректов прошли валидацию: maxRedirects={}, timeout={}, delay={}", 
+                     dto.getMaxRedirects(), dto.getTimeoutMs(), dto.getDelayMs());
+            
             // Получаем данные из файла
             List<List<String>> rawData = readFullFileData(metadata);
             log.info("Прочитано строк из файла для асинхронной обработки: {}", rawData.size());

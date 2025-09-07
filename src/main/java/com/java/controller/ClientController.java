@@ -2,6 +2,9 @@ package com.java.controller;
 
 import com.java.dto.ClientDto;
 import com.java.service.client.ClientService;
+import com.java.service.validation.BusinessValidationService;
+import com.java.service.validation.ValidationException;
+import com.java.model.Client;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -24,6 +27,7 @@ import java.util.stream.Collectors;
 public class ClientController {
 
     private final ClientService clientService;
+    private final BusinessValidationService businessValidationService;
 
     /**
      * Отображение списка всех клиентов
@@ -61,10 +65,27 @@ public class ClientController {
         }
 
         try {
+            // Конвертируем DTO в entity для валидации
+            Client clientEntity = new Client();
+            clientEntity.setName(clientDto.getName());
+            clientEntity.setDescription(clientDto.getDescription());
+            
+            // Валидируем клиента через Validation Layer
+            businessValidationService.validateClient(clientEntity);
+            log.debug("Клиент {} прошел бизнес-валидацию", clientDto.getName());
+            
             ClientDto createdClient = clientService.createClient(clientDto);
             redirectAttributes.addFlashAttribute("successMessage",
                     "Клиент '" + createdClient.getName() + "' успешно создан");
             return "redirect:/clients";
+        } catch (ValidationException e) {
+            log.error("Validation error creating client: {}", e.getMessage());
+            if (e.getFieldName() != null) {
+                result.rejectValue(e.getFieldName(), "error.validation", e.getMessage());
+            } else {
+                result.reject("error.validation", e.getMessage());
+            }
+            return "clients/form";
         } catch (IllegalArgumentException e) {
             log.error("Error creating client: {}", e.getMessage());
             result.rejectValue("name", "error.client", e.getMessage());

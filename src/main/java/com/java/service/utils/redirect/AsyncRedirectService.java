@@ -5,6 +5,7 @@ import com.java.model.utils.RedirectProcessingRequest;
 import com.java.model.utils.RedirectResult;
 import com.java.service.notification.NotificationService;
 import com.java.service.utils.RedirectFinderService;
+import com.java.service.validation.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -31,6 +32,29 @@ public class AsyncRedirectService {
         String operationId = UUID.randomUUID().toString();
         
         try {
+            // Валидация входных данных
+            if (request == null) {
+                throw new ValidationException("Запрос на обработку редиректов не может быть null");
+            }
+            
+            if (request.getUrls() == null || request.getUrls().isEmpty()) {
+                throw new ValidationException("Список URL для обработки не может быть пустым");
+            }
+            
+            if (request.getUrls().size() > 10000) {
+                throw new ValidationException("Слишком много URL для обработки (максимум 10000): " + request.getUrls().size());
+            }
+            
+            if (request.getMaxRedirects() < 1 || request.getMaxRedirects() > 10) {
+                throw new ValidationException("Некорректное максимальное количество редиректов: " + request.getMaxRedirects());
+            }
+            
+            if (request.getTimeoutMs() < 1000 || request.getTimeoutMs() > 60000) {
+                throw new ValidationException("Некорректный таймаут: " + request.getTimeoutMs() + " мс");
+            }
+            
+            log.debug("Запрос на асинхронную обработку редиректов прошел валидацию: {} URLs", request.getUrls().size());
+            
             log.info("Начинаем асинхронную обработку редиректов. Operation ID: {}", operationId);
             
             // Уведомляем о начале обработки

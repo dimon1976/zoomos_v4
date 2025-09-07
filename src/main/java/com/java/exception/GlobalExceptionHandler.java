@@ -1,9 +1,14 @@
 package com.java.exception;
 
 import com.java.service.imports.validation.TemplateValidationService;
+import com.java.service.validation.ValidationException;
+import com.java.service.ErrorLogService;
+import com.java.service.ErrorNotificationService;
+import com.java.model.entity.ErrorLog;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.ui.Model;
@@ -27,7 +32,11 @@ import java.util.Optional;
  */
 @ControllerAdvice
 @Slf4j
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
+
+    private final ErrorLogService errorLogService;
+    private final ErrorNotificationService errorNotificationService;
 
     // Константы для представлений ошибок
     private static final String DEFAULT_ERROR_VIEW = "error/general";
@@ -132,6 +141,48 @@ public class GlobalExceptionHandler {
                 "Превышен максимальный размер файла. Максимальный размер: 1200MB.", request);
 
         return FILE_ERROR_VIEW;
+    }
+
+    /**
+     * Обработка ошибок валидации из Validation Layer
+     *
+     * @param ex исключение валидации
+     * @param model модель представления
+     * @param request HTTP-запрос
+     * @return имя представления ошибки
+     */
+    @ExceptionHandler(ValidationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public String handleValidationException(
+            ValidationException ex, Model model, HttpServletRequest request) {
+
+        // Логируем ошибку в БД и обычные логи
+        ErrorLog errorLog = logErrorToDatabase("Ошибка валидации Validation Layer", ex, request);
+        
+        // Добавляем детальную информацию об ошибке валидации
+        model.addAttribute(ERROR_MESSAGE_ATTR, ex.getMessage());
+        model.addAttribute("errorLogId", errorLog.getId());
+        
+        if (ex.getFieldName() != null) {
+            model.addAttribute("fieldName", ex.getFieldName());
+        }
+        
+        if (ex.getInvalidValue() != null) {
+            model.addAttribute("invalidValue", ex.getInvalidValue());
+        }
+        
+        model.addAttribute(REQUEST_URI_ATTR, request.getRequestURI());
+        model.addAttribute(TIMESTAMP_ATTR, System.currentTimeMillis());
+
+        // Определяем тип ошибки по контексту URI для выбора подходящего представления
+        String uri = request.getRequestURI();
+        if (uri.contains("/import")) {
+            return FILE_ERROR_VIEW;  // Ошибки файловой валидации при импорте
+        } else if (uri.contains("/clients")) {
+            return DEFAULT_ERROR_VIEW; // Ошибки бизнес-валидации клиентов
+        } else {
+            return DEFAULT_ERROR_VIEW; // Общие ошибки валидации
+        }
     }
 
     /**
@@ -325,6 +376,31 @@ public class GlobalExceptionHandler {
      */
     private void logError(String errorType, Throwable ex) {
         log.error("{}: {}", errorType, ex.getMessage(), ex);
+    }
+
+    /**
+     * Логирует ошибку в БД и обычные логи.
+     *
+     * @param errorType тип ошибки
+     * @param ex исключение
+     * @param request HTTP-запрос
+     * @return запись об ошибке в БД
+     */
+    private ErrorLog logErrorToDatabase(String errorType, Throwable ex, HttpServletRequest request) {
+        // Логируем в обычные логи
+        logError(errorType, ex);
+        
+        // Логируем в БД
+        ErrorLog errorLog = errorLogService.logError(ex, request);
+        
+        // Отправляем WebSocket уведомление
+        try {
+            errorNotificationService.sendErrorNotification(errorLog);
+        } catch (Exception notificationEx) {
+            log.warn("Ошибка при отправке уведомления об ошибке: {}", notificationEx.getMessage());
+        }
+        
+        return errorLog;
     }
 
     /**

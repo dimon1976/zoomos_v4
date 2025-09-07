@@ -11,6 +11,8 @@ import com.java.model.enums.ImportStatus;
 import com.java.repository.*;
 import com.java.service.file.FileAnalyzerService;
 import com.java.service.notification.NotificationService;
+import com.java.service.validation.BusinessValidationService;
+import com.java.service.validation.ValidationException;
 import com.java.util.PathResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +47,7 @@ public class AsyncImportService {
     private final FileAnalyzerService fileAnalyzerService;
     private final ImportProcessorService processorService;
     private final ImportProgressService progressService;
+    private final BusinessValidationService businessValidationService;
     private final MemoryMonitor memoryMonitor;
     private final PathResolver pathResolver;
     private final NotificationService notificationService;
@@ -68,12 +71,27 @@ public class AsyncImportService {
         log.info("Запуск асинхронного импорта для клиента ID: {}", clientId);
 
         try {
-            // Получаем клиента и шаблон
+            // Получаем клиента для валидации
             Client client = clientRepository.findById(clientId)
-                    .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+                .orElseThrow(() -> new RuntimeException("Клиент не найден: " + clientId));
+            
+            // Валидация бизнес-правил
+            businessValidationService.validateClient(client);
+            log.debug("Клиент {} прошел валидацию для импорта", client.getName());
+            
+            // Получаем шаблон
 
             ImportTemplate template = templateRepository.findByIdWithFields(request.getTemplateId())
                     .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
+
+            // Валидация шаблона
+            businessValidationService.validateTemplate(template);
+            log.debug("Шаблон {} прошел валидацию для импорта", template.getName());
+            
+            // Валидация импортной операции
+            businessValidationService.validateOperation("IMPORT", client.getId(), template.getId());
+            log.debug("Операция импорта для клиента {} с шаблоном {} прошла валидацию", 
+                     client.getName(), template.getName());
 
             // Проверяем, что шаблон принадлежит клиенту
             if (!template.getClient().getId().equals(clientId)) {

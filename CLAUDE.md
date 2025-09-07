@@ -56,16 +56,34 @@ mvn flyway:info
 
 ## Architecture Overview
 
-### Core Application Structure
+### Core Application Structure (Refactored)
 ```
 src/main/java/com/java/
-├── config/          # Configuration classes (WebSocket, Async, Security)
-├── controller/      # REST and MVC controllers
-├── service/         # Business logic services
-├── dto/            # Data transfer objects
-├── model/entity/   # JPA entities
-└── constants/      # Application constants
+├── config/              # Configuration classes (WebSocket, Async, Security)
+├── controller/          # REST and MVC controllers
+│   ├── importing/       # Import controllers (NEW)
+│   ├── exporting/       # Export controllers (NEW)  
+│   └── utils/           # Utility controllers
+├── service/             # Business logic services
+│   ├── importing/       # Import services (NEW)
+│   ├── exporting/       # Export services (NEW)
+│   ├── validation/      # Validation Layer (NEW)
+│   ├── core/           # Core business services (NEW)
+│   ├── utils/          # Utility services
+│   └── maintenance/    # Maintenance services
+├── dto/                # Data transfer objects
+│   ├── importing/      # Import DTOs (NEW)
+│   ├── exporting/      # Export DTOs (NEW)
+│   └── utils/          # Utility DTOs
+├── model/entity/       # JPA entities
+├── exception/          # Exception handling
+└── constants/          # Application constants
 ```
+
+### Refactoring Progress
+- **Phase 1 Complete**: New package structure and Validation Layer interfaces created
+- **Current Status**: Implementing clean architecture with importing/exporting separation
+- **Next Steps**: Migrating existing services to new structure with improved validation
 
 ### Key Service Categories
 
