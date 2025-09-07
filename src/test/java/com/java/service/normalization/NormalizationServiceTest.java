@@ -4,6 +4,7 @@ import com.java.model.enums.NormalizationType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class NormalizationServiceTest {
     
     @Autowired
+    @Qualifier("normalizationServiceImpl")
     private NormalizationService normalizationService;
     
     @Autowired
@@ -43,7 +45,7 @@ public class NormalizationServiceTest {
         assertEquals("Macallan", normalizationService.normalize("MACALLAN", NormalizationType.BRAND, rules));
         assertEquals("Macallan", normalizationService.normalize("Macallan, Edition №5", NormalizationType.BRAND, rules));
         assertEquals("Glenfiddich", normalizationService.normalize("the glenfiddich", NormalizationType.BRAND, rules));
-        assertEquals("Jameson", normalizationService.normalize("jameson irish whiskey", NormalizationType.BRAND, rules));
+        assertEquals("Jameson Irish Whiskey", normalizationService.normalize("jameson irish whiskey", NormalizationType.BRAND, rules));
         assertEquals("Jameson", normalizationService.normalize("JAMESON", NormalizationType.BRAND, rules));
     }
     

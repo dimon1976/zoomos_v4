@@ -1,0 +1,49 @@
+antiblock:
+  strategies:
+    simple-http:
+      enabled: true
+      timeout: 10
+      max-retries: 2
+    
+    enhanced-http:
+      enabled: true
+      timeout: 15
+      user-agents:
+        - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        - "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:119.0) Gecko/20100101 Firefox/119.0"
+        - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:119.0) Gecko/20100101 Firefox/119.0"
+        - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36"
+      
+    proxy-http:
+      enabled: false  # отключено по умолчанию
+      timeout: 20
+      rotation: true
+      proxies: []  # пустой список - нужно добавить вручную при необходимости
+        # - "http://proxy1:8080"
+        # - "socks5://proxy2:1080"
+      
+    playwright:
+      enabled: false  # отключено из-за размера библиотеки
+      browsers: [chromium, firefox]
+      headless: true
+      timeout: 30
+      
+    selenium:
+      enabled: true
+      timeout: 60
+      headless: true
+
+  statistics:
+    save-to-db: true
+    log-strategies: true
+  
+  # Обратная совместимость со старой конфигурацией
+  user-agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  statistics-enabled: true
+  log-strategies: true
+  simple-http-timeout: 10
+  enhanced-http-timeout: 15
+  max-retries: 2

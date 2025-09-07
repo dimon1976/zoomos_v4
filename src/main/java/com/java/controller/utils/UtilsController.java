@@ -67,11 +67,11 @@ public class UtilsController {
         ));
         
         utilities.add(Map.of(
-            "id", "redirect-collector",
-            "title", "Сбор финальных ссылок",
-            "description", "Получение финальных URL после всех редиректов",
+            "id", "redirect-finder",
+            "title", "Поиск финальных ссылок",
+            "description", "Получение финальных URL после обработки HTTP редиректов с защитой от антиботов",
             "icon", "fas fa-external-link-alt",
-            "url", "/utils/redirect-collector",
+            "url", "/utils/redirect-finder",
             "status", "ready"
         ));
         

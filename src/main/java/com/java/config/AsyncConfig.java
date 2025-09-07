@@ -119,4 +119,24 @@ public class AsyncConfig {
 
         return executor;
     }
+
+    /**
+     * Пул потоков для обработки редиректов (IO-интенсивные операции)
+     */
+    @Bean(name = "redirectTaskExecutor")
+    public Executor redirectTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(3);
+        executor.setQueueCapacity(5);
+        executor.setThreadNamePrefix("RedirectExecutor-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(600); // 10 минут на завершение для долгих операций
+        executor.initialize();
+
+        log.info("Инициализирован пул потоков для редиректов: core=1, max=3, queue=5");
+
+        return executor;
+    }
 }
