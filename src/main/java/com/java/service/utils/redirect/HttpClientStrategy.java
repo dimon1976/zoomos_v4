@@ -21,6 +21,8 @@ import java.util.Set;
 @Slf4j
 public class HttpClientStrategy implements RedirectStrategy {
     
+    private final UrlSecurityValidator urlSecurityValidator;
+    
     private static final Set<String> BLOCK_KEYWORDS = Set.of(
         "captcha", "recaptcha", "cloudflare", "access denied", 
         "blocked", "forbidden", "защита", "antibot",
@@ -29,7 +31,8 @@ public class HttpClientStrategy implements RedirectStrategy {
     
     private final HttpClient httpClient;
     
-    public HttpClientStrategy() {
+    public HttpClientStrategy(UrlSecurityValidator urlSecurityValidator) {
+        this.urlSecurityValidator = urlSecurityValidator;
         this.httpClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.ALWAYS)
                 .connectTimeout(Duration.ofSeconds(5))
@@ -45,6 +48,14 @@ public class HttpClientStrategy implements RedirectStrategy {
         try {
             if (url == null || url.trim().isEmpty()) {
                 return buildErrorResult(url, startTime, "URL не может быть пустым");
+            }
+            
+            // Валидация URL на безопасность (SSRF защита)
+            try {
+                urlSecurityValidator.validateUrl(url);
+            } catch (SecurityException e) {
+                log.warn("URL заблокирован по соображениям безопасности: {} - {}", url, e.getMessage());
+                return buildErrorResult(url, startTime, "Заблокирован: " + e.getMessage());
             }
             
             URI uri = URI.create(url.trim());

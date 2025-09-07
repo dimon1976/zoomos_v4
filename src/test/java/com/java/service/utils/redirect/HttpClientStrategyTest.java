@@ -2,6 +2,7 @@ package com.java.service.utils.redirect;
 
 import com.java.model.utils.PageStatus;
 import com.java.model.utils.RedirectResult;
+import com.java.service.utils.redirect.UrlSecurityValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -15,10 +16,12 @@ import java.util.concurrent.TimeUnit;
 class HttpClientStrategyTest {
 
     private HttpClientStrategy strategy;
+    private UrlSecurityValidator urlSecurityValidator;
 
     @BeforeEach
     void setUp() {
-        strategy = new HttpClientStrategy();
+        urlSecurityValidator = new UrlSecurityValidator();
+        strategy = new HttpClientStrategy(urlSecurityValidator);
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.java.service.notification.NotificationService;
 import com.java.service.utils.redirect.CurlStrategy;
 import com.java.service.utils.redirect.HttpClientStrategy;
 import com.java.service.utils.redirect.RedirectStrategy;
+import com.java.service.utils.redirect.UrlSecurityValidator;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,11 +45,13 @@ class RedirectFinderServiceTest {
     private RedirectFinderService redirectFinderService;
     private CurlStrategy curlStrategy;
     private HttpClientStrategy httpClientStrategy;
+    private UrlSecurityValidator urlSecurityValidator;
 
     @BeforeEach
     void setUp() {
-        curlStrategy = new CurlStrategy();
-        httpClientStrategy = new HttpClientStrategy();
+        urlSecurityValidator = new UrlSecurityValidator();
+        curlStrategy = new CurlStrategy(urlSecurityValidator);
+        httpClientStrategy = new HttpClientStrategy(urlSecurityValidator);
 
         // Используем реальные стратегии для интеграционного тестирования
         redirectFinderService = new RedirectFinderService(

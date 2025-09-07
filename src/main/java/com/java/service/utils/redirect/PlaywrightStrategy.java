@@ -18,6 +18,12 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 public class PlaywrightStrategy implements RedirectStrategy {
     
+    private final UrlSecurityValidator urlSecurityValidator;
+    
+    public PlaywrightStrategy(UrlSecurityValidator urlSecurityValidator) {
+        this.urlSecurityValidator = urlSecurityValidator;
+    }
+    
     private static final Set<String> BLOCK_KEYWORDS = Set.of(
         "captcha", "recaptcha", "cloudflare", "access denied", 
         "доступ ограничен", "доступ запрещен", "проверка безопасности",
@@ -33,6 +39,14 @@ public class PlaywrightStrategy implements RedirectStrategy {
         String originalUrl = url;
         
         log.debug("Начинаем обработку URL: {} с помощью PlaywrightStrategy", url);
+        
+        // Валидация URL на безопасность (SSRF защита)
+        try {
+            urlSecurityValidator.validateUrl(url);
+        } catch (SecurityException e) {
+            log.warn("URL заблокирован по соображениям безопасности: {} - {}", url, e.getMessage());
+            return buildErrorResult(originalUrl, startTime, "Заблокирован: " + e.getMessage());
+        }
         
         try (Playwright playwright = Playwright.create()) {
             Browser browser = playwright.chromium().launch(
@@ -202,6 +216,22 @@ public class PlaywrightStrategy implements RedirectStrategy {
         String lowerContent = content.toLowerCase();
         return BLOCK_KEYWORDS.stream()
                 .anyMatch(lowerContent::contains);
+    }
+    
+    private RedirectResult buildErrorResult(String originalUrl, long startTime, String errorMessage) {
+        long endTime = System.currentTimeMillis();
+        log.error("Ошибка обработки URL {}: {}", originalUrl, errorMessage);
+        
+        return RedirectResult.builder()
+                .originalUrl(originalUrl)
+                .finalUrl(originalUrl)
+                .redirectCount(0)
+                .status(PageStatus.ERROR)
+                .errorMessage(errorMessage)
+                .startTime(startTime)
+                .endTime(endTime)
+                .strategy(getStrategyName())
+                .build();
     }
     
     @Override

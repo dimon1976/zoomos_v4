@@ -128,14 +128,14 @@ public class AsyncConfig {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(1);
         executor.setMaxPoolSize(3);
-        executor.setQueueCapacity(5);
+        executor.setQueueCapacity(25);
         executor.setThreadNamePrefix("RedirectExecutor-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(600); // 10 минут на завершение для долгих операций
         executor.initialize();
 
-        log.info("Инициализирован пул потоков для редиректов: core=1, max=3, queue=5");
+        log.info("Инициализирован пул потоков для редиректов: core=1, max=3, queue=25");
 
         return executor;
     }
