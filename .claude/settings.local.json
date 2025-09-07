@@ -26,7 +26,8 @@
       "Bash(curl:*)",
       "Bash(pkill:*)",
       "Bash(netstat:*)",
-      "mcp__playwright__browser_wait_for"
+      "mcp__playwright__browser_wait_for",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

@@ -18,8 +18,6 @@ Zoomos v4 is a Spring Boot 3.2.12 file processing application with client-based 
 ### Build and Run
 ```bash
 # Quick start (preferred method)
-run-utf8.bat                      # Windows batch script with UTF-8 encoding
-# or
 mvn spring-boot:run -Dspring-boot.run.profiles=silent
 
 # Build and test
@@ -89,7 +87,9 @@ src/main/java/com/java/
 
 **Utility Services**
 - `RedirectFinderService` - HTTP redirect processing utility
-- `CurlStrategy`, `PlaywrightStrategy` - Strategies for bypass anti-bot systems
+- `AsyncRedirectService` - Asynchronous redirect processing with WebSocket progress
+- `CurlStrategy`, `PlaywrightStrategy`, `HttpClientStrategy` - Strategy pattern for anti-bot bypass
+- `BarcodeMatchService`, `UrlCleanerService`, `LinkExtractorService` - Additional utilities
 
 ## HTTP Redirect Utility
 
@@ -102,17 +102,20 @@ Processes CSV/Excel files containing URLs to resolve final URLs after HTTP redir
 3. **HttpClientStrategy** (Priority 3): Java HTTP Client fallback
 
 ### Key Components
-- `RedirectFinderController` - Web interface for file upload/processing
-- `RedirectFinderService` - Core business logic
+- `RedirectFinderController` - Web interface for file upload/processing  
+- `RedirectFinderService` - Core business logic with FileGeneratorService integration
+- `AsyncRedirectService` - Asynchronous processing with WebSocket progress notifications
 - `RedirectStrategy` - Interface for processing strategies
 - `RedirectResult` - Result model with URL, redirect count, status
+- `RedirectExportTemplate` - Template for seamless integration with export system
+- `RedirectProgressDto` - Progress tracking for real-time WebSocket updates
 
-### Configuration
-```java
-// Maximum ~950 lines of code total
-// Uses KISS principle - minimal classes, straightforward logic
-// MVP approach - basic functionality only
-```
+### Critical Implementation Details
+**CurlStrategy User-Agent Issue**: Do NOT use User-Agent headers - many sites (goldapple.ru) block redirects when browser User-Agent is present. Manual redirect following is implemented instead of `curl -L`.
+
+**HTTP Status Code Handling**: Capture the initial redirect HTTP code (301/302) not the final status (200). Use `initialRedirectCode` variable to preserve the first redirect status.
+
+**Asynchronous Architecture**: Fully integrated with existing async system using dedicated `redirectTaskExecutor` thread pool and WebSocket notifications via `/topic/redirect-progress/{operationId}`.
 
 ## Configuration System
 
@@ -143,6 +146,11 @@ import.async.max-pool-size=2
 # Export processing
 export.async.core-pool-size=2
 export.async.max-pool-size=4
+
+# Redirect processing (HTTP redirect utility)
+redirect.async.core-pool-size=1
+redirect.async.max-pool-size=3
+redirect.async.queue-capacity=5
 ```
 
 ## Development Guidelines
@@ -200,6 +208,7 @@ maintenance.scheduler.health-check.cron=0 0 * * * *      # Hourly
 
 Real-time updates for:
 - File processing progress (`/topic/progress/{operationId}`)
+- Redirect processing progress (`/topic/redirect-progress/{operationId}`) 
 - Maintenance system notifications (`/topic/notifications`)
 - Client-side JavaScript handles connections and reconnection
 
@@ -212,3 +221,30 @@ Real-time updates for:
 - Закрывай запущенный сервер после тестирования
 - Следуй принципам KISS, YAGNI, MVP, итеративная разработка
 - Не усложняй код без необходимости - это pet проект
+
+## Current State Notes
+
+**Recently Completed HTTP Redirect Utility** (as of 2025-01-06):
+- **Async Processing**: Complete async architecture with WebSocket progress notifications
+- **Strategy Pattern**: Three-tier strategy system (CurlStrategy → PlaywrightStrategy → HttpClientStrategy)  
+- **Export Integration**: Full integration with FileGeneratorService for consistent CSV/Excel export
+- **Critical Fixes**: User-Agent blocking resolution, HTTP status code preservation, delay configuration
+- **Real-world Testing**: Successful testing with goldapple.ru redirects (301 → final URL)
+- **Documentation**: Complete technical documentation in `doc/intro_redirect.md`
+
+**Architecture Insights**:
+- Uses dedicated `redirectTaskExecutor` thread pool (1-3 threads) for HTTP operations
+- Manual redirect following instead of curl -L to avoid User-Agent detection  
+- Preserves initial redirect HTTP codes (301/302) rather than final status (200)
+- Configurable delay between requests (0-5 seconds) to prevent rate limiting
+- Seamless integration with existing async/WebSocket notification system
+
+## Code References
+
+When referencing specific functions or pieces of code include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
