@@ -5,9 +5,11 @@ import com.java.model.entity.FileMetadata;
 import com.java.model.utils.PageStatus;
 import com.java.model.utils.RedirectResult;
 import com.java.service.exports.FileGeneratorService;
+import com.java.service.notification.NotificationService;
 import com.java.service.utils.redirect.CurlStrategy;
 import com.java.service.utils.redirect.HttpClientStrategy;
 import com.java.service.utils.redirect.RedirectStrategy;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +31,12 @@ class RedirectFinderServiceTest {
 
     @Mock
     private FileGeneratorService fileGeneratorService;
+    
+    @Mock
+    private NotificationService notificationService;
+    
+    @Mock
+    private SimpMessagingTemplate messagingTemplate;
 
     @Mock
     private RedirectStrategy mockStrategy;
@@ -45,7 +53,9 @@ class RedirectFinderServiceTest {
         // Используем реальные стратегии для интеграционного тестирования
         redirectFinderService = new RedirectFinderService(
                 List.of(curlStrategy, httpClientStrategy),
-                fileGeneratorService
+                fileGeneratorService,
+                notificationService,
+                messagingTemplate
         );
     }
 

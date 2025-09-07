@@ -8,14 +8,20 @@ import com.java.model.utils.RedirectExportTemplate;
 import com.java.model.utils.RedirectUrlData;
 import com.java.model.utils.RedirectProcessingRequest;
 import com.java.service.exports.FileGeneratorService;
+import com.java.service.notification.NotificationService;
 import com.java.service.utils.redirect.RedirectStrategy;
+import com.java.service.utils.redirect.RedirectProgressDto;
+import com.java.dto.NotificationDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Stream;
 import java.util.stream.Collectors;
@@ -34,36 +40,87 @@ public class RedirectFinderService {
     
     private final List<RedirectStrategy> strategies;
     private final FileGeneratorService fileGeneratorService;
+    private final NotificationService notificationService;
+    private final SimpMessagingTemplate messagingTemplate;
     
     /**
-     * Основной метод обработки файла с URL для поиска финальных ссылок
+     * Подготовка данных для асинхронной обработки
+     */
+    public RedirectProcessingRequest prepareAsyncRequest(FileMetadata metadata, RedirectFinderDto dto) {
+        try {
+            // Получаем данные из файла
+            List<List<String>> rawData = readFullFileData(metadata);
+            log.info("Прочитано строк из файла для асинхронной обработки: {}", rawData.size());
+            
+            if (rawData.isEmpty()) {
+                throw new IllegalArgumentException("Файл не содержит данных для обработки");
+            }
+            
+            // Конвертируем в RedirectUrlData
+            List<RedirectUrlData> urls = convertToRedirectUrlData(rawData, dto, metadata);
+            
+            return RedirectProcessingRequest.builder()
+                    .urls(urls)
+                    .maxRedirects(dto.getMaxRedirects())
+                    .timeoutMs(dto.getTimeoutMs())
+                    .delayMs(dto.getDelayMs() != null ? dto.getDelayMs() : 0)
+                    .includeId(dto.getIdColumn() != null && dto.getIdColumn() >= 0)
+                    .includeModel(dto.getModelColumn() != null && dto.getModelColumn() >= 0)
+                    .idColumnName("ID")
+                    .modelColumnName("Модель")
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("Ошибка подготовки данных для асинхронной обработки: {}", metadata.getOriginalFilename(), e);
+            throw new RuntimeException("Ошибка подготовки данных: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Основной метод обработки файла с URL для поиска финальных ссылок (синхронный)
      */
     public byte[] processRedirectFinding(FileMetadata metadata, RedirectFinderDto dto) {
+        String operationId = UUID.randomUUID().toString();
+        
         log.info("=== НАЧАЛО ОБРАБОТКИ РЕДИРЕКТОВ ===");
         log.info("Файл: {}", metadata.getOriginalFilename());
         log.info("Параметры: urlColumn={}, maxRedirects={}, timeout={}ms", 
                 dto.getUrlColumn(), dto.getMaxRedirects(), dto.getTimeoutMs());
+        log.info("Operation ID: {}", operationId);
         
         try {
             // Получаем данные из файла
             List<List<String>> rawData = readFullFileData(metadata);
             log.info("Прочитано строк из файла: {}", rawData.size());
             
+            int totalUrls = calculateTotalUrls(rawData, metadata);
+            sendProgressUpdate(operationId, "Начинаем обработку редиректов...", 0, 0, totalUrls);
+            
             if (rawData.isEmpty()) {
                 throw new IllegalArgumentException("Файл не содержит данных для обработки");
             }
             
             // Обрабатываем каждый URL
-            List<RedirectResult> results = processUrls(rawData, dto, metadata);
+            List<RedirectResult> results = processUrls(rawData, dto, metadata, operationId);
             
             // Логируем статистику
             logProcessingStatistics(results);
             
             // Генерируем результат
-            return generateResultFile(results, dto, metadata);
+            sendProgressUpdate(operationId, "Генерируем файл результатов...", 95, results.size(), results.size());
+            byte[] resultData = generateResultFile(results, dto, metadata);
+            
+            // Уведомляем о завершении
+            String fileName = "redirect-finder-result_" + 
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + 
+                (".csv".equalsIgnoreCase(dto.getOutputFormat()) ? ".csv" : ".xlsx");
+            sendCompletionNotification(operationId, fileName, results.size());
+            
+            return resultData;
             
         } catch (Exception e) {
             log.error("Критическая ошибка обработки файла: {}", metadata.getOriginalFilename(), e);
+            sendErrorNotification(operationId, "Ошибка обработки: " + e.getMessage());
             throw new RuntimeException("Ошибка обработки файла: " + e.getMessage(), e);
         }
     }
@@ -92,18 +149,36 @@ public class RedirectFinderService {
     
     private List<List<String>> readCsvFile(FileMetadata metadata) throws IOException {
         List<List<String>> data = new ArrayList<>();
-        Path filePath = Path.of(metadata.getTempFilePath());
         
-        try (Stream<String> lines = Files.lines(filePath)) {
-            lines.forEach(line -> {
-                // Простой парсинг CSV - для MVP достаточно
-                String[] values = line.split(",");
-                List<String> row = new ArrayList<>();
-                for (String value : values) {
-                    row.add(value.trim().replaceAll("^\"|\"$", "")); // убираем кавычки
+        try (Reader reader = Files.newBufferedReader(java.nio.file.Paths.get(metadata.getTempFilePath()), 
+                java.nio.charset.Charset.forName(metadata.getDetectedEncoding() != null ? metadata.getDetectedEncoding() : "UTF-8"));
+             com.opencsv.CSVReader csvReader = new com.opencsv.CSVReaderBuilder(reader)
+                .withCSVParser(new com.opencsv.CSVParserBuilder()
+                    .withSeparator(metadata.getDetectedDelimiter() != null ? metadata.getDetectedDelimiter().charAt(0) : ';')
+                    .withQuoteChar(metadata.getDetectedQuoteChar() != null ? metadata.getDetectedQuoteChar().charAt(0) : '"')
+                    .build())
+                .build()) {
+
+            String[] line;
+            boolean isFirstLine = true;
+            try {
+                while ((line = csvReader.readNext()) != null) {
+                    if (isFirstLine && line.length == 1 && (line[0] == null || line[0].trim().isEmpty())) {
+                        isFirstLine = false;
+                        continue; // Пропускаем пустую первую строку
+                    }
+                    isFirstLine = false;
+
+                    // Пропускаем полностью пустые строки
+                    if (line.length == 0 || Arrays.stream(line).allMatch(cell -> cell == null || cell.trim().isEmpty())) {
+                        continue;
+                    }
+
+                    data.add(Arrays.asList(line));
                 }
-                data.add(row);
-            });
+            } catch (com.opencsv.exceptions.CsvValidationException e) {
+                throw new IOException("Ошибка парсинга CSV файла: " + e.getMessage(), e);
+            }
         }
         
         return data;
@@ -187,7 +262,7 @@ public class RedirectFinderService {
         return data;
     }
     
-    private List<RedirectResult> processUrls(List<List<String>> rawData, RedirectFinderDto dto, FileMetadata metadata) {
+    private List<RedirectResult> processUrls(List<List<String>> rawData, RedirectFinderDto dto, FileMetadata metadata, String operationId) {
         List<RedirectResult> results = new ArrayList<>();
         
         // Получаем стратегии в порядке приоритета
@@ -224,11 +299,14 @@ public class RedirectFinderService {
                 
                 results.add(result);
                 
-                // Логируем прогресс каждые 10%
+                // Отправляем прогресс каждые 10% или каждые 10 URL
                 int totalRows = rawData.size() - startRow;
-                if (processedCount % Math.max(1, totalRows / 10) == 0) {
-                    log.info("Прогресс: {}% ({}/{})", 
-                            (processedCount * 100 / totalRows), processedCount, totalRows);
+                if (processedCount % Math.max(1, Math.min(totalRows / 10, 10)) == 0) {
+                    int percentage = (processedCount * 100 / totalRows);
+                    sendProgressUpdate(operationId, 
+                        String.format("Обработано %d из %d URLs", processedCount, totalRows), 
+                        percentage, processedCount, totalRows);
+                    log.info("Прогресс: {}% ({}/{})", percentage, processedCount, totalRows);
                 }
                 
             } catch (Exception e) {
@@ -252,10 +330,8 @@ public class RedirectFinderService {
                 continue;
             }
             
-            // Принудительное использование Playwright если установлен флаг
-            if (dto.getUsePlaywright() && !"playwright".equals(strategy.getStrategyName())) {
-                continue;
-            }
+            // Если явно не запрошен только Playwright, используем стратегии по приоритету
+            // usePlaywright теперь означает "разрешить использование Playwright" а не "использовать только Playwright"
             
             log.debug("Пробуем стратегию: {} для URL: {}", strategy.getStrategyName(), url);
             
@@ -581,5 +657,105 @@ public class RedirectFinderService {
             log.error("Ошибка генерации файла результатов", e);
             throw new RuntimeException("Ошибка генерации файла: " + e.getMessage(), e);
         }
+    }
+    
+    private int calculateTotalUrls(List<List<String>> rawData, FileMetadata metadata) {
+        int startRow = metadata.getHasHeader() != null && metadata.getHasHeader() ? 1 : 0;
+        return rawData.size() - startRow;
+    }
+    
+    private void sendProgressUpdate(String operationId, String message, int percentage, int processed, int total) {
+        try {
+            RedirectProgressDto progress = new RedirectProgressDto();
+            progress.setOperationId(operationId);
+            progress.setMessage(message);
+            progress.setPercentage(percentage);
+            progress.setProcessed(processed);
+            progress.setTotal(total);
+            progress.setStatus("IN_PROGRESS");
+            progress.setTimestamp(LocalDateTime.now());
+            
+            messagingTemplate.convertAndSend("/topic/redirect-progress/" + operationId, progress);
+            
+        } catch (Exception e) {
+            log.error("Ошибка отправки прогресса для операции {}", operationId, e);
+        }
+    }
+    
+    private void sendCompletionNotification(String operationId, String fileName, int processedCount) {
+        try {
+            RedirectProgressDto progress = new RedirectProgressDto();
+            progress.setOperationId(operationId);
+            progress.setMessage("Обработка завершена успешно");
+            progress.setPercentage(100);
+            progress.setProcessed(processedCount);
+            progress.setTotal(processedCount);
+            progress.setStatus("COMPLETED");
+            progress.setFileName(fileName);
+            progress.setTimestamp(LocalDateTime.now());
+            
+            messagingTemplate.convertAndSend("/topic/redirect-progress/" + operationId, progress);
+            
+            // Общее уведомление
+            notificationService.sendGeneralNotification(
+                String.format("Обработка редиректов завершена. Обработано %d URLs. Файл: %s", 
+                    processedCount, fileName), 
+                NotificationDto.NotificationType.SUCCESS
+            );
+            
+        } catch (Exception e) {
+            log.error("Ошибка отправки уведомления о завершении для операции {}", operationId, e);
+        }
+    }
+    
+    private void sendErrorNotification(String operationId, String errorMessage) {
+        try {
+            RedirectProgressDto progress = new RedirectProgressDto();
+            progress.setOperationId(operationId);
+            progress.setMessage(errorMessage);
+            progress.setStatus("ERROR");
+            progress.setTimestamp(LocalDateTime.now());
+            
+            messagingTemplate.convertAndSend("/topic/redirect-progress/" + operationId, progress);
+            
+            // Общее уведомление
+            notificationService.sendGeneralNotification(
+                "Ошибка обработки редиректов: " + errorMessage, 
+                NotificationDto.NotificationType.ERROR
+            );
+            
+        } catch (Exception e) {
+            log.error("Ошибка отправки уведомления об ошибке для операции {}", operationId, e);
+        }
+    }
+    
+    /**
+     * Конвертация данных из файла в RedirectUrlData
+     */
+    private List<RedirectUrlData> convertToRedirectUrlData(List<List<String>> rawData, RedirectFinderDto dto, FileMetadata metadata) {
+        List<RedirectUrlData> urls = new ArrayList<>();
+        
+        int startRow = metadata.getHasHeader() != null && metadata.getHasHeader() ? 1 : 0;
+        
+        for (int i = startRow; i < rawData.size(); i++) {
+            List<String> row = rawData.get(i);
+            
+            String url = getColumnValue(row, dto.getUrlColumn());
+            if (url == null || url.trim().isEmpty()) {
+                log.warn("Пропускаем строку {} - пустой URL", i + 1);
+                continue;
+            }
+            
+            String id = getColumnValue(row, dto.getIdColumn());
+            String model = getColumnValue(row, dto.getModelColumn());
+            
+            urls.add(RedirectUrlData.builder()
+                    .url(url.trim())
+                    .id(id)
+                    .model(model)
+                    .build());
+        }
+        
+        return urls;
     }
 }

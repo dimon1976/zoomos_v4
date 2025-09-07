@@ -193,13 +193,22 @@
                                     </select>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Таймаут на URL</label>
+                                    <label class="form-label">
+                                        <i class="fas fa-hourglass-half text-info"></i>
+                                        Таймаут на URL
+                                    </label>
                                     <select class="form-select" th:field="*{timeoutMs}">
                                         <option value="5000">5 секунд</option>
                                         <option value="10000" selected>10 секунд (рекомендуется)</option>
                                         <option value="15000">15 секунд</option>
                                         <option value="30000">30 секунд</option>
                                     </select>
+                                    <div class="form-text mt-1">
+                                        <i class="fas fa-info-circle text-info"></i>
+                                        <strong>Максимальное время ожидания ответа</strong> от одного URL.<br>
+                                        • <strong>Меньше время:</strong> быстрее обработка, но могут пропадать медленные сайты<br>
+                                        • <strong>Больше время:</strong> больше шансов найти ссылку, но общая обработка дольше
+                                    </div>
                                 </div>
                             </div>
                             
@@ -218,9 +227,12 @@
                                         <option value="3000">3 секунды</option>
                                         <option value="5000">5 секунд</option>
                                     </select>
-                                    <div class="form-text">
-                                        <i class="fas fa-info-circle"></i>
-                                        Задержка помогает избежать блокировки при обработке большого количества URL
+                                    <div class="form-text mt-1">
+                                        <i class="fas fa-info-circle text-warning"></i>
+                                        <strong>Пауза между запросами</strong> для избежания блокировки.<br>
+                                        • <strong>Без задержки:</strong> максимальная скорость, но риск блокировки<br>
+                                        • <strong>0.5-2 секунды:</strong> оптимально для большинства сайтов<br>
+                                        • <strong>5+ секунд:</strong> для строгих анти-бот систем (напр. Wildberries, ОЗОН)
                                     </div>
                                 </div>
                             </div>
@@ -272,11 +284,30 @@
                             </div>
 
                             <!-- Submit Section -->
-                            <div class="d-flex justify-content-center mt-4">
-                                <button type="submit" class="btn btn-danger process-button">
-                                    <i class="fas fa-external-link-alt"></i>
-                                    Начать обработку редиректов
+                            <div class="d-flex justify-content-center gap-3 mt-4">
+                                <!-- Асинхронная обработка (рекомендуется) -->
+                                <button type="button" id="asyncProcessBtn" class="btn btn-success process-button">
+                                    <i class="fas fa-rocket"></i>
+                                    Запустить в фоне (рекомендуется)
                                 </button>
+                                
+                                <!-- Синхронная обработка (для небольших файлов) -->
+                                <button type="submit" class="btn btn-outline-danger">
+                                    <i class="fas fa-external-link-alt"></i>
+                                    Быстро (до 50 URL)
+                                </button>
+                            </div>
+                            
+                            <div class="row mt-3">
+                                <div class="col-md-12">
+                                    <div class="alert alert-info">
+                                        <h6><i class="fas fa-info-circle"></i> Режимы обработки:</h6>
+                                        <ul class="mb-0">
+                                            <li><strong>В фоне:</strong> Для больших файлов. Можете заниматься другой работой, уведомление придёт автоматически</li>
+                                            <li><strong>Быстро:</strong> Для файлов до 50 URL. Файл скачается сразу после обработки</li>
+                                        </ul>
+                                    </div>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -355,11 +386,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Form submission
-    form.addEventListener('submit', function(e) {
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault(); // Предотвращаем обычную отправку формы
+        
         const urlColumn = form.querySelector('[name="urlColumn"]').value;
         
         if (!urlColumn) {
-            e.preventDefault();
             alert('Выберите колонку с URL');
             return;
         }
@@ -374,6 +406,122 @@ document.addEventListener('DOMContentLoaded', function() {
             const estimatedTime = Math.ceil(rowCount * 2 / 60); // ~2 sec per URL
             const timeText = estimatedTime > 1 ? `~${estimatedTime} мин` : '~1 мин';
             submitBtn.innerHTML += ` (примерно ${timeText})`;
+        }
+        
+        try {
+            // Отправляем форму через fetch
+            const formData = new FormData(form);
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                throw new Error('Ошибка обработки: ' + response.status);
+            }
+            
+            // Получаем файл как blob
+            const blob = await response.blob();
+            
+            // Извлекаем имя файла из заголовка Content-Disposition
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let fileName = 'redirect-finder-result.csv';
+            if (contentDisposition) {
+                const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                if (match && match[1]) {
+                    fileName = match[1].replace(/['"]/g, '');
+                }
+            }
+            
+            // Создаем ссылку для скачивания
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            // Показываем уведомление об успехе
+            if (typeof showNotification === 'function') {
+                showNotification('Файл с результатами успешно обработан и скачан!', 'success');
+            } else {
+                alert('Файл с результатами успешно обработан и скачан!');
+            }
+            
+            // Перенаправляем пользователя на страницу утилит
+            setTimeout(() => {
+                window.location.href = '/utils';
+            }, 1500);
+            
+        } catch (error) {
+            console.error('Ошибка обработки файла:', error);
+            alert('Произошла ошибка при обработке файла: ' + error.message);
+            
+            // Восстанавливаем кнопку
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-play"></i> Начать обработку редиректов';
+        }
+    });
+    
+    // Асинхронная обработка
+    const asyncBtn = document.getElementById('asyncProcessBtn');
+    asyncBtn.addEventListener('click', async function(e) {
+        e.preventDefault();
+        
+        const urlColumn = form.querySelector('[name="urlColumn"]').value;
+        
+        if (!urlColumn) {
+            alert('Выберите колонку с URL');
+            return;
+        }
+        
+        // Подтверждение запуска
+        if (!confirm('Запустить обработку в фоне? Вы сможете заниматься другой работой, а по завершении получите уведомление.')) {
+            return;
+        }
+        
+        // Show loading state
+        const originalText = this.innerHTML;
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Запускаем обработку...';
+        
+        try {
+            // Отправляем запрос на асинхронную обработку
+            const formData = new FormData(form);
+            const response = await fetch('/utils/redirect-finder/process-async', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Ошибка ${response.status}: ${errorText}`);
+            }
+            
+            const result = await response.text();
+            
+            // Показываем уведомление об успешном запуске
+            if (typeof showNotification === 'function') {
+                showNotification(result, 'success');
+            } else {
+                alert(result);
+            }
+            
+            // Перенаправляем пользователя на страницу утилит
+            setTimeout(() => {
+                window.location.href = '/utils';
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Ошибка запуска асинхронной обработки:', error);
+            alert('Произошла ошибка при запуске: ' + error.message);
+            
+            // Восстанавливаем кнопку
+            this.disabled = false;
+            this.innerHTML = originalText;
         }
     });
     
