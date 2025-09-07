@@ -15,6 +15,12 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class CurlStrategy implements RedirectStrategy {
     
+    private final UrlSecurityValidator urlSecurityValidator;
+    
+    public CurlStrategy(UrlSecurityValidator urlSecurityValidator) {
+        this.urlSecurityValidator = urlSecurityValidator;
+    }
+    
     private static final Set<String> BLOCK_KEYWORDS = Set.of(
         "captcha", "recaptcha", "cloudflare", "access denied", 
         "blocked", "forbidden", "защита", "antibot",
@@ -31,6 +37,14 @@ public class CurlStrategy implements RedirectStrategy {
         try {
             if (url == null || url.trim().isEmpty()) {
                 return buildErrorResult(url, startTime, "URL не может быть пустым");
+            }
+            
+            // Валидация URL на безопасность (SSRF защита)
+            try {
+                urlSecurityValidator.validateUrl(url);
+            } catch (SecurityException e) {
+                log.warn("URL заблокирован по соображениям безопасности: {} - {}", url, e.getMessage());
+                return buildErrorResult(url, startTime, "Заблокирован: " + e.getMessage());
             }
             
             return followRedirectsManually(url, maxRedirects, timeoutMs, startTime);
@@ -53,12 +67,20 @@ public class CurlStrategy implements RedirectStrategy {
         for (int i = 0; i <= maxRedirects; i++) {
             log.debug("Проверяем URL (попытка {}): {}", i + 1, currentUrl);
             
+            // Валидация URL на каждом редиректе для безопасности
+            try {
+                urlSecurityValidator.validateUrl(currentUrl);
+            } catch (SecurityException e) {
+                log.warn("Редирект заблокирован: {} - {}", currentUrl, e.getMessage());
+                return buildErrorResult(originalUrl, startTime, "Редирект заблокирован: " + e.getMessage());
+            }
+            
             // Получаем заголовки (без User-Agent для обхода блокировок)
+            // URL уже валидирован, безопасен для передачи в команду
             String[] headerCommand = {
                 "curl", "-I", "-s", 
                 "--connect-timeout", "5",
-                "--max-time", String.valueOf(timeoutMs / 1000),
-                "--insecure",
+                "--max-time", String.valueOf(Math.max(1, timeoutMs / 1000)),
                 currentUrl
             };
             

@@ -102,18 +102,26 @@ Processes CSV/Excel files containing URLs to resolve final URLs after HTTP redir
 3. **HttpClientStrategy** (Priority 3): Java HTTP Client fallback
 
 ### Key Components
-- `RedirectFinderController` - Web interface for file upload/processing  
-- `RedirectFinderService` - Core business logic with FileGeneratorService integration
-- `AsyncRedirectService` - Asynchronous processing with WebSocket progress notifications
-- `RedirectStrategy` - Interface for processing strategies
-- `RedirectResult` - Result model with URL, redirect count, status
+- `RedirectFinderController` - Web interface with dual processing modes (/process and /process-async endpoints)  
+- `RedirectFinderService` - Core business logic with sync and async request preparation
+- `AsyncRedirectService` - Dedicated async processing with comprehensive WebSocket progress tracking
+- `RedirectStrategy` - Interface implemented by three processing strategies with intelligent fallback
+- `RedirectResult` - Result model with URL, redirect count, HTTP status, and processing metadata
 - `RedirectExportTemplate` - Template for seamless integration with export system
-- `RedirectProgressDto` - Progress tracking for real-time WebSocket updates
+- `RedirectProgressDto` - Progress tracking DTO for real-time WebSocket updates and user notifications
+- `RedirectProcessingRequest` - Request model for async processing with URL data and configuration
+- `RedirectUrlData` - Individual URL data model supporting ID and model fields
 
 ### Critical Implementation Details
 **CurlStrategy User-Agent Issue**: Do NOT use User-Agent headers - many sites (goldapple.ru) block redirects when browser User-Agent is present. Manual redirect following is implemented instead of `curl -L`.
 
 **HTTP Status Code Handling**: Capture the initial redirect HTTP code (301/302) not the final status (200). Use `initialRedirectCode` variable to preserve the first redirect status.
+
+**JavaScript Redirect Detection**: PlaywrightStrategy successfully handles sites like Yandex Market where redirects occur via JavaScript rather than HTTP headers. Essential for e-commerce and dynamic sites.
+
+**Dual Processing Modes**: 
+- **Synchronous**: Direct file download after processing, suitable for files under 50 URLs
+- **Asynchronous**: Background processing with WebSocket notifications, allows multitasking
 
 **Asynchronous Architecture**: Fully integrated with existing async system using dedicated `redirectTaskExecutor` thread pool and WebSocket notifications via `/topic/redirect-progress/{operationId}`.
 
@@ -146,12 +154,14 @@ import.async.max-pool-size=2
 # Export processing
 export.async.core-pool-size=2
 export.async.max-pool-size=4
-
-# Redirect processing (HTTP redirect utility)
-redirect.async.core-pool-size=1
-redirect.async.max-pool-size=3
-redirect.async.queue-capacity=5
 ```
+
+**Thread Pool Executors** (configured in AsyncConfig.java):
+- `importTaskExecutor`: Import processing (configurable via properties)
+- `exportTaskExecutor`: Export processing (configurable via properties) 
+- `fileAnalysisExecutor`: File analysis operations (2-4 threads)
+- `utilsTaskExecutor`: General utilities (1-2 threads)
+- `redirectTaskExecutor`: HTTP redirect processing (1-3 threads, 10min timeout)
 
 ## Development Guidelines
 
@@ -224,25 +234,39 @@ Real-time updates for:
 
 ## Current State Notes
 
-**Recently Completed HTTP Redirect Utility** (as of 2025-01-06):
-- **Async Processing**: Complete async architecture with WebSocket progress notifications
-- **Strategy Pattern**: Three-tier strategy system (CurlStrategy → PlaywrightStrategy → HttpClientStrategy)  
+**Recently Completed HTTP Redirect Utility Enhancements** (as of 2025-09-07):
+- **Async Processing**: Complete dual-mode architecture - background processing for large files and quick sync mode for small files
+- **Enhanced UI**: Two processing modes with clear explanations and user guidance
+- **Strategy Pattern**: Fully tested three-tier system (CurlStrategy → PlaywrightStrategy → HttpClientStrategy)
+- **Real-world Testing**: Successfully handles complex sites like Yandex Market with JavaScript redirects
+- **Parameter Documentation**: Detailed tooltips explaining timeout and delay settings
 - **Export Integration**: Full integration with FileGeneratorService for consistent CSV/Excel export
-- **Critical Fixes**: User-Agent blocking resolution, HTTP status code preservation, delay configuration
-- **Real-world Testing**: Successful testing with goldapple.ru redirects (301 → final URL)
-- **Documentation**: Complete technical documentation in `doc/intro_redirect.md`
+- **WebSocket Notifications**: Real-time progress tracking and completion alerts
+
+**Proven Capabilities**:
+- **Anti-Bot Bypass**: Successfully processes e-commerce sites with complex protection (Yandex Market, Goldapple)
+- **JavaScript Redirects**: Playwright strategy handles JS-based redirects that curl cannot detect  
+- **Large File Processing**: Async mode allows processing thousands of URLs while working on other tasks
+- **Encoding Handling**: Properly handles UTF-8 files with international characters
+- **Production Ready**: Comprehensive error handling, progress tracking, and user feedback
 
 **Architecture Insights**:
 - Uses dedicated `redirectTaskExecutor` thread pool (1-3 threads) for HTTP operations
 - Manual redirect following instead of curl -L to avoid User-Agent detection  
 - Preserves initial redirect HTTP codes (301/302) rather than final status (200)
 - Configurable delay between requests (0-5 seconds) to prevent rate limiting
+- Intelligent strategy escalation based on response analysis
 - Seamless integration with existing async/WebSocket notification system
 
 ## Code References
 
 When referencing specific functions or pieces of code include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.
 
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
