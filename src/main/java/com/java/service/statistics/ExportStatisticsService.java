@@ -7,10 +7,15 @@ import com.java.model.entity.ExportTemplate;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
+import com.java.service.statistics.StatisticsCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -23,6 +28,7 @@ public class ExportStatisticsService {
     private final ExportTemplateRepository templateRepository;
     private final ExportStatisticsRepository statisticsRepository;
     private final StatisticsSettingsService settingsService;
+    private final StatisticsCacheService cacheService;
 
     /**
      * Вычисляет статистику для выбранных операций экспорта
@@ -348,5 +354,121 @@ public class ExportStatisticsService {
                 .modificationPercentage(modificationPercentage)
                 .alertLevel(alertLevel)
                 .build();
+    }
+
+    // === Enhanced Methods with Caching and Pagination ===
+
+    /**
+     * Получает агрегированную статистику с кэшированием
+     */
+    public List<Object[]> getAggregatedStatistics(List<Long> sessionIds) {
+        return cacheService.getAggregatedStats(sessionIds);
+    }
+
+    /**
+     * Получает топ групп для клиента с пагинацией
+     */
+    public Page<Object[]> getTopGroupsForClient(Long clientId, ZonedDateTime sinceDate, Pageable pageable) {
+        log.debug("Получение топ групп для клиента {} с {}", clientId, sinceDate);
+        return statisticsRepository.findTopGroupsByClient(clientId, sinceDate, pageable);
+    }
+
+    /**
+     * Получает дневные тренды с кэшированием
+     */
+    public List<Object[]> getDailyTrendsForClient(Long clientId, int daysBack) {
+        ZonedDateTime sinceDate = ZonedDateTime.now().minusDays(daysBack);
+        return cacheService.getDailyTrends(clientId, sinceDate);
+    }
+
+    /**
+     * Получает статистику за период с кэшированием
+     */
+    public List<ExportStatistics> getStatisticsForDateRange(Long clientId, 
+                                                           ZonedDateTime startDate, 
+                                                           ZonedDateTime endDate) {
+        return cacheService.getStatisticsForPeriod(clientId, startDate, endDate);
+    }
+
+    /**
+     * Получает статистику с поддержкой пагинации для больших датасетов
+     */
+    public Page<ExportStatistics> getStatisticsPagedBySessionIds(List<Long> sessionIds, Pageable pageable) {
+        log.debug("Получение пагинированной статистики для {} сессий", sessionIds.size());
+        return statisticsRepository.findByExportSessionIdsPaged(sessionIds, pageable);
+    }
+
+    /**
+     * Получает сводку статистики для dashboard
+     */
+    public Map<String, Object> getStatisticsSummary(Long clientId, int daysBack) {
+        ZonedDateTime sinceDate = ZonedDateTime.now().minusDays(daysBack);
+        
+        // Получаем топ 5 групп
+        List<Object[]> topGroups = cacheService.getTopGroups(clientId, sinceDate, 5);
+        
+        // Получаем дневные тренды
+        List<Object[]> dailyTrends = cacheService.getDailyTrends(clientId, sinceDate);
+        
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("topGroups", topGroups);
+        summary.put("dailyTrends", dailyTrends);
+        summary.put("period", daysBack + " дней");
+        summary.put("generatedAt", ZonedDateTime.now());
+        
+        return summary;
+    }
+
+    /**
+     * Получает детальную статистику для конкретной группы
+     */
+    public Map<String, Object> getGroupDetailedStats(Long sessionId, String groupValue) {
+        List<ExportStatistics> groupStats = statisticsRepository
+                .findByExportSessionIdAndGroupFieldValue(sessionId, groupValue);
+        
+        Map<String, Object> details = new HashMap<>();
+        details.put("sessionId", sessionId);
+        details.put("groupValue", groupValue);
+        details.put("statistics", groupStats);
+        details.put("totalRecords", groupStats.size());
+        
+        // Подсчитываем общие метрики
+        long totalCount = groupStats.stream()
+                .mapToLong(ExportStatistics::getCountValue)
+                .sum();
+        long totalDateModifications = groupStats.stream()
+                .mapToLong(ExportStatistics::getDateModificationsCount)
+                .sum();
+        
+        details.put("totalCount", totalCount);
+        details.put("totalDateModifications", totalDateModifications);
+        
+        return details;
+    }
+
+    /**
+     * Проверяет здоровье системы статистики
+     */
+    public Map<String, Object> getStatisticsHealthCheck(Long clientId) {
+        Map<String, Object> health = new HashMap<>();
+        
+        try {
+            // Проверяем количество сессий с статистикой
+            ZonedDateTime lastWeek = ZonedDateTime.now().minusWeeks(1);
+            List<ExportStatistics> recentStats = cacheService
+                    .getStatisticsForPeriod(clientId, lastWeek, ZonedDateTime.now());
+            
+            health.put("status", "healthy");
+            health.put("recentStatisticsCount", recentStats.size());
+            health.put("lastWeekPeriod", lastWeek.toString() + " - " + ZonedDateTime.now().toString());
+            health.put("cacheStatus", "active");
+            
+        } catch (Exception e) {
+            log.warn("Проблема с проверкой здоровья статистики для клиента {}: {}", clientId, e.getMessage());
+            health.put("status", "degraded");
+            health.put("error", e.getMessage());
+        }
+        
+        return health;
     }
 }

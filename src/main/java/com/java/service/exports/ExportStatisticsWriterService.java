@@ -6,6 +6,7 @@ import com.java.model.entity.ExportSession;
 import com.java.model.entity.ExportStatistics;
 import com.java.model.entity.ExportTemplate;
 import com.java.repository.ExportStatisticsRepository;
+import com.java.service.statistics.StatisticsCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ public class ExportStatisticsWriterService {
 
     private final ExportStatisticsRepository statisticsRepository;
     private final ObjectMapper objectMapper;
+    private final StatisticsCacheService cacheService;
 
     /**
      * Сохраняет статистику по данным экспорта
@@ -146,8 +148,16 @@ public class ExportStatisticsWriterService {
 
         // Сохраняем всю статистику
         statisticsRepository.saveAll(statisticsToSave);
+        
+        // Очищаем кэш статистики после сохранения новых данных
+        cacheService.evictStatsCache();
+        cacheService.evictSessionCache(session.getId());
+        if (session.getFileOperation() != null && session.getFileOperation().getClient() != null) {
+            cacheService.evictClientCache(session.getFileOperation().getClient().getId());
+        }
 
-        log.info("Сохранено {} записей статистики для сессии ID: {}", statisticsToSave.size(), session.getId());
+        log.info("Сохранено {} записей статистики для сессии ID: {}, кэш очищен", 
+                 statisticsToSave.size(), session.getId());
     }
 
     /**
