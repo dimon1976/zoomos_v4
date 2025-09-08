@@ -100,8 +100,9 @@ public interface ExportStatisticsRepository extends JpaRepository<ExportStatisti
      */
     @Query("SELECT es FROM ExportStatistics es " +
            "JOIN FETCH es.exportSession s " +
+           "JOIN FETCH s.fileOperation fo " +
            "WHERE s.startedAt BETWEEN :startDate AND :endDate " +
-           "AND s.client.id = :clientId " +
+           "AND fo.client.id = :clientId " +
            "ORDER BY s.startedAt DESC")
     List<ExportStatistics> findByDateRangeAndClient(@Param("startDate") ZonedDateTime startDate,
                                                    @Param("endDate") ZonedDateTime endDate,
@@ -113,7 +114,8 @@ public interface ExportStatisticsRepository extends JpaRepository<ExportStatisti
     @Query("SELECT es.groupFieldValue, SUM(es.countValue) as totalCount " +
            "FROM ExportStatistics es " +
            "JOIN es.exportSession s " +
-           "WHERE s.client.id = :clientId " +
+           "JOIN s.fileOperation fo " +
+           "WHERE fo.client.id = :clientId " +
            "AND s.startedAt >= :sinceDate " +
            "GROUP BY es.groupFieldValue " +
            "ORDER BY totalCount DESC")
@@ -129,7 +131,8 @@ public interface ExportStatisticsRepository extends JpaRepository<ExportStatisti
            "SUM(es.countValue) as dailyCount " +
            "FROM ExportStatistics es " +
            "JOIN es.exportSession s " +
-           "WHERE s.client.id = :clientId " +
+           "JOIN s.fileOperation fo " +
+           "WHERE fo.client.id = :clientId " +
            "AND s.startedAt >= :sinceDate " +
            "GROUP BY DATE(s.startedAt), es.groupFieldValue " +
            "ORDER BY exportDate DESC, dailyCount DESC")
