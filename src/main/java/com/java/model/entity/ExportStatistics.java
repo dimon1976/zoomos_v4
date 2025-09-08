@@ -3,8 +3,11 @@ package com.java.model.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.ZonedDateTime;
+import java.util.Map;
 
 /**
  * Сущность для хранения статистики экспорта
@@ -60,4 +63,28 @@ public class ExportStatistics {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
+
+    /**
+     * Метаданные полей для продвинутой фильтрации.
+     * Содержит информацию о доступных значениях полей, их типах и другие метаданные
+     * для построения динамических фильтров.
+     * 
+     * Пример структуры JSON:
+     * {
+     *   "availableValues": {
+     *     "city": ["Москва", "СПб", "Екатеринбург"],
+     *     "status": ["ACTIVE", "INACTIVE"],
+     *     "priceRange": {"min": 100, "max": 5000}
+     *   },
+     *   "fieldTypes": {
+     *     "city": "STRING",
+     *     "status": "ENUM", 
+     *     "price": "NUMERIC"
+     *   }
+     * }
+     */
+    @Column(name = "field_metadata", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Builder.Default
+    private Map<String, Object> fieldMetadata = new java.util.HashMap<>();
 }
