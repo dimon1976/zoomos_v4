@@ -191,6 +191,52 @@
         </div>
     </div>
 
+    <!-- Панель быстрых фильтров -->
+    <div th:unless="${#lists.isEmpty(comparison)}" class="card mb-4" id="quickFiltersPanel">
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-filter me-2 text-primary"></i>
+                <h6 class="mb-0">Быстрые фильтры</h6>
+            </div>
+            <div class="d-flex align-items-center">
+                <span id="filterStatus" class="badge bg-light text-dark me-2">Показано: <span id="visibleRowsCount">0</span> строк</span>
+            </div>
+        </div>
+        <div class="card-body py-2">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <!-- Фильтр только предупреждения -->
+                <button type="button" id="onlyAlertsBtn" class="btn btn-outline-warning btn-sm" 
+                        onclick="toggleOnlyAlerts()" title="Показать только строки с предупреждениями и критическими изменениями">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Только предупреждения
+                </button>
+                
+                <!-- Фильтр скрыть без изменений -->
+                <button type="button" id="hideNoChangesBtn" class="btn btn-outline-secondary btn-sm" 
+                        onclick="toggleHideNoChanges()" title="Скрыть строки без изменений (стабильные значения)">
+                    <i class="fas fa-eye-slash me-1"></i>
+                    Скрыть без изменений
+                </button>
+                
+                <!-- Разделитель -->
+                <div class="vr"></div>
+                
+                <!-- Счетчик скрытых строк -->
+                <span class="text-muted small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Скрыто: <span id="hiddenRowsCount">0</span> строк
+                </span>
+                
+                <!-- Кнопка сброса -->
+                <button type="button" id="resetFiltersBtn" class="btn btn-outline-danger btn-sm ms-auto" 
+                        onclick="resetAllFilters()" title="Сбросить все фильтры">
+                    <i class="fas fa-undo me-1"></i>
+                    Сбросить
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Компактная статистика изменений дат -->
     <div th:unless="${#lists.isEmpty(comparison)}" id="dateModificationsPanel" class="mb-3 d-none">
         <div class="alert alert-info mb-3" style="background-color: #e3f2fd; border-color: #81d4fa; padding: 10px 15px;">
@@ -372,11 +418,7 @@
     let currentWarningThreshold = /*[[${warningPercentage}]]*/ 10;
     let currentCriticalThreshold = /*[[${criticalPercentage}]]*/ 20;
 
-    document.addEventListener('DOMContentLoaded', () => {
-        addGroupStartClass();
-        updateSummaryCounters();
-        displayDateModifications();
-    });
+    // Старая инициализация убрана - теперь в новой функции ниже
 
     function toggleSettings() {
         const panel = document.getElementById('settingsPanel');
@@ -598,6 +640,142 @@
             `;
         }).join('');
     }
+
+    // === БЫСТРЫЕ ФИЛЬТРЫ ===
+    
+    let filterState = {
+        onlyAlerts: false,
+        hideNoChanges: false
+    };
+
+    function toggleOnlyAlerts() {
+        filterState.onlyAlerts = !filterState.onlyAlerts;
+        applyFilters();
+        updateFilterButtons();
+        showNotification(
+            filterState.onlyAlerts ? 'Показаны только предупреждения' : 'Показаны все строки', 
+            'info'
+        );
+    }
+
+    function toggleHideNoChanges() {
+        filterState.hideNoChanges = !filterState.hideNoChanges;
+        applyFilters();
+        updateFilterButtons();
+        showNotification(
+            filterState.hideNoChanges ? 'Скрыты строки без изменений' : 'Показаны все строки', 
+            'info'
+        );
+    }
+
+    function resetAllFilters() {
+        filterState.onlyAlerts = false;
+        filterState.hideNoChanges = false;
+        applyFilters();
+        updateFilterButtons();
+        showNotification('Все фильтры сброшены', 'success');
+    }
+
+    function applyFilters() {
+        const rows = document.querySelectorAll('.statistics-table tbody tr');
+        let visibleCount = 0;
+        let hiddenCount = 0;
+
+        rows.forEach(row => {
+            let shouldShow = true;
+
+            // Фильтр: только предупреждения
+            if (filterState.onlyAlerts) {
+                const hasAlert = row.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
+                if (!hasAlert) {
+                    shouldShow = false;
+                }
+            }
+
+            // Фильтр: скрыть без изменений
+            if (filterState.hideNoChanges && shouldShow) {
+                const hasStableOnly = Array.from(row.querySelectorAll('td'))
+                    .some(cell => cell.classList.contains('metric-stable') && !cell.classList.contains('group-header'));
+                
+                // Если все значения в строке стабильные (нет изменений)
+                const allMetricCells = Array.from(row.querySelectorAll('td')).filter(cell => 
+                    !cell.classList.contains('group-header') && 
+                    !cell.hasAttribute('rowspan') &&
+                    cell.querySelector('.metric-value')
+                );
+                
+                const allStable = allMetricCells.every(cell => cell.classList.contains('metric-stable'));
+                if (allStable && allMetricCells.length > 0) {
+                    shouldShow = false;
+                }
+            }
+
+            if (shouldShow) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+                hiddenCount++;
+            }
+        });
+
+        updateRowCounters(visibleCount, hiddenCount);
+        updateSummaryCounters(); // Пересчитать summary cards с учетом фильтров
+    }
+
+    function updateFilterButtons() {
+        const onlyAlertsBtn = document.getElementById('onlyAlertsBtn');
+        const hideNoChangesBtn = document.getElementById('hideNoChangesBtn');
+
+        // Обновляем стили кнопок
+        if (filterState.onlyAlerts) {
+            onlyAlertsBtn.classList.remove('btn-outline-warning');
+            onlyAlertsBtn.classList.add('btn-warning', 'text-white');
+        } else {
+            onlyAlertsBtn.classList.remove('btn-warning', 'text-white');
+            onlyAlertsBtn.classList.add('btn-outline-warning');
+        }
+
+        if (filterState.hideNoChanges) {
+            hideNoChangesBtn.classList.remove('btn-outline-secondary');
+            hideNoChangesBtn.classList.add('btn-secondary', 'text-white');
+        } else {
+            hideNoChangesBtn.classList.remove('btn-secondary', 'text-white');
+            hideNoChangesBtn.classList.add('btn-outline-secondary');
+        }
+    }
+
+    function updateRowCounters(visible, hidden) {
+        const visibleCountEl = document.getElementById('visibleRowsCount');
+        const hiddenCountEl = document.getElementById('hiddenRowsCount');
+        
+        if (visibleCountEl) visibleCountEl.textContent = visible;
+        if (hiddenCountEl) hiddenCountEl.textContent = hidden;
+
+        // Обновляем статус панели фильтров
+        const filterStatus = document.getElementById('filterStatus');
+        if (filterStatus) {
+            if (hidden > 0) {
+                filterStatus.className = 'badge bg-warning text-dark me-2';
+                filterStatus.innerHTML = `Показано: <span id="visibleRowsCount">${visible}</span> строк`;
+            } else {
+                filterStatus.className = 'badge bg-light text-dark me-2';
+                filterStatus.innerHTML = `Показано: <span id="visibleRowsCount">${visible}</span> строк`;
+            }
+        }
+    }
+
+    // Инициализация фильтров при загрузке страницы
+    document.addEventListener('DOMContentLoaded', () => {
+        addGroupStartClass();
+        updateSummaryCounters();
+        displayDateModifications();
+        
+        // Инициализируем счетчики фильтров
+        const totalRows = document.querySelectorAll('.statistics-table tbody tr').length;
+        updateRowCounters(totalRows, 0);
+        updateFilterButtons();
+    });
     /*]]>*/
 </script>
 </body>
