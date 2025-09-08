@@ -75,6 +75,15 @@ public class UtilsController {
             "status", "ready"
         ));
         
+        utilities.add(Map.of(
+            "id", "stats-processor",
+            "title", "Обработка файла статистики",
+            "description", "Обработка файлов статистики с выбором колонок и изменением данных",
+            "icon", "fas fa-chart-line",
+            "url", "/utils/stats-processor",
+            "status", "ready"
+        ));
+        
         return utilities;
     }
 }
