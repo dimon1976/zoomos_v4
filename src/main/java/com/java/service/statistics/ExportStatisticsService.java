@@ -471,4 +471,300 @@ public class ExportStatisticsService {
         
         return health;
     }
+
+    // === New Filtering Methods for Iteration 4 ===
+
+    /**
+     * Получает отфильтрованную статистику с поддержкой пагинации
+     */
+    public StatisticsFilteredResponseDto calculateFilteredComparison(StatisticsFilterDto filterDto) {
+        log.info("Расчет отфильтрованной статистики для клиента: {} с фильтрами", filterDto.getClientId());
+
+        // Создаем базовый запрос статистики
+        StatisticsRequestDto baseRequest = StatisticsRequestDto.builder()
+                .exportSessionIds(filterDto.getExportSessionIds())
+                .warningPercentage(settingsService.getWarningPercentage())
+                .criticalPercentage(settingsService.getCriticalPercentage())
+                .build();
+
+        // Получаем базовые результаты
+        List<StatisticsComparisonDto> baseResults = calculateComparison(baseRequest);
+        
+        // Применяем фильтры
+        List<StatisticsComparisonDto> filteredResults = applyFilters(baseResults, filterDto);
+        
+        // Применяем пагинацию
+        PageRequest pageRequest = PageRequest.of(filterDto.getPage(), filterDto.getSize());
+        List<StatisticsComparisonDto> paginatedResults = applyPagination(filteredResults, pageRequest);
+        
+        // Получаем метаданные полей
+        Map<String, List<String>> availableValues = getAvailableFieldValues(filterDto.getClientId(), filterDto.getExportSessionIds());
+        Map<String, Object> fieldMetadata = buildFieldMetadata(baseResults);
+        
+        // Вычисляем агрегированную статистику
+        Map<String, Object> aggregatedStats = calculateAggregatedStats(filteredResults);
+
+        return StatisticsFilteredResponseDto.builder()
+                .results(paginatedResults)
+                .totalElements((long) filteredResults.size())
+                .totalPages((int) Math.ceil((double) filteredResults.size() / filterDto.getSize()))
+                .currentPage(filterDto.getPage())
+                .pageSize(filterDto.getSize())
+                .hasNext((filterDto.getPage() + 1) * filterDto.getSize() < filteredResults.size())
+                .hasPrevious(filterDto.getPage() > 0)
+                .appliedFilters(filterDto)
+                .aggregatedStats(aggregatedStats)
+                .availableFieldValues(availableValues)
+                .fieldMetadata(fieldMetadata)
+                .build();
+    }
+
+    /**
+     * Получает доступные значения полей для динамических фильтров
+     */
+    public Map<String, List<String>> getAvailableFieldValues(Long clientId, List<Long> sessionIds) {
+        log.debug("Получение доступных значений полей для клиента: {}", clientId);
+        
+        List<ExportStatistics> statistics;
+        if (sessionIds != null && !sessionIds.isEmpty()) {
+            statistics = statisticsRepository.findByExportSessionIds(sessionIds);
+        } else {
+            // Получаем все статистики клиента за последние 3 месяца
+            ZonedDateTime threeMonthsAgo = ZonedDateTime.now().minusMonths(3);
+            statistics = cacheService.getStatisticsForPeriod(clientId, threeMonthsAgo, ZonedDateTime.now());
+        }
+        
+        Map<String, List<String>> availableValues = new HashMap<>();
+        
+        // Группируем уникальные значения по полям
+        Set<String> groupFieldValues = statistics.stream()
+                .map(ExportStatistics::getGroupFieldValue)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        
+        Set<String> countFieldNames = statistics.stream()
+                .map(ExportStatistics::getCountFieldName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        
+        Set<String> groupFieldNames = statistics.stream()
+                .map(ExportStatistics::getGroupFieldName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        availableValues.put("groupFieldValues", new ArrayList<>(groupFieldValues));
+        availableValues.put("countFieldNames", new ArrayList<>(countFieldNames));
+        availableValues.put("groupFieldNames", new ArrayList<>(groupFieldNames));
+        
+        return availableValues;
+    }
+
+    /**
+     * Применяет фильтры к результатам статистики
+     */
+    private List<StatisticsComparisonDto> applyFilters(List<StatisticsComparisonDto> results, StatisticsFilterDto filterDto) {
+        return results.stream()
+                .filter(comparison -> applyGroupFieldFilter(comparison, filterDto))
+                .map(comparison -> filterOperationsByAlertLevels(comparison, filterDto))
+                .filter(comparison -> !comparison.getOperations().isEmpty()) // Убираем пустые группы
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Применяет фильтр по полям группировки
+     */
+    private boolean applyGroupFieldFilter(StatisticsComparisonDto comparison, StatisticsFilterDto filterDto) {
+        if (filterDto.getGroupFieldFilters().isEmpty()) {
+            return true;
+        }
+        
+        // Проверяем, соответствует ли значение группы фильтрам
+        return filterDto.getGroupFieldFilters().values().stream()
+                .anyMatch(allowedValues -> allowedValues.contains(comparison.getGroupFieldValue()));
+    }
+
+    /**
+     * Фильтрует операции по уровням предупреждений и другим условиям
+     */
+    private StatisticsComparisonDto filterOperationsByAlertLevels(StatisticsComparisonDto comparison, StatisticsFilterDto filterDto) {
+        List<StatisticsComparisonDto.OperationStatistics> filteredOperations = comparison.getOperations().stream()
+                .filter(operation -> applyAlertLevelFilter(operation, filterDto))
+                .filter(operation -> applyChangePercentageFilter(operation, filterDto))
+                .filter(operation -> applyNoChangesFilter(operation, filterDto))
+                .filter(operation -> applyWarningOnlyFilter(operation, filterDto))
+                .filter(operation -> applyProblemsOnlyFilter(operation, filterDto))
+                .collect(Collectors.toList());
+
+        return StatisticsComparisonDto.builder()
+                .groupFieldValue(comparison.getGroupFieldValue())
+                .operations(filteredOperations)
+                .build();
+    }
+
+    /**
+     * Применяет фильтр по уровням предупреждений
+     */
+    private boolean applyAlertLevelFilter(StatisticsComparisonDto.OperationStatistics operation, StatisticsFilterDto filterDto) {
+        if (filterDto.getAlertLevels().isEmpty()) {
+            return true;
+        }
+        
+        // Проверяем, есть ли метрики с нужными уровнями предупреждений
+        return operation.getMetrics().values().stream()
+                .anyMatch(metric -> filterDto.getAlertLevels().contains(metric.getAlertLevel().name()));
+    }
+
+    /**
+     * Применяет фильтр по диапазону изменений
+     */
+    private boolean applyChangePercentageFilter(StatisticsComparisonDto.OperationStatistics operation, StatisticsFilterDto filterDto) {
+        if (filterDto.getMinChangePercentage() == null && filterDto.getMaxChangePercentage() == null) {
+            return true;
+        }
+        
+        return operation.getMetrics().values().stream()
+                .anyMatch(metric -> {
+                    double absChangePercent = Math.abs(metric.getChangePercentage());
+                    boolean minOk = filterDto.getMinChangePercentage() == null || absChangePercent >= filterDto.getMinChangePercentage();
+                    boolean maxOk = filterDto.getMaxChangePercentage() == null || absChangePercent <= filterDto.getMaxChangePercentage();
+                    return minOk && maxOk;
+                });
+    }
+
+    /**
+     * Применяет фильтр "скрыть без изменений"
+     */
+    private boolean applyNoChangesFilter(StatisticsComparisonDto.OperationStatistics operation, StatisticsFilterDto filterDto) {
+        if (!filterDto.getHideNoChanges()) {
+            return true;
+        }
+        
+        // Скрываем операции где все метрики имеют изменения < 1%
+        return operation.getMetrics().values().stream()
+                .anyMatch(metric -> Math.abs(metric.getChangePercentage()) >= 1.0);
+    }
+
+    /**
+     * Применяет фильтр "только предупреждения" (WARNING уровень)
+     */
+    private boolean applyWarningOnlyFilter(StatisticsComparisonDto.OperationStatistics operation, StatisticsFilterDto filterDto) {
+        if (!filterDto.getOnlyWarnings()) {
+            return true;
+        }
+        
+        // Показываем только операции с WARNING уровнем (не CRITICAL)
+        return operation.getMetrics().values().stream()
+                .anyMatch(metric -> metric.getAlertLevel() == StatisticsComparisonDto.AlertLevel.WARNING);
+    }
+
+    /**
+     * Применяет фильтр "только проблемы" (WARNING + CRITICAL)
+     */
+    private boolean applyProblemsOnlyFilter(StatisticsComparisonDto.OperationStatistics operation, StatisticsFilterDto filterDto) {
+        if (!filterDto.getOnlyProblems()) {
+            return true;
+        }
+        
+        // Показываем только операции с WARNING или CRITICAL уровнем
+        return operation.getMetrics().values().stream()
+                .anyMatch(metric -> metric.getAlertLevel() == StatisticsComparisonDto.AlertLevel.WARNING ||
+                                   metric.getAlertLevel() == StatisticsComparisonDto.AlertLevel.CRITICAL);
+    }
+
+    /**
+     * Применяет пагинацию к результатам
+     */
+    private List<StatisticsComparisonDto> applyPagination(List<StatisticsComparisonDto> results, PageRequest pageRequest) {
+        int start = (int) pageRequest.getOffset();
+        int end = Math.min(start + pageRequest.getPageSize(), results.size());
+        
+        if (start >= results.size()) {
+            return Collections.emptyList();
+        }
+        
+        return results.subList(start, end);
+    }
+
+    /**
+     * Строит метаданные полей для UI
+     */
+    private Map<String, Object> buildFieldMetadata(List<StatisticsComparisonDto> results) {
+        Map<String, Object> metadata = new HashMap<>();
+        
+        // Собираем информацию о типах полей и диапазонах значений
+        Set<String> allMetricFields = results.stream()
+                .flatMap(comp -> comp.getOperations().stream())
+                .flatMap(op -> op.getMetrics().keySet().stream())
+                .collect(Collectors.toSet());
+        
+        Map<String, String> fieldTypes = new HashMap<>();
+        Map<String, Map<String, Double>> fieldRanges = new HashMap<>();
+        
+        for (String field : allMetricFields) {
+            fieldTypes.put(field, "NUMERIC");
+            
+            // Находим диапазон значений для поля
+            List<Double> values = results.stream()
+                    .flatMap(comp -> comp.getOperations().stream())
+                    .map(op -> op.getMetrics().get(field))
+                    .filter(Objects::nonNull)
+                    .map(StatisticsComparisonDto.MetricValue::getChangePercentage)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            
+            if (!values.isEmpty()) {
+                double min = values.stream().mapToDouble(Double::doubleValue).min().orElse(0.0);
+                double max = values.stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
+                
+                Map<String, Double> range = new HashMap<>();
+                range.put("min", min);
+                range.put("max", max);
+                fieldRanges.put(field, range);
+            }
+        }
+        
+        metadata.put("fieldTypes", fieldTypes);
+        metadata.put("fieldRanges", fieldRanges);
+        metadata.put("totalFields", allMetricFields.size());
+        
+        return metadata;
+    }
+
+    /**
+     * Вычисляет агрегированную статистику по отфильтрованным данным
+     */
+    private Map<String, Object> calculateAggregatedStats(List<StatisticsComparisonDto> results) {
+        Map<String, Object> stats = new HashMap<>();
+        
+        int totalOperations = results.stream()
+                .mapToInt(comp -> comp.getOperations().size())
+                .sum();
+        
+        long normalCount = results.stream()
+                .flatMap(comp -> comp.getOperations().stream())
+                .flatMap(op -> op.getMetrics().values().stream())
+                .mapToLong(metric -> metric.getAlertLevel() == StatisticsComparisonDto.AlertLevel.NORMAL ? 1 : 0)
+                .sum();
+        
+        long warningCount = results.stream()
+                .flatMap(comp -> comp.getOperations().stream())
+                .flatMap(op -> op.getMetrics().values().stream())
+                .mapToLong(metric -> metric.getAlertLevel() == StatisticsComparisonDto.AlertLevel.WARNING ? 1 : 0)
+                .sum();
+        
+        long criticalCount = results.stream()
+                .flatMap(comp -> comp.getOperations().stream())
+                .flatMap(op -> op.getMetrics().values().stream())
+                .mapToLong(metric -> metric.getAlertLevel() == StatisticsComparisonDto.AlertLevel.CRITICAL ? 1 : 0)
+                .sum();
+        
+        stats.put("totalOperations", totalOperations);
+        stats.put("totalGroups", results.size());
+        stats.put("normalCount", normalCount);
+        stats.put("warningCount", warningCount);
+        stats.put("criticalCount", criticalCount);
+        stats.put("problemsCount", warningCount + criticalCount);
+        
+        return stats;
+    }
 }

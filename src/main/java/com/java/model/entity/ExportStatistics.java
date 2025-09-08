@@ -82,6 +82,7 @@ public class ExportStatistics {
      *     "price": "NUMERIC"
      *   }
      * }
+     * 
      */
     @Column(name = "field_metadata", columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)

@@ -2,6 +2,8 @@
 package com.java.controller;
 
 import com.java.dto.StatisticsComparisonDto;
+import com.java.dto.StatisticsFilterDto;
+import com.java.dto.StatisticsFilteredResponseDto;
 import com.java.dto.StatisticsRequestDto;
 import com.java.model.entity.ExportSession;
 import com.java.repository.ExportSessionRepository;
@@ -18,6 +20,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.List;
@@ -295,6 +298,155 @@ public class ExportStatisticsController {
                     "error", e.getMessage()
             );
         }
+    }
+
+    // === New Filtering API Endpoints for Iteration 4 ===
+
+    /**
+     * API endpoint для получения отфильтрованной статистики с пагинацией
+     */
+    @PostMapping("/api/filtered-analyze")
+    @ResponseBody
+    public StatisticsFilteredResponseDto analyzeFilteredStatistics(@Valid @RequestBody StatisticsFilterDto filterDto) {
+        log.debug("API запрос на отфильтрованный анализ статистики для клиента: {}", filterDto.getClientId());
+        
+        try {
+            return statisticsService.calculateFilteredComparison(filterDto);
+        } catch (Exception e) {
+            log.error("Ошибка отфильтрованного анализа статистики для клиента {}", filterDto.getClientId(), e);
+            
+            // Возвращаем пустой результат с ошибкой в aggregatedStats
+            return StatisticsFilteredResponseDto.builder()
+                    .results(List.of())
+                    .totalElements(0L)
+                    .totalPages(0)
+                    .currentPage(filterDto.getPage())
+                    .pageSize(filterDto.getSize())
+                    .hasNext(false)
+                    .hasPrevious(false)
+                    .appliedFilters(filterDto)
+                    .aggregatedStats(Map.of("error", e.getMessage()))
+                    .availableFieldValues(Map.of())
+                    .fieldMetadata(Map.of())
+                    .build();
+        }
+    }
+
+    /**
+     * API endpoint для получения доступных значений полей для динамических фильтров
+     */
+    @GetMapping("/api/field-values/{clientId}")
+    @ResponseBody
+    public Map<String, Object> getFieldValues(@PathVariable Long clientId,
+                                              @RequestParam(required = false) List<Long> sessionIds) {
+        log.debug("API запрос на получение значений полей для клиента: {}", clientId);
+        
+        try {
+            Map<String, List<String>> availableValues = statisticsService.getAvailableFieldValues(clientId, sessionIds);
+            
+            return Map.of(
+                    "success", true,
+                    "clientId", clientId,
+                    "availableValues", availableValues,
+                    "sessionIds", sessionIds != null ? sessionIds : List.of()
+            );
+            
+        } catch (Exception e) {
+            log.error("Ошибка получения значений полей для клиента {}", clientId, e);
+            
+            return Map.of(
+                    "success", false,
+                    "error", e.getMessage(),
+                    "clientId", clientId
+            );
+        }
+    }
+
+    /**
+     * API endpoint для быстрой проверки наличия данных для фильтрации
+     */
+    @GetMapping("/api/filter-availability/{clientId}")
+    @ResponseBody
+    public Map<String, Object> checkFilterAvailability(@PathVariable Long clientId,
+                                                       @RequestParam(required = false, defaultValue = "30") int daysBack) {
+        log.debug("Проверка доступности фильтров для клиента: {} за {} дней", clientId, daysBack);
+        
+        try {
+            // Получаем статистики за период
+            java.time.ZonedDateTime sinceDate = java.time.ZonedDateTime.now().minusDays(daysBack);
+            List<com.java.model.entity.ExportStatistics> statistics = 
+                    statisticsService.getStatisticsForDateRange(clientId, sinceDate, java.time.ZonedDateTime.now());
+            
+            boolean hasData = !statistics.isEmpty();
+            int totalRecords = statistics.size();
+            
+            // Подсчитываем уникальные группы и поля
+            long uniqueGroups = statistics.stream()
+                    .map(com.java.model.entity.ExportStatistics::getGroupFieldValue)
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .count();
+            
+            long uniqueFields = statistics.stream()
+                    .map(com.java.model.entity.ExportStatistics::getCountFieldName)
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .count();
+            
+            return Map.of(
+                    "success", true,
+                    "hasData", hasData,
+                    "totalRecords", totalRecords,
+                    "uniqueGroups", uniqueGroups,
+                    "uniqueFields", uniqueFields,
+                    "daysBack", daysBack,
+                    "period", sinceDate.toString() + " - " + java.time.ZonedDateTime.now().toString(),
+                    "recommendFiltering", hasData && uniqueGroups > 5 // Рекомендуем фильтры если много групп
+            );
+            
+        } catch (Exception e) {
+            log.error("Ошибка проверки доступности фильтров для клиента {}", clientId, e);
+            
+            return Map.of(
+                    "success", false,
+                    "error", e.getMessage(),
+                    "hasData", false
+            );
+        }
+    }
+
+    /**
+     * API endpoint для получения сводной информации о статистике клиента (dashboard)
+     */
+    @GetMapping("/api/summary/{clientId}")
+    @ResponseBody
+    public Map<String, Object> getStatisticsSummary(@PathVariable Long clientId,
+                                                    @RequestParam(required = false, defaultValue = "7") int daysBack) {
+        log.debug("API запрос на сводку статистики для клиента: {} за {} дней", clientId, daysBack);
+        
+        try {
+            return statisticsService.getStatisticsSummary(clientId, daysBack);
+            
+        } catch (Exception e) {
+            log.error("Ошибка получения сводки статистики для клиента {}", clientId, e);
+            
+            return Map.of(
+                    "success", false,
+                    "error", e.getMessage(),
+                    "clientId", clientId
+            );
+        }
+    }
+
+    /**
+     * API endpoint для проверки здоровья системы статистики клиента
+     */
+    @GetMapping("/api/health/{clientId}")
+    @ResponseBody
+    public Map<String, Object> getStatisticsHealth(@PathVariable Long clientId) {
+        log.debug("API запрос на проверку здоровья статистики для клиента: {}", clientId);
+        
+        return statisticsService.getStatisticsHealthCheck(clientId);
     }
 
 }
