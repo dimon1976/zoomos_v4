@@ -27,9 +27,12 @@
       "Bash(pkill:*)",
       "Bash(netstat:*)",
       "mcp__playwright__browser_wait_for",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(mkdir:*)",
+      "Bash(md:*)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "outputStyle": "default"
 }

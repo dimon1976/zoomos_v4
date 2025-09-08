@@ -221,6 +221,22 @@
                 <!-- Разделитель -->
                 <div class="vr"></div>
                 
+                <!-- Умные пресеты -->
+                <button type="button" id="onlyProblemsBtn" class="btn btn-outline-danger btn-sm" 
+                        onclick="applyPreset('onlyProblems')" title="Показать только строки с предупреждениями и критическими изменениями">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    🚨 Только проблемы
+                </button>
+                
+                <button type="button" id="bigChangesBtn" class="btn btn-outline-info btn-sm" 
+                        onclick="applyPreset('bigChanges')" title="Показать только большие изменения (>25%)">
+                    <i class="fas fa-chart-line me-1"></i>
+                    📈 Большие изменения
+                </button>
+                
+                <!-- Разделитель -->
+                <div class="vr"></div>
+                
                 <!-- Счетчик скрытых строк -->
                 <span class="text-muted small">
                     <i class="fas fa-info-circle me-1"></i>
@@ -644,14 +660,42 @@
     // === БЫСТРЫЕ ФИЛЬТРЫ ===
     
     let filterState = {
-        onlyAlerts: false,
-        hideNoChanges: false
+        onlyAlerts: false,        // Только WARNING (10-20%)
+        hideNoChanges: false,
+        bigChanges: false,
+        onlyProblems: false       // WARNING + CRITICAL (>10%)
     };
+
+    // === ЛОКАЛЬНОЕ ХРАНЕНИЕ ===
+    const STORAGE_KEY = 'statistics-filters-state';
+    
+    function saveFiltersToStorage() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(filterState));
+        } catch (e) {
+            console.warn('Не удается сохранить состояние фильтров:', e);
+        }
+    }
+    
+    function loadFiltersFromStorage() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                filterState = { ...filterState, ...parsed };
+                return true;
+            }
+        } catch (e) {
+            console.warn('Не удается загрузить состояние фильтров:', e);
+        }
+        return false;
+    }
 
     function toggleOnlyAlerts() {
         filterState.onlyAlerts = !filterState.onlyAlerts;
         applyFilters();
         updateFilterButtons();
+        saveFiltersToStorage();
         showNotification(
             filterState.onlyAlerts ? 'Показаны только предупреждения' : 'Показаны все строки', 
             'info'
@@ -662,6 +706,7 @@
         filterState.hideNoChanges = !filterState.hideNoChanges;
         applyFilters();
         updateFilterButtons();
+        saveFiltersToStorage();
         showNotification(
             filterState.hideNoChanges ? 'Скрыты строки без изменений' : 'Показаны все строки', 
             'info'
@@ -671,9 +716,40 @@
     function resetAllFilters() {
         filterState.onlyAlerts = false;
         filterState.hideNoChanges = false;
+        filterState.bigChanges = false;
+        filterState.onlyProblems = false;
         applyFilters();
         updateFilterButtons();
+        saveFiltersToStorage();
         showNotification('Все фильтры сброшены', 'success');
+    }
+
+    // === УМНЫЕ ПРЕСЕТЫ ===
+    
+    function applyPreset(presetName) {
+        switch (presetName) {
+            case 'onlyProblems':
+                // Активируем фильтр "только проблемы" (WARNING + CRITICAL)
+                filterState.onlyAlerts = false;
+                filterState.hideNoChanges = false;
+                filterState.bigChanges = false;
+                filterState.onlyProblems = true;
+                showNotification('🚨 Показаны только проблемы (предупреждения и критические)', 'warning');
+                break;
+                
+            case 'bigChanges':
+                // Показываем только большие изменения (>25%)
+                filterState.onlyAlerts = false;
+                filterState.hideNoChanges = true; // скрываем без изменений
+                filterState.bigChanges = true;
+                filterState.onlyProblems = false;
+                showNotification('📈 Показаны только большие изменения (>25%)', 'info');
+                break;
+        }
+        
+        applyFilters();
+        updateFilterButtons();
+        saveFiltersToStorage();
     }
 
     function applyFilters() {
@@ -684,10 +760,21 @@
         rows.forEach(row => {
             let shouldShow = true;
 
-            // Фильтр: только предупреждения
+            // Фильтр: только предупреждения (WARNING уровень, не CRITICAL)
             if (filterState.onlyAlerts) {
-                const hasAlert = row.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
-                if (!hasAlert) {
+                const hasWarning = row.querySelector('.metric-increase-warning, .metric-decrease-warning');
+                const hasCritical = row.querySelector('.metric-increase-critical, .metric-decrease-critical');
+                
+                // Показывать только строки с WARNING, но без CRITICAL
+                if (!hasWarning || hasCritical) {
+                    shouldShow = false;
+                }
+            }
+            
+            // Фильтр: только проблемы (WARNING + CRITICAL)
+            if (filterState.onlyProblems && shouldShow) {
+                const hasProblems = row.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
+                if (!hasProblems) {
                     shouldShow = false;
                 }
             }
@@ -710,6 +797,23 @@
                 }
             }
 
+            // Фильтр: только большие изменения (>25%)
+            if (filterState.bigChanges && shouldShow) {
+                let hasBigChange = false;
+                const changeSpans = row.querySelectorAll('.metric-change span[data-change]');
+                
+                changeSpans.forEach(span => {
+                    const changeValue = Math.abs(parseFloat(span.getAttribute('data-change')) || 0);
+                    if (changeValue >= 25) {
+                        hasBigChange = true;
+                    }
+                });
+                
+                if (!hasBigChange && changeSpans.length > 0) {
+                    shouldShow = false;
+                }
+            }
+
             if (shouldShow) {
                 row.style.display = '';
                 visibleCount++;
@@ -726,8 +830,10 @@
     function updateFilterButtons() {
         const onlyAlertsBtn = document.getElementById('onlyAlertsBtn');
         const hideNoChangesBtn = document.getElementById('hideNoChangesBtn');
+        const onlyProblemsBtn = document.getElementById('onlyProblemsBtn');
+        const bigChangesBtn = document.getElementById('bigChangesBtn');
 
-        // Обновляем стили кнопок
+        // Обновляем стили основных фильтров
         if (filterState.onlyAlerts) {
             onlyAlertsBtn.classList.remove('btn-outline-warning');
             onlyAlertsBtn.classList.add('btn-warning', 'text-white');
@@ -742,6 +848,27 @@
         } else {
             hideNoChangesBtn.classList.remove('btn-secondary', 'text-white');
             hideNoChangesBtn.classList.add('btn-outline-secondary');
+        }
+
+        // Обновляем стили пресетов
+        if (onlyProblemsBtn) {
+            if (filterState.onlyProblems && !filterState.hideNoChanges && !filterState.bigChanges && !filterState.onlyAlerts) {
+                onlyProblemsBtn.classList.remove('btn-outline-danger');
+                onlyProblemsBtn.classList.add('btn-danger', 'text-white');
+            } else {
+                onlyProblemsBtn.classList.remove('btn-danger', 'text-white');
+                onlyProblemsBtn.classList.add('btn-outline-danger');
+            }
+        }
+
+        if (bigChangesBtn) {
+            if (filterState.bigChanges && !filterState.onlyAlerts && !filterState.onlyProblems) {
+                bigChangesBtn.classList.remove('btn-outline-info');
+                bigChangesBtn.classList.add('btn-info', 'text-white');
+            } else {
+                bigChangesBtn.classList.remove('btn-info', 'text-white');
+                bigChangesBtn.classList.add('btn-outline-info');
+            }
         }
     }
 
@@ -771,9 +898,13 @@
         updateSummaryCounters();
         displayDateModifications();
         
-        // Инициализируем счетчики фильтров
-        const totalRows = document.querySelectorAll('.statistics-table tbody tr').length;
-        updateRowCounters(totalRows, 0);
+        // Загружаем сохраненное состояние фильтров из localStorage
+        loadFiltersFromStorage();
+        
+        // Применяем загруженные фильтры
+        applyFilters();
+        
+        // Обновляем состояние кнопок
         updateFilterButtons();
     });
     /*]]>*/
