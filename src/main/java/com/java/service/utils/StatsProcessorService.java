@@ -33,6 +33,11 @@ public class StatsProcessorService {
     private final ExcelStyleFactory excelStyleFactory;
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
+    // Индексы колонок для дополнительных данных
+    private static final int COMPETITOR_URL_COLUMN_INDEX = 27;
+    private static final int SOURCE_COLUMN_INDEX = 28;
+    private static final int DATE_ADD_COLUMN_INDEX = 29;
+    
     // Базовые колонки (из старой версии StatisticService, строка 46)
     private static final List<Integer> BASE_COLUMNS = Arrays.asList(
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 19, 20, 22, 23, 24
@@ -87,13 +92,13 @@ public class StatsProcessorService {
         
         // Добавляем дополнительные колонки по аналогии со старой версией (строки 100-110)
         if (dto.isShowCompetitorUrl()) {
-            columns.add(27); // URL конкурента
+            columns.add(COMPETITOR_URL_COLUMN_INDEX); // URL конкурента
         }
         if (dto.isShowSource()) {
-            columns.add(28); // Кто добавил
+            columns.add(SOURCE_COLUMN_INDEX); // Кто добавил
         }
         if (dto.isShowDateAdd()) {
-            columns.add(29); // Дата добавления
+            columns.add(DATE_ADD_COLUMN_INDEX); // Дата добавления
         }
         
         return columns;
@@ -113,7 +118,7 @@ public class StatsProcessorService {
             headers.add("Добавил");
         }
         if (dto.isShowDateAdd()) {
-            headers.add("Добавил");
+            headers.add("Дата добавления");
         }
         
         return headers;
@@ -158,7 +163,7 @@ public class StatsProcessorService {
                 
                 if (value.isEmpty()) {
                     processedRow.add("");
-                } else if (sourceReplace && columnIndex == 28) {
+                } else if (sourceReplace && columnIndex == SOURCE_COLUMN_INDEX && columnIndex < originalRow.size()) {
                     // Замена источника для клиента (логика из строк 143-144 старой версии)
                     if (!KNOWN_USERS.contains(value.toLowerCase())) {
                         processedRow.add("manager");
@@ -212,13 +217,33 @@ public class StatsProcessorService {
     }
     
     /**
-     * Экранирование значений для CSV
+     * Экранирование значений для CSV с защитой от инъекции формул
      */
     private String escapeCSV(String value, String delimiter) {
         if (value == null) return "";
         
-        if (value.contains(delimiter) || value.contains("\"") || value.contains("\n")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
+        // Защита от CSV формул - экранируем опасные префиксы
+        String sanitizedValue = sanitizeCSVFormulas(value);
+        
+        if (sanitizedValue.contains(delimiter) || sanitizedValue.contains("\"") || sanitizedValue.contains("\n")) {
+            return "\"" + sanitizedValue.replace("\"", "\"\"") + "\"";
+        }
+        
+        return sanitizedValue;
+    }
+    
+    /**
+     * Санитизация CSV данных от потенциально опасных формул
+     */
+    private String sanitizeCSVFormulas(String value) {
+        if (value == null || value.isEmpty()) return value;
+        
+        String trimmedValue = value.trim();
+        // Проверяем на опасные префиксы формул
+        if (trimmedValue.startsWith("=") || trimmedValue.startsWith("+") || 
+            trimmedValue.startsWith("-") || trimmedValue.startsWith("@")) {
+            // Добавляем одинарную кавычку в начало для предотвращения выполнения формулы
+            return "'" + value;
         }
         
         return value;

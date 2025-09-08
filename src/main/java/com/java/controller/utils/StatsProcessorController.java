@@ -65,6 +65,13 @@ public class StatsProcessorController {
             return "redirect:/utils/stats-processor";
         }
 
+        // Валидация имени файла
+        String validationError = validateFileName(file.getOriginalFilename());
+        if (validationError != null) {
+            redirectAttributes.addFlashAttribute("error", validationError);
+            return "redirect:/utils/stats-processor";
+        }
+
         try {
             // Анализ файла
             FileMetadata metadata = fileAnalyzerService.analyzeFile(file, "stats-processor");
@@ -190,7 +197,7 @@ public class StatsProcessorController {
                     
         } catch (Exception e) {
             log.error("Failed to process stats file: {}", metadata.getOriginalFilename(), e);
-            throw new RuntimeException("Ошибка при обработке файла: " + e.getMessage(), e);
+            throw new IllegalArgumentException("Ошибка при обработке файла: " + e.getMessage(), e);
         }
     }
 
@@ -201,5 +208,56 @@ public class StatsProcessorController {
     public String cancel(HttpSession session) {
         session.removeAttribute("statsProcessorFile");
         return "redirect:/utils/stats-processor";
+    }
+    
+    /**
+     * Валидация имени файла для предотвращения path traversal и других атак
+     * 
+     * @param fileName имя файла для валидации
+     * @return null если валидация прошла, иначе сообщение об ошибке
+     */
+    private String validateFileName(String fileName) {
+        if (fileName == null || fileName.trim().isEmpty()) {
+            return "Имя файла не может быть пустым";
+        }
+
+        String sanitizedName = fileName.trim();
+
+        // Проверка длины имени файла
+        if (sanitizedName.length() > 255) {
+            return "Слишком длинное имя файла (максимум 255 символов)";
+        }
+
+        // Проверка на path traversal атаки
+        if (sanitizedName.contains("..") || sanitizedName.contains("/") || 
+            sanitizedName.contains("\\") || sanitizedName.contains(":")) {
+            return "Недопустимые символы в имени файла";
+        }
+
+        // Проверка на системные имена файлов Windows
+        String upperName = sanitizedName.toUpperCase();
+        String[] reservedNames = {"CON", "PRN", "AUX", "NUL", 
+                                  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+                                  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"};
+        
+        for (String reserved : reservedNames) {
+            if (upperName.equals(reserved) || upperName.startsWith(reserved + ".")) {
+                return "Недопустимое системное имя файла";
+            }
+        }
+
+        // Проверка на допустимые расширения файлов
+        if (!sanitizedName.toLowerCase().endsWith(".xlsx") && 
+            !sanitizedName.toLowerCase().endsWith(".xls") && 
+            !sanitizedName.toLowerCase().endsWith(".csv")) {
+            return "Поддерживаются только файлы Excel (.xlsx, .xls) и CSV (.csv)";
+        }
+
+        // Проверка на недопустимые символы
+        if (sanitizedName.matches(".*[<>:\"|?*\\x00-\\x1f].*")) {
+            return "Файл содержит недопустимые символы";
+        }
+
+        return null; // Валидация прошла успешно
     }
 }

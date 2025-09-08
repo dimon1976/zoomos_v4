@@ -283,6 +283,26 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Обработка IllegalArgumentException (некорректные аргументы)
+     *
+     * @param ex исключение
+     * @param model модель представления
+     * @param request HTTP-запрос
+     * @return имя представления ошибки
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public String handleIllegalArgumentException(
+            IllegalArgumentException ex, Model model, HttpServletRequest request) {
+
+        logError("Некорректные параметры", ex);
+        setErrorAttributes(model,
+                "Некорректные параметры: " + ex.getMessage(), request);
+
+        return DEFAULT_ERROR_VIEW;
+    }
+
+    /**
      * Обработка всех остальных исключений
      *
      * @param ex исключение
