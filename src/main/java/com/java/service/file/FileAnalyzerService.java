@@ -338,6 +338,15 @@ public class FileAnalyzerService {
      * Определяет символ кавычек по частоте использования
      */
     private char detectQuoteChar(String content) {
+        // TODO: Улучшить автодетект - апострофы в данных (DOCTOR'S BEST) не должны определяться как кавычки
+        // Нужно анализировать контекст использования символов, а не только частоту
+        
+        // Временное решение: принудительно используем двойные кавычки
+        // Это решает проблему с апострофами в названиях товаров
+        log.debug("Принудительно используем двойные кавычки как quote character");
+        return '"';
+        
+        /* Закомментированный код автодетекта:
         Map<Character, Integer> quoteCounts = new HashMap<>();
 
         for (char quote : COMMON_QUOTES) {
@@ -351,6 +360,7 @@ public class FileAnalyzerService {
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
                 .orElse('"');
+        */
     }
 
     /**
