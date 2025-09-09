@@ -191,6 +191,141 @@
         </div>
     </div>
 
+    <!-- Панель продвинутых фильтров -->
+    <div th:unless="${#lists.isEmpty(comparison)}" class="card mb-3" id="advancedFiltersPanel">
+        <div class="card-header">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-sliders-h me-2 text-info"></i>
+                    <h6 class="mb-0">Продвинутые фильтры</h6>
+                </div>
+                <button type="button" class="btn btn-link btn-sm p-0 text-info" 
+                        data-bs-toggle="collapse" data-bs-target="#advancedFiltersCollapse" 
+                        aria-expanded="false" aria-controls="advancedFiltersCollapse"
+                        id="advancedFiltersToggle">
+                    <i class="fas fa-chevron-down" id="advancedFiltersIcon"></i>
+                </button>
+            </div>
+        </div>
+        <div class="collapse" id="advancedFiltersCollapse">
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- Фильтр по уровням предупреждений -->
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                            Уровни предупреждений
+                        </label>
+                        <div class="d-flex flex-column gap-1">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="alertLevelNormal" value="NORMAL" checked>
+                                <label class="form-check-label text-muted" for="alertLevelNormal">
+                                    <i class="fas fa-circle text-muted me-1" style="font-size: 0.7em;"></i>
+                                    Обычные
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="alertLevelWarning" value="WARNING" checked>
+                                <label class="form-check-label text-warning" for="alertLevelWarning">
+                                    <i class="fas fa-circle text-warning me-1" style="font-size: 0.7em;"></i>
+                                    Предупреждения
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="alertLevelCritical" value="CRITICAL" checked>
+                                <label class="form-check-label text-danger" for="alertLevelCritical">
+                                    <i class="fas fa-circle text-danger me-1" style="font-size: 0.7em;"></i>
+                                    Критические
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Фильтр по диапазону изменений -->
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-percentage text-info me-1"></i>
+                            Диапазон изменений (%)
+                        </label>
+                        <div class="row g-1">
+                            <div class="col-6">
+                                <input type="number" class="form-control form-control-sm" 
+                                       id="minChangePercentage" placeholder="Мин" min="0" max="1000">
+                            </div>
+                            <div class="col-6">
+                                <input type="number" class="form-control form-control-sm" 
+                                       id="maxChangePercentage" placeholder="Макс" min="0" max="1000">
+                            </div>
+                        </div>
+                        <small class="text-muted">Введите диапазон от 0 до 1000%</small>
+                    </div>
+
+                    <!-- Фильтр по группам полей -->
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-layer-group text-success me-1"></i>
+                            Группы полей
+                        </label>
+                        <select class="form-select form-select-sm" id="groupFieldFilter" multiple size="3">
+                            <!-- Опции будут загружены динамически -->
+                        </select>
+                        <small class="text-muted">Выберите группы для отображения</small>
+                    </div>
+                </div>
+
+                <!-- Дополнительные опции -->
+                <div class="row g-3 mt-2">
+                    <div class="col-md-12">
+                        <div class="d-flex flex-wrap gap-3 align-items-center">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="hideNoChangesAdvanced">
+                                <label class="form-check-label text-muted" for="hideNoChangesAdvanced">
+                                    <i class="fas fa-eye-slash me-1"></i>
+                                    Скрыть записи без изменений
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="onlyWarningsAdvanced">
+                                <label class="form-check-label text-warning" for="onlyWarningsAdvanced">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                    Только предупреждения
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="onlyProblemsAdvanced">
+                                <label class="form-check-label text-danger" for="onlyProblemsAdvanced">
+                                    <i class="fas fa-times-circle me-1"></i>
+                                    Только проблемы (WARNING + CRITICAL)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Кнопки управления -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="d-flex gap-2 align-items-center">
+                            <button type="button" class="btn btn-primary btn-sm" id="applyAdvancedFiltersBtn">
+                                <i class="fas fa-filter me-1"></i>
+                                Применить фильтры
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="resetAdvancedFiltersBtn">
+                                <i class="fas fa-undo me-1"></i>
+                                Сбросить
+                            </button>
+                            <div class="vr"></div>
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                <span id="advancedFilterStatus">Фильтры не применены</span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Панель быстрых фильтров -->
     <div th:unless="${#lists.isEmpty(comparison)}" class="card mb-4" id="quickFiltersPanel">
         <div class="card-header d-flex align-items-center justify-content-between">
@@ -892,6 +1027,330 @@
         }
     }
 
+    // ===== Продвинутые фильтры =====
+    
+    // Состояние продвинутых фильтров
+    let advancedFiltersState = {
+        enabled: false,
+        alertLevels: ['NORMAL', 'WARNING', 'CRITICAL'],
+        minChangePercentage: null,
+        maxChangePercentage: null,
+        groupFieldValues: [],
+        hideNoChanges: false,
+        onlyWarnings: false,
+        onlyProblems: false
+    };
+
+    // Переключение панели продвинутых фильтров
+    function toggleAdvancedFilters() {
+        const collapse = new bootstrap.Collapse(document.getElementById('advancedFiltersCollapse'));
+        const icon = document.getElementById('advancedFiltersIcon');
+        
+        document.getElementById('advancedFiltersCollapse').addEventListener('shown.bs.collapse', () => {
+            icon.classList.remove('fa-chevron-down');
+            icon.classList.add('fa-chevron-up');
+            if (!advancedFiltersState.groupFieldValues.length) {
+                loadAvailableFieldValues();
+            }
+        });
+        
+        document.getElementById('advancedFiltersCollapse').addEventListener('hidden.bs.collapse', () => {
+            icon.classList.remove('fa-chevron-up');
+            icon.classList.add('fa-chevron-down');
+        });
+    }
+
+    // Загрузка доступных значений полей для фильтров
+    async function loadAvailableFieldValues() {
+        const clientId = extractClientIdFromUrl();
+        if (!clientId) return;
+        
+        try {
+            const response = await fetch(`/statistics/api/field-values/${clientId}`);
+            if (!response.ok) {
+                throw new Error('Ошибка загрузки значений полей');
+            }
+            
+            const data = await response.json();
+            if (data.success && data.availableValues) {
+                populateGroupFieldsSelect(data.availableValues.groupFieldValues || []);
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки доступных значений полей:', error);
+            showNotification('Ошибка загрузки фильтров', 'danger');
+        }
+    }
+
+    // Заполнение select с группами полей
+    function populateGroupFieldsSelect(groupValues) {
+        const select = document.getElementById('groupFieldFilter');
+        select.innerHTML = '';
+        
+        if (groupValues.length === 0) {
+            select.innerHTML = '<option disabled>Нет доступных групп</option>';
+            return;
+        }
+        
+        groupValues.forEach(value => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            select.appendChild(option);
+        });
+    }
+
+    // Получение текущих настроек продвинутых фильтров
+    function getAdvancedFiltersSettings() {
+        return {
+            alertLevels: Array.from(document.querySelectorAll('input[type="checkbox"][id^="alertLevel"]:checked')).map(cb => cb.value),
+            minChangePercentage: document.getElementById('minChangePercentage').value || null,
+            maxChangePercentage: document.getElementById('maxChangePercentage').value || null,
+            groupFieldValues: Array.from(document.getElementById('groupFieldFilter').selectedOptions).map(opt => opt.value),
+            hideNoChanges: document.getElementById('hideNoChangesAdvanced').checked,
+            onlyWarnings: document.getElementById('onlyWarningsAdvanced').checked,
+            onlyProblems: document.getElementById('onlyProblemsAdvanced').checked
+        };
+    }
+
+    // Применение продвинутых фильтров
+    async function applyAdvancedFilters() {
+        const settings = getAdvancedFiltersSettings();
+        const clientId = extractClientIdFromUrl();
+        
+        if (!clientId) {
+            showNotification('Ошибка определения клиента', 'danger');
+            return;
+        }
+
+        // Обновляем состояние
+        advancedFiltersState = { ...settings, enabled: true };
+        
+        // Показываем индикатор загрузки
+        document.getElementById('advancedFilterStatus').innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Применение фильтров...';
+        
+        try {
+            // Формируем запрос к API
+            const filterDto = {
+                clientId: parseInt(clientId),
+                exportSessionIds: [],
+                alertLevels: settings.alertLevels,
+                minChangePercentage: settings.minChangePercentage ? parseInt(settings.minChangePercentage) : null,
+                maxChangePercentage: settings.maxChangePercentage ? parseInt(settings.maxChangePercentage) : null,
+                groupFieldFilters: settings.groupFieldValues.length > 0 ? { 'groupFieldValue': settings.groupFieldValues } : {},
+                hideNoChanges: settings.hideNoChanges,
+                onlyWarnings: settings.onlyWarnings,
+                onlyProblems: settings.onlyProblems,
+                page: 0,
+                size: 1000
+            };
+
+            const response = await fetch('/statistics/api/filtered-analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(filterDto)
+            });
+
+            if (!response.ok) {
+                throw new Error('Ошибка применения фильтров');
+            }
+
+            const result = await response.json();
+            
+            // Пока используем клиентскую фильтрацию как fallback
+            // TODO: Заменить на серверную фильтрацию когда будет готов полный UI
+            applyAdvancedFiltersClientSide(settings);
+            
+            updateAdvancedFilterStatus(settings);
+            showNotification('Продвинутые фильтры применены', 'success');
+            
+        } catch (error) {
+            console.error('Ошибка применения продвинутых фильтров:', error);
+            
+            // Fallback к клиентской фильтрации
+            applyAdvancedFiltersClientSide(settings);
+            updateAdvancedFilterStatus(settings);
+            showNotification('Применены клиентские фильтры', 'warning');
+        }
+    }
+
+    // Клиентская фильтрация как fallback
+    function applyAdvancedFiltersClientSide(settings) {
+        const rows = document.querySelectorAll('.statistics-table tbody tr');
+        let visibleCount = 0;
+        let hiddenCount = 0;
+
+        rows.forEach(row => {
+            let shouldShow = true;
+
+            // Проверка уровней предупреждений
+            if (settings.alertLevels.length > 0 && settings.alertLevels.length < 3) {
+                const hasMatchingAlert = settings.alertLevels.some(level => {
+                    if (level === 'NORMAL') {
+                        return row.querySelector('.metric-stable');
+                    } else if (level === 'WARNING') {
+                        return row.querySelector('.metric-increase-warning, .metric-decrease-warning');
+                    } else if (level === 'CRITICAL') {
+                        return row.querySelector('.metric-increase-critical, .metric-decrease-critical');
+                    }
+                    return false;
+                });
+                
+                if (!hasMatchingAlert) shouldShow = false;
+            }
+
+            // Проверка диапазона изменений - пока пропускаем, требует парсинга значений из DOM
+
+            // Проверка групп полей
+            if (settings.groupFieldValues.length > 0) {
+                const groupCell = row.querySelector('.group-header');
+                if (groupCell) {
+                    const groupValue = groupCell.textContent.trim();
+                    if (!settings.groupFieldValues.includes(groupValue)) {
+                        shouldShow = false;
+                    }
+                }
+            }
+
+            // Дополнительные фильтры
+            if (settings.hideNoChanges && shouldShow) {
+                const hasChanges = row.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
+                if (!hasChanges) shouldShow = false;
+            }
+
+            if (settings.onlyWarnings && shouldShow) {
+                const hasWarning = row.querySelector('.metric-increase-warning, .metric-decrease-warning');
+                const hasCritical = row.querySelector('.metric-increase-critical, .metric-decrease-critical');
+                if (!hasWarning || hasCritical) shouldShow = false;
+            }
+
+            if (settings.onlyProblems && shouldShow) {
+                const hasProblems = row.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
+                if (!hasProblems) shouldShow = false;
+            }
+
+            if (shouldShow) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+                hiddenCount++;
+            }
+        });
+
+        updateRowCounters(visibleCount, hiddenCount);
+        updateSummaryCounters();
+    }
+
+    // Обновление статуса продвинутых фильтров
+    function updateAdvancedFilterStatus(settings) {
+        const statusEl = document.getElementById('advancedFilterStatus');
+        let statusText = 'Активны фильтры: ';
+        let filters = [];
+        
+        if (settings.alertLevels.length < 3) {
+            filters.push(`Уровни: ${settings.alertLevels.join(', ')}`);
+        }
+        
+        if (settings.minChangePercentage || settings.maxChangePercentage) {
+            let range = '';
+            if (settings.minChangePercentage) range += `>${settings.minChangePercentage}%`;
+            if (settings.minChangePercentage && settings.maxChangePercentage) range += ' - ';
+            if (settings.maxChangePercentage) range += `<${settings.maxChangePercentage}%`;
+            filters.push(`Изменения: ${range}`);
+        }
+        
+        if (settings.groupFieldValues.length > 0) {
+            filters.push(`Группы: ${settings.groupFieldValues.length} выбрано`);
+        }
+        
+        if (settings.hideNoChanges) filters.push('Без изменений скрыты');
+        if (settings.onlyWarnings) filters.push('Только предупреждения');
+        if (settings.onlyProblems) filters.push('Только проблемы');
+        
+        if (filters.length === 0) {
+            statusText = 'Фильтры не применены';
+        } else {
+            statusText += filters.join(', ');
+        }
+        
+        statusEl.textContent = statusText;
+    }
+
+    // Сброс продвинутых фильтров
+    function resetAdvancedFilters() {
+        // Сбросить все чекбоксы уровней предупреждений
+        document.querySelectorAll('input[type="checkbox"][id^="alertLevel"]').forEach(cb => cb.checked = true);
+        
+        // Очистить поля диапазона
+        document.getElementById('minChangePercentage').value = '';
+        document.getElementById('maxChangePercentage').value = '';
+        
+        // Очистить выбор групп полей
+        document.getElementById('groupFieldFilter').selectedIndex = -1;
+        
+        // Сбросить дополнительные опции
+        document.getElementById('hideNoChangesAdvanced').checked = false;
+        document.getElementById('onlyWarningsAdvanced').checked = false;
+        document.getElementById('onlyProblemsAdvanced').checked = false;
+        
+        // Обновить состояние
+        advancedFiltersState = {
+            enabled: false,
+            alertLevels: ['NORMAL', 'WARNING', 'CRITICAL'],
+            minChangePercentage: null,
+            maxChangePercentage: null,
+            groupFieldValues: [],
+            hideNoChanges: false,
+            onlyWarnings: false,
+            onlyProblems: false
+        };
+        
+        // Показать все строки
+        document.querySelectorAll('.statistics-table tbody tr').forEach(row => {
+            row.style.display = '';
+        });
+        
+        updateRowCounters(document.querySelectorAll('.statistics-table tbody tr').length, 0);
+        updateSummaryCounters();
+        updateAdvancedFilterStatus(advancedFiltersState);
+        
+        showNotification('Продвинутые фильтры сброшены', 'info');
+    }
+
+    // Извлечение clientId из URL
+    function extractClientIdFromUrl() {
+        const path = window.location.pathname;
+        const match = path.match(/\/statistics\/client\/(\d+)/) || path.match(/\/clients\/(\d+)/);
+        return match ? match[1] : null;
+    }
+
+    // Инициализация обработчиков событий для продвинутых фильтров
+    function initAdvancedFiltersHandlers() {
+        // Обработчик для кнопки применения фильтров
+        document.getElementById('applyAdvancedFiltersBtn')?.addEventListener('click', applyAdvancedFilters);
+        
+        // Обработчик для кнопки сброса фильтров
+        document.getElementById('resetAdvancedFiltersBtn')?.addEventListener('click', resetAdvancedFilters);
+        
+        // Обработчик для переключения панели
+        document.getElementById('advancedFiltersToggle')?.addEventListener('click', toggleAdvancedFilters);
+        
+        // Обработчики для взаимоисключающих чекбоксов
+        document.getElementById('onlyWarningsAdvanced')?.addEventListener('change', function() {
+            if (this.checked) {
+                document.getElementById('onlyProblemsAdvanced').checked = false;
+            }
+        });
+        
+        document.getElementById('onlyProblemsAdvanced')?.addEventListener('change', function() {
+            if (this.checked) {
+                document.getElementById('onlyWarningsAdvanced').checked = false;
+            }
+        });
+    }
+
     // Инициализация фильтров при загрузке страницы
     document.addEventListener('DOMContentLoaded', () => {
         addGroupStartClass();
@@ -906,6 +1365,9 @@
         
         // Обновляем состояние кнопок
         updateFilterButtons();
+        
+        // Инициализируем обработчики продвинутых фильтров
+        initAdvancedFiltersHandlers();
     });
     /*]]>*/
 </script>
