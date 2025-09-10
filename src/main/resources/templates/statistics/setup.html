@@ -48,6 +48,9 @@
 </div>
 
 <section>
+    <!-- Скрытое поле с clientId для JavaScript -->
+    <input type="hidden" id="hiddenClientId" th:value="${clientId}">
+    
     <form id="statisticsForm" th:action="@{/statistics/analyze}" method="post">
 
         <!-- Выбор шаблона -->

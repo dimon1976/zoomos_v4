@@ -116,6 +116,9 @@
 </div>
 
 <section>
+    <!-- Скрытое поле с clientId для JavaScript -->
+    <input type="hidden" id="hiddenClientId" th:value="${clientId}">
+    
     <!-- Панель настроек (скрыта классом d-none) -->
     <div id="settingsPanel" class="settings-panel d-none">
         <div class="row align-items-center">
@@ -504,6 +507,51 @@
             </th:block>
             </tbody>
         </table>
+
+        <!-- Пагинация результатов -->
+        <nav aria-label="Пагинация результатов статистики" id="statisticsPagination" style="display: none;">
+            <div class="row align-items-center mt-3">
+                <div class="col-md-6">
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="pageSizeSelect" class="form-label mb-0">Записей на странице:</label>
+                        <select id="pageSizeSelect" class="form-select form-select-sm" style="width: auto;">
+                            <option value="25">25</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                        </select>
+                    </div>
+                    <div class="mt-2">
+                        <small class="text-muted" id="paginationInfo">
+                            Показано 1-50 из 150 записей
+                        </small>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <ul class="pagination pagination-sm justify-content-end mb-0" id="paginationControls">
+                        <li class="page-item disabled" id="prevPage">
+                            <a class="page-link" href="#" aria-label="Предыдущая">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        <li class="page-item active" id="page1">
+                            <a class="page-link" href="#" data-page="0">1</a>
+                        </li>
+                        <li class="page-item" id="page2">
+                            <a class="page-link" href="#" data-page="1">2</a>
+                        </li>
+                        <li class="page-item" id="page3">
+                            <a class="page-link" href="#" data-page="2">3</a>
+                        </li>
+                        <li class="page-item" id="nextPage">
+                            <a class="page-link" href="#" aria-label="Следующая">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
     </div>
 
     <!-- Детальная информация (аккордеон) -->
@@ -1041,6 +1089,24 @@
         onlyProblems: false
     };
 
+    // Состояние пагинации
+    let paginationState = {
+        currentPage: 0,
+        pageSize: 50,
+        totalElements: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrevious: false,
+        isServerPagination: false // Флаг использования серверной пагинации
+    };
+
+    // Состояние дебаунса для фильтров
+    let debounceState = {
+        filterTimeout: null,
+        debounceDelay: 500, // 500мс задержка
+        isFilteringInProgress: false
+    };
+
     // Переключение панели продвинутых фильтров
     function toggleAdvancedFilters() {
         const collapse = new bootstrap.Collapse(document.getElementById('advancedFiltersCollapse'));
@@ -1112,13 +1178,40 @@
         };
     }
 
+    // Дебаунсированное применение продвинутых фильтров
+    function applyAdvancedFiltersDebounced() {
+        // Отменяем предыдущий таймер
+        if (debounceState.filterTimeout) {
+            clearTimeout(debounceState.filterTimeout);
+        }
+
+        // Показываем индикатор ожидания
+        const statusElement = document.getElementById('advancedFilterStatus');
+        if (statusElement && !debounceState.isFilteringInProgress) {
+            statusElement.innerHTML = '<i class="fas fa-clock me-1"></i>Ожидание завершения ввода...';
+        }
+
+        // Устанавливаем новый таймер
+        debounceState.filterTimeout = setTimeout(() => {
+            applyAdvancedFilters();
+        }, debounceState.debounceDelay);
+    }
+
     // Применение продвинутых фильтров
     async function applyAdvancedFilters() {
+        // Проверяем, не выполняется ли уже фильтрация
+        if (debounceState.isFilteringInProgress) {
+            return;
+        }
+
+        debounceState.isFilteringInProgress = true;
+
         const settings = getAdvancedFiltersSettings();
         const clientId = extractClientIdFromUrl();
         
         if (!clientId) {
             showNotification('Ошибка определения клиента', 'danger');
+            debounceState.isFilteringInProgress = false;
             return;
         }
 
@@ -1172,6 +1265,9 @@
             applyAdvancedFiltersClientSide(settings);
             updateAdvancedFilterStatus(settings);
             showNotification('Применены клиентские фильтры', 'warning');
+        } finally {
+            // Сбрасываем состояние фильтрации
+            debounceState.isFilteringInProgress = false;
         }
     }
 
@@ -1319,8 +1415,15 @@
         showNotification('Продвинутые фильтры сброшены', 'info');
     }
 
-    // Извлечение clientId из URL
+    // Извлечение clientId из URL или скрытого поля
     function extractClientIdFromUrl() {
+        // Сначала пробуем получить из скрытого поля на странице
+        const hiddenClientId = document.getElementById('hiddenClientId');
+        if (hiddenClientId && hiddenClientId.value) {
+            return hiddenClientId.value;
+        }
+        
+        // Если не нашли, пробуем извлечь из URL
         const path = window.location.pathname;
         const match = path.match(/\/statistics\/client\/(\d+)/) || path.match(/\/clients\/(\d+)/);
         return match ? match[1] : null;
@@ -1351,6 +1454,212 @@
         });
     }
 
+    // ===== Пагинация =====
+
+    // Обновляет UI пагинации
+    function updatePaginationUI() {
+        const paginationNav = document.getElementById('statisticsPagination');
+        const paginationInfo = document.getElementById('paginationInfo');
+        const paginationControls = document.getElementById('paginationControls');
+        const prevPageBtn = document.getElementById('prevPage');
+        const nextPageBtn = document.getElementById('nextPage');
+
+        if (paginationState.totalPages <= 1) {
+            paginationNav.style.display = 'none';
+            return;
+        }
+
+        paginationNav.style.display = 'block';
+
+        // Обновляем информацию
+        const start = paginationState.currentPage * paginationState.pageSize + 1;
+        const end = Math.min((paginationState.currentPage + 1) * paginationState.pageSize, paginationState.totalElements);
+        paginationInfo.textContent = `Показано ${start}-${end} из ${paginationState.totalElements} записей`;
+
+        // Обновляем состояние кнопок предыдущая/следующая
+        if (paginationState.hasPrevious) {
+            prevPageBtn.classList.remove('disabled');
+        } else {
+            prevPageBtn.classList.add('disabled');
+        }
+
+        if (paginationState.hasNext) {
+            nextPageBtn.classList.remove('disabled');
+        } else {
+            nextPageBtn.classList.add('disabled');
+        }
+
+        // Генерируем номера страниц
+        generatePageNumbers();
+    }
+
+    // Генерирует номера страниц с умной логикой отображения
+    function generatePageNumbers() {
+        const paginationControls = document.getElementById('paginationControls');
+        
+        // Удаляем существующие номера страниц (оставляем только prev/next)
+        const pageItems = paginationControls.querySelectorAll('.page-item:not(#prevPage):not(#nextPage)');
+        pageItems.forEach(item => item.remove());
+
+        const totalPages = paginationState.totalPages;
+        const currentPage = paginationState.currentPage;
+        
+        // Определяем диапазон страниц для отображения
+        let startPage = Math.max(0, currentPage - 2);
+        let endPage = Math.min(totalPages - 1, currentPage + 2);
+
+        // Корректируем диапазон если недостаточно страниц с одной стороны
+        if (endPage - startPage < 4) {
+            if (startPage === 0) {
+                endPage = Math.min(totalPages - 1, startPage + 4);
+            } else if (endPage === totalPages - 1) {
+                startPage = Math.max(0, endPage - 4);
+            }
+        }
+
+        // Вставляем номера страниц перед кнопкой "Следующая"
+        const nextPageBtn = document.getElementById('nextPage');
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const pageItem = document.createElement('li');
+            pageItem.className = `page-item ${i === currentPage ? 'active' : ''}`;
+            
+            const pageLink = document.createElement('a');
+            pageLink.className = 'page-link';
+            pageLink.href = '#';
+            pageLink.textContent = i + 1;
+            pageLink.setAttribute('data-page', i);
+            
+            pageLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                goToPage(i);
+            });
+            
+            pageItem.appendChild(pageLink);
+            paginationControls.insertBefore(pageItem, nextPageBtn);
+        }
+    }
+
+    // Переходит на указанную страницу
+    function goToPage(pageNumber) {
+        if (pageNumber < 0 || pageNumber >= paginationState.totalPages) {
+            return;
+        }
+
+        paginationState.currentPage = pageNumber;
+        
+        if (paginationState.isServerPagination) {
+            // Серверная пагинация: перезагружаем данные
+            applyAdvancedFilters();
+        } else {
+            // Клиентская пагинация: фильтруем видимые строки
+            applyClientSidePagination();
+        }
+    }
+
+    // Применяет клиентскую пагинацию к видимым строкам
+    function applyClientSidePagination() {
+        const rows = document.querySelectorAll('.statistics-table tbody tr');
+        const visibleRows = Array.from(rows).filter(row => row.style.display !== 'none');
+        
+        // Обновляем состояние пагинации
+        paginationState.totalElements = visibleRows.length;
+        paginationState.totalPages = Math.ceil(visibleRows.length / paginationState.pageSize);
+        paginationState.hasNext = paginationState.currentPage < paginationState.totalPages - 1;
+        paginationState.hasPrevious = paginationState.currentPage > 0;
+
+        // Проверяем корректность текущей страницы
+        if (paginationState.currentPage >= paginationState.totalPages && paginationState.totalPages > 0) {
+            paginationState.currentPage = paginationState.totalPages - 1;
+        }
+
+        // Скрываем все строки
+        visibleRows.forEach(row => row.style.display = 'none');
+
+        // Показываем только строки текущей страницы
+        const start = paginationState.currentPage * paginationState.pageSize;
+        const end = start + paginationState.pageSize;
+        
+        for (let i = start; i < end && i < visibleRows.length; i++) {
+            visibleRows[i].style.display = '';
+        }
+
+        updatePaginationUI();
+    }
+
+    // Добавляет дебаунсированные обработчики на элементы фильтров
+    function addDebounceHandlersToFilters() {
+        // Диапазоны изменений
+        ['minChangePercentage', 'maxChangePercentage'].forEach(fieldId => {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                field.addEventListener('input', applyAdvancedFiltersDebounced);
+            }
+        });
+
+        // Мультиселект группы полей
+        const groupFieldFilter = document.getElementById('groupFieldFilter');
+        if (groupFieldFilter) {
+            groupFieldFilter.addEventListener('change', applyAdvancedFiltersDebounced);
+        }
+
+        // Чекбоксы (они применяются мгновенно, без дебаунса)
+        ['hideNoChangesAdvanced', 'onlyWarningsAdvanced', 'onlyProblemsAdvanced'].forEach(fieldId => {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                // Для чекбоксов используем мгновенное применение
+                field.addEventListener('change', applyAdvancedFilters);
+            }
+        });
+
+        // Чекбоксы уровней предупреждений (тоже мгновенно)
+        ['normalLevel', 'warningLevel', 'criticalLevel'].forEach(fieldId => {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                field.addEventListener('change', applyAdvancedFilters);
+            }
+        });
+    }
+
+    // Инициализация обработчиков пагинации
+    function initPaginationHandlers() {
+        // Обработчик изменения размера страницы
+        document.getElementById('pageSizeSelect')?.addEventListener('change', function() {
+            paginationState.pageSize = parseInt(this.value);
+            paginationState.currentPage = 0; // Сброс на первую страницу
+            
+            if (paginationState.isServerPagination) {
+                applyAdvancedFilters();
+            } else {
+                applyClientSidePagination();
+            }
+        });
+
+        // Обработчики для кнопок предыдущая/следующая
+        document.getElementById('prevPage')?.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (paginationState.hasPrevious) {
+                goToPage(paginationState.currentPage - 1);
+            }
+        });
+
+        document.getElementById('nextPage')?.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (paginationState.hasNext) {
+                goToPage(paginationState.currentPage + 1);
+            }
+        });
+    }
+
+    // Инициализация клиентской пагинации при загрузке
+    function initClientSidePagination() {
+        const rows = document.querySelectorAll('.statistics-table tbody tr');
+        if (rows.length > paginationState.pageSize) {
+            paginationState.isServerPagination = false;
+            applyClientSidePagination();
+        }
+    }
+
     // Инициализация фильтров при загрузке страницы
     document.addEventListener('DOMContentLoaded', () => {
         addGroupStartClass();
@@ -1366,9 +1675,93 @@
         // Обновляем состояние кнопок
         updateFilterButtons();
         
-        // Инициализируем обработчики продвинутых фильтров
+        // Инициализируем обработчики продвинутых фильтров и пагинации
         initAdvancedFiltersHandlers();
+        initPaginationHandlers();
+        initClientSidePagination();
+        
+        // Добавляем дебаунсированные обработчики
+        addDebounceHandlersToFilters();
     });
+
+    // ===== Экспорт в Excel =====
+
+    /**
+     * Экспортирует отфильтрованную статистику в Excel
+     */
+    async function exportToExcel() {
+        const clientId = extractClientIdFromUrl();
+        
+        if (!clientId) {
+            showNotification('Ошибка определения клиента', 'danger');
+            return;
+        }
+
+        // Показываем индикатор загрузки
+        const originalText = event.target.innerHTML;
+        event.target.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Экспортируем...';
+        event.target.disabled = true;
+
+        try {
+            // Формируем фильтры для экспорта
+            const filterDto = {
+                clientId: parseInt(clientId),
+                exportSessionIds: [],
+                alertLevels: advancedFiltersState.enabled ? 
+                    advancedFiltersState.alertLevels : 
+                    ['NORMAL', 'WARNING', 'CRITICAL'],
+                groupFieldFilters: advancedFiltersState.enabled ? 
+                    (advancedFiltersState.groupFieldValues.length > 0 ? 
+                        {"groupField": advancedFiltersState.groupFieldValues} : {}) : {},
+                countFieldFilters: {},
+                minChangePercentage: advancedFiltersState.enabled ? advancedFiltersState.minChangePercentage : null,
+                maxChangePercentage: advancedFiltersState.enabled ? advancedFiltersState.maxChangePercentage : null,
+                hideNoChanges: advancedFiltersState.enabled ? advancedFiltersState.hideNoChanges : false,
+                onlyWarnings: advancedFiltersState.enabled ? advancedFiltersState.onlyWarnings : false,
+                onlyProblems: advancedFiltersState.enabled ? advancedFiltersState.onlyProblems : false,
+                page: 0,
+                size: 10000 // Экспортируем максимально много записей
+            };
+
+            const response = await fetch('/statistics/export/excel', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(filterDto)
+            });
+
+            if (!response.ok) {
+                throw new Error('Ошибка экспорта: ' + response.status);
+            }
+
+            // Получаем файл как blob
+            const blob = await response.blob();
+            
+            // Создаем ссылку для скачивания
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'statistics_export_' + Date.now() + '.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            showNotification('Файл Excel успешно скачан', 'success');
+            
+        } catch (error) {
+            console.error('Ошибка экспорта в Excel:', error);
+            showNotification('Ошибка экспорта в Excel: ' + error.message, 'danger');
+        } finally {
+            // Восстанавливаем кнопку
+            if (event.target) {
+                event.target.innerHTML = originalText;
+                event.target.disabled = false;
+            }
+        }
+    }
+
     /*]]>*/
 </script>
 </body>

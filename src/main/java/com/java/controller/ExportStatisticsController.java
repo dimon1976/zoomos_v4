@@ -40,6 +40,7 @@ public class ExportStatisticsController {
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
     private final ExportStatisticsRepository statisticsRepository;
+    private final ExportStatisticsWriterService writerService;
 
     /**
      * Страница выбора операций для анализа статистики
@@ -78,7 +79,7 @@ public class ExportStatisticsController {
     @PostMapping("/analyze")
     public String analyzeStatistics(@ModelAttribute StatisticsRequestDto request,
                                     RedirectAttributes redirectAttributes,
-                                    Long clientId,
+                                    @RequestParam Long clientId,
                                     Model model) {
         log.debug("POST запрос на анализ статистики: {}", request);
 
@@ -89,7 +90,7 @@ public class ExportStatisticsController {
             if (comparison.isEmpty()) {
                 redirectAttributes.addFlashAttribute("warningMessage",
                         "Нет данных для анализа статистики");
-                return "redirect:/statistics/client/" + request.getTemplateId();
+                return "redirect:/statistics/client/" + clientId;
             }
 
             // Добавляем данные в модель
@@ -447,6 +448,301 @@ public class ExportStatisticsController {
         log.debug("API запрос на проверку здоровья статистики для клиента: {}", clientId);
         
         return statisticsService.getStatisticsHealthCheck(clientId);
+    }
+
+    /**
+     * Экспорт отфильтрованной статистики в Excel
+     */
+    @PostMapping("/export/excel")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> exportStatisticsToExcel(
+            @Valid @RequestBody StatisticsFilterDto filterDto) {
+        log.debug("Запрос на экспорт отфильтрованной статистики в Excel для клиента: {}", filterDto.getClientId());
+        
+        try {
+            // Получаем отфильтрованные данные без пагинации
+            StatisticsFilterDto exportFilter = StatisticsFilterDto.builder()
+                    .clientId(filterDto.getClientId())
+                    .exportSessionIds(filterDto.getExportSessionIds())
+                    .alertLevels(filterDto.getAlertLevels())
+                    .groupFieldFilters(filterDto.getGroupFieldFilters())
+                    .countFieldFilters(filterDto.getCountFieldFilters())
+                    .minChangePercentage(filterDto.getMinChangePercentage())
+                    .maxChangePercentage(filterDto.getMaxChangePercentage())
+                    .hideNoChanges(filterDto.getHideNoChanges())
+                    .onlyWarnings(filterDto.getOnlyWarnings())
+                    .onlyProblems(filterDto.getOnlyProblems())
+                    .page(0)
+                    .size(10000) // Экспортируем максимально много записей
+                    .build();
+
+            StatisticsFilteredResponseDto response = statisticsService.calculateFilteredComparison(exportFilter);
+            
+            if (response.getResults().isEmpty()) {
+                return org.springframework.http.ResponseEntity.badRequest()
+                        .body(null);
+            }
+
+            // Формируем данные для Excel
+            List<Map<String, Object>> excelData = convertStatisticsToExcelFormat(response);
+            
+            // Генерируем файл Excel
+            String fileName = "statistics_export_" + System.currentTimeMillis() + ".xlsx";
+            byte[] excelBytes = generateExcelFile(excelData, response, fileName);
+            
+            // Возвращаем файл
+            org.springframework.core.io.ByteArrayResource resource = 
+                    new org.springframework.core.io.ByteArrayResource(excelBytes);
+            
+            return org.springframework.http.ResponseEntity.ok()
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, 
+                            "attachment; filename=\"" + fileName + "\"")
+                    .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, 
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    .body(resource);
+                    
+        } catch (Exception e) {
+            log.error("Ошибка экспорта статистики в Excel для клиента {}", filterDto.getClientId(), e);
+            return org.springframework.http.ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * Преобразует данные статистики в формат для Excel
+     */
+    private List<Map<String, Object>> convertStatisticsToExcelFormat(StatisticsFilteredResponseDto response) {
+        List<Map<String, Object>> excelData = new java.util.ArrayList<>();
+        
+        for (StatisticsComparisonDto group : response.getResults()) {
+            for (StatisticsComparisonDto.OperationStatistics operation : group.getOperations()) {
+                for (Map.Entry<String, StatisticsComparisonDto.MetricValue> metricEntry : operation.getMetrics().entrySet()) {
+                    Map<String, Object> row = new java.util.HashMap<>();
+                    
+                    row.put("Группа", group.getGroupFieldValue());
+                    row.put("Операция", operation.getOperationName());
+                    row.put("Дата экспорта", operation.getExportDate());
+                    row.put("Метрика", metricEntry.getKey());
+                    row.put("Текущее значение", metricEntry.getValue().getCurrentValue());
+                    row.put("Предыдущее значение", metricEntry.getValue().getPreviousValue());
+                    row.put("Изменение %", metricEntry.getValue().getChangePercentage());
+                    row.put("Тип изменения", metricEntry.getValue().getChangeType().name());
+                    row.put("Уровень предупреждения", metricEntry.getValue().getAlertLevel().name());
+                    
+                    excelData.add(row);
+                }
+            }
+        }
+        
+        return excelData;
+    }
+
+    /**
+     * Генерирует Excel файл с информацией о примененных фильтрах
+     */
+    private byte[] generateExcelFile(List<Map<String, Object>> data, 
+                                   StatisticsFilteredResponseDto response, 
+                                   String fileName) throws Exception {
+        
+        // Используем Apache POI для генерации Excel
+        org.apache.poi.ss.usermodel.Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
+        org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("Статистика");
+        
+        int currentRow = 0;
+        
+        // Добавляем информацию о примененных фильтрах
+        currentRow = addFilterInfoToSheet(sheet, response, currentRow);
+        
+        // Пропускаем строку
+        currentRow += 2;
+        
+        // Создаем заголовки данных
+        org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(currentRow);
+        String[] headers = {"Группа", "Операция", "Дата экспорта", "Метрика", 
+                           "Текущее значение", "Предыдущее значение", "Изменение %", 
+                           "Тип изменения", "Уровень предупреждения"};
+        
+        // Стиль заголовков
+        org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
+        org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        headerStyle.setFont(headerFont);
+        headerStyle.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.LIGHT_BLUE.getIndex());
+        headerStyle.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+        
+        for (int i = 0; i < headers.length; i++) {
+            org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+        }
+        
+        currentRow++;
+        
+        // Заполняем данными
+        for (Map<String, Object> rowData : data) {
+            org.apache.poi.ss.usermodel.Row row = sheet.createRow(currentRow++);
+            
+            int cellNum = 0;
+            for (String header : headers) {
+                org.apache.poi.ss.usermodel.Cell cell = row.createCell(cellNum++);
+                Object value = rowData.get(header);
+                if (value != null) {
+                    if (value instanceof Number) {
+                        cell.setCellValue(((Number) value).doubleValue());
+                    } else if (value instanceof java.time.ZonedDateTime) {
+                        // Форматируем дату
+                        java.time.ZonedDateTime dateTime = (java.time.ZonedDateTime) value;
+                        cell.setCellValue(dateTime.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")));
+                    } else {
+                        cell.setCellValue(value.toString());
+                    }
+                }
+            }
+        }
+        
+        // Автоподбор ширины колонок
+        for (int i = 0; i < headers.length; i++) {
+            sheet.autoSizeColumn(i);
+        }
+        
+        // Конвертируем в byte array
+        java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
+        workbook.write(outputStream);
+        workbook.close();
+        
+        return outputStream.toByteArray();
+    }
+
+    /**
+     * Добавляет информацию о примененных фильтрах в Excel лист
+     */
+    private int addFilterInfoToSheet(org.apache.poi.ss.usermodel.Sheet sheet, 
+                                   StatisticsFilteredResponseDto response, 
+                                   int startRow) {
+        
+        StatisticsFilterDto filters = response.getAppliedFilters();
+        int currentRow = startRow;
+        
+        // Стиль для заголовка фильтров
+        org.apache.poi.ss.usermodel.CellStyle titleStyle = sheet.getWorkbook().createCellStyle();
+        org.apache.poi.ss.usermodel.Font titleFont = sheet.getWorkbook().createFont();
+        titleFont.setBold(true);
+        titleFont.setFontHeight((short) 280); // 14pt
+        titleStyle.setFont(titleFont);
+        
+        // Заголовок
+        org.apache.poi.ss.usermodel.Row titleRow = sheet.createRow(currentRow++);
+        org.apache.poi.ss.usermodel.Cell titleCell = titleRow.createCell(0);
+        titleCell.setCellValue("Информация об экспорте и примененных фильтрах");
+        titleCell.setCellStyle(titleStyle);
+        
+        // Пропускаем строку
+        currentRow++;
+        
+        // Информация об экспорте
+        addInfoRow(sheet, currentRow++, "Дата экспорта:", 
+                java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")));
+        addInfoRow(sheet, currentRow++, "ID клиента:", filters.getClientId().toString());
+        addInfoRow(sheet, currentRow++, "Всего записей найдено:", String.valueOf(response.getTotalElements()));
+        addInfoRow(sheet, currentRow++, "Записей экспортировано:", String.valueOf(response.getResults().size()));
+        
+        // Пропускаем строку
+        currentRow++;
+        
+        // Информация о фильтрах
+        org.apache.poi.ss.usermodel.Row filterTitleRow = sheet.createRow(currentRow++);
+        org.apache.poi.ss.usermodel.Cell filterTitleCell = filterTitleRow.createCell(0);
+        filterTitleCell.setCellValue("Примененные фильтры:");
+        filterTitleCell.setCellStyle(titleStyle);
+        
+        // Уровни предупреждений
+        if (!filters.getAlertLevels().isEmpty()) {
+            addInfoRow(sheet, currentRow++, "Уровни предупреждений:", String.join(", ", filters.getAlertLevels()));
+        }
+        
+        // Диапазон изменений
+        if (filters.getMinChangePercentage() != null || filters.getMaxChangePercentage() != null) {
+            String range = "";
+            if (filters.getMinChangePercentage() != null) {
+                range += "от " + filters.getMinChangePercentage() + "%";
+            }
+            if (filters.getMaxChangePercentage() != null) {
+                if (!range.isEmpty()) range += " ";
+                range += "до " + filters.getMaxChangePercentage() + "%";
+            }
+            addInfoRow(sheet, currentRow++, "Диапазон изменений:", range);
+        }
+        
+        // Дополнительные условия
+        if (filters.getHideNoChanges()) {
+            addInfoRow(sheet, currentRow++, "Скрыть без изменений:", "Да");
+        }
+        if (filters.getOnlyWarnings()) {
+            addInfoRow(sheet, currentRow++, "Только предупреждения:", "Да");
+        }
+        if (filters.getOnlyProblems()) {
+            addInfoRow(sheet, currentRow++, "Только проблемы:", "Да");
+        }
+        
+        // Фильтры по группам полей
+        if (!filters.getGroupFieldFilters().isEmpty()) {
+            StringBuilder groupFilters = new StringBuilder();
+            for (Map.Entry<String, List<String>> entry : filters.getGroupFieldFilters().entrySet()) {
+                if (groupFilters.length() > 0) groupFilters.append("; ");
+                groupFilters.append(entry.getKey()).append(": ").append(String.join(", ", entry.getValue()));
+            }
+            addInfoRow(sheet, currentRow++, "Фильтры по группам:", groupFilters.toString());
+        }
+        
+        // Агрегированная статистика
+        if (response.getAggregatedStats() != null && !response.getAggregatedStats().isEmpty()) {
+            currentRow++;
+            org.apache.poi.ss.usermodel.Row statsTitle = sheet.createRow(currentRow++);
+            org.apache.poi.ss.usermodel.Cell statsTitleCell = statsTitle.createCell(0);
+            statsTitleCell.setCellValue("Сводная статистика:");
+            statsTitleCell.setCellStyle(titleStyle);
+            
+            for (Map.Entry<String, Object> stat : response.getAggregatedStats().entrySet()) {
+                String key = formatStatKey(stat.getKey());
+                addInfoRow(sheet, currentRow++, key + ":", stat.getValue().toString());
+            }
+        }
+        
+        return currentRow;
+    }
+    
+    /**
+     * Добавляет информационную строку в Excel лист
+     */
+    private void addInfoRow(org.apache.poi.ss.usermodel.Sheet sheet, int rowNum, String label, String value) {
+        org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowNum);
+        
+        // Стиль для подписи
+        org.apache.poi.ss.usermodel.CellStyle labelStyle = sheet.getWorkbook().createCellStyle();
+        org.apache.poi.ss.usermodel.Font labelFont = sheet.getWorkbook().createFont();
+        labelFont.setBold(true);
+        labelStyle.setFont(labelFont);
+        
+        org.apache.poi.ss.usermodel.Cell labelCell = row.createCell(0);
+        labelCell.setCellValue(label);
+        labelCell.setCellStyle(labelStyle);
+        
+        org.apache.poi.ss.usermodel.Cell valueCell = row.createCell(1);
+        valueCell.setCellValue(value);
+    }
+    
+    /**
+     * Форматирует ключи статистики для отображения
+     */
+    private String formatStatKey(String key) {
+        switch (key) {
+            case "total_operations": return "Всего операций";
+            case "total_groups": return "Всего групп";
+            case "total_records": return "Всего записей";
+            case "normalCount": return "Нормальных изменений";
+            case "warningCount": return "Предупреждений";
+            case "criticalCount": return "Критических изменений";
+            case "problemsCount": return "Всего проблем";
+            default: return key;
+        }
     }
 
 }

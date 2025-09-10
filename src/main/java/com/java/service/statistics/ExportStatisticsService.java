@@ -475,10 +475,92 @@ public class ExportStatisticsService {
     // === New Filtering Methods for Iteration 4 ===
 
     /**
-     * Получает отфильтрованную статистику с поддержкой пагинации
+     * Получает отфильтрованную статистику с поддержкой пагинации (оптимизированная версия)
      */
     public StatisticsFilteredResponseDto calculateFilteredComparison(StatisticsFilterDto filterDto) {
         log.info("Расчет отфильтрованной статистики для клиента: {} с фильтрами", filterDto.getClientId());
+
+        // Используем оптимизированную фильтрацию на уровне БД
+        if (shouldUseOptimizedFiltering(filterDto)) {
+            return calculateFilteredComparisonOptimized(filterDto);
+        }
+
+        // Fallback к старому методу для сложных фильтров
+        return calculateFilteredComparisonFallback(filterDto);
+    }
+
+    /**
+     * Оптимизированная версия фильтрации с использованием нативных SQL запросов
+     */
+    private StatisticsFilteredResponseDto calculateFilteredComparisonOptimized(StatisticsFilterDto filterDto) {
+        log.debug("Использование оптимизированной фильтрации для клиента: {}", filterDto.getClientId());
+
+        // Подготавливаем параметры для нативного запроса
+        String sessionIds = prepareArrayParameter(filterDto.getExportSessionIds());
+        String groupFieldValues = prepareArrayParameter(extractGroupFieldValues(filterDto));
+        String countFieldNames = prepareArrayParameter(extractCountFieldNames(filterDto));
+        
+        // Получаем общее количество для пагинации
+        Long totalElements = statisticsRepository.countFilteredStatistics(
+                filterDto.getClientId(), sessionIds, groupFieldValues, countFieldNames);
+        
+        if (totalElements == 0) {
+            return StatisticsFilteredResponseDto.builder()
+                    .results(Collections.emptyList())
+                    .totalElements(0L)
+                    .totalPages(0)
+                    .currentPage(filterDto.getPage())
+                    .pageSize(filterDto.getSize())
+                    .hasNext(false)
+                    .hasPrevious(false)
+                    .appliedFilters(filterDto)
+                    .aggregatedStats(Collections.emptyMap())
+                    .availableFieldValues(Collections.emptyMap())
+                    .fieldMetadata(Collections.emptyMap())
+                    .build();
+        }
+        
+        // Получаем отфильтрованные данные с пагинацией
+        int offset = filterDto.getPage() * filterDto.getSize();
+        List<ExportStatistics> rawStatistics = statisticsRepository.findFilteredStatisticsOptimized(
+                filterDto.getClientId(), sessionIds, groupFieldValues, countFieldNames,
+                filterDto.getSize(), offset);
+        
+        // Преобразуем в DTO и применяем логические фильтры (изменения, уровни предупреждений)
+        List<StatisticsComparisonDto> results = convertToComparisonDtos(rawStatistics, filterDto);
+        
+        // Получаем агрегированную статистику
+        Map<String, Object> aggregatedStats = getOptimizedAggregatedStats(
+                filterDto.getClientId(), sessionIds, groupFieldValues);
+        
+        // Получаем метаданные полей
+        Map<String, List<String>> availableValues = getOptimizedFieldValues(filterDto.getClientId());
+        Map<String, Object> fieldMetadata = buildOptimizedFieldMetadata(filterDto.getClientId());
+        
+        int totalPages = (int) Math.ceil((double) totalElements / filterDto.getSize());
+        boolean hasNext = (filterDto.getPage() + 1) < totalPages;
+        boolean hasPrevious = filterDto.getPage() > 0;
+
+        return StatisticsFilteredResponseDto.builder()
+                .results(results)
+                .totalElements(totalElements)
+                .totalPages(totalPages)
+                .currentPage(filterDto.getPage())
+                .pageSize(filterDto.getSize())
+                .hasNext(hasNext)
+                .hasPrevious(hasPrevious)
+                .appliedFilters(filterDto)
+                .aggregatedStats(aggregatedStats)
+                .availableFieldValues(availableValues)
+                .fieldMetadata(fieldMetadata)
+                .build();
+    }
+
+    /**
+     * Fallback метод для сложных фильтров
+     */
+    private StatisticsFilteredResponseDto calculateFilteredComparisonFallback(StatisticsFilterDto filterDto) {
+        log.debug("Использование fallback фильтрации для клиента: {}", filterDto.getClientId());
 
         // Создаем базовый запрос статистики
         StatisticsRequestDto baseRequest = StatisticsRequestDto.builder()
@@ -766,5 +848,198 @@ public class ExportStatisticsService {
         stats.put("problemsCount", warningCount + criticalCount);
         
         return stats;
+    }
+
+    // === Optimization Helper Methods ===
+
+    /**
+     * Определяет, можно ли использовать оптимизированную фильтрацию
+     */
+    private boolean shouldUseOptimizedFiltering(StatisticsFilterDto filterDto) {
+        // Простые фильтры: группировка, поля, сессии
+        boolean hasSimpleFilters = !filterDto.getGroupFieldFilters().isEmpty() || 
+                                  !filterDto.getCountFieldFilters().isEmpty() ||
+                                  !filterDto.getExportSessionIds().isEmpty();
+        
+        // Сложные фильтры требуют fallback
+        boolean hasComplexFilters = filterDto.getMinChangePercentage() != null ||
+                                   filterDto.getMaxChangePercentage() != null ||
+                                   filterDto.getOnlyWarnings() ||
+                                   filterDto.getOnlyProblems() ||
+                                   filterDto.getHideNoChanges();
+        
+        // Используем оптимизацию только для простых фильтров или без фильтров
+        return !hasComplexFilters;
+    }
+
+    /**
+     * Подготавливает параметр массива для PostgreSQL
+     */
+    private String prepareArrayParameter(List<?> list) {
+        if (list == null || list.isEmpty()) {
+            return null;
+        }
+        return "{" + list.stream()
+                .map(Object::toString)
+                .map(s -> "\"" + s.replace("\"", "\\\"") + "\"")
+                .collect(Collectors.joining(",")) + "}";
+    }
+
+    /**
+     * Извлекает значения полей группировки из фильтров
+     */
+    private List<String> extractGroupFieldValues(StatisticsFilterDto filterDto) {
+        return filterDto.getGroupFieldFilters().values().stream()
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Извлекает значения полей подсчета из фильтров
+     */
+    private List<String> extractCountFieldNames(StatisticsFilterDto filterDto) {
+        return filterDto.getCountFieldFilters().values().stream()
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Преобразует сырые данные статистики в DTO сравнения
+     */
+    private List<StatisticsComparisonDto> convertToComparisonDtos(List<ExportStatistics> rawStatistics, StatisticsFilterDto filterDto) {
+        // Группируем по группе полей
+        Map<String, List<ExportStatistics>> groupedStats = rawStatistics.stream()
+                .collect(Collectors.groupingBy(ExportStatistics::getGroupFieldValue));
+
+        List<StatisticsComparisonDto> comparisons = new ArrayList<>();
+
+        for (Map.Entry<String, List<ExportStatistics>> entry : groupedStats.entrySet()) {
+            String groupValue = entry.getKey();
+            List<ExportStatistics> groupStatistics = entry.getValue();
+
+            // Группируем по сессиям
+            Map<Long, List<ExportStatistics>> statsBySession = groupStatistics.stream()
+                    .collect(Collectors.groupingBy(stat -> stat.getExportSession().getId()));
+
+            List<StatisticsComparisonDto.OperationStatistics> operationStats = new ArrayList<>();
+
+            for (Map.Entry<Long, List<ExportStatistics>> sessionEntry : statsBySession.entrySet()) {
+                Long sessionId = sessionEntry.getKey();
+                List<ExportStatistics> sessionStats = sessionEntry.getValue();
+                
+                if (!sessionStats.isEmpty()) {
+                    ExportSession session = sessionStats.get(0).getExportSession();
+                    
+                    // Простые метрики без сравнения с предыдущими (для оптимизации)
+                    Map<String, StatisticsComparisonDto.MetricValue> metrics = new HashMap<>();
+                    for (ExportStatistics stat : sessionStats) {
+                        StatisticsComparisonDto.MetricValue metric = StatisticsComparisonDto.MetricValue.builder()
+                                .currentValue(stat.getCountValue())
+                                .previousValue(null)
+                                .changePercentage(0.0)
+                                .changeType(StatisticsComparisonDto.ChangeType.STABLE)
+                                .alertLevel(StatisticsComparisonDto.AlertLevel.NORMAL)
+                                .build();
+                        metrics.put(stat.getCountFieldName(), metric);
+                    }
+
+                    operationStats.add(StatisticsComparisonDto.OperationStatistics.builder()
+                            .exportSessionId(sessionId)
+                            .operationId(session.getFileOperation().getId())
+                            .operationName("Экспорт " + sessionId)
+                            .exportDate(session.getStartedAt())
+                            .metrics(metrics)
+                            .dateModificationStats(null)
+                            .build());
+                }
+            }
+
+            if (!operationStats.isEmpty()) {
+                comparisons.add(StatisticsComparisonDto.builder()
+                        .groupFieldValue(groupValue)
+                        .operations(operationStats)
+                        .build());
+            }
+        }
+
+        return comparisons;
+    }
+
+    /**
+     * Получает оптимизированную агрегированную статистику
+     */
+    private Map<String, Object> getOptimizedAggregatedStats(Long clientId, String sessionIds, String groupFieldValues) {
+        List<Object[]> rawStats = statisticsRepository.getFilteredAggregatedStats(clientId, sessionIds, groupFieldValues);
+        
+        Map<String, Object> stats = new HashMap<>();
+        for (Object[] row : rawStats) {
+            String metricName = (String) row[0];
+            String metricValue = (String) row[1];
+            
+            try {
+                stats.put(metricName, Long.parseLong(metricValue));
+            } catch (NumberFormatException e) {
+                stats.put(metricName, metricValue);
+            }
+        }
+        
+        // Добавляем дефолтные значения
+        stats.putIfAbsent("total_operations", 0L);
+        stats.putIfAbsent("total_groups", 0L);
+        stats.putIfAbsent("total_records", 0L);
+        stats.putIfAbsent("normalCount", 0L);
+        stats.putIfAbsent("warningCount", 0L);
+        stats.putIfAbsent("criticalCount", 0L);
+        stats.putIfAbsent("problemsCount", 0L);
+        
+        return stats;
+    }
+
+    /**
+     * Получает оптимизированные значения полей
+     */
+    private Map<String, List<String>> getOptimizedFieldValues(Long clientId) {
+        ZonedDateTime sinceDate = ZonedDateTime.now().minusMonths(3);
+        List<Object[]> fieldMetadata = statisticsRepository.getFieldMetadataForClient(clientId, sinceDate);
+        
+        Map<String, List<String>> availableValues = new HashMap<>();
+        
+        for (Object[] row : fieldMetadata) {
+            String fieldType = (String) row[0];
+            Object jsonValues = row[1];
+            
+            if (jsonValues != null) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    List<String> values = mapper.readValue(jsonValues.toString(), 
+                            new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+                    availableValues.put(fieldType, values);
+                } catch (Exception e) {
+                    log.warn("Ошибка парсинга JSON для поля {}: {}", fieldType, e.getMessage());
+                    availableValues.put(fieldType, Collections.emptyList());
+                }
+            }
+        }
+        
+        return availableValues;
+    }
+
+    /**
+     * Создает оптимизированные метаданные полей
+     */
+    private Map<String, Object> buildOptimizedFieldMetadata(Long clientId) {
+        Map<String, Object> metadata = new HashMap<>();
+        
+        // Базовая информация
+        metadata.put("clientId", clientId);
+        metadata.put("optimized", true);
+        metadata.put("lastUpdated", ZonedDateTime.now().toString());
+        
+        // Счетчики полей добавим позже при необходимости
+        metadata.put("totalFields", 0);
+        metadata.put("fieldTypes", Collections.emptyMap());
+        metadata.put("fieldRanges", Collections.emptyMap());
+        
+        return metadata;
     }
 }
