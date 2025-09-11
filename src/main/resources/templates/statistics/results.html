@@ -136,9 +136,9 @@
             </div>
             <div class="col-md-4">
                 <div class="legend">
-                    <div class="legend-color" style="background-color: var(--bs-success-bg);"></div>
-                    <span>Рост</span>
-                        <span>Критическое</span>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: var(--bs-success-bg);"></div>
+                        <span>Рост (критическое)</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-color" style="background-color: var(--bs-warning-bg);"></div>
@@ -613,7 +613,7 @@
 
 <script th:inline="javascript">
     /*<![CDATA[*/
-    const statisticsData = /*[[${comparison}]]*/ [];
+    const statisticsData = /*[[${comparison != null ? #strings.escapeJavaScript(#json.serialize(comparison)) : '[]'}]]*/ [];
     let currentWarningThreshold = /*[[${warningPercentage}]]*/ 10;
     let currentCriticalThreshold = /*[[${criticalPercentage}]]*/ 20;
 
@@ -656,7 +656,26 @@
 
         recalculateAlertLevels();
         updateSummaryCounters();
+        updateFilterTooltips(); // Обновить подсказки с новыми порогами
         showNotification('Пороги отклонений обновлены', 'success');
+    }
+
+    function updateFilterTooltips() {
+        // Обновляем подсказки на кнопках фильтров
+        const onlyAlertsBtn = document.getElementById('onlyAlertsBtn');
+        if (onlyAlertsBtn) {
+            onlyAlertsBtn.title = `Показать только предупреждения (${currentWarningThreshold}-${currentCriticalThreshold}%)`;
+        }
+        
+        const onlyProblemsBtn = document.getElementById('onlyProblemsBtn');
+        if (onlyProblemsBtn) {
+            onlyProblemsBtn.title = `Показать только проблемы (>=${currentWarningThreshold}%)`;
+        }
+        
+        const bigChangesBtn = document.getElementById('bigChangesBtn');
+        if (bigChangesBtn) {
+            bigChangesBtn.title = `Показать только большие изменения (>=${currentCriticalThreshold}%)`;
+        }
     }
 
     function recalculateAlertLevels() {
@@ -880,7 +899,7 @@
         updateFilterButtons();
         saveFiltersToStorage();
         showNotification(
-            filterState.onlyAlerts ? 'Показаны только предупреждения' : 'Показаны все строки', 
+            filterState.onlyAlerts ? `Показаны только предупреждения (${currentWarningThreshold}-${currentCriticalThreshold}%)` : 'Показаны все строки', 
             'info'
         );
     }
@@ -912,21 +931,21 @@
     function applyPreset(presetName) {
         switch (presetName) {
             case 'onlyProblems':
-                // Активируем фильтр "только проблемы" (WARNING + CRITICAL)
+                // Активируем фильтр "только проблемы" (WARNING + CRITICAL >= warningThreshold%)
                 filterState.onlyAlerts = false;
                 filterState.hideNoChanges = false;
                 filterState.bigChanges = false;
                 filterState.onlyProblems = true;
-                showNotification('🚨 Показаны только проблемы (предупреждения и критические)', 'warning');
+                showNotification(`🚨 Показаны только проблемы (>=${currentWarningThreshold}%)`, 'warning');
                 break;
                 
             case 'bigChanges':
-                // Показываем только большие изменения (>25%)
+                // Показываем только большие изменения (>=criticalThreshold%)
                 filterState.onlyAlerts = false;
                 filterState.hideNoChanges = true; // скрываем без изменений
                 filterState.bigChanges = true;
                 filterState.onlyProblems = false;
-                showNotification('📈 Показаны только большие изменения (>25%)', 'info');
+                showNotification(`📈 Показаны только большие изменения (>=${currentCriticalThreshold}%)`, 'info');
                 break;
         }
         
@@ -940,69 +959,102 @@
         let visibleCount = 0;
         let hiddenCount = 0;
 
+        // Сначала собираем данные о группах и их строках
+        const groups = new Map();
+        let currentGroup = null;
+        
         rows.forEach(row => {
-            let shouldShow = true;
-
-            // Фильтр: только предупреждения (WARNING уровень, не CRITICAL)
-            if (filterState.onlyAlerts) {
-                const hasWarning = row.querySelector('.metric-increase-warning, .metric-decrease-warning');
-                const hasCritical = row.querySelector('.metric-increase-critical, .metric-decrease-critical');
-                
-                // Показывать только строки с WARNING, но без CRITICAL
-                if (!hasWarning || hasCritical) {
-                    shouldShow = false;
-                }
+            const groupHeader = row.querySelector('td[rowspan]');
+            if (groupHeader) {
+                // Это начало новой группы
+                const groupName = groupHeader.textContent.trim();
+                currentGroup = {
+                    name: groupName,
+                    headerRow: row,
+                    metricRows: [],
+                    shouldShow: false
+                };
+                groups.set(groupName, currentGroup);
+            } else if (currentGroup) {
+                // Это строка метрики в текущей группе
+                currentGroup.metricRows.push(row);
             }
+        });
+
+        // Проверяем каждую группу на соответствие фильтрам
+        groups.forEach(group => {
+            let groupHasMatchingRows = false;
             
-            // Фильтр: только проблемы (WARNING + CRITICAL)
-            if (filterState.onlyProblems && shouldShow) {
-                const hasProblems = row.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
-                if (!hasProblems) {
-                    shouldShow = false;
-                }
-            }
+            group.metricRows.forEach(row => {
+                let shouldShow = true;
 
-            // Фильтр: скрыть без изменений
-            if (filterState.hideNoChanges && shouldShow) {
-                const hasStableOnly = Array.from(row.querySelectorAll('td'))
-                    .some(cell => cell.classList.contains('metric-stable') && !cell.classList.contains('group-header'));
-                
-                // Если все значения в строке стабильные (нет изменений)
-                const allMetricCells = Array.from(row.querySelectorAll('td')).filter(cell => 
+                // Получаем все ячейки с метриками в строке (исключаем группу и название метрики)
+                const metricCells = Array.from(row.querySelectorAll('td')).filter(cell => 
                     !cell.classList.contains('group-header') && 
                     !cell.hasAttribute('rowspan') &&
                     cell.querySelector('.metric-value')
                 );
                 
-                const allStable = allMetricCells.every(cell => cell.classList.contains('metric-stable'));
-                if (allStable && allMetricCells.length > 0) {
-                    shouldShow = false;
-                }
-            }
-
-            // Фильтр: только большие изменения (>25%)
-            if (filterState.bigChanges && shouldShow) {
-                let hasBigChange = false;
-                const changeSpans = row.querySelectorAll('.metric-change span[data-change]');
+                // Берем последний столбец (самый новый экспорт)
+                const lastColumnCell = metricCells[metricCells.length - 1];
                 
-                changeSpans.forEach(span => {
-                    const changeValue = Math.abs(parseFloat(span.getAttribute('data-change')) || 0);
-                    if (changeValue >= 25) {
-                        hasBigChange = true;
+                if (lastColumnCell) {
+                    // Получаем процент изменения из data-change атрибута
+                    const changeSpan = lastColumnCell.querySelector('.metric-change span[data-change]');
+                    const changeValue = changeSpan ? Math.abs(parseFloat(changeSpan.getAttribute('data-change')) || 0) : 0;
+                    
+                    // Отладочная информация убрана
+                    
+                    // Фильтр: только предупреждения (>=warningThreshold% и <criticalThreshold%) - смотрим только последний столбец
+                    if (filterState.onlyAlerts && shouldShow) {
+                        const isWarning = changeValue >= currentWarningThreshold && changeValue < currentCriticalThreshold;
+                        if (!isWarning) {
+                            shouldShow = false;
+                        }
                     }
-                });
-                
-                if (!hasBigChange && changeSpans.length > 0) {
+                    
+                    // Фильтр: только проблемы (WARNING + CRITICAL = >=warningThreshold%) - смотрим только последний столбец
+                    if (filterState.onlyProblems && shouldShow) {
+                        const hasProblems = changeValue >= currentWarningThreshold;
+                        if (!hasProblems) {
+                            shouldShow = false;
+                        }
+                    }
+
+                    // Фильтр: скрыть без изменений - смотрим только последний столбец
+                    if (filterState.hideNoChanges && shouldShow) {
+                        const hasNoChanges = changeValue === 0;
+                        if (hasNoChanges) {
+                            shouldShow = false;
+                        }
+                    }
+
+                    // Фильтр: только большие изменения (>=criticalThreshold%) - смотрим только последний столбец
+                    if (filterState.bigChanges && shouldShow) {
+                        const isBigChange = changeValue >= currentCriticalThreshold;
+                        if (!isBigChange) {
+                            shouldShow = false;
+                        }
+                    }
+                } else {
                     shouldShow = false;
                 }
-            }
 
-            if (shouldShow) {
-                row.style.display = '';
-                visibleCount++;
-            } else {
-                row.style.display = 'none';
-                hiddenCount++;
+                if (shouldShow) {
+                    groupHasMatchingRows = true;
+                    visibleCount++;
+                } else {
+                    hiddenCount++;
+                }
+                
+                // Устанавливаем видимость строки метрики
+                row.style.display = shouldShow ? '' : 'none';
+            });
+            
+            // Устанавливаем видимость заголовка группы
+            group.headerRow.style.display = groupHasMatchingRows ? '' : 'none';
+            if (!groupHasMatchingRows) {
+                hiddenCount++; // Считаем заголовок группы как скрытую строку
             }
         });
 
@@ -1280,50 +1332,80 @@
         rows.forEach(row => {
             let shouldShow = true;
 
-            // Проверка уровней предупреждений
-            if (settings.alertLevels.length > 0 && settings.alertLevels.length < 3) {
-                const hasMatchingAlert = settings.alertLevels.some(level => {
-                    if (level === 'NORMAL') {
-                        return row.querySelector('.metric-stable');
-                    } else if (level === 'WARNING') {
-                        return row.querySelector('.metric-increase-warning, .metric-decrease-warning');
-                    } else if (level === 'CRITICAL') {
-                        return row.querySelector('.metric-increase-critical, .metric-decrease-critical');
-                    }
-                    return false;
-                });
-                
-                if (!hasMatchingAlert) shouldShow = false;
-            }
+            // Получаем все ячейки с метриками в строке (исключаем группу и название метрики)
+            const metricCells = Array.from(row.querySelectorAll('td')).filter(cell => 
+                !cell.classList.contains('group-header') && 
+                !cell.hasAttribute('rowspan') &&
+                cell.querySelector('.metric-value')
+            );
+            
+            // Берем последний столбец (самый новый экспорт)
+            const lastColumnCell = metricCells[metricCells.length - 1];
+            
+            if (!lastColumnCell) {
+                shouldShow = false;
+            } else {
+                // Проверка уровней предупреждений - смотрим только последний столбец
+                if (settings.alertLevels.length > 0 && settings.alertLevels.length < 3) {
+                    const hasMatchingAlert = settings.alertLevels.some(level => {
+                        if (level === 'NORMAL') {
+                            return lastColumnCell.classList.contains('metric-stable');
+                        } else if (level === 'WARNING') {
+                            return lastColumnCell.querySelector('.metric-increase-warning, .metric-decrease-warning');
+                        } else if (level === 'CRITICAL') {
+                            return lastColumnCell.querySelector('.metric-increase-critical, .metric-decrease-critical');
+                        }
+                        return false;
+                    });
+                    
+                    if (!hasMatchingAlert) shouldShow = false;
+                }
 
-            // Проверка диапазона изменений - пока пропускаем, требует парсинга значений из DOM
-
-            // Проверка групп полей
-            if (settings.groupFieldValues.length > 0) {
-                const groupCell = row.querySelector('.group-header');
-                if (groupCell) {
-                    const groupValue = groupCell.textContent.trim();
-                    if (!settings.groupFieldValues.includes(groupValue)) {
+                // Проверка диапазона изменений - смотрим только последний столбец
+                if ((settings.minChangePercentage || settings.maxChangePercentage) && shouldShow) {
+                    const changeSpan = lastColumnCell.querySelector('.metric-change span[data-change]');
+                    if (changeSpan) {
+                        const changeValue = Math.abs(parseFloat(changeSpan.getAttribute('data-change')) || 0);
+                        
+                        if (settings.minChangePercentage && changeValue < settings.minChangePercentage) {
+                            shouldShow = false;
+                        }
+                        if (settings.maxChangePercentage && changeValue > settings.maxChangePercentage) {
+                            shouldShow = false;
+                        }
+                    } else if (settings.minChangePercentage && settings.minChangePercentage > 0) {
+                        // Если нет изменений, но требуется минимум
                         shouldShow = false;
                     }
                 }
-            }
 
-            // Дополнительные фильтры
-            if (settings.hideNoChanges && shouldShow) {
-                const hasChanges = row.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
-                if (!hasChanges) shouldShow = false;
-            }
+                // Проверка групп полей
+                if (settings.groupFieldValues.length > 0) {
+                    const groupCell = row.querySelector('.group-header');
+                    if (groupCell) {
+                        const groupValue = groupCell.textContent.trim();
+                        if (!settings.groupFieldValues.includes(groupValue)) {
+                            shouldShow = false;
+                        }
+                    }
+                }
 
-            if (settings.onlyWarnings && shouldShow) {
-                const hasWarning = row.querySelector('.metric-increase-warning, .metric-decrease-warning');
-                const hasCritical = row.querySelector('.metric-increase-critical, .metric-decrease-critical');
-                if (!hasWarning || hasCritical) shouldShow = false;
-            }
+                // Дополнительные фильтры - смотрим только последний столбец
+                if (settings.hideNoChanges && shouldShow) {
+                    const hasChanges = lastColumnCell.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
+                    if (!hasChanges) shouldShow = false;
+                }
 
-            if (settings.onlyProblems && shouldShow) {
-                const hasProblems = row.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
-                if (!hasProblems) shouldShow = false;
+                if (settings.onlyWarnings && shouldShow) {
+                    const hasWarning = lastColumnCell.querySelector('.metric-increase-warning, .metric-decrease-warning');
+                    const hasCritical = lastColumnCell.querySelector('.metric-increase-critical, .metric-decrease-critical');
+                    if (!hasWarning || hasCritical) shouldShow = false;
+                }
+
+                if (settings.onlyProblems && shouldShow) {
+                    const hasProblems = lastColumnCell.querySelector('.metric-increase-warning, .metric-increase-critical, .metric-decrease-warning, .metric-decrease-critical');
+                    if (!hasProblems) shouldShow = false;
+                }
             }
 
             if (shouldShow) {
@@ -1665,6 +1747,9 @@
         addGroupStartClass();
         updateSummaryCounters();
         displayDateModifications();
+        
+        // Обновляем подсказки фильтров с актуальными порогами
+        updateFilterTooltips();
         
         // Загружаем сохраненное состояние фильтров из localStorage
         loadFiltersFromStorage();
