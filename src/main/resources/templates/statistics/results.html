@@ -613,7 +613,7 @@
 
 <script th:inline="javascript">
     /*<![CDATA[*/
-    const statisticsData = /*[[${comparison != null ? #strings.escapeJavaScript(#json.serialize(comparison)) : '[]'}]]*/ [];
+    const statisticsData = /*[[${comparison}]]*/ [];
     let currentWarningThreshold = /*[[${warningPercentage}]]*/ 10;
     let currentCriticalThreshold = /*[[${criticalPercentage}]]*/ 20;
 
