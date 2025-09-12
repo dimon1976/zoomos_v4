@@ -531,10 +531,6 @@
         
         // Пересчитываем счетчики фильтров после изменения порогов
         calculateFilterCounts();
-        // Обновляем data-атрибуты после изменения порогов
-        if (window.markTableRowsAfterThresholdChange) {
-            window.markTableRowsAfterThresholdChange();
-        }
     }
 
     function updateSummaryCounters() {
@@ -868,6 +864,5 @@
     /*]]>*/
 </script>
 
-<script th:src="@{/js/statistics-filter.js}"></script>
 </body>
 </html>
