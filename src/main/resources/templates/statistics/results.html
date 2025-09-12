@@ -26,6 +26,60 @@
             --bs-success-text: #0f5132;
         }
 
+        /* ===== Фильтры быстрого доступа ===== */
+        .filter-controls {
+            background-color: var(--bs-gray-100);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid var(--bs-gray-300);
+        }
+
+        .filter-controls .btn-group .btn {
+            border-radius: 0.375rem;
+            margin-right: 2px;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .filter-controls .btn-group .btn:last-child {
+            margin-right: 0;
+        }
+
+        .filter-controls .btn-group .btn.active {
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .filter-controls .btn-group .btn:hover:not(.active) {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .filter-status {
+            font-size: 0.9rem;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .filter-status span {
+            font-weight: 600;
+            color: var(--bs-primary);
+        }
+
+        /* Скрытие групп */
+        .group-hidden {
+            display: none !important;
+        }
+
+        /* Анимация фильтрации */
+        .statistics-table tbody tr {
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .statistics-table tbody tr.filtering {
+            opacity: 0.5;
+        }
+
         /* ===== Таблица статистики ===== */
         .statistics-table { font-size: 0.9rem; }
 
@@ -226,6 +280,33 @@
         <p class="text-muted">Проверьте выбранные операции и настройки фильтров</p>
     </div>
 
+    <!-- Быстрые фильтры -->
+    <div th:unless="${#lists.isEmpty(comparison)}" class="filter-controls mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="btn-group" role="group" aria-label="Фильтры быстрого доступа">
+                <button type="button" class="btn btn-outline-warning" id="filterWarning" title="Показать только группы с предупреждениями">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Только предупреждения (<span id="warningCount">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-danger" id="filterCritical" title="Показать только группы с критическими отклонениями">
+                    <i class="fas fa-exclamation-circle me-1"></i>
+                    Только критические (<span id="criticalCount">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-dark" id="filterBoth" title="Показать группы с любыми отклонениями">
+                    <i class="fas fa-filter me-1"></i>
+                    Все отклонения (<span id="bothCount">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="filterReset" title="Показать все группы">
+                    <i class="fas fa-times me-1"></i>
+                    Сброс (<span id="totalCount">0</span>)
+                </button>
+            </div>
+            <div class="filter-status text-muted" id="filterStatus">
+                Показано: <span id="visibleGroups">0</span> из <span id="totalGroups">0</span> групп
+            </div>
+        </div>
+    </div>
+
     <!-- Таблица статистики -->
     <div th:unless="${#lists.isEmpty(comparison)}" class="table-responsive">
         <table class="table table-bordered statistics-table">
@@ -376,6 +457,7 @@
         addGroupStartClass();
         updateSummaryCounters();
         displayDateModifications();
+        initializeQuickFilters();
     });
 
     function toggleSettings() {
@@ -446,11 +528,25 @@
                 cell.classList.add('metric-stable');
             }
         });
+        
+        // Пересчитываем счетчики фильтров после изменения порогов
+        calculateFilterCounts();
+        // Обновляем data-атрибуты после изменения порогов
+        if (window.markTableRowsAfterThresholdChange) {
+            window.markTableRowsAfterThresholdChange();
+        }
     }
 
     function updateSummaryCounters() {
-        const warningCells = document.querySelectorAll('.metric-increase-warning, .metric-decrease-warning').length;
-        const criticalCells = document.querySelectorAll('.metric-increase-critical, .metric-decrease-critical').length;
+        // При подсчете счетчиков учитываем только видимые строки
+        const visibleRows = document.querySelectorAll('.statistics-table tbody tr:not(.group-hidden)');
+        const warningCells = Array.from(visibleRows).reduce((count, row) => {
+            return count + row.querySelectorAll('.metric-increase-warning, .metric-decrease-warning').length;
+        }, 0);
+        const criticalCells = Array.from(visibleRows).reduce((count, row) => {
+            return count + row.querySelectorAll('.metric-increase-critical, .metric-decrease-critical').length;
+        }, 0);
+        
         const fromData = statisticsData && statisticsData[0] && Array.isArray(statisticsData[0].operations)
             ? statisticsData[0].operations.length
             : null;
@@ -509,6 +605,177 @@
             if (tr.querySelector('td[rowspan]')) tr.classList.add('group-start');
         });
     }
+
+    // ===== Фильтры быстрого доступа =====
+    function initializeQuickFilters() {
+        calculateFilterCounts();
+        bindFilterEvents();
+        updateFilterStatus();
+    }
+
+    function calculateFilterCounts() {
+        const groups = document.querySelectorAll('.statistics-table tbody tr.group-start');
+        let warningCount = 0, criticalCount = 0, bothCount = 0;
+        const totalCount = groups.length;
+        
+        groups.forEach(groupRow => {
+            const groupMetrics = getGroupMetrics(groupRow);
+            const hasWarning = hasWarningOnlyDeviations(groupMetrics);
+            const hasCritical = hasCriticalDeviations(groupMetrics);
+            const hasAny = hasAnyDeviations(groupMetrics);
+            
+            if (hasWarning) warningCount++;
+            if (hasCritical) criticalCount++;
+            if (hasAny) bothCount++;
+        });
+        
+        // Обновляем счетчики кнопок
+        const warningCountEl = document.getElementById('warningCount');
+        const criticalCountEl = document.getElementById('criticalCount');
+        const bothCountEl = document.getElementById('bothCount');
+        const totalCountEl = document.getElementById('totalCount');
+        
+        if (warningCountEl) warningCountEl.textContent = warningCount;
+        if (criticalCountEl) criticalCountEl.textContent = criticalCount;
+        if (bothCountEl) bothCountEl.textContent = bothCount;
+        if (totalCountEl) totalCountEl.textContent = totalCount;
+    }
+
+    function getGroupMetrics(groupStartRow) {
+        const metrics = [];
+        let currentRow = groupStartRow;
+        
+        // Собираем все строки метрик для этой группы
+        while (currentRow && (!currentRow.nextElementSibling || !currentRow.nextElementSibling.classList.contains('group-start'))) {
+            const metricCells = currentRow.querySelectorAll('.metric-decrease-warning, .metric-decrease-critical, .metric-increase-warning, .metric-increase-critical');
+            metrics.push(...metricCells);
+            currentRow = currentRow.nextElementSibling;
+        }
+        
+        return metrics;
+    }
+
+    function hasWarningOnlyDeviations(metrics) {
+        const hasWarning = metrics.some(cell => 
+            cell.classList.contains('metric-decrease-warning') || 
+            cell.classList.contains('metric-increase-warning')
+        );
+        const hasCritical = hasCriticalDeviations(metrics);
+        return hasWarning && !hasCritical;
+    }
+
+    function hasCriticalDeviations(metrics) {
+        return metrics.some(cell => 
+            cell.classList.contains('metric-decrease-critical') || 
+            cell.classList.contains('metric-increase-critical')
+        );
+    }
+
+    function hasAnyDeviations(metrics) {
+        return metrics.some(cell => 
+            cell.classList.contains('metric-decrease-warning') || 
+            cell.classList.contains('metric-decrease-critical') ||
+            cell.classList.contains('metric-increase-warning') ||
+            cell.classList.contains('metric-increase-critical')
+        );
+    }
+
+    function shouldShowGroup(groupMetrics, filterType) {
+        switch (filterType) {
+            case 'warning':
+                return hasWarningOnlyDeviations(groupMetrics);
+            case 'critical':
+                return hasCriticalDeviations(groupMetrics);
+            case 'both':
+                return hasAnyDeviations(groupMetrics);
+            case 'reset':
+            default:
+                return true;
+        }
+    }
+
+    function filterGroups(filterType) {
+        const groups = document.querySelectorAll('.statistics-table tbody tr.group-start');
+        let visibleCount = 0;
+        
+        // Добавляем класс анимации
+        groups.forEach(row => row.classList.add('filtering'));
+        
+        setTimeout(() => {
+            groups.forEach(groupRow => {
+                const groupMetrics = getGroupMetrics(groupRow);
+                const shouldShow = shouldShowGroup(groupMetrics, filterType);
+                
+                toggleGroupVisibility(groupRow, shouldShow);
+                if (shouldShow) visibleCount++;
+                
+                // Убираем класс анимации
+                groupRow.classList.remove('filtering');
+            });
+            
+            updateFilterStatus(visibleCount, groups.length);
+            setActiveFilter(filterType);
+            updateSummaryCounters(); // Обновляем счетчики сводки после фильтраци�
+        }, 150);
+    }
+
+    function toggleGroupVisibility(groupStartRow, shouldShow) {
+        let currentRow = groupStartRow;
+        
+        // Скрываем/показываем все строки, принадлежащие этой группе
+        while (currentRow && (!currentRow.nextElementSibling || !currentRow.nextElementSibling.classList.contains('group-start'))) {
+            currentRow.classList.toggle('group-hidden', !shouldShow);
+            currentRow = currentRow.nextElementSibling;
+        }
+    }
+
+    function updateFilterStatus(visibleCount, totalCount) {
+        const visibleEl = document.getElementById('visibleGroups');
+        const totalEl = document.getElementById('totalGroups');
+        
+        if (visibleEl) visibleEl.textContent = visibleCount || 0;
+        if (totalEl) totalEl.textContent = totalCount || 0;
+    }
+
+    function setActiveFilter(filterType) {
+        // Убираем активное состояние со всех кнопок
+        document.querySelectorAll('.filter-controls .btn').forEach(btn => 
+            btn.classList.remove('active')
+        );
+        
+        // Устанавливаем активное состояние на текущий фильтр
+        let activeButtonId;
+        switch (filterType) {
+            case 'warning': activeButtonId = 'filterWarning'; break;
+            case 'critical': activeButtonId = 'filterCritical'; break;
+            case 'both': activeButtonId = 'filterBoth'; break;
+            case 'reset': activeButtonId = 'filterReset'; break;
+        }
+        
+        const activeButton = document.getElementById(activeButtonId);
+        if (activeButton) activeButton.classList.add('active');
+    }
+
+    function bindFilterEvents() {
+        const filterWarning = document.getElementById('filterWarning');
+        const filterCritical = document.getElementById('filterCritical');
+        const filterBoth = document.getElementById('filterBoth');
+        const filterReset = document.getElementById('filterReset');
+        
+        if (filterWarning) {
+            filterWarning.addEventListener('click', () => filterGroups('warning'));
+        }
+        if (filterCritical) {
+            filterCritical.addEventListener('click', () => filterGroups('critical'));
+        }
+        if (filterBoth) {
+            filterBoth.addEventListener('click', () => filterGroups('both'));
+        }
+        if (filterReset) {
+            filterReset.addEventListener('click', () => filterGroups('reset'));
+        }
+    }
+    // ===== Конец фильтров быстрого доступа =====
 
     function displayDateModifications() {
         if (!statisticsData || statisticsData.length === 0) return;
@@ -600,5 +867,7 @@
     }
     /*]]>*/
 </script>
+
+<script th:src="@{/js/statistics-filter.js}"></script>
 </body>
 </html>
