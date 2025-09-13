@@ -352,12 +352,21 @@
                                 <th:block th:each="groupOp : ${group.operations}">
                                     <th:block th:if="${groupOp.exportSessionId == colOperation.exportSessionId}">
                                         <th:block th:with="metricValue=${groupOp.metrics[metric.key]}">
+                                            <!-- Для DATE_MODIFICATIONS инвертируем логику цветов -->
                                             <div th:class="${metricValue == null ? 'metric-stable' :
-                                                (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-increase-warning'  :
-                                                (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-increase-critical' :
-                                                (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-decrease-warning'  :
-                                                (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-decrease-critical' :
-                                                'metric-stable'}">
+                                                (metric.key == 'DATE_MODIFICATIONS' ?
+                                                    (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-decrease-warning'  :
+                                                    (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-decrease-critical' :
+                                                    (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-increase-warning'  :
+                                                    (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-increase-critical' :
+                                                    'metric-stable'
+                                                :
+                                                    (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-increase-warning'  :
+                                                    (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-increase-critical' :
+                                                    (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-decrease-warning'  :
+                                                    (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-decrease-critical' :
+                                                    'metric-stable'
+                                                )}">
 
                                                 <div class="metric-value"
                                                      th:text="${metricValue != null ? metricValue.currentValue : '-'}">-
@@ -613,24 +622,24 @@
         const groups = document.querySelectorAll('.statistics-table tbody tr.group-start');
         let warningCount = 0, criticalCount = 0, bothCount = 0;
         const totalCount = groups.length;
-        
+
         groups.forEach(groupRow => {
             const groupMetrics = getGroupMetrics(groupRow);
-            const hasWarning = hasWarningOnlyDeviations(groupMetrics);
+            const hasOnlyWarning = hasOnlyWarningDeviations(groupMetrics);
             const hasCritical = hasCriticalDeviations(groupMetrics);
             const hasAny = hasAnyDeviations(groupMetrics);
-            
-            if (hasWarning) warningCount++;
+
+            if (hasOnlyWarning) warningCount++;
             if (hasCritical) criticalCount++;
             if (hasAny) bothCount++;
         });
-        
+
         // Обновляем счетчики кнопок
         const warningCountEl = document.getElementById('warningCount');
         const criticalCountEl = document.getElementById('criticalCount');
         const bothCountEl = document.getElementById('bothCount');
         const totalCountEl = document.getElementById('totalCount');
-        
+
         if (warningCountEl) warningCountEl.textContent = warningCount;
         if (criticalCountEl) criticalCountEl.textContent = criticalCount;
         if (bothCountEl) bothCountEl.textContent = bothCount;
@@ -640,49 +649,62 @@
     function getGroupMetrics(groupStartRow) {
         const metrics = [];
         let currentRow = groupStartRow;
-        
+
         // Собираем все строки метрик для этой группы
-        while (currentRow && (!currentRow.nextElementSibling || !currentRow.nextElementSibling.classList.contains('group-start'))) {
+        // Группа включает строку с rowspan и все следующие строки до следующей группы
+        do {
             const metricCells = currentRow.querySelectorAll('.metric-decrease-warning, .metric-decrease-critical, .metric-increase-warning, .metric-increase-critical');
             metrics.push(...metricCells);
             currentRow = currentRow.nextElementSibling;
-        }
-        
+        } while (currentRow && !currentRow.querySelector('td[rowspan]'));
+
         return metrics;
     }
 
-    function hasWarningOnlyDeviations(metrics) {
-        const hasWarning = metrics.some(cell => 
-            cell.classList.contains('metric-decrease-warning') || 
-            cell.classList.contains('metric-increase-warning')
+    function hasWarningDeviations(metrics) {
+        // Проверяем есть ли хотя бы одно ПЛОХОЕ предупреждение в группе
+        // Для DATE_MODIFICATIONS плохо когда растет (increase-warning отображается как decrease-warning)
+        // Для остальных метрик плохо когда падает (decrease-warning)
+        return metrics.some(cell =>
+            cell.classList.contains('metric-decrease-warning')
         );
+    }
+
+    function hasCriticalDeviations(metrics) {
+        // Проверяем есть ли хотя бы одно ПЛОХОЕ критическое отклонение в группе
+        // Для DATE_MODIFICATIONS плохо когда растет (increase-critical отображается как decrease-critical)
+        // Для остальных метрик плохо когда падает (decrease-critical)
+        return metrics.some(cell =>
+            cell.classList.contains('metric-decrease-critical')
+        );
+    }
+
+    function hasOnlyWarningDeviations(metrics) {
+        // Проверяем есть ли предупреждения И нет критических отклонений
+        const hasWarning = hasWarningDeviations(metrics);
         const hasCritical = hasCriticalDeviations(metrics);
         return hasWarning && !hasCritical;
     }
 
-    function hasCriticalDeviations(metrics) {
-        return metrics.some(cell => 
-            cell.classList.contains('metric-decrease-critical') || 
-            cell.classList.contains('metric-increase-critical')
-        );
-    }
-
     function hasAnyDeviations(metrics) {
-        return metrics.some(cell => 
-            cell.classList.contains('metric-decrease-warning') || 
-            cell.classList.contains('metric-decrease-critical') ||
-            cell.classList.contains('metric-increase-warning') ||
-            cell.classList.contains('metric-increase-critical')
+        // Проверяем есть ли любые ПЛОХИЕ отклонения в группе
+        // Учитываем только плохие отклонения (красные и желтые)
+        return metrics.some(cell =>
+            cell.classList.contains('metric-decrease-warning') ||
+            cell.classList.contains('metric-decrease-critical')
         );
     }
 
     function shouldShowGroup(groupMetrics, filterType) {
         switch (filterType) {
             case 'warning':
-                return hasWarningOnlyDeviations(groupMetrics);
+                // Показываем только группы с предупреждениями БЕЗ критических отклонений
+                return hasOnlyWarningDeviations(groupMetrics);
             case 'critical':
+                // Показываем группы, где есть хотя бы одно критическое отклонение
                 return hasCriticalDeviations(groupMetrics);
             case 'both':
+                // Показываем группы с любыми отклонениями
                 return hasAnyDeviations(groupMetrics);
             case 'reset':
             default:
@@ -717,12 +739,13 @@
 
     function toggleGroupVisibility(groupStartRow, shouldShow) {
         let currentRow = groupStartRow;
-        
+
         // Скрываем/показываем все строки, принадлежащие этой группе
-        while (currentRow && (!currentRow.nextElementSibling || !currentRow.nextElementSibling.classList.contains('group-start'))) {
+        // Группа включает строку с rowspan и все следующие строки до следующей группы
+        do {
             currentRow.classList.toggle('group-hidden', !shouldShow);
             currentRow = currentRow.nextElementSibling;
-        }
+        } while (currentRow && !currentRow.querySelector('td[rowspan]'));
     }
 
     function updateFilterStatus(visibleCount, totalCount) {
