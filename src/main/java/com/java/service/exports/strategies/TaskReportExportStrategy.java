@@ -36,7 +36,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
             ExportTemplate template,
             Map<String, Object> context) {
 
-        log.info("Применение стратегии Задание-Отчет");
+        log.debug("Применение стратегии Задание-Отчет");
         log.debug("Входных записей: {}", data.size());
 
         String clientRegionCode = (String) context.get("clientRegionCode");
@@ -201,7 +201,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
             log.debug("Пропущенные записи отчета без ключа: {}", summary);
         }
 
-        log.info("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {}, дат изменено: {})",
+        log.debug("После фильтрации осталось {} записей из {} (обогащено: {}, пропущено без ключа: {}, дат изменено: {})",
                 matched, reportData.size(), enriched, skippedWithoutKey, общееКоличествоИзмененийДат);
 
         // 6. Применяем стандартную обработку для форматирования полей

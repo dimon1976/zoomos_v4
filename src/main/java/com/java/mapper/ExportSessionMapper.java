@@ -16,10 +16,21 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ExportSessionMapper {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static ObjectMapper objectMapper;
 
     private ExportSessionMapper() {
         // Утилитный класс
+    }
+
+    public static void setObjectMapper(ObjectMapper mapper) {
+        objectMapper = mapper;
+    }
+
+    private static ObjectMapper getObjectMapper() {
+        if (objectMapper == null) {
+            objectMapper = new ObjectMapper();
+        }
+        return objectMapper;
     }
 
     /**
@@ -70,7 +81,7 @@ public class ExportSessionMapper {
         if (json == null || json.isEmpty()) return new ArrayList<>();
 
         try {
-            return objectMapper.readValue(json, new TypeReference<List<Long>>() {});
+            return getObjectMapper().readValue(json, new TypeReference<List<Long>>() {});
         } catch (Exception e) {
             log.error("Ошибка парсинга ID операций", e);
             return new ArrayList<>();
@@ -84,7 +95,7 @@ public class ExportSessionMapper {
         if (json == null || json.isEmpty()) return new ArrayList<>();
 
         try {
-            return objectMapper.readValue(json, new TypeReference<List<ExportTemplateFilterDto>>() {});
+            return getObjectMapper().readValue(json, new TypeReference<List<ExportTemplateFilterDto>>() {});
         } catch (Exception e) {
             log.error("Ошибка парсинга фильтров", e);
             return new ArrayList<>();

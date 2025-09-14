@@ -37,14 +37,10 @@
                         </option>
                     </select>
                 </div>
-                <div class="mb-3">
-                    <label for="operationIds" class="form-label">ID операций (через запятую)</label>
-                    <input type="text" id="operationIds" name="operationIds" class="form-control">
-                </div>
 
                 <div class="mb-3">
-                    <label for="maxReportAgeDays" class="form-label">Макс. давность отчёта (дней)</label>
-                    <input type="number" id="maxReportAgeDays" class="form-control" th:field="*{maxReportAgeDays}" min="1">
+                    <label for="reportDateFrom" class="form-label">Отчёт не старше чем</label>
+                    <input type="date" id="reportDateFrom" name="reportDateFrom" class="form-control">
                 </div>
 
                 <div class="mb-3" th:if="${!#lists.isEmpty(recentOperations)}">
@@ -141,7 +137,6 @@
         const templateSelect = document.getElementById('templateId');
         const filtersBlocks = document.querySelectorAll('.template-filters');
         const exportAll = document.getElementById('exportAll');
-        const operationInput = document.getElementById('operationIds');
         const operationCheckboxes = document.querySelectorAll('input[name="selectedOperationIds"]');
 
         function updateIndexes(block) {
@@ -239,7 +234,6 @@
 
         function toggleOperations() {
             const disabled = exportAll.checked;
-            operationInput.disabled = disabled;
             operationCheckboxes.forEach(cb => cb.disabled = disabled);
         }
 

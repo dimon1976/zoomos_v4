@@ -5,6 +5,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Bean;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.java.mapper.FileMetadataMapper;
+import com.java.mapper.ExportTemplateMapper;
+import com.java.mapper.ExportSessionMapper;
+import javax.annotation.PostConstruct;
 
 /**
  * Конфигурация параметров импорта
@@ -35,10 +39,18 @@ public class ImportConfig {
     }
 
     @Bean
-    public ObjectMapper importObjectMapper() {
+    public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         return mapper;
+    }
+
+    @PostConstruct
+    public void initializeStaticMappers() {
+        ObjectMapper mapper = objectMapper();
+        FileMetadataMapper.setObjectMapper(mapper);
+        ExportTemplateMapper.setObjectMapper(mapper);
+        ExportSessionMapper.setObjectMapper(mapper);
     }
 
     /**

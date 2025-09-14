@@ -39,7 +39,7 @@ public class ExportService {
     private final ExportDataService dataService;
     private final ExportProcessorService processorService;
     private final AsyncExportService asyncExportService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     /**
      * Минимальное количество строк, при превышении которого экспорт

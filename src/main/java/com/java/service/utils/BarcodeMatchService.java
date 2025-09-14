@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class BarcodeMatchService {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     /**
      * Обработка сопоставления штрихкодов

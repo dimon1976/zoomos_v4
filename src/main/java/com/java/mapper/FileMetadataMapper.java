@@ -16,10 +16,21 @@ import java.util.Map;
 @Slf4j
 public class FileMetadataMapper {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static ObjectMapper objectMapper;
 
     private FileMetadataMapper() {
         // Утилитный класс
+    }
+
+    public static void setObjectMapper(ObjectMapper mapper) {
+        objectMapper = mapper;
+    }
+
+    private static ObjectMapper getObjectMapper() {
+        if (objectMapper == null) {
+            objectMapper = new ObjectMapper();
+        }
+        return objectMapper;
     }
 
     /**
@@ -57,7 +68,7 @@ public class FileMetadataMapper {
         if (json == null || json.isEmpty()) return new ArrayList<>();
 
         try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+            return getObjectMapper().readValue(json, new TypeReference<List<String>>() {});
         } catch (Exception e) {
             log.error("Ошибка парсинга JSON массива", e);
             return new ArrayList<>();
@@ -71,7 +82,7 @@ public class FileMetadataMapper {
         if (json == null || json.isEmpty()) return new ArrayList<>();
 
         try {
-            List<List<String>> rawData = objectMapper.readValue(json,
+            List<List<String>> rawData = getObjectMapper().readValue(json,
                     new TypeReference<List<List<String>>>() {});
 
             // Преобразуем в формат с ключами для удобства отображения

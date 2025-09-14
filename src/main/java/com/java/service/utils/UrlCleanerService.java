@@ -31,7 +31,7 @@ import java.util.stream.Stream;
 public class UrlCleanerService {
 
     private final FileGeneratorService fileGeneratorService;
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     
     // Список параметров для удаления
     private static final Set<String> UTM_PARAMS = Set.of(
