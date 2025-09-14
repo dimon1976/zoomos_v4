@@ -83,6 +83,19 @@ public class ExportProcessorService {
                 log.debug("Operation IDs получены из данных: {}", loadedIds);
             }
 
+            // Обновляем sourceOperationIds в сессии с реальными ID операций после загрузки данных
+            if (request.getOperationIds() != null && !request.getOperationIds().isEmpty()) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    String sourceOperationIdsJson = mapper.writeValueAsString(request.getOperationIds());
+                    session.setSourceOperationIds(sourceOperationIdsJson);
+                    sessionRepository.save(session);
+                    log.debug("Обновлены sourceOperationIds в сессии {}: {}", session.getId(), sourceOperationIdsJson);
+                } catch (Exception e) {
+                    log.error("Ошибка обновления sourceOperationIds для сессии {}", session.getId(), e);
+                }
+            }
+
             log.debug("После загрузки получено {} строк", data.size());
             session.setTotalRows((long) data.size());
 
