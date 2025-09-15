@@ -118,6 +118,34 @@
         /* Метрика всегда во 2-й колонке */
         .statistics-table tbody tr td:nth-child(2) { background-color: var(--bs-gray-100); }
 
+        /* Цветовое выделение для одинаковых метрик */
+        .metric-highlight-date {
+            background-color: #f8d7da !important; /* розовый */
+            font-weight: 600;
+            border-left: 3px solid #dc3545;
+        }
+        .metric-highlight-price {
+            background-color: #d1ecf1 !important; /* голубой - приоритетный */
+            font-weight: 600;
+            border-left: 3px solid #17a2b8;
+        }
+        .metric-highlight-promo {
+            background-color: #fff3cd !important; /* желтый */
+            font-weight: 600;
+            border-left: 3px solid #ffc107;
+        }
+
+        /* Подсветка значений для выделенных метрик */
+        .metric-highlight-date ~ td {
+            background-color: #fff5f5 !important; /* очень светло-розовый */
+        }
+        .metric-highlight-price ~ td {
+            background-color: #e6f7ff !important; /* очень светло-голубой */
+        }
+        .metric-highlight-promo ~ td {
+            background-color: #fffbf0 !important; /* очень светло-желтый */
+        }
+
         .align-middle { vertical-align: middle !important; }
 
         /* Карточки/панели */

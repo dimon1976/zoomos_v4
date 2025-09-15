@@ -9,6 +9,7 @@ let currentCriticalThreshold = 20;
 
 document.addEventListener('DOMContentLoaded', () => {
     addGroupStartClass();
+    highlightMetrics();
     updateSummaryCounters();
     displayDateModifications();
     initializeQuickFilters();
@@ -82,6 +83,9 @@ function recalculateAlertLevels() {
             cell.classList.add('metric-stable');
         }
     });
+
+    // Восстанавливаем выделение метрик после пересчета
+    highlightMetrics();
 
     // Пересчитываем счетчики фильтров после изменения порогов
     calculateFilterCounts();
@@ -168,6 +172,34 @@ function showNotification(message, type) {
 function addGroupStartClass() {
     document.querySelectorAll('.statistics-table tbody tr').forEach(tr => {
         if (tr.querySelector('td[rowspan]')) tr.classList.add('group-start');
+    });
+}
+
+function highlightMetrics() {
+    // Применяем цветовое выделение для всех ячеек с метриками
+    document.querySelectorAll('.statistics-table tbody td').forEach(cell => {
+        // Проверяем, является ли ячейка метрикой (не группой и не значением)
+        const cellText = cell.textContent.trim();
+
+        // Пропускаем ячейки с rowspan (группы) и ячейки с числовыми значениями
+        if (cell.hasAttribute('rowspan') || cell.querySelector('.metric-value')) {
+            return;
+        }
+
+        // Проверяем текст ячейки на соответствие названиям метрик
+        const metricName = cellText.toUpperCase();
+
+        // Удаляем все предыдущие классы выделения
+        cell.classList.remove('metric-highlight-date', 'metric-highlight-price', 'metric-highlight-promo');
+
+        // Применяем соответствующий класс выделения
+        if (metricName === 'DATE_MODIFICATIONS' || metricName === 'DATE MODIFICATIONS') {
+            cell.classList.add('metric-highlight-date');
+        } else if (metricName === 'COMPETITORPRICE' || metricName === 'COMPETITOR PRICE') {
+            cell.classList.add('metric-highlight-price');
+        } else if (metricName === 'COMPETITORPROMOTIONALPRICE' || metricName === 'COMPETITOR PROMOTIONAL PRICE') {
+            cell.classList.add('metric-highlight-promo');
+        }
     });
 }
 
