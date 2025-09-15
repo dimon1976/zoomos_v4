@@ -8,7 +8,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.java.mapper.FileMetadataMapper;
 import com.java.mapper.ExportTemplateMapper;
 import com.java.mapper.ExportSessionMapper;
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 
 /**
  * Конфигурация параметров импорта
@@ -47,7 +47,8 @@ public class ImportConfig {
 
     @PostConstruct
     public void initializeStaticMappers() {
-        ObjectMapper mapper = objectMapper();
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
         FileMetadataMapper.setObjectMapper(mapper);
         ExportTemplateMapper.setObjectMapper(mapper);
         ExportSessionMapper.setObjectMapper(mapper);
