@@ -19,8 +19,10 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -78,28 +80,25 @@ public class ExportController {
     @PostMapping("/client/{clientId}/start")
     public String startExport(@PathVariable Long clientId,
                               @ModelAttribute ExportRequestDto request,
-                              @RequestParam(required = false) String operationIds,
                               @RequestParam(name = "selectedOperationIds", required = false) List<Long> selectedOperations,
                               @RequestParam(value = "exportAll", defaultValue = "false") boolean exportAll,
+                              @RequestParam(name = "reportDateFrom", required = false) LocalDate reportDateFrom,
                               RedirectAttributes redirectAttributes) {
         try {
             List<Long> ops = new ArrayList<>();
-            if (!exportAll) {
-                if (operationIds != null) {
-                    ops.addAll(Arrays.stream(operationIds.split(","))
-                            .map(String::trim)
-                            .filter(s -> !s.isEmpty())
-                            .map(Long::parseLong)
-                            .toList());
-                }
-                if (selectedOperations != null) {
-                    ops.addAll(selectedOperations);
-                }
+            if (!exportAll && selectedOperations != null) {
+                ops.addAll(selectedOperations);
             }
 
             // Even when exporting the entire table, keep an empty list instead of null
             // to avoid null value issues in subsequent processing
             request.setOperationIds(ops);
+
+            // Пересчёт количества дней из выбранной даты
+            if (reportDateFrom != null) {
+                long daysDiff = ChronoUnit.DAYS.between(reportDateFrom, LocalDate.now());
+                request.setMaxReportAgeDays((int) daysDiff);
+            }
 
             ExportSessionDto session = exportService.startExport(request, clientId);
 

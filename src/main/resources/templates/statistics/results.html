@@ -26,6 +26,60 @@
             --bs-success-text: #0f5132;
         }
 
+        /* ===== Фильтры быстрого доступа ===== */
+        .filter-controls {
+            background-color: var(--bs-gray-100);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid var(--bs-gray-300);
+        }
+
+        .filter-controls .btn-group .btn {
+            border-radius: 0.375rem;
+            margin-right: 2px;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .filter-controls .btn-group .btn:last-child {
+            margin-right: 0;
+        }
+
+        .filter-controls .btn-group .btn.active {
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .filter-controls .btn-group .btn:hover:not(.active) {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .filter-status {
+            font-size: 0.9rem;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .filter-status span {
+            font-weight: 600;
+            color: var(--bs-primary);
+        }
+
+        /* Скрытие групп */
+        .group-hidden {
+            display: none !important;
+        }
+
+        /* Анимация фильтрации */
+        .statistics-table tbody tr {
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .statistics-table tbody tr.filtering {
+            opacity: 0.5;
+        }
+
         /* ===== Таблица статистики ===== */
         .statistics-table { font-size: 0.9rem; }
 
@@ -226,6 +280,33 @@
         <p class="text-muted">Проверьте выбранные операции и настройки фильтров</p>
     </div>
 
+    <!-- Быстрые фильтры -->
+    <div th:unless="${#lists.isEmpty(comparison)}" class="filter-controls mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="btn-group" role="group" aria-label="Фильтры быстрого доступа">
+                <button type="button" class="btn btn-outline-warning" id="filterWarning" title="Показать только группы с предупреждениями">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Только предупреждения (<span id="warningCount">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-danger" id="filterCritical" title="Показать только группы с критическими отклонениями">
+                    <i class="fas fa-exclamation-circle me-1"></i>
+                    Только критические (<span id="criticalCount">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-dark" id="filterBoth" title="Показать группы с любыми отклонениями">
+                    <i class="fas fa-filter me-1"></i>
+                    Все отклонения (<span id="bothCount">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="filterReset" title="Показать все группы">
+                    <i class="fas fa-times me-1"></i>
+                    Сброс (<span id="totalCount">0</span>)
+                </button>
+            </div>
+            <div class="filter-status text-muted" id="filterStatus">
+                Показано: <span id="visibleGroups">0</span> из <span id="totalGroups">0</span> групп
+            </div>
+        </div>
+    </div>
+
     <!-- Таблица статистики -->
     <div th:unless="${#lists.isEmpty(comparison)}" class="table-responsive">
         <table class="table table-bordered statistics-table">
@@ -271,12 +352,21 @@
                                 <th:block th:each="groupOp : ${group.operations}">
                                     <th:block th:if="${groupOp.exportSessionId == colOperation.exportSessionId}">
                                         <th:block th:with="metricValue=${groupOp.metrics[metric.key]}">
+                                            <!-- Для DATE_MODIFICATIONS инвертируем логику цветов -->
                                             <div th:class="${metricValue == null ? 'metric-stable' :
-                                                (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-increase-warning'  :
-                                                (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-increase-critical' :
-                                                (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-decrease-warning'  :
-                                                (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-decrease-critical' :
-                                                'metric-stable'}">
+                                                (metric.key == 'DATE_MODIFICATIONS' ?
+                                                    (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-decrease-warning'  :
+                                                    (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-decrease-critical' :
+                                                    (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-increase-warning'  :
+                                                    (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-increase-critical' :
+                                                    'metric-stable'
+                                                :
+                                                    (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-increase-warning'  :
+                                                    (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-increase-critical' :
+                                                    (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-decrease-warning'  :
+                                                    (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-decrease-critical' :
+                                                    'metric-stable'
+                                                )}">
 
                                                 <div class="metric-value"
                                                      th:text="${metricValue != null ? metricValue.currentValue : '-'}">-
@@ -366,239 +456,20 @@
     <i class="fas fa-file-excel fa-lg"></i>
 </button>
 
+<script src="/js/statistics-results.js"></script>
 <script th:inline="javascript">
     /*<![CDATA[*/
-    const statisticsData = /*[[${comparison}]]*/ [];
-    let currentWarningThreshold = /*[[${warningPercentage}]]*/ 10;
-    let currentCriticalThreshold = /*[[${criticalPercentage}]]*/ 20;
+    // Инициализация данных из Thymeleaf
+    const statisticsDataFromTemplate = /*[[${comparison}]]*/ [];
+    const warningThresholdFromTemplate = /*[[${warningPercentage}]]*/ 10;
+    const criticalThresholdFromTemplate = /*[[${criticalPercentage}]]*/ 20;
 
     document.addEventListener('DOMContentLoaded', () => {
-        addGroupStartClass();
-        updateSummaryCounters();
-        displayDateModifications();
+        // Инициализируем данные в загруженном скрипте
+        initializeStatisticsData(statisticsDataFromTemplate, warningThresholdFromTemplate, criticalThresholdFromTemplate);
     });
-
-    function toggleSettings() {
-        const panel = document.getElementById('settingsPanel');
-        panel.classList.toggle('d-none');
-    }
-
-    function validateThresholdValue(val, fallback) {
-        const n = Number.parseInt(String(val), 10);
-        return Number.isFinite(n) ? Math.min(100, Math.max(1, n)) : fallback;
-    }
-
-    function updateThresholds() {
-        const warningEl = document.getElementById('warningThreshold');
-        const criticalEl = document.getElementById('criticalThreshold');
-        const warning = validateThresholdValue(warningEl.value, currentWarningThreshold);
-        const critical = validateThresholdValue(criticalEl.value, currentCriticalThreshold);
-
-        if (warning >= critical) {
-            alert('Процент предупреждения должен быть меньше критического');
-            warningEl.value = currentWarningThreshold;
-            criticalEl.value = currentCriticalThreshold;
-        }
-    }
-
-    function applyThresholds() {
-        const warning = validateThresholdValue(document.getElementById('warningThreshold').value, currentWarningThreshold);
-        const critical = validateThresholdValue(document.getElementById('criticalThreshold').value, currentCriticalThreshold);
-
-        if (warning >= critical) {
-            alert('Процент предупреждения должен быть меньше критического');
-            return;
-        }
-
-        currentWarningThreshold = warning;
-        currentCriticalThreshold = critical;
-
-        recalculateAlertLevels();
-        updateSummaryCounters();
-        showNotification('Пороги отклонений обновлены', 'success');
-    }
-
-    function recalculateAlertLevels() {
-        const cells = document.querySelectorAll('.statistics-table tbody td');
-        cells.forEach(cell => {
-            cell.classList.remove(
-                'metric-increase-warning','metric-increase-critical',
-                'metric-decrease-warning','metric-decrease-critical',
-                'metric-stable'
-            );
-
-            const changeWrapper = cell.querySelector('.metric-change span');
-            if (!changeWrapper) { cell.classList.add('metric-stable'); return; }
-
-            // Берём числовое значение из data-change, чтобы не зависеть от локали
-            const raw = changeWrapper.getAttribute('data-change');
-            const val = raw === null ? NaN : Number(raw);
-            if (!Number.isFinite(val) || val === 0) { cell.classList.add('metric-stable'); return; }
-
-            const abs = Math.abs(val);
-            const isUp = val > 0;
-
-            if (abs >= currentCriticalThreshold) {
-                cell.classList.add(isUp ? 'metric-increase-critical' : 'metric-decrease-critical');
-            } else if (abs >= currentWarningThreshold) {
-                cell.classList.add(isUp ? 'metric-increase-warning' : 'metric-decrease-warning');
-            } else {
-                cell.classList.add('metric-stable');
-            }
-        });
-    }
-
-    function updateSummaryCounters() {
-        const warningCells = document.querySelectorAll('.metric-increase-warning, .metric-decrease-warning').length;
-        const criticalCells = document.querySelectorAll('.metric-increase-critical, .metric-decrease-critical').length;
-        const fromData = statisticsData && statisticsData[0] && Array.isArray(statisticsData[0].operations)
-            ? statisticsData[0].operations.length
-            : null;
-        const fromDom = document.querySelectorAll('thead .operation-header').length;
-        const totalOperations = fromData ?? fromDom;
-
-        const totalEl = document.getElementById('totalOperationsCount');
-        if (totalEl) totalEl.textContent = String(totalOperations);
-        const warnEl = document.getElementById('warningChangesCount');
-        if (warnEl) warnEl.textContent = String(warningCells);
-        const critEl = document.getElementById('criticalChangesCount');
-        if (critEl) critEl.textContent = String(criticalCells);
-    }
-
-    function exportToExcel() {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '/statistics/export/excel';
-        form.style.display = 'none';
-
-        const dataInput = document.createElement('input');
-        dataInput.name = 'statisticsData';
-        try { dataInput.value = JSON.stringify(statisticsData); } catch (_) { dataInput.value = '[]'; }
-        form.appendChild(dataInput);
-
-        const settingsInput = document.createElement('input');
-        settingsInput.name = 'settings';
-        settingsInput.value = JSON.stringify({
-            warningThreshold: currentWarningThreshold,
-            criticalThreshold: currentCriticalThreshold
-        });
-        form.appendChild(settingsInput);
-
-        document.body.appendChild(form);
-        form.submit();
-        form.remove();
-
-        showNotification('Экспорт в Excel запущен', 'info');
-    }
-
-    function showNotification(message, type) {
-        const alert = document.createElement('div');
-        alert.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-        alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-        alert.setAttribute('role', 'alert');
-        alert.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" aria-label="Закрыть" onclick="this.parentElement.remove()"></button>
-        `;
-        document.body.appendChild(alert);
-        setTimeout(() => { if (alert.parentElement) alert.remove(); }, 5000);
-    }
-
-    function addGroupStartClass() {
-        document.querySelectorAll('.statistics-table tbody tr').forEach(tr => {
-            if (tr.querySelector('td[rowspan]')) tr.classList.add('group-start');
-        });
-    }
-
-    function displayDateModifications() {
-        if (!statisticsData || statisticsData.length === 0) return;
-
-        const panel = document.getElementById('dateModificationsPanel');
-        const summary = document.getElementById('dateModificationsSummary');
-        const content = document.getElementById('dateModificationsContent');
-
-        // Собираем статистику изменений дат из всех групп (только для последней операции)
-        const allDateMods = [];
-        
-        statisticsData.forEach(group => {
-            if (group.operations && group.operations.length > 0) {
-                // Берем первую операцию (самую новую, т.к. отсортированы по убыванию даты)
-                const latestOperation = group.operations[0];
-                if (latestOperation.dateModificationStats) {
-                    allDateMods.push({
-                        group: group.groupFieldValue,
-                        operation: latestOperation.operationName,
-                        exportDate: latestOperation.exportDate,
-                        ...latestOperation.dateModificationStats
-                    });
-                }
-            }
-        });
-
-        if (allDateMods.length === 0) {
-            panel.classList.add('d-none');
-            return;
-        }
-
-        // Отображаем панель
-        panel.classList.remove('d-none');
-
-        // Создаем компактное резюме
-        const totalModified = allDateMods.reduce((sum, mod) => sum + mod.modifiedCount, 0);
-        const totalRecords = allDateMods.reduce((sum, mod) => sum + mod.totalCount, 0);
-        const overallPercentage = totalRecords > 0 ? (totalModified / totalRecords * 100).toFixed(1) : '0.0';
-        
-        const criticalGroups = allDateMods.filter(mod => mod.alertLevel.toLowerCase() === 'critical').length;
-        const warningGroups = allDateMods.filter(mod => mod.alertLevel.toLowerCase() === 'warning').length;
-        
-        let summaryText = `${totalModified} из ${totalRecords} записей (${overallPercentage}%)`;
-        if (criticalGroups > 0) {
-            summaryText += ` | <span class="text-danger"><i class="fas fa-exclamation-triangle"></i> ${criticalGroups} критических</span>`;
-        }
-        if (warningGroups > 0) {
-            summaryText += ` | <span class="text-warning"><i class="fas fa-exclamation-triangle"></i> ${warningGroups} предупреждений</span>`;
-        }
-        
-        summary.innerHTML = summaryText;
-
-        // Создаем детализированные карточки для каждой группы с изменениями дат
-        content.innerHTML = allDateMods.map(dateMod => {
-            const alertClass = dateMod.alertLevel.toLowerCase() === 'critical' ? 'border-danger' :
-                              dateMod.alertLevel.toLowerCase() === 'warning' ? 'border-warning' :
-                              'border-info';
-            
-            const alertBadge = dateMod.alertLevel.toLowerCase() === 'critical' ? 
-                              '<span class="badge bg-danger ms-2">Критическое</span>' :
-                              dateMod.alertLevel.toLowerCase() === 'warning' ?
-                              '<span class="badge bg-warning text-dark ms-2">Предупреждение</span>' :
-                              '<span class="badge bg-success ms-2">Нормально</span>';
-
-            return `
-                <div class="col-md-6 col-lg-4 mb-2">
-                    <div class="card ${alertClass} h-100" style="font-size: 0.9rem;">
-                        <div class="card-body p-2">
-                            <div class="d-flex justify-content-between align-items-start mb-1">
-                                <h6 class="card-title mb-0" style="font-size: 0.95rem;">${dateMod.group}</h6>
-                                ${alertBadge}
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="fw-bold text-primary">${dateMod.modificationPercentage.toFixed(1)}%</div>
-                                    <div class="small text-muted">
-                                        ${dateMod.modifiedCount}/${dateMod.totalCount} записей
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <div class="small text-muted">${dateMod.operation}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
     /*]]>*/
 </script>
+
 </body>
 </html>

@@ -19,7 +19,18 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ExportTemplateMapper {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static ObjectMapper objectMapper;
+
+    public static void setObjectMapper(ObjectMapper mapper) {
+        objectMapper = mapper;
+    }
+
+    private static ObjectMapper getObjectMapper() {
+        if (objectMapper == null) {
+            objectMapper = new ObjectMapper();
+        }
+        return objectMapper;
+    }
 
     public static ExportTemplateDto toDto(ExportTemplate entity) {
         if (entity == null) return null;
@@ -230,7 +241,7 @@ public class ExportTemplateMapper {
             return new ArrayList<>();
         }
         try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+            return getObjectMapper().readValue(json, new TypeReference<List<String>>() {});
         } catch (Exception e) {
             log.error("Ошибка парсинга JSON списка: {}", json, e);
             return new ArrayList<>();

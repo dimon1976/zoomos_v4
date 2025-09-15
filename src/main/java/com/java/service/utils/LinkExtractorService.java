@@ -28,7 +28,7 @@ import java.util.stream.Stream;
 public class LinkExtractorService {
 
     private final FileGeneratorService fileGeneratorService;
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     
     // Регулярное выражение для поиска URL
     private static final Pattern URL_PATTERN = Pattern.compile(

@@ -31,7 +31,7 @@ public class StatsProcessorService {
 
     private final FileAnalyzerService fileAnalyzerService;
     private final ExcelStyleFactory excelStyleFactory;
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     
     // Индексы колонок для дополнительных данных
     private static final int COMPETITOR_URL_COLUMN_INDEX = 27;

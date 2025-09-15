@@ -9,6 +9,7 @@ import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -22,6 +23,7 @@ public class ExportStatisticsService {
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
     private final ExportStatisticsRepository statisticsRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final StatisticsSettingsService settingsService;
 
     /**
@@ -73,6 +75,12 @@ public class ExportStatisticsService {
 
         List<StatisticsComparisonDto> comparisons = new ArrayList<>();
 
+        // Кешируем имена операций для избежания повторных вызовов
+        Map<Long, String> operationNamesCache = new HashMap<>();
+        for (ExportSession session : sessions) {
+            operationNamesCache.put(session.getId(), generateOperationName(session, template));
+        }
+
         for (Map.Entry<String, List<ExportStatistics>> entry : statisticsByGroup.entrySet()) {
             String groupValue = entry.getKey();
             List<ExportStatistics> groupStatistics = entry.getValue();
@@ -98,13 +106,13 @@ public class ExportStatisticsService {
                                     calculateMetrics(sessionStats, previousStats, request);
 
                             // Вычисляем статистику изменений дат
-                            StatisticsComparisonDto.DateModificationStats dateModStats = 
+                            StatisticsComparisonDto.DateModificationStats dateModStats =
                                     calculateDateModificationStats(sessionStats);
 
                             operationStats.add(StatisticsComparisonDto.OperationStatistics.builder()
                                     .exportSessionId(session.getId())
                                     .operationId(session.getFileOperation().getId())
-                                    .operationName(generateOperationName(session, template))
+                                    .operationName(operationNamesCache.get(session.getId()))
                                     .exportDate(session.getStartedAt())
                                     .metrics(metrics)
                                     .dateModificationStats(dateModStats)
@@ -128,35 +136,68 @@ public class ExportStatisticsService {
      */
     private String generateOperationName(ExportSession session, ExportTemplate template) {
         String nameSource = template.getOperationNameSource();
+        log.debug("generateOperationName: sessionId={}, templateId={}, operationNameSource='{}'",
+            session.getId(), template.getId(), nameSource);
 
         if ("TASK_NUMBER".equals(nameSource)) {
             // Извлекаем номер задания из данных операции
             String taskNumber = extractTaskNumberFromSession(session);
+            log.debug("generateOperationName: извлеченный номер задания='{}'", taskNumber);
             return taskNumber != null ? taskNumber : "Экспорт " + session.getId();
         } else if ("FILE_NAME".equals(nameSource)) {
             // Используем имя файла
             String fileName = session.getFileOperation().getFileName();
+            log.debug("generateOperationName: имя файла='{}'", fileName);
             return fileName != null ? fileName.replace(".csv", "").replace(".xlsx", "") : "Экспорт " + session.getId();
         } else {
             // По умолчанию
+            log.debug("generateOperationName: используется значение по умолчанию");
             return "Экспорт " + session.getId();
         }
     }
 
     /**
      * Извлекает номер задания из операций-источников сессии экспорта
+     * Использует ту же логику что и в ExportProcessorService
      */
     private String extractTaskNumberFromSession(ExportSession session) {
         try {
+            log.info("=== ОТЛАДКА extractTaskNumberFromSession ===");
+            log.info("SessionId: {}", session.getId());
+            log.info("SourceOperationIds JSON: '{}'", session.getSourceOperationIds());
+
             // Парсим список операций-источников
             List<Long> sourceOperationIds = parseSourceOperationIds(session.getSourceOperationIds());
+            log.info("Распарсенные operationIds: {}", sourceOperationIds);
+
             if (sourceOperationIds.isEmpty()) {
+                log.warn("Нет операций-источников для сессии {}", session.getId());
                 return null;
             }
 
-            // Берем первую операцию и ищем в ней номер задания
-            // Это требует дополнительного запроса к БД
-            // Пока возвращаем null, можно доработать позже
+            // Проверяем каждую операцию-источник в поиске номера задания
+            // Используем ту же SQL логику что и в ExportProcessorService.extractTaskNumber()
+            for (Long operationId : sourceOperationIds) {
+                log.info("Проверяем operationId: {}", operationId);
+                String sql = "SELECT product_additional1 FROM av_data WHERE operation_id = ? AND product_additional1 IS NOT NULL AND product_additional1 != '' LIMIT 1";
+
+                String taskNumber = jdbcTemplate.query(sql, ps -> ps.setLong(1, operationId), rs -> {
+                    if (rs.next()) {
+                        Object value = rs.getObject("product_additional1");
+                        log.info("Найдено значение в БД: '{}'", value);
+                        return value != null ? value.toString().trim() : null;
+                    }
+                    log.info("Нет записей в av_data для operationId: {}", operationId);
+                    return null;
+                });
+
+                if (taskNumber != null && !taskNumber.isEmpty()) {
+                    log.info("✅ Найден номер задания '{}' для операции {}", taskNumber, operationId);
+                    return taskNumber;
+                }
+            }
+
+            log.warn("❌ Номер задания не найден в операциях-источниках сессии {}", session.getId());
             return null;
         } catch (Exception e) {
             log.error("Ошибка извлечения номера задания из сессии {}", session.getId(), e);
