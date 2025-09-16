@@ -3,22 +3,19 @@ package com.java.service.utils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.utils.StatsProcessDto;
+import com.java.model.entity.ExportTemplate;
+import com.java.model.entity.ExportTemplateField;
 import com.java.model.entity.FileMetadata;
-import com.java.service.file.FileAnalyzerService;
-import com.java.service.exports.style.ExcelStyleFactory;
-import com.java.service.exports.style.ExcelStyles;
+import com.java.service.exports.FileGeneratorService;
+import com.java.util.FileReaderUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Сервис для обработки файлов статистики
@@ -29,8 +26,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class StatsProcessorService {
 
-    private final FileAnalyzerService fileAnalyzerService;
-    private final ExcelStyleFactory excelStyleFactory;
+    private final FileReaderUtils fileReaderUtils;
+    private final FileGeneratorService fileGeneratorService;
     private final ObjectMapper objectMapper;
     
     // Индексы колонок для дополнительных данных
@@ -58,29 +55,94 @@ public class StatsProcessorService {
      */
     public byte[] processStatsFile(FileMetadata metadata, StatsProcessDto dto) throws IOException {
         log.info("Начинаем обработку файла статистики: {}", metadata.getOriginalFilename());
-        
-        // Извлекаем данные из JSON полей FileMetadata
-        List<List<String>> data = parseSampleData(metadata.getSampleData());
-        
-        if (data.isEmpty()) {
-            throw new IllegalArgumentException("Файл не содержит данных для обработки");
+
+        try {
+            // Читаем ВСЕ данные из файла через централизованный утилитарный класс
+            List<List<String>> data = fileReaderUtils.readFullFileData(metadata);
+
+            if (data.isEmpty()) {
+                throw new IllegalArgumentException("Файл не содержит данных для обработки");
+            }
+
+            log.info("Загружено {} строк для обработки", data.size());
+
+            // Определяем колонки для экспорта
+            List<Integer> columnsToExport = getColumnsToExport(dto);
+
+            // Обрабатываем данные
+            List<List<String>> processedData = processData(data, columnsToExport, dto.isSourceReplace());
+
+            log.info("Обработано {} строк", processedData.size());
+
+            // Создаем ExportTemplate
+            ExportTemplate template = createExportTemplate(dto);
+
+            // Преобразуем данные в Stream<Map<String, Object>>
+            Stream<Map<String, Object>> dataStream = convertToMapStream(processedData, getHeaders(dto));
+
+            // Используем FileGeneratorService для генерации файла
+            String fileName = "stats-processed_" + System.currentTimeMillis();
+            java.nio.file.Path generatedFile = fileGeneratorService.generateFile(
+                    dataStream,
+                    processedData.size(),
+                    template,
+                    fileName
+            );
+
+            // Читаем сгенерированный файл в массив байт
+            return java.nio.file.Files.readAllBytes(generatedFile);
+
+        } catch (Exception e) {
+            log.error("Ошибка при обработке файла статистики: {}", metadata.getOriginalFilename(), e);
+            throw new IOException("Ошибка обработки файла: " + e.getMessage(), e);
         }
-        
-        // Определяем колонки для экспорта
-        List<Integer> columnsToExport = getColumnsToExport(dto);
-        
-        // Обрабатываем данные
-        List<List<String>> processedData = processData(data, columnsToExport, dto.isSourceReplace());
-        
-        // Формируем заголовки
+    }
+
+    /**
+     * Создание ExportTemplate на основе настроек из DTO
+     */
+    private ExportTemplate createExportTemplate(StatsProcessDto dto) {
+        ExportTemplate template = ExportTemplate.builder()
+                .name("Stats Export")
+                .description("Экспорт обработанной статистики")
+                .fileFormat("csv".equalsIgnoreCase(dto.getOutputFormat()) ? "CSV" : "XLSX")
+                .csvDelimiter(dto.getCsvDelimiter())
+                .csvEncoding(dto.getCsvEncoding())
+                .csvQuoteChar("\"")
+                .csvIncludeHeader(true)
+                .fields(new ArrayList<>())
+                .build();
+
+        // Создаем поля на основе заголовков
         List<String> headers = getHeaders(dto);
-        
-        // Генерируем файл результата
-        if ("csv".equalsIgnoreCase(dto.getOutputFormat())) {
-            return generateCsvFile(processedData, headers, dto);
-        } else {
-            return generateExcelFile(processedData, headers);
+        List<ExportTemplateField> fields = new ArrayList<>();
+
+        for (int i = 0; i < headers.size(); i++) {
+            String header = headers.get(i);
+            fields.add(ExportTemplateField.builder()
+                    .template(template)
+                    .entityFieldName(header)
+                    .exportColumnName(header)
+                    .fieldOrder(i + 1)
+                    .isIncluded(true)
+                    .build());
         }
+
+        template.setFields(fields);
+        return template;
+    }
+
+    /**
+     * Преобразование данных в Stream<Map<String, Object>> для FileGeneratorService
+     */
+    private Stream<Map<String, Object>> convertToMapStream(List<List<String>> data, List<String> headers) {
+        return data.stream().map(row -> {
+            Map<String, Object> map = new LinkedHashMap<>();
+            for (int i = 0; i < headers.size() && i < row.size(); i++) {
+                map.put(headers.get(i), row.get(i));
+            }
+            return map;
+        });
     }
 
     /**
@@ -190,106 +252,5 @@ public class StatsProcessorService {
         return "";
     }
 
-    /**
-     * Генерация CSV файла
-     */
-    private byte[] generateCsvFile(List<List<String>> data, List<String> headers, StatsProcessDto dto) throws IOException {
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream();
-             OutputStreamWriter writer = new OutputStreamWriter(out, 
-                 "UTF-8".equalsIgnoreCase(dto.getCsvEncoding()) ? StandardCharsets.UTF_8 : StandardCharsets.ISO_8859_1)) {
-            
-            String delimiter = dto.getCsvDelimiter();
-            
-            // Заголовки
-            writer.write(String.join(delimiter, headers) + "\n");
-            
-            // Данные
-            for (List<String> row : data) {
-                List<String> escapedRow = row.stream()
-                    .map(value -> escapeCSV(value, delimiter))
-                    .collect(Collectors.toList());
-                writer.write(String.join(delimiter, escapedRow) + "\n");
-            }
-            
-            writer.flush();
-            return out.toByteArray();
-        }
-    }
-    
-    /**
-     * Экранирование значений для CSV с защитой от инъекции формул
-     */
-    private String escapeCSV(String value, String delimiter) {
-        if (value == null) return "";
-        
-        // Защита от CSV формул - экранируем опасные префиксы
-        String sanitizedValue = sanitizeCSVFormulas(value);
-        
-        if (sanitizedValue.contains(delimiter) || sanitizedValue.contains("\"") || sanitizedValue.contains("\n")) {
-            return "\"" + sanitizedValue.replace("\"", "\"\"") + "\"";
-        }
-        
-        return sanitizedValue;
-    }
-    
-    /**
-     * Санитизация CSV данных от потенциально опасных формул
-     */
-    private String sanitizeCSVFormulas(String value) {
-        if (value == null || value.isEmpty()) return value;
-        
-        String trimmedValue = value.trim();
-        // Проверяем на опасные префиксы формул
-        if (trimmedValue.startsWith("=") || trimmedValue.startsWith("+") || 
-            trimmedValue.startsWith("-") || trimmedValue.startsWith("@")) {
-            // Добавляем одинарную кавычку в начало для предотвращения выполнения формулы
-            return "'" + value;
-        }
-        
-        return value;
-    }
-
-    /**
-     * Генерация Excel файла
-     */
-    private byte[] generateExcelFile(List<List<String>> data, List<String> headers) throws IOException {
-        
-        try (Workbook workbook = new XSSFWorkbook(); 
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            
-            Sheet sheet = workbook.createSheet("Статистика");
-            
-            // Создание стилей через ExcelStyleFactory
-            ExcelStyles styles = excelStyleFactory.createStyles(workbook);
-            
-            // Заголовки
-            Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < headers.size(); i++) {
-                Cell cell = headerRow.createCell(i);
-                cell.setCellValue(headers.get(i));
-                cell.setCellStyle(styles.getHeaderStyle());
-            }
-            
-            // Данные
-            int rowIndex = 1;
-            for (List<String> rowData : data) {
-                Row dataRow = sheet.createRow(rowIndex++);
-                
-                for (int i = 0; i < rowData.size(); i++) {
-                    Cell cell = dataRow.createCell(i);
-                    cell.setCellValue(rowData.get(i));
-                    // Используем стандартный стиль из ExcelStyleFactory
-                }
-            }
-            
-            // Автоподбор ширины колонок
-            for (int i = 0; i < headers.size(); i++) {
-                sheet.autoSizeColumn(i);
-            }
-            
-            workbook.write(out);
-            return out.toByteArray();
-        }
-    }
 
 }
