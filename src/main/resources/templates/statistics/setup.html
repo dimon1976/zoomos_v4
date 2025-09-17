@@ -128,7 +128,8 @@
                 <div th:unless="${#lists.isEmpty(recentExports)}" class="row">
                     <div th:each="export : ${recentExports}" class="col-md-6 col-lg-4 mb-3">
                         <div class="card export-card h-100"
-                             onclick="toggleExportSelection(this, [[${export.id}]])">
+                             th:attr="data-export-id=${export.id}"
+                             onclick="toggleExportSelectionByData(this)">
                             <div class="card-body">
                                 <div class="form-check">
                                     <input class="form-check-input operation-checkbox" type="checkbox"
@@ -288,6 +289,11 @@
         checkbox.checked = !checkbox.checked;
         updateCardSelection(checkbox);
         updateSelectAllState();
+    }
+
+    function toggleExportSelectionByData(card) {
+        const exportId = card.getAttribute('data-export-id');
+        toggleExportSelection(card, exportId);
     }
 
     function updateCardSelection(checkbox) {

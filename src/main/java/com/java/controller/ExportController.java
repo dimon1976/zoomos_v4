@@ -8,9 +8,9 @@ import com.java.model.FileOperation;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.service.EntityFieldService;
-import com.java.util.ControllerUtils;
 import com.java.service.exports.ExportService;
 import com.java.service.exports.ExportTemplateService;
+import com.java.util.ControllerUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -20,13 +20,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.LocalDate;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Контроллер для операций экспорта

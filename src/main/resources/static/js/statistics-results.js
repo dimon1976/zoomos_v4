@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     addGroupStartClass();
     highlightMetrics();
     updateSummaryCounters();
-    displayDateModifications();
+    // displayDateModifications(); // Перенесено в initializeStatisticsData()
     initializeQuickFilters();
 });
 
@@ -405,45 +405,64 @@ function bindFilterEvents() {
 // ===== Конец фильтров быстрого доступа =====
 
 function displayDateModifications() {
-    if (!statisticsData || statisticsData.length === 0) return;
+    if (!statisticsData || statisticsData.length === 0) {
+        console.debug('displayDateModifications: Нет данных статистики');
+        return;
+    }
 
     const panel = document.getElementById('dateModificationsPanel');
     const summary = document.getElementById('dateModificationsSummary');
     const content = document.getElementById('dateModificationsContent');
 
-    // Собираем статистику изменений дат из всех групп (только для последней операции)
+    if (!panel || !summary || !content) {
+        console.warn('displayDateModifications: Не найдены элементы DOM для панели DATE_MODIFICATIONS');
+        return;
+    }
+
+    // Собираем статистику изменений дат из всех групп и всех операций
     const allDateMods = [];
 
     statisticsData.forEach(group => {
         if (group.operations && group.operations.length > 0) {
-            // Берем первую операцию (самую новую, т.к. отсортированы по убыванию даты)
-            const latestOperation = group.operations[0];
-            if (latestOperation.dateModificationStats) {
-                allDateMods.push({
-                    group: group.groupFieldValue,
-                    operation: latestOperation.operationName,
-                    exportDate: latestOperation.exportDate,
-                    ...latestOperation.dateModificationStats
-                });
-            }
+            group.operations.forEach(operation => {
+                // Ищем статистику изменений дат в операции
+                if (operation.dateModificationStats) {
+                    console.debug('Найдена статистика изменений дат для группы:', group.groupFieldValue, operation.dateModificationStats);
+                    allDateMods.push({
+                        group: group.groupFieldValue,
+                        operation: operation.operationName,
+                        exportDate: operation.exportDate,
+                        operationId: operation.operationId,
+                        ...operation.dateModificationStats
+                    });
+                }
+            });
         }
     });
 
+    console.debug('displayDateModifications: Найдено записей с изменениями дат:', allDateMods.length);
+
     if (allDateMods.length === 0) {
-        panel.classList.add('d-none');
+        console.debug('displayDateModifications: Нет данных об изменениях дат - показываем панель для отладки');
+        // Временно показываем панель даже если нет данных (для отладки)
+        panel.classList.remove('d-none');
+        // Показываем пустое сообщение для отладки
+        summary.innerHTML = 'Нет данных об изменениях дат (режим отладки)';
+        content.innerHTML = '<div class="col-12 text-muted text-center p-3 bg-light border rounded">⚠️ Данные об изменениях дат не найдены в statisticsData</div>';
         return;
     }
 
     // Отображаем панель
     panel.classList.remove('d-none');
+    console.debug('displayDateModifications: Панель DATE_MODIFICATIONS показана с данными:', allDateMods);
 
     // Создаем компактное резюме
-    const totalModified = allDateMods.reduce((sum, mod) => sum + mod.modifiedCount, 0);
-    const totalRecords = allDateMods.reduce((sum, mod) => sum + mod.totalCount, 0);
+    const totalModified = allDateMods.reduce((sum, mod) => sum + (mod.modifiedCount || 0), 0);
+    const totalRecords = allDateMods.reduce((sum, mod) => sum + (mod.totalCount || 0), 0);
     const overallPercentage = totalRecords > 0 ? (totalModified / totalRecords * 100).toFixed(1) : '0.0';
 
-    const criticalGroups = allDateMods.filter(mod => mod.alertLevel.toLowerCase() === 'critical').length;
-    const warningGroups = allDateMods.filter(mod => mod.alertLevel.toLowerCase() === 'warning').length;
+    const criticalGroups = allDateMods.filter(mod => mod.alertLevel && mod.alertLevel.toLowerCase() === 'critical').length;
+    const warningGroups = allDateMods.filter(mod => mod.alertLevel && mod.alertLevel.toLowerCase() === 'warning').length;
 
     let summaryText = `${totalModified} из ${totalRecords} записей (${overallPercentage}%)`;
     if (criticalGroups > 0) {
@@ -457,33 +476,39 @@ function displayDateModifications() {
 
     // Создаем детализированные карточки для каждой группы с изменениями дат
     content.innerHTML = allDateMods.map(dateMod => {
-        const alertClass = dateMod.alertLevel.toLowerCase() === 'critical' ? 'border-danger' :
-                          dateMod.alertLevel.toLowerCase() === 'warning' ? 'border-warning' :
+        const alertLevel = (dateMod.alertLevel || 'normal').toLowerCase();
+        const alertClass = alertLevel === 'critical' ? 'border-danger' :
+                          alertLevel === 'warning' ? 'border-warning' :
                           'border-info';
 
-        const alertBadge = dateMod.alertLevel.toLowerCase() === 'critical' ?
+        const alertBadge = alertLevel === 'critical' ?
                           '<span class="badge bg-danger ms-2">Критическое</span>' :
-                          dateMod.alertLevel.toLowerCase() === 'warning' ?
+                          alertLevel === 'warning' ?
                           '<span class="badge bg-warning text-dark ms-2">Предупреждение</span>' :
                           '<span class="badge bg-success ms-2">Нормально</span>';
+
+        const modificationPercentage = dateMod.modificationPercentage || 0;
+        const modifiedCount = dateMod.modifiedCount || 0;
+        const totalCount = dateMod.totalCount || 0;
+        const operationName = dateMod.operation || `Операция #${dateMod.operationId || 'N/A'}`;
 
         return `
             <div class="col-md-6 col-lg-4 mb-2">
                 <div class="card ${alertClass} h-100" style="font-size: 0.9rem;">
                     <div class="card-body p-2">
                         <div class="d-flex justify-content-between align-items-start mb-1">
-                            <h6 class="card-title mb-0" style="font-size: 0.95rem;">${dateMod.group}</h6>
+                            <h6 class="card-title mb-0" style="font-size: 0.95rem;">${dateMod.group || 'Неизвестная группа'}</h6>
                             ${alertBadge}
                         </div>
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <div class="fw-bold text-primary">${dateMod.modificationPercentage.toFixed(1)}%</div>
+                                <div class="fw-bold text-primary">${modificationPercentage.toFixed(1)}%</div>
                                 <div class="small text-muted">
-                                    ${dateMod.modifiedCount}/${dateMod.totalCount} записей
+                                    ${modifiedCount}/${totalCount} записей
                                 </div>
                             </div>
                             <div class="text-end">
-                                <div class="small text-muted">${dateMod.operation}</div>
+                                <div class="small text-muted">${operationName}</div>
                             </div>
                         </div>
                     </div>
@@ -498,4 +523,29 @@ function initializeStatisticsData(data, warningThreshold, criticalThreshold) {
     statisticsData = data || [];
     currentWarningThreshold = warningThreshold || 10;
     currentCriticalThreshold = criticalThreshold || 20;
+
+    // Детальное логирование данных для отладки DATE_MODIFICATIONS
+    console.log('=== ИНИЦИАЛИЗАЦИЯ ДАННЫХ СТАТИСТИКИ ===');
+    console.log('Всего групп:', statisticsData.length);
+    statisticsData.forEach((group, groupIndex) => {
+        console.log(`\nГруппа ${groupIndex + 1}: ${group.groupFieldValue}`);
+        console.log('Операций в группе:', group.operations ? group.operations.length : 0);
+
+        if (group.operations) {
+            group.operations.forEach((operation, opIndex) => {
+                console.log(`  Операция ${opIndex + 1} (ID: ${operation.operationId}):`);
+                console.log('    dateModificationStats:', operation.dateModificationStats);
+                if (operation.dateModificationStats) {
+                    console.log('    - modifiedCount:', operation.dateModificationStats.modifiedCount);
+                    console.log('    - totalCount:', operation.dateModificationStats.totalCount);
+                    console.log('    - modificationPercentage:', operation.dateModificationStats.modificationPercentage);
+                    console.log('    - alertLevel:', operation.dateModificationStats.alertLevel);
+                }
+            });
+        }
+    });
+    console.log('=== КОНЕЦ ЛОГИРОВАНИЯ ===');
+
+    // Теперь, когда данные инициализированы, обрабатываем отображение DATE_MODIFICATIONS
+    displayDateModifications();
 }
