@@ -405,19 +405,34 @@ function bindFilterEvents() {
 // ===== Конец фильтров быстрого доступа =====
 
 function displayDateModifications() {
-    if (!statisticsData || statisticsData.length === 0) return;
+    console.log('displayDateModifications called');
+    console.log('statisticsData:', statisticsData);
+
+    if (!statisticsData || statisticsData.length === 0) {
+        console.log('No statistics data available');
+        return;
+    }
 
     const panel = document.getElementById('dateModificationsPanel');
     const summary = document.getElementById('dateModificationsSummary');
     const content = document.getElementById('dateModificationsContent');
 
+    if (!panel || !summary || !content) {
+        console.error('Required DOM elements not found');
+        return;
+    }
+
     // Собираем статистику изменений дат из всех групп (только для последней операции)
     const allDateMods = [];
 
-    statisticsData.forEach(group => {
+    statisticsData.forEach((group, groupIndex) => {
+        console.log(`Processing group ${groupIndex}:`, group);
         if (group.operations && group.operations.length > 0) {
             // Берем первую операцию (самую новую, т.к. отсортированы по убыванию даты)
             const latestOperation = group.operations[0];
+            console.log(`Latest operation for group ${groupIndex}:`, latestOperation);
+            console.log(`dateModificationStats:`, latestOperation.dateModificationStats);
+
             if (latestOperation.dateModificationStats) {
                 allDateMods.push({
                     group: group.groupFieldValue,
@@ -429,11 +444,15 @@ function displayDateModifications() {
         }
     });
 
+    console.log('Collected date modifications:', allDateMods);
+
     if (allDateMods.length === 0) {
+        console.log('No date modifications found, hiding panel');
         panel.classList.add('d-none');
         return;
     }
 
+    console.log('Found date modifications, showing panel');
     // Отображаем панель
     panel.classList.remove('d-none');
 

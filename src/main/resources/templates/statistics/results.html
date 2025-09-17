@@ -493,6 +493,10 @@
     const criticalThresholdFromTemplate = /*[[${criticalPercentage}]]*/ 20;
 
     document.addEventListener('DOMContentLoaded', () => {
+        console.log('Raw statisticsDataFromTemplate:', statisticsDataFromTemplate);
+        console.log('Type of statisticsDataFromTemplate:', typeof statisticsDataFromTemplate);
+        console.log('Length of statisticsDataFromTemplate:', statisticsDataFromTemplate ? statisticsDataFromTemplate.length : 'undefined');
+
         // Инициализируем данные в загруженном скрипте
         initializeStatisticsData(statisticsDataFromTemplate, warningThresholdFromTemplate, criticalThresholdFromTemplate);
     });

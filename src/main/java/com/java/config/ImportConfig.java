@@ -27,6 +27,7 @@ public class ImportConfig {
 
     @Value("${import.timeout-minutes:60}")
     private int timeoutMinutes;
+    //TODO test
 
     @Bean
     public ImportSettings importSettings() {
