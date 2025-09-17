@@ -125,6 +125,78 @@
             </div>
         </div>
 
+        <!-- Дополнительные операции обслуживания -->
+        <div class="row mb-4">
+            <!-- VACUUM FULL -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">
+                            <i class="fas fa-compress-alt"></i>
+                            VACUUM FULL
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="small">Полная перестройка таблиц для освобождения места на диске. <strong>ВНИМАНИЕ:</strong> Блокирует таблицы на время выполнения!</p>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-warning" onclick="performVacuum()">
+                                <i class="fas fa-compress-alt"></i> Выполнить VACUUM
+                            </button>
+                        </div>
+                        <div id="vacuumResult" class="mt-3 d-none">
+                            <!-- Результат VACUUM -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REINDEX -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-sync"></i>
+                            REINDEX
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="small">Перестройка всех индексов для оптимизации производительности запросов.</p>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-secondary" onclick="performReindex()">
+                                <i class="fas fa-sync"></i> Перестроить индексы
+                            </button>
+                        </div>
+                        <div id="reindexResult" class="mt-3 d-none">
+                            <!-- Результат REINDEX -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Анализ Bloat -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-search"></i>
+                            Анализ Bloat
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="small">Поиск раздутых таблиц с избыточным неиспользуемым пространством.</p>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-dark" onclick="analyzeBloat()">
+                                <i class="fas fa-search"></i> Анализировать Bloat
+                            </button>
+                        </div>
+                        <div id="bloatResult" class="mt-3 d-none">
+                            <!-- Результат анализа bloat -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Размеры таблиц -->
         <div class="row">
             <div class="col-12">
@@ -328,16 +400,16 @@ async function cleanupDatabase() {
 async function analyzePerformance() {
     const button = event.target;
     const originalText = button.innerHTML;
-    
+
     button.disabled = true;
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ...';
-    
+
     try {
         const response = await fetch('/maintenance/database/performance');
         const performance = await response.json();
-        
+
         const resultDiv = document.getElementById('performanceResult');
-        
+
         if (performance.length > 0) {
             let performanceHtml = `
                 <div class="alert alert-info">
@@ -357,12 +429,12 @@ async function analyzePerformance() {
                         </thead>
                         <tbody>
             `;
-            
+
             performance.forEach(query => {
                 const isSlowQuery = query.slowQuery;
                 const rowClass = isSlowQuery ? 'table-warning' : '';
                 const queryText = query.query.length > 60 ? query.query.substring(0, 60) + '...' : query.query;
-                
+
                 performanceHtml += `
                     <tr class="${rowClass}">
                         <td><code style="font-size: 0.8rem;">${queryText}</code></td>
@@ -373,7 +445,7 @@ async function analyzePerformance() {
                     </tr>
                 `;
             });
-            
+
             performanceHtml += '</tbody></table></div>';
             resultDiv.innerHTML = performanceHtml;
         } else {
@@ -383,12 +455,188 @@ async function analyzePerformance() {
                 <p class="mb-0">Проблем с производительностью не обнаружено</p>
             `;
         }
-        
+
         resultDiv.classList.remove('d-none');
-        
+
     } catch (error) {
         console.error('Ошибка анализа производительности:', error);
         const resultDiv = document.getElementById('performanceResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка анализа</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// VACUUM FULL
+async function performVacuum() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+
+    if (!confirm('ВНИМАНИЕ! VACUUM FULL заблокирует все таблицы на время выполнения. Продолжить?')) {
+        return;
+    }
+
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Выполнение VACUUM...';
+
+    try {
+        const response = await fetch('/maintenance/database/vacuum', { method: 'POST' });
+        const result = await response.json();
+
+        const resultDiv = document.getElementById('vacuumResult');
+
+        if (result.success) {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> VACUUM FULL выполнен</h6>
+                <p class="mb-1">Обработано таблиц: <strong>${result.tablesProcessed}</strong></p>
+                <p class="mb-1">Размер до: <strong>${result.initialSize}</strong></p>
+                <p class="mb-1">Размер после: <strong>${result.finalSize}</strong></p>
+                <p class="mb-0">Освобождено: <strong>${result.freedSpace}</strong></p>
+            `;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-danger';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-times-circle"></i> Ошибка VACUUM</h6>
+                <p class="mb-0">${result.error}</p>
+            `;
+        }
+
+        resultDiv.classList.remove('d-none');
+        loadDatabaseStats(); // Обновляем статистику
+
+    } catch (error) {
+        console.error('Ошибка VACUUM FULL:', error);
+        const resultDiv = document.getElementById('vacuumResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// REINDEX
+async function performReindex() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+
+    if (!confirm('Перестроить все индексы? Это может занять некоторое время.')) {
+        return;
+    }
+
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Перестройка индексов...';
+
+    try {
+        const response = await fetch('/maintenance/database/reindex', { method: 'POST' });
+        const result = await response.json();
+
+        const resultDiv = document.getElementById('reindexResult');
+
+        if (result.success) {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> REINDEX выполнен</h6>
+                <p class="mb-0">Обработано индексов: <strong>${result.processedIndexes}/${result.totalIndexes}</strong></p>
+            `;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-danger';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-times-circle"></i> Ошибка REINDEX</h6>
+                <p class="mb-0">${result.error}</p>
+            `;
+        }
+
+        resultDiv.classList.remove('d-none');
+
+    } catch (error) {
+        console.error('Ошибка REINDEX:', error);
+        const resultDiv = document.getElementById('reindexResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+// Анализ Bloat
+async function analyzeBloat() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ...';
+
+    try {
+        const response = await fetch('/maintenance/database/bloat');
+        const bloatInfo = await response.json();
+
+        const resultDiv = document.getElementById('bloatResult');
+
+        if (bloatInfo.length > 0) {
+            let bloatHtml = `
+                <div class="alert alert-warning">
+                    <h6><i class="fas fa-exclamation-triangle"></i> Обнаружены раздутые таблицы</h6>
+                    <p class="mb-0">Найдено таблиц с избыточным пространством: ${bloatInfo.length}</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Таблица</th>
+                                <th>Реальный размер</th>
+                                <th>Ожидаемый</th>
+                                <th>Bloat %</th>
+                                <th>Потеряно места</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            bloatInfo.forEach(table => {
+                const bloatPercent = parseFloat(table.bloatPercent);
+                const rowClass = bloatPercent > 30 ? 'table-danger' : (bloatPercent > 15 ? 'table-warning' : '');
+
+                bloatHtml += `
+                    <tr class="${rowClass}">
+                        <td><code>${table.tableName}</code></td>
+                        <td>${table.realSize}</td>
+                        <td>${table.expectedSize}</td>
+                        <td><strong>${table.bloatPercent}%</strong></td>
+                        <td class="text-danger">${table.wastedSpace}</td>
+                    </tr>
+                `;
+            });
+
+            bloatHtml += `
+                        </tbody>
+                    </table>
+                </div>
+                <div class="alert alert-info mt-2">
+                    <small><i class="fas fa-info-circle"></i> Для очистки раздутых таблиц используйте VACUUM FULL</small>
+                </div>
+            `;
+            resultDiv.innerHTML = bloatHtml;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Анализ завершен</h6>
+                <p class="mb-0">Раздутых таблиц не обнаружено</p>
+            `;
+        }
+
+        resultDiv.classList.remove('d-none');
+
+    } catch (error) {
+        console.error('Ошибка анализа bloat:', error);
+        const resultDiv = document.getElementById('bloatResult');
         resultDiv.className = 'mt-3 alert alert-danger';
         resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка анализа</h6><p class="mb-0">' + error.message + '</p>';
         resultDiv.classList.remove('d-none');

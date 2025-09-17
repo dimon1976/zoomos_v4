@@ -11,10 +11,14 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import java.math.BigInteger;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import javax.sql.DataSource;
 
 @Service
 @Slf4j
@@ -22,6 +26,7 @@ import java.util.stream.Collectors;
 public class DatabaseMaintenanceService {
 
     private final EntityManager entityManager;
+    private final DataSource dataSource;
     private final ImportSessionRepository importSessionRepository;
     private final ExportSessionRepository exportSessionRepository;
     private final FileOperationRepository fileOperationRepository;
@@ -38,38 +43,202 @@ public class DatabaseMaintenanceService {
     @Transactional
     public DatabaseCleanupResultDto cleanupOldData() {
         log.info("Запуск очистки старых данных (старше {} дней)", oldDataCleanupDays);
-        
+
         DatabaseCleanupResultDto result = new DatabaseCleanupResultDto();
         result.setCleanupTime(LocalDateTime.now());
-        
+
         try {
             LocalDateTime cutoffDate = LocalDateTime.now().minusDays(oldDataCleanupDays);
-            
+
             int deletedImportSessions = cleanupOldImportSessions(cutoffDate);
             int deletedExportSessions = cleanupOldExportSessions(cutoffDate);
             int deletedFileOperations = cleanupOldFileOperations(cutoffDate);
             int deletedOrphaned = cleanupOrphanedRecords();
-            
+
             result.setDeletedImportSessions(deletedImportSessions);
             result.setDeletedExportSessions(deletedExportSessions);
             result.setDeletedFileOperations(deletedFileOperations);
             result.setDeletedOrphanedRecords(deletedOrphaned);
             result.setSuccess(true);
-            
+
             long freedSpace = calculateFreedSpace(deletedImportSessions, deletedExportSessions, deletedFileOperations);
             result.setFreedSpaceBytes(freedSpace);
             result.setFormattedFreedSpace(formatBytes(freedSpace));
-            
-            log.info("Очистка завершена: импорт={}, экспорт={}, операции={}, orphaned={}", 
+
+            log.info("Очистка завершена: импорт={}, экспорт={}, операции={}, orphaned={}",
                 deletedImportSessions, deletedExportSessions, deletedFileOperations, deletedOrphaned);
-            
+
         } catch (Exception e) {
             log.error("Ошибка при очистке старых данных", e);
             result.setSuccess(false);
             result.setErrorMessage(e.getMessage());
         }
-        
+
         return result;
+    }
+
+    public Map<String, Object> performVacuumFull() {
+        log.info("Запуск VACUUM FULL для всех таблиц");
+        Map<String, Object> result = new HashMap<>();
+
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+
+            // Отключаем автокоммит для получения размера БД
+            connection.setAutoCommit(false);
+
+            long startSize = getDatabaseSizeViaJdbc(statement);
+
+            // Включаем автокоммит для VACUUM (требует отдельных транзакций)
+            connection.setAutoCommit(true);
+
+            // Получаем список всех таблиц
+            ResultSet tablesRs = statement.executeQuery(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+            );
+
+            List<String> tables = new ArrayList<>();
+            while (tablesRs.next()) {
+                tables.add(tablesRs.getString("tablename"));
+            }
+            tablesRs.close();
+
+            // VACUUM FULL для каждой таблицы
+            for (String table : tables) {
+                log.info("VACUUM FULL для таблицы: {}", table);
+                try {
+                    statement.execute("VACUUM FULL " + table);
+                } catch (Exception e) {
+                    log.warn("Не удалось выполнить VACUUM FULL для таблицы {}: {}", table, e.getMessage());
+                }
+            }
+
+            // Получаем размер после очистки
+            connection.setAutoCommit(false);
+            long endSize = getDatabaseSizeViaJdbc(statement);
+            connection.setAutoCommit(true);
+
+            long freedBytes = startSize - endSize;
+
+            result.put("success", true);
+            result.put("tablesProcessed", tables.size());
+            result.put("initialSize", formatBytes(startSize));
+            result.put("finalSize", formatBytes(endSize));
+            result.put("freedSpace", formatBytes(freedBytes));
+            result.put("freedSpaceBytes", freedBytes);
+
+            log.info("VACUUM FULL завершен. Освобождено: {}", formatBytes(freedBytes));
+
+        } catch (Exception e) {
+            log.error("Ошибка при выполнении VACUUM FULL", e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+        }
+
+        return result;
+    }
+
+    public Map<String, Object> performReindex() {
+        log.info("Запуск REINDEX для всех индексов");
+        Map<String, Object> result = new HashMap<>();
+
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+
+            connection.setAutoCommit(true);
+
+            // Получаем список всех индексов
+            ResultSet indexesRs = statement.executeQuery("""
+                SELECT indexname, tablename
+                FROM pg_indexes
+                WHERE schemaname = 'public'
+                AND indexname NOT LIKE '%_pkey'
+                """);
+
+            List<String[]> indexes = new ArrayList<>();
+            while (indexesRs.next()) {
+                indexes.add(new String[]{indexesRs.getString("indexname"), indexesRs.getString("tablename")});
+            }
+            indexesRs.close();
+
+            int processedCount = 0;
+            for (String[] index : indexes) {
+                String indexName = index[0];
+                String tableName = index[1];
+                log.info("REINDEX для индекса: {} (таблица: {})", indexName, tableName);
+
+                try {
+                    statement.execute("REINDEX INDEX " + indexName);
+                    processedCount++;
+                } catch (Exception e) {
+                    log.warn("Не удалось выполнить REINDEX для {}: {}", indexName, e.getMessage());
+                }
+            }
+
+            result.put("success", true);
+            result.put("totalIndexes", indexes.size());
+            result.put("processedIndexes", processedCount);
+
+            log.info("REINDEX завершен. Обработано индексов: {}/{}", processedCount, indexes.size());
+
+        } catch (Exception e) {
+            log.error("Ошибка при выполнении REINDEX", e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+        }
+
+        return result;
+    }
+
+    public List<Map<String, Object>> analyzeBloat() {
+        log.info("Анализ раздувания (bloat) таблиц");
+        List<Map<String, Object>> bloatInfo = new ArrayList<>();
+
+        try {
+            // Упрощенный анализ bloat через статистику таблиц
+            String sql = """
+                SELECT
+                    t.tablename,
+                    pg_size_pretty(pg_total_relation_size(t.schemaname||'.'||t.tablename)) as table_size,
+                    pg_size_pretty(pg_relation_size(t.schemaname||'.'||t.tablename)) as relation_size,
+                    CASE
+                        WHEN pg_relation_size(t.schemaname||'.'||t.tablename) > 0
+                        THEN ROUND(((pg_total_relation_size(t.schemaname||'.'||t.tablename) - pg_relation_size(t.schemaname||'.'||t.tablename))::numeric / pg_relation_size(t.schemaname||'.'||t.tablename) * 100), 2)
+                        ELSE 0
+                    END as index_bloat_pct,
+                    CASE
+                        WHEN s.n_dead_tup > 0 AND s.n_live_tup > 0
+                        THEN ROUND((s.n_dead_tup::numeric / (s.n_live_tup + s.n_dead_tup) * 100), 2)
+                        ELSE 0
+                    END as dead_tuple_pct
+                FROM pg_tables t
+                LEFT JOIN pg_stat_user_tables s ON s.relname = t.tablename
+                WHERE t.schemaname = 'public'
+                AND pg_relation_size(t.schemaname||'.'||t.tablename) > 1048576
+                ORDER BY pg_total_relation_size(t.schemaname||'.'||t.tablename) DESC
+                LIMIT 10
+                """;
+
+            Query query = entityManager.createNativeQuery(sql);
+            List<Object[]> results = query.getResultList();
+
+            for (Object[] row : results) {
+                Map<String, Object> bloat = new HashMap<>();
+                bloat.put("tableName", row[0]);
+                bloat.put("realSize", row[1]);
+                bloat.put("expectedSize", row[2]);
+                bloat.put("bloatPercent", row[3]);
+                bloat.put("wastedSpace", row[4] + "% dead tuples");
+                bloatInfo.add(bloat);
+            }
+
+            log.info("Анализ bloat завершен. Найдено {} таблиц для анализа", bloatInfo.size());
+
+        } catch (Exception e) {
+            log.error("Ошибка при анализе bloat", e);
+        }
+
+        return bloatInfo;
     }
 
     public List<QueryPerformanceDto> analyzeQueryPerformance() {
@@ -537,5 +706,18 @@ public class DatabaseMaintenanceService {
     private String truncateQuery(String query) {
         if (query == null) return "";
         return query.length() > 100 ? query.substring(0, 100) + "..." : query;
+    }
+
+    private long getDatabaseSizeViaJdbc(Statement statement) {
+        try {
+            ResultSet rs = statement.executeQuery("SELECT pg_database_size(current_database())");
+            if (rs.next()) {
+                return rs.getLong(1);
+            }
+            rs.close();
+        } catch (Exception e) {
+            log.warn("Не удалось получить размер БД через JDBC: {}", e.getMessage());
+        }
+        return 0;
     }
 }
