@@ -25,6 +25,14 @@
     "files.autoGuessEncoding": true,
 
     // Java settings
+    "java.home": "c:\\java\\jdk17",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-17",
+            "path": "c:\\java\\jdk17",
+            "default": true
+        }
+    ],
     "java.debug.logLevel": "INFO",
     "java.debug.settings.console": "integratedTerminal",
     "java.debug.settings.forceBuildBeforeLaunch": false,
@@ -32,6 +40,8 @@
     // Maven settings
     "maven.terminal.useJavaHome": true,
     "maven.executable.path": "mvn",
+    "java.compile.sourceCompatibility": "17",
+    "java.compile.targetCompatibility": "17",
 
     // Spring Boot settings
     "spring-boot.ls.problem.application-properties.UNKNOWN_PROPERTY": "ignore"

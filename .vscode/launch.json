@@ -15,6 +15,7 @@
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "JAVA_HOME": "c:\\java\\jdk17",
                 "LANG": "ru_RU.UTF-8"
             },
             "console": "integratedTerminal",
@@ -36,6 +37,7 @@
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "JAVA_HOME": "c:\\java\\jdk17",
                 "LANG": "ru_RU.UTF-8"
             },
             "console": "integratedTerminal",
@@ -57,6 +59,7 @@
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "JAVA_HOME": "c:\\java\\jdk17",
                 "LANG": "ru_RU.UTF-8"
             },
             "console": "integratedTerminal",
@@ -78,6 +81,7 @@
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "JAVA_HOME": "c:\\java\\jdk17",
                 "LANG": "ru_RU.UTF-8"
             },
             "console": "integratedTerminal",
@@ -99,6 +103,7 @@
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "JAVA_HOME": "c:\\java\\jdk17",
                 "LANG": "ru_RU.UTF-8"
             },
             "console": "integratedTerminal",
