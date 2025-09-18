@@ -50,7 +50,7 @@ public class PlaywrightStrategy implements RedirectStrategy {
         
         try (Playwright playwright = Playwright.create()) {
             Browser browser = playwright.chromium().launch(
-                new BrowserType.LaunchOptions().setHeadless(true)
+                new BrowserType.LaunchOptions().setHeadless(false)
             );
             
             BrowserContext context = browser.newContext(new Browser.NewContextOptions()
@@ -84,22 +84,66 @@ public class PlaywrightStrategy implements RedirectStrategy {
             
             try {
                 log.debug("Playwright: навигация к URL: {}", url);
-                Response response = page.navigate(url, new Page.NavigateOptions().setTimeout(timeoutMs));
+                Response response = page.navigate(url, new Page.NavigateOptions().setTimeout(Math.max(timeoutMs, 30000)));
                 
                 // Ждем загрузки страницы и возможных JavaScript-редиректов
-                page.waitForLoadState(LoadState.NETWORKIDLE, new Page.WaitForLoadStateOptions().setTimeout(10000));
+                page.waitForLoadState(LoadState.NETWORKIDLE, new Page.WaitForLoadStateOptions().setTimeout(15000));
+
+                // Специальная обработка для маркетплейсов (Яндекс.Маркет, Wildberries и др.)
+                if (url.contains("market.yandex") || url.contains("wildberries") || url.contains("ozon")) {
+                    log.debug("Обнаружен маркетплейс, применяем специальную стратегию ожидания");
+                    // Дополнительное ожидание для маркетплейсов
+                    try {
+                        page.waitForTimeout(3000); // Даем время для инициализации JS
+
+                        // Ждем появления контента (любой из элементов)
+                        page.locator("body").first().waitFor(new Locator.WaitForOptions().setTimeout(5000));
+
+                        // Еще одно ожидание на случай ленивой загрузки
+                        page.waitForTimeout(2000);
+                    } catch (Exception e) {
+                        log.debug("Ошибка при специальном ожидании маркетплейса: {}", e.getMessage());
+                    }
+                }
                 
-                // Дополнительное ожидание для JavaScript-редиректов (увеличено время)
+                // Дополнительное ожидание для JavaScript-редиректов (специально для маркетплейсов)
                 String currentUrl = page.url();
-                for (int i = 0; i < 20; i++) { // Увеличено до 20 итераций (10 сек)
+                String previousUrl = currentUrl;
+                int unchangedCount = 0;
+
+                // Увеличиваем время ожидания для сложных сайтов типа Яндекс.Маркет
+                for (int i = 0; i < 60; i++) { // Увеличено до 60 итераций (30 сек)
                     page.waitForTimeout(500); // Ждем 500мс между проверками
                     String newUrl = page.url();
+
                     if (!newUrl.equals(currentUrl)) {
+                        log.debug("JavaScript редирект обнаружен: {} -> {}", currentUrl, newUrl);
                         currentUrl = newUrl;
                         redirectCount++;
-                        log.debug("JavaScript редирект обнаружен: {} -> {}", currentUrl, newUrl);
                         finalUrl = newUrl;
-                        i = 0; // Сброс счетчика для поиска дальнейших редиректов
+                        unchangedCount = 0; // Сбрасываем счетчик неизменности
+                    } else {
+                        unchangedCount++;
+                        // Если URL не менялся 10 раз подряд (5 секунд), считаем загрузку завершенной
+                        if (unchangedCount >= 10) {
+                            log.debug("URL стабилизировался: {}", currentUrl);
+                            break;
+                        }
+                    }
+
+                    // Дополнительная проверка: если страница полностью загружена и URL изменился
+                    try {
+                        String pageTitle = page.title();
+                        if (pageTitle != null && !pageTitle.isEmpty() && !pageTitle.equals("Loading...")) {
+                            // Страница загружена, проверяем еще раз URL
+                            String finalCheckUrl = page.url();
+                            if (!finalCheckUrl.equals(previousUrl)) {
+                                finalUrl = finalCheckUrl;
+                                log.debug("Финальный URL после загрузки страницы: {}", finalUrl);
+                            }
+                        }
+                    } catch (Exception e) {
+                        // Игнорируем ошибки получения заголовка
                     }
                 }
                 
