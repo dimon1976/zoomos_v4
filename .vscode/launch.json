@@ -11,7 +11,10 @@
             "vmArgs": [
                 "-Dspring.profiles.active=silent",
                 "-Dfile.encoding=UTF-8",
-                "-Dconsole.encoding=UTF-8"
+                "-Dconsole.encoding=UTF-8",
+                "-Xms512m",
+                "-Xmx2g",
+                "-XX:+UseG1GC"
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
@@ -33,7 +36,10 @@
             "vmArgs": [
                 "-Dspring.profiles.active=dev",
                 "-Dfile.encoding=UTF-8",
-                "-Dconsole.encoding=UTF-8"
+                "-Dconsole.encoding=UTF-8",
+                "-Xms512m",
+                "-Xmx2g",
+                "-XX:+UseG1GC"
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
@@ -55,7 +61,10 @@
             "vmArgs": [
                 "-Dspring.profiles.active=verbose",
                 "-Dfile.encoding=UTF-8",
-                "-Dconsole.encoding=UTF-8"
+                "-Dconsole.encoding=UTF-8",
+                "-Xms512m",
+                "-Xmx2g",
+                "-XX:+UseG1GC"
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
@@ -77,7 +86,10 @@
             "vmArgs": [
                 "-Dspring.profiles.active=prod",
                 "-Dfile.encoding=UTF-8",
-                "-Dconsole.encoding=UTF-8"
+                "-Dconsole.encoding=UTF-8",
+                "-Xms512m",
+                "-Xmx2g",
+                "-XX:+UseG1GC"
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
@@ -99,7 +111,10 @@
             "vmArgs": [
                 "-Dspring.profiles.active=silent",
                 "-Dfile.encoding=UTF-8",
-                "-Dconsole.encoding=UTF-8"
+                "-Dconsole.encoding=UTF-8",
+                "-Xms512m",
+                "-Xmx2g",
+                "-XX:+UseG1GC"
             ],
             "env": {
                 "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
@@ -141,6 +156,34 @@
             "internalConsoleOptions": "neverOpen",
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "maven: test"
+        },
+        {
+            "type": "java",
+            "name": "🚄 Run Main (Performance Optimized)",
+            "request": "launch",
+            "mainClass": "com.java.Main",
+            "projectName": "file-processing-app",
+            "args": [],
+            "vmArgs": [
+                "-Dspring.profiles.active=silent",
+                "-Dfile.encoding=UTF-8",
+                "-Dconsole.encoding=UTF-8",
+                "-Xms1g",
+                "-Xmx4g",
+                "-XX:+UseG1GC",
+                "-XX:MaxGCPauseMillis=200",
+                "-XX:+UseStringDeduplication",
+                "-XX:+OptimizeStringConcat"
+            ],
+            "env": {
+                "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "JAVA_HOME": "c:\\java\\jdk17",
+                "LANG": "ru_RU.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "chcp-utf8"
         }
     ],
     "compounds": [

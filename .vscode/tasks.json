@@ -176,6 +176,36 @@
             "type": "shell",
             "command": "java",
             "args": [
+                "-Xms512m",
+                "-Xmx2g",
+                "-XX:+UseG1GC",
+                "-Dfile.encoding=UTF-8",
+                "-jar",
+                "target/file-processing-app-1.0-SNAPSHOT.jar",
+                "--spring.profiles.active=silent"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": []
+        },
+        {
+            "label": "start-app-jar-optimized",
+            "type": "shell",
+            "command": "java",
+            "args": [
+                "-Xms1g",
+                "-Xmx4g",
+                "-XX:+UseG1GC",
+                "-XX:MaxGCPauseMillis=200",
+                "-XX:+UseStringDeduplication",
+                "-XX:+OptimizeStringConcat",
+                "-Dfile.encoding=UTF-8",
                 "-jar",
                 "target/file-processing-app-1.0-SNAPSHOT.jar",
                 "--spring.profiles.active=silent"
