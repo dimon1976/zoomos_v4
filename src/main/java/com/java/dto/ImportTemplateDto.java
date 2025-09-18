@@ -40,8 +40,10 @@ public class ImportTemplateDto {
     @Builder.Default
     private DataSourceType dataSourceType = DataSourceType.FILE;
 
+    @Builder.Default
     private DuplicateStrategy duplicateStrategy = DuplicateStrategy.ALLOW_ALL;
 
+    @Builder.Default
     private ErrorStrategy errorStrategy = ErrorStrategy.CONTINUE_ON_ERROR;
 
     private String fileType;
@@ -50,10 +52,13 @@ public class ImportTemplateDto {
 
     private String encoding;
 
+    @Builder.Default
     private Integer skipHeaderRows = 1;
 
+    @Builder.Default
     private Boolean isActive = true;
 
+    @Builder.Default
     private List<ImportTemplateFieldDto> fields = new ArrayList<>();
 
     private ZonedDateTime createdAt;

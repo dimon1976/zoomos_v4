@@ -14,6 +14,7 @@ import java.util.List;
 @AllArgsConstructor
 public class ExportStatisticsSettingsDto {
 
+    @Builder.Default
     private Boolean enableStatistics = false;
 
     @Builder.Default

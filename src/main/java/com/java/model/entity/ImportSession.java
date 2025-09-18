@@ -40,19 +40,24 @@ public class ImportSession {
     private Long totalRows;
 
     @Column(name = "processed_rows")
+    @Builder.Default
     private Long processedRows = 0L;
 
     @Column(name = "success_rows")
+    @Builder.Default
     private Long successRows = 0L;
 
     @Column(name = "error_rows")
+    @Builder.Default
     private Long errorRows = 0L;
 
     @Column(name = "duplicate_rows")
+    @Builder.Default
     private Long duplicateRows = 0L;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
+    @Builder.Default
     private ImportStatus status = ImportStatus.INITIALIZING;
 
     @Column(name = "error_message", columnDefinition = "TEXT")
@@ -66,12 +71,15 @@ public class ImportSession {
     private ZonedDateTime completedAt;
 
     @Column(name = "is_cancelled")
+    @Builder.Default
     private Boolean isCancelled = false;
 
     @Column(name = "is_estimated")
+    @Builder.Default
     private Boolean isEstimated = false;
 
     @OneToMany(mappedBy = "importSession", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<ImportError> errors = new ArrayList<>();
 
     @OneToOne(mappedBy = "importSession", cascade = CascadeType.ALL, orphanRemoval = true)

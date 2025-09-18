@@ -391,6 +391,11 @@
 
     function showUpdateIndicator() {
         const indicator = document.getElementById('updateIndicator');
+        if (!indicator) {
+            console.warn('Update indicator element not found');
+            return;
+        }
+
         indicator.style.display = 'block';
         indicator.classList.add('pulse');
 

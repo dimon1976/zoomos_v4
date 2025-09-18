@@ -239,6 +239,55 @@ public class MaintenanceController {
             return ResponseEntity.internalServerError().build();
         }
     }
+
+    @PostMapping("/database/vacuum")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> performVacuum() {
+        log.info("Запуск VACUUM FULL через API");
+        try {
+            Map<String, Object> result = databaseMaintenanceService.performVacuumFull();
+            log.info("VACUUM FULL завершен. Освобождено: {}", result.get("freedSpace"));
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Ошибка выполнения VACUUM FULL: {}", e.getMessage());
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
+    @PostMapping("/database/reindex")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> performReindex() {
+        log.info("Запуск REINDEX через API");
+        try {
+            Map<String, Object> result = databaseMaintenanceService.performReindex();
+            log.info("REINDEX завершен. Обработано индексов: {}/{}",
+                result.get("processedIndexes"), result.get("totalIndexes"));
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Ошибка выполнения REINDEX: {}", e.getMessage());
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
+    @GetMapping("/database/bloat")
+    @ResponseBody
+    public ResponseEntity<List<Map<String, Object>>> analyzeBloat() {
+        log.info("Анализ bloat таблиц через API");
+        try {
+            List<Map<String, Object>> bloatInfo = databaseMaintenanceService.analyzeBloat();
+            log.debug("Анализ bloat завершен. Найдено раздутых таблиц: {}", bloatInfo.size());
+            return ResponseEntity.ok(bloatInfo);
+        } catch (Exception e) {
+            log.error("Ошибка анализа bloat: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
     
     // === SYSTEM HEALTH ENDPOINTS ===
     

@@ -54,10 +54,12 @@ public class ImportTemplate {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "duplicate_strategy", nullable = false)
+    @Builder.Default
     private DuplicateStrategy duplicateStrategy = DuplicateStrategy.ALLOW_ALL;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "error_strategy", nullable = false)
+    @Builder.Default
     private ErrorStrategy errorStrategy = ErrorStrategy.CONTINUE_ON_ERROR;
 
     @Column(name = "file_type")
@@ -70,9 +72,11 @@ public class ImportTemplate {
     private String encoding;
 
     @Column(name = "skip_header_rows")
+    @Builder.Default
     private Integer skipHeaderRows = 1;
 
     @Column(name = "is_active")
+    @Builder.Default
     private Boolean isActive = true;
 
     @OneToMany(mappedBy = "template", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)

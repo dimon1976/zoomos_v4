@@ -47,5 +47,6 @@ public class Client {
     private ZonedDateTime updatedAt;
 
     @OneToMany(mappedBy = "client", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<FileOperation> fileOperations = new ArrayList<>();
 }
