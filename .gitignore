@@ -74,3 +74,9 @@ service-refactor-plan.md
 
 # Конфигурационные файлы среды разработки
 /application-dev.properties
+# Исключить чувствительные файлы
+dependency-tree.txt
+log.txt
+*.log
+# IDE и временные файлы
+nul

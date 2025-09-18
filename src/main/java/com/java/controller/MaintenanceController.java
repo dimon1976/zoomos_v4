@@ -106,7 +106,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(stats);
         } catch (Exception e) {
             log.error("Ошибка получения статистики файлов: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("getFileStats", e);
         }
     }
     
@@ -120,7 +120,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Ошибка архивирования файлов: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("archiveFiles", e);
         }
     }
     
@@ -134,7 +134,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(duplicates);
         } catch (Exception e) {
             log.error("Ошибка поиска дублей файлов: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("findDuplicates", e);
         }
     }
     
@@ -148,7 +148,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Ошибка удаления архивов: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("deleteArchivedFiles", e);
         }
     }
     
@@ -162,7 +162,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Ошибка удаления дубликатов: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("deleteDuplicateFiles", e);
         }
     }
     
@@ -170,13 +170,23 @@ public class MaintenanceController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> cleanDirectory(@org.springframework.web.bind.annotation.PathVariable String directoryType) {
         log.info("Очистка директории {} через API", directoryType);
+
+        // Валидация типа директории
+        if (!isValidDirectoryType(directoryType)) {
+            log.warn("Недопустимый тип директории: {}", directoryType);
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Недопустимый тип директории: " + directoryType);
+            return ResponseEntity.badRequest().body(error);
+        }
+
         try {
             Map<String, Object> result = fileManagementService.cleanDirectory(directoryType);
             log.info("Очистка директории {} завершена. Удалено файлов: {}", directoryType, result.get("deletedFiles"));
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Ошибка очистки директории {}: {}", directoryType, e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("cleanDirectory", e);
         }
     }
     
@@ -190,7 +200,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Ошибка полной очистки директорий: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("cleanAllDirectories", e);
         }
     }
     
@@ -206,7 +216,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(stats);
         } catch (Exception e) {
             log.error("Ошибка получения статистики БД: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("getDatabaseStats", e);
         }
     }
     
@@ -222,7 +232,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Ошибка очистки БД: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("cleanupDatabase", e);
         }
     }
     
@@ -236,7 +246,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(performance);
         } catch (Exception e) {
             log.error("Ошибка анализа производительности БД: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("getDatabasePerformance", e);
         }
     }
 
@@ -244,6 +254,16 @@ public class MaintenanceController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> performVacuum() {
         log.info("Запуск VACUUM FULL через API");
+
+        // Проверка безопасности операции
+        if (!isDatabaseOperationSafe()) {
+            log.warn("VACUUM операция отклонена из соображений безопасности");
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Операция недоступна в текущем состоянии системы");
+            return ResponseEntity.badRequest().body(error);
+        }
+
         try {
             Map<String, Object> result = databaseMaintenanceService.performVacuumFull();
             log.info("VACUUM FULL завершен. Освобождено: {}", result.get("freedSpace"));
@@ -261,6 +281,16 @@ public class MaintenanceController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> performReindex() {
         log.info("Запуск REINDEX через API");
+
+        // Проверка безопасности операции
+        if (!isDatabaseOperationSafe()) {
+            log.warn("REINDEX операция отклонена из соображений безопасности");
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Операция недоступна в текущем состоянии системы");
+            return ResponseEntity.badRequest().body(error);
+        }
+
         try {
             Map<String, Object> result = databaseMaintenanceService.performReindex();
             log.info("REINDEX завершен. Обработано индексов: {}/{}",
@@ -285,7 +315,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(bloatInfo);
         } catch (Exception e) {
             log.error("Ошибка анализа bloat: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("analyzeBloat", e);
         }
     }
     
@@ -302,7 +332,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(health);
         } catch (Exception e) {
             log.error("Ошибка проверки состояния системы: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("getSystemHealth", e);
         }
     }
     
@@ -318,7 +348,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(resources);
         } catch (Exception e) {
             log.error("Ошибка мониторинга ресурсов системы: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("getSystemResources", e);
         }
     }
     
@@ -333,7 +363,7 @@ public class MaintenanceController {
             return ResponseEntity.ok(report);
         } catch (Exception e) {
             log.error("Ошибка генерации диагностического отчета: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
+            return createErrorResponse("getSystemReport", e);
         }
     }
     
@@ -390,5 +420,60 @@ public class MaintenanceController {
             ));
             return ResponseEntity.internalServerError().body(result);
         }
+    }
+
+    // === VALIDATION METHODS ===
+
+    /**
+     * Валидация типа директории для операций очистки
+     */
+    private boolean isValidDirectoryType(String directoryType) {
+        if (directoryType == null || directoryType.trim().isEmpty()) {
+            return false;
+        }
+        // Разрешенные типы директорий
+        return directoryType.matches("^(temp|upload|export|import|logs)$");
+    }
+
+    /**
+     * Проверка безопасности выполнения операций с БД
+     */
+    private boolean isDatabaseOperationSafe() {
+        try {
+            // Проверяем загрузку системы через SystemHealthService
+            SystemResourcesDto resources = systemHealthService.getSystemResources();
+
+            // Запрещаем операции при высокой загрузке CPU (>90%) или памяти (>95%)
+            if (resources.getCpuUsagePercent() > 90.0 || resources.getMemoryUsagePercent() > 95.0) {
+                log.warn("Высокая загрузка системы: CPU={}%, Memory={}%",
+                        resources.getCpuUsagePercent(), resources.getMemoryUsagePercent());
+                return false;
+            }
+
+            return true;
+        } catch (Exception e) {
+            log.warn("Не удалось проверить состояние системы: {}", e.getMessage());
+            // В случае ошибки разрешаем операцию (fail-open)
+            return true;
+        }
+    }
+
+    // === ERROR HANDLING UTILITIES ===
+
+    /**
+     * Создание стандартного ответа об ошибке
+     */
+    private <T> ResponseEntity<T> createErrorResponse(String operation, Exception e) {
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("operation", operation);
+        errorDetails.put("error", e.getMessage());
+        errorDetails.put("timestamp", java.time.LocalDateTime.now().toString());
+        errorDetails.put("success", false);
+
+        log.error("Ошибка выполнения операции {}: {}", operation, e.getMessage());
+
+        @SuppressWarnings("unchecked")
+        T responseBody = (T) errorDetails;
+        return ResponseEntity.internalServerError().body(responseBody);
     }
 }
