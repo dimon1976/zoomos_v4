@@ -1,0 +1,149 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "🚀 Run Main (Silent Profile)",
+            "request": "launch",
+            "mainClass": "com.java.Main",
+            "projectName": "file-processing-app",
+            "args": [],
+            "vmArgs": [
+                "-Dspring.profiles.active=silent",
+                "-Dfile.encoding=UTF-8",
+                "-Dconsole.encoding=UTF-8"
+            ],
+            "env": {
+                "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "LANG": "ru_RU.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "chcp-utf8"
+        },
+        {
+            "type": "java",
+            "name": "🔧 Run Main (Dev Profile)",
+            "request": "launch",
+            "mainClass": "com.java.Main",
+            "projectName": "file-processing-app",
+            "args": [],
+            "vmArgs": [
+                "-Dspring.profiles.active=dev",
+                "-Dfile.encoding=UTF-8",
+                "-Dconsole.encoding=UTF-8"
+            ],
+            "env": {
+                "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "LANG": "ru_RU.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "chcp-utf8"
+        },
+        {
+            "type": "java",
+            "name": "📝 Run Main (Verbose Profile)",
+            "request": "launch",
+            "mainClass": "com.java.Main",
+            "projectName": "file-processing-app",
+            "args": [],
+            "vmArgs": [
+                "-Dspring.profiles.active=verbose",
+                "-Dfile.encoding=UTF-8",
+                "-Dconsole.encoding=UTF-8"
+            ],
+            "env": {
+                "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "LANG": "ru_RU.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "chcp-utf8"
+        },
+        {
+            "type": "java",
+            "name": "🏭 Run Main (Prod Profile)",
+            "request": "launch",
+            "mainClass": "com.java.Main",
+            "projectName": "file-processing-app",
+            "args": [],
+            "vmArgs": [
+                "-Dspring.profiles.active=prod",
+                "-Dfile.encoding=UTF-8",
+                "-Dconsole.encoding=UTF-8"
+            ],
+            "env": {
+                "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "LANG": "ru_RU.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "chcp-utf8"
+        },
+        {
+            "type": "java",
+            "name": "🐛 Debug Main (Silent Profile)",
+            "request": "launch",
+            "mainClass": "com.java.Main",
+            "projectName": "file-processing-app",
+            "args": [],
+            "vmArgs": [
+                "-Dspring.profiles.active=silent",
+                "-Dfile.encoding=UTF-8",
+                "-Dconsole.encoding=UTF-8"
+            ],
+            "env": {
+                "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8",
+                "LANG": "ru_RU.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "cwd": "${workspaceFolder}",
+            "stopOnEntry": false,
+            "preLaunchTask": "chcp-utf8"
+        },
+        {
+            "type": "java",
+            "name": "🔨 Maven Spring Boot (Silent)",
+            "request": "launch",
+            "mainClass": "com.java.Main",
+            "projectName": "file-processing-app",
+            "args": [],
+            "vmArgs": [
+                "-Dspring.profiles.active=silent",
+                "-Dfile.encoding=UTF-8"
+            ],
+            "env": {
+                "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8"
+            },
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "maven: spring-boot:run (silent)"
+        },
+        {
+            "type": "java",
+            "name": "🧪 Run Tests",
+            "request": "launch",
+            "mainClass": "",
+            "projectName": "file-processing-app",
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "maven: test"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "🔄 Restart App (Silent)",
+            "configurations": [],
+            "preLaunchTask": "maven: spring-boot:stop",
+            "postDebugTask": "🚀 Run Main (Silent Profile)"
+        }
+    ]
+}
