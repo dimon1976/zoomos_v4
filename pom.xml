@@ -99,13 +99,15 @@
             <artifactId>playwright</artifactId>
             <version>1.40.0</version>
         </dependency>
-        <!-- Development Tools -->
+        <!-- Development Tools (отключено для стабильности) -->
+        <!--
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
             <scope>runtime</scope>
             <optional>true</optional>
         </dependency>
+        -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
