@@ -35,12 +35,15 @@ public class ImportTemplateField {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "field_type")
+    @Builder.Default
     private FieldType fieldType = FieldType.STRING;
 
     @Column(name = "is_required")
+    @Builder.Default
     private Boolean isRequired = false;
 
     @Column(name = "is_unique")
+    @Builder.Default
     private Boolean isUnique = false; // Для проверки дубликатов
 
     @Column(name = "default_value")

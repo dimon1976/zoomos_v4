@@ -71,6 +71,7 @@ public class NotificationDto {
     /**
      * Автоматически скрывать уведомление через N секунд (0 = не скрывать)
      */
+    @Builder.Default
     private int autoHideSeconds = 8;
 
     /**

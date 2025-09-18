@@ -22,8 +22,10 @@ public class ImportRequestDto {
     @NotNull(message = "ID шаблона обязателен")
     private Long templateId;
 
+    @Builder.Default
     private Boolean validateOnly = false;
 
+    @Builder.Default
     private Boolean asyncMode = true;
 
     // Путь к уже сохраненному файлу

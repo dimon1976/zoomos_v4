@@ -320,55 +320,66 @@ public class RedirectFinderService {
     
     private RedirectResult processUrl(String url, List<RedirectStrategy> strategies, RedirectFinderDto dto) {
         RedirectResult lastResult = null;
-        
+
+        // Если принудительно выбран Playwright, используем только его
+        if (Boolean.TRUE.equals(dto.getUsePlaywright())) {
+            log.debug("Принудительное использование Playwright для URL: {}", url);
+            RedirectStrategy playwrightStrategy = strategies.stream()
+                    .filter(s -> "playwright".equals(s.getStrategyName()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (playwrightStrategy != null) {
+                return playwrightStrategy.followRedirects(url, dto.getMaxRedirects(), dto.getTimeoutMs());
+            } else {
+                log.warn("Playwright стратегия не найдена, используем стандартный алгоритм");
+            }
+        }
+
         for (RedirectStrategy strategy : strategies) {
             PageStatus previousStatus = lastResult != null ? lastResult.getStatus() : null;
-            
+
             if (!strategy.canHandle(url, previousStatus)) {
-                log.debug("Стратегия {} не может обработать URL: {} (предыдущий статус: {})", 
+                log.debug("Стратегия {} не может обработать URL: {} (предыдущий статус: {})",
                         strategy.getStrategyName(), url, previousStatus);
                 continue;
             }
-            
-            // Если явно не запрошен только Playwright, используем стратегии по приоритету
-            // usePlaywright теперь означает "разрешить использование Playwright" а не "использовать только Playwright"
-            
+
             log.debug("Пробуем стратегию: {} для URL: {}", strategy.getStrategyName(), url);
-            
+
             RedirectResult result = strategy.followRedirects(url, dto.getMaxRedirects(), dto.getTimeoutMs());
             lastResult = result;
-            
+
             // Если получили успешный результат или не можем улучшить - возвращаем
             if (result.getStatus() == PageStatus.REDIRECT ||
                 result.getStatus() == PageStatus.NOT_FOUND) {
                 return result;
             }
-            
-            // Для статуса OK проверяем: если это curl и URL не изменился, 
+
+            // Для статуса OK проверяем: если это curl и URL не изменился,
             // возможно есть JavaScript-редирект - пробуем Playwright
             if (result.getStatus() == PageStatus.OK) {
-                if ("curl".equals(strategy.getStrategyName()) && 
-                    url.equals(result.getFinalUrl()) && 
-                    !dto.getUsePlaywright()) {
+                if ("curl".equals(strategy.getStrategyName()) &&
+                    url.equals(result.getFinalUrl())) {
                     log.debug("Curl вернул OK без изменения URL, возможен JS-редирект. Пробуем Playwright.");
                     continue; // Продолжаем к следующей стратегии (Playwright)
                 }
                 return result;
             }
-            
+
             // Если заблокированы, пробуем следующую стратегию
             if (result.getStatus() == PageStatus.BLOCKED) {
                 log.debug("URL заблокирован стратегией {}, пробуем следующую", strategy.getStrategyName());
                 continue;
             }
-            
+
             // При других ошибках тоже пробуем следующую стратегию
-            log.debug("Стратегия {} вернула статус {}, пробуем следующую", 
+            log.debug("Стратегия {} вернула статус {}, пробуем следующую",
                     strategy.getStrategyName(), result.getStatus());
         }
-        
+
         // Если все стратегии не сработали, возвращаем последний результат
-        return lastResult != null ? lastResult : 
+        return lastResult != null ? lastResult :
                 RedirectResult.builder()
                         .originalUrl(url)
                         .finalUrl(url)

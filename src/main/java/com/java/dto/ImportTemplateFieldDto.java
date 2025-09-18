@@ -22,10 +22,13 @@ public class ImportTemplateFieldDto {
     @NotBlank(message = "Имя поля сущности обязательно")
     private String entityFieldName;
 
+    @Builder.Default
     private FieldType fieldType = FieldType.STRING;
 
+    @Builder.Default
     private Boolean isRequired = false;
 
+    @Builder.Default
     private Boolean isUnique = false;
 
     private String defaultValue;
