@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Объединение данных',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Объединение данных',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Объединение данных</title>
+</head>
+
+<th:block th:fragment="content">
+    <div class="container mt-4">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-database me-2"></i>
+                            Объединение данных по модели аналогов
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form>
+                            <div class="mb-3">
+                                <label for="sourceFile" class="form-label">
+                                    Файл исходных данных
+                                    <small class="text-muted">(ID, Модель клиента, Модель аналога, Коэффициент)</small>
+                                </label>
+                                <input type="file" class="form-control" id="sourceFile"
+                                       accept=".csv,.xlsx,.xls" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="collectedFile" class="form-label">
+                                    Файл собранных данных
+                                    <small class="text-muted">(Модель аналога, Ссылка)</small>
+                                </label>
+                                <input type="file" class="form-control" id="collectedFile"
+                                       accept=".csv,.xlsx,.xls" required>
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-link me-2"></i>
+                                    Объединить данные
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+    <!-- Скрипты будут добавлены позже -->
+</th:block>
+
+<th:block th:fragment="styles">
+    <!-- Стили будут добавлены позже -->
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <!-- Действия страницы будут добавлены позже -->
+</th:block>
+
+</html>
