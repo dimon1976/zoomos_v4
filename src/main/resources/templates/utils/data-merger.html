@@ -24,14 +24,54 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        <form>
+                        <!-- Форма загрузки -->
+                        <form th:action="@{/utils/data-merger/process}" method="post" enctype="multipart/form-data" id="mergeForm">
                             <div class="mb-3">
                                 <label for="sourceFile" class="form-label">
                                     Файл исходных данных
                                     <small class="text-muted">(ID, Модель клиента, Модель аналога, Коэффициент)</small>
                                 </label>
-                                <input type="file" class="form-control" id="sourceFile"
-                                       accept=".csv,.xlsx,.xls" required>
+                                <input type="file" class="form-control" id="sourceFile" name="sourceFile"
+                                       accept=".csv,.xlsx,.xls" required onchange="handleSourceFileSelect(this)">
+                            </div>
+
+                            <!-- Колонки для исходного файла -->
+                            <div id="sourceColumnsSection" class="mb-3" style="display: none;">
+                                <div class="card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <h6 class="mb-0">Выберите колонки в исходном файле</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label for="sourceIdColumn" class="form-label">Колонка ID:</label>
+                                                <select class="form-select" id="sourceIdColumn" name="sourceIdColumn">
+                                                    <option value="">Выберите колонку...</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="sourceClientModelColumn" class="form-label">Колонка модели клиента:</label>
+                                                <select class="form-select" id="sourceClientModelColumn" name="sourceClientModelColumn">
+                                                    <option value="">Выберите колонку...</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="row mt-2">
+                                            <div class="col-md-6">
+                                                <label for="sourceAnalogModelColumn" class="form-label">Колонка модели аналога:</label>
+                                                <select class="form-select" id="sourceAnalogModelColumn" name="sourceAnalogModelColumn">
+                                                    <option value="">Выберите колонку...</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="sourceCoefficientColumn" class="form-label">Колонка коэффициента:</label>
+                                                <select class="form-select" id="sourceCoefficientColumn" name="sourceCoefficientColumn">
+                                                    <option value="">Выберите колонку...</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -39,17 +79,88 @@
                                     Файл собранных данных
                                     <small class="text-muted">(Модель аналога, Ссылка)</small>
                                 </label>
-                                <input type="file" class="form-control" id="collectedFile"
-                                       accept=".csv,.xlsx,.xls" required>
+                                <input type="file" class="form-control" id="collectedFile" name="collectedFile"
+                                       accept=".csv,.xlsx,.xls" required onchange="handleCollectedFileSelect(this)">
                             </div>
 
-                            <div class="d-grid">
+                            <!-- Колонки для собранного файла -->
+                            <div id="collectedColumnsSection" class="mb-3" style="display: none;">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="mb-0">Выберите колонки в файле собранных данных</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label for="collectedAnalogModelColumn" class="form-label">Колонка модели аналога:</label>
+                                                <select class="form-select" id="collectedAnalogModelColumn" name="collectedAnalogModelColumn">
+                                                    <option value="">Выберите колонку...</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="collectedLinkColumn" class="form-label">Колонка ссылки:</label>
+                                                <select class="form-select" id="collectedLinkColumn" name="collectedLinkColumn">
+                                                    <option value="">Выберите колонку...</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2">
                                 <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-link me-2"></i>
                                     Объединить данные
                                 </button>
+                                <button type="button" class="btn btn-success" onclick="downloadFile()">
+                                    <i class="fas fa-download me-2"></i>
+                                    Скачать файл результата
+                                </button>
                             </div>
                         </form>
+
+                        <!-- Результаты -->
+                        <div th:if="${success}" class="mt-4">
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle me-2"></i>
+                                Данные успешно объединены! Получено <strong th:text="${resultCount}">0</strong> строк результата.
+                            </div>
+
+                            <div class="mt-3">
+                                <h6>Пример результата:</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>Модель клиента</th>
+                                                <th>Модель аналога</th>
+                                                <th>Коэффициент</th>
+                                                <th>Ссылка</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr th:each="row : ${results}">
+                                                <td th:text="${row.id}">1</td>
+                                                <td th:text="${row.clientModel}">ModelA</td>
+                                                <td th:text="${row.analogModel}">AnalogX</td>
+                                                <td th:text="${row.coefficient}">1.5</td>
+                                                <td th:text="${row.link}">http://example.com</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ошибки -->
+                        <div th:if="${error}" class="mt-4">
+                            <div class="alert alert-danger">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <span th:text="${error}">Ошибка обработки</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -58,7 +169,165 @@
 </th:block>
 
 <th:block th:fragment="scripts">
-    <!-- Скрипты будут добавлены позже -->
+<script>
+// Обработчик выбора исходного файла
+function handleSourceFileSelect(input) {
+    if (input.files && input.files[0]) {
+        analyzeFileHeaders(input.files[0], 'source');
+    }
+}
+
+// Обработчик выбора файла собранных данных
+function handleCollectedFileSelect(input) {
+    if (input.files && input.files[0]) {
+        analyzeFileHeaders(input.files[0], 'collected');
+    }
+}
+
+// Анализ заголовков файла
+function analyzeFileHeaders(file, fileType) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('fileType', fileType);
+
+    fetch('/utils/data-merger/analyze-headers', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            populateColumnSelects(data.headers, fileType);
+            showColumnSection(fileType);
+        } else {
+            alert('Ошибка анализа файла: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        alert('Ошибка анализа файла');
+    });
+}
+
+// Заполнение селектов колонок
+function populateColumnSelects(headers, fileType) {
+    if (fileType === 'source') {
+        populateSelect('sourceIdColumn', headers);
+        populateSelect('sourceClientModelColumn', headers);
+        populateSelect('sourceAnalogModelColumn', headers);
+        populateSelect('sourceCoefficientColumn', headers);
+
+        // Автоматическое сопоставление по ключевым словам
+        autoSelectColumn('sourceIdColumn', headers, ['id', 'ид', 'номер', 'name', 'название', 'наименование', 'продукт', 'товар']);
+        autoSelectColumn('sourceClientModelColumn', headers, ['модель клиента', 'client model', 'клиент', 'продукт конкурента', 'конкурент']);
+        autoSelectColumn('sourceAnalogModelColumn', headers, ['модель аналога', 'analog model', 'аналог', 'модель клиента']);
+        autoSelectColumn('sourceCoefficientColumn', headers, ['коэффициент', 'coefficient', 'коэф', 'конкурент']);
+    } else {
+        populateSelect('collectedAnalogModelColumn', headers);
+        populateSelect('collectedLinkColumn', headers);
+
+        // Автоматическое сопоставление по ключевым словам
+        autoSelectColumn('collectedAnalogModelColumn', headers, ['модель аналога', 'analog model', 'аналог', 'модель', 'модель клиента', 'client model', 'клиент']);
+        autoSelectColumn('collectedLinkColumn', headers, ['ссылка', 'link', 'url', 'href', 'адрес']);
+    }
+}
+
+// Заполнение отдельного селекта
+function populateSelect(selectId, headers) {
+    const select = document.getElementById(selectId);
+    select.innerHTML = '<option value="">Выберите колонку...</option>';
+
+    headers.forEach((header, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = `${index + 1}. ${header}`;
+        select.appendChild(option);
+    });
+}
+
+// Автоматический выбор колонки по ключевым словам
+function autoSelectColumn(selectId, headers, keywords) {
+    const select = document.getElementById(selectId);
+
+    for (let i = 0; i < headers.length; i++) {
+        const header = headers[i].toLowerCase();
+        for (const keyword of keywords) {
+            if (header.includes(keyword.toLowerCase())) {
+                select.value = i;
+                return;
+            }
+        }
+    }
+}
+
+// Показать секцию выбора колонок
+function showColumnSection(fileType) {
+    const sectionId = fileType === 'source' ? 'sourceColumnsSection' : 'collectedColumnsSection';
+    document.getElementById(sectionId).style.display = 'block';
+}
+
+function downloadFile() {
+    const sourceFile = document.getElementById('sourceFile').files[0];
+    const collectedFile = document.getElementById('collectedFile').files[0];
+
+    if (!sourceFile || !collectedFile) {
+        alert('Пожалуйста, выберите оба файла перед скачиванием');
+        return;
+    }
+
+    // Получаем значения колонок
+    const columnMappings = getColumnMappings();
+
+    // Создаем FormData для отправки файлов
+    const formData = new FormData();
+    formData.append('sourceFile', sourceFile);
+    formData.append('collectedFile', collectedFile);
+
+    // Добавляем маппинги колонок
+    Object.keys(columnMappings).forEach(key => {
+        formData.append(key, columnMappings[key]);
+    });
+
+    // Отправляем запрос на скачивание
+    fetch('/utils/data-merger/download', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        throw new Error('Ошибка скачивания файла');
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'merged_result.csv';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        alert('Ошибка скачивания файла');
+    });
+}
+
+// Получить маппинги колонок
+function getColumnMappings() {
+    return {
+        sourceIdColumn: document.getElementById('sourceIdColumn').value,
+        sourceClientModelColumn: document.getElementById('sourceClientModelColumn').value,
+        sourceAnalogModelColumn: document.getElementById('sourceAnalogModelColumn').value,
+        sourceCoefficientColumn: document.getElementById('sourceCoefficientColumn').value,
+        collectedAnalogModelColumn: document.getElementById('collectedAnalogModelColumn').value,
+        collectedLinkColumn: document.getElementById('collectedLinkColumn').value
+    };
+}
+</script>
 </th:block>
 
 <th:block th:fragment="styles">

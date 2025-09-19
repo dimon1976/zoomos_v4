@@ -83,7 +83,16 @@ public class UtilsController {
             "url", "/utils/stats-processor",
             "status", "ready"
         ));
-        
+
+        utilities.add(Map.of(
+            "id", "data-merger",
+            "title", "Объединение данных",
+            "description", "Объединение данных по модели аналогов с построчной выгрузкой",
+            "icon", "fas fa-database",
+            "url", "/utils/data-merger",
+            "status", "ready"
+        ));
+
         return utilities;
     }
 }
