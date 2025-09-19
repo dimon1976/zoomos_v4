@@ -93,21 +93,25 @@ public class DatabaseMaintenanceService {
             connection.setAutoCommit(true);
 
             // Получаем список всех таблиц
-            ResultSet tablesRs = statement.executeQuery(
-                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
-            );
-
             List<String> tables = new ArrayList<>();
-            while (tablesRs.next()) {
-                tables.add(tablesRs.getString("tablename"));
+            try (ResultSet tablesRs = statement.executeQuery(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'")) {
+                while (tablesRs.next()) {
+                    tables.add(tablesRs.getString("tablename"));
+                }
             }
-            tablesRs.close();
 
             // VACUUM FULL для каждой таблицы
             for (String table : tables) {
                 log.info("VACUUM FULL для таблицы: {}", table);
                 try {
-                    statement.execute("VACUUM FULL " + table);
+                    // Валидация имени таблицы для предотвращения SQL injection
+                    if (isValidIdentifier(table)) {
+                        String sql = String.format("VACUUM FULL %s", escapeIdentifier(table));
+                        statement.execute(sql);
+                    } else {
+                        log.warn("Недопустимое имя таблицы: {}", table);
+                    }
                 } catch (Exception e) {
                     log.warn("Не удалось выполнить VACUUM FULL для таблицы {}: {}", table, e.getMessage());
                 }
@@ -148,18 +152,17 @@ public class DatabaseMaintenanceService {
             connection.setAutoCommit(true);
 
             // Получаем список всех индексов
-            ResultSet indexesRs = statement.executeQuery("""
+            List<String[]> indexes = new ArrayList<>();
+            try (ResultSet indexesRs = statement.executeQuery("""
                 SELECT indexname, tablename
                 FROM pg_indexes
                 WHERE schemaname = 'public'
                 AND indexname NOT LIKE '%_pkey'
-                """);
-
-            List<String[]> indexes = new ArrayList<>();
-            while (indexesRs.next()) {
-                indexes.add(new String[]{indexesRs.getString("indexname"), indexesRs.getString("tablename")});
+                """)) {
+                while (indexesRs.next()) {
+                    indexes.add(new String[]{indexesRs.getString("indexname"), indexesRs.getString("tablename")});
+                }
             }
-            indexesRs.close();
 
             int processedCount = 0;
             for (String[] index : indexes) {
@@ -168,8 +171,14 @@ public class DatabaseMaintenanceService {
                 log.info("REINDEX для индекса: {} (таблица: {})", indexName, tableName);
 
                 try {
-                    statement.execute("REINDEX INDEX " + indexName);
-                    processedCount++;
+                    // Валидация имени индекса для предотвращения SQL injection
+                    if (isValidIdentifier(indexName)) {
+                        String sql = String.format("REINDEX INDEX %s", escapeIdentifier(indexName));
+                        statement.execute(sql);
+                        processedCount++;
+                    } else {
+                        log.warn("Недопустимое имя индекса: {}", indexName);
+                    }
                 } catch (Exception e) {
                     log.warn("Не удалось выполнить REINDEX для {}: {}", indexName, e.getMessage());
                 }
@@ -708,13 +717,31 @@ public class DatabaseMaintenanceService {
         return query.length() > 100 ? query.substring(0, 100) + "..." : query;
     }
 
+    /**
+     * Валидация SQL идентификатора для предотвращения SQL injection
+     */
+    private boolean isValidIdentifier(String identifier) {
+        if (identifier == null || identifier.trim().isEmpty()) {
+            return false;
+        }
+        // Проверяем, что идентификатор содержит только допустимые символы
+        // PostgreSQL: буквы, цифры, подчеркивания, начинается с буквы или подчеркивания
+        return identifier.matches("^[a-zA-Z_][a-zA-Z0-9_]*$") && identifier.length() <= 63;
+    }
+
+    /**
+     * Экранирование SQL идентификатора
+     */
+    private String escapeIdentifier(String identifier) {
+        // В PostgreSQL идентификаторы экранируются двойными кавычками
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
+    }
+
     private long getDatabaseSizeViaJdbc(Statement statement) {
-        try {
-            ResultSet rs = statement.executeQuery("SELECT pg_database_size(current_database())");
+        try (ResultSet rs = statement.executeQuery("SELECT pg_database_size(current_database())")) {
             if (rs.next()) {
                 return rs.getLong(1);
             }
-            rs.close();
         } catch (Exception e) {
             log.warn("Не удалось получить размер БД через JDBC: {}", e.getMessage());
         }

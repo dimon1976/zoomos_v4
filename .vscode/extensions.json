@@ -1,0 +1,40 @@
+{
+    "recommendations": [
+        // Java Development
+        "vscjava.vscode-java-pack",
+        "redhat.java",
+        "vscjava.vscode-java-debug",
+        "vscjava.vscode-java-test",
+        "vscjava.vscode-maven",
+
+        // Spring Boot
+        "vmware.vscode-spring-boot",
+        "vscjava.vscode-spring-initializr",
+        "vscjava.vscode-spring-boot-dashboard",
+
+        // Database
+        "ms-vscode.vscode-json",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+
+        // Web Development
+        "ms-vscode.vscode-typescript-next",
+        "bradlc.vscode-tailwindcss",
+        "formulahendry.auto-rename-tag",
+
+        // Git & Version Control
+        "mhutchie.git-graph",
+        "eamodio.gitlens",
+
+        // Productivity
+        "ms-vscode.vscode-todo-highlight",
+        "christian-kohler.path-intellisense",
+        "streetsidesoftware.code-spell-checker",
+        "ms-vscode.powershell",
+
+        // File Formats
+        "redhat.vscode-yaml",
+        "ms-vscode.vscode-json",
+        "DotJoshJohnson.xml"
+    ]
+}

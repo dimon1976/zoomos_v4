@@ -68,6 +68,7 @@ public class RedirectFinderService {
                     .includeModel(dto.getModelColumn() != null && dto.getModelColumn() >= 0)
                     .idColumnName("ID")
                     .modelColumnName("Модель")
+                    .usePlaywright(dto.getUsePlaywright() != null ? dto.getUsePlaywright() : false)
                     .build();
                     
         } catch (Exception e) {
@@ -540,16 +541,38 @@ public class RedirectFinderService {
     /**
      * Обработка списка URL с поддержкой прогресса и задержки
      */
-    public List<RedirectResult> processRedirects(List<RedirectUrlData> urls, int maxRedirects, int timeoutMs, 
-                                               int delayMs, ProgressCallback progressCallback) {
+    public List<RedirectResult> processRedirects(List<RedirectUrlData> urls, int maxRedirects, int timeoutMs,
+                                               int delayMs, boolean usePlaywright, ProgressCallback progressCallback) {
         List<RedirectResult> results = new ArrayList<>();
-        
-        // Получаем стратегии в порядке приоритета
-        List<RedirectStrategy> sortedStrategies = strategies.stream()
-                .sorted(Comparator.comparingInt(RedirectStrategy::getPriority))
-                .collect(Collectors.toList());
-        
-        log.info("Начинаем асинхронную обработку {} URLs с задержкой {}мс", urls.size(), delayMs);
+
+        // Получаем стратегии
+        List<RedirectStrategy> sortedStrategies;
+
+        if (usePlaywright) {
+            // Если принудительно выбран Playwright, используем только его
+            log.debug("Принудительное использование Playwright для всех URL");
+            RedirectStrategy playwrightStrategy = strategies.stream()
+                    .filter(s -> "playwright".equals(s.getStrategyName()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (playwrightStrategy != null) {
+                sortedStrategies = List.of(playwrightStrategy);
+            } else {
+                log.warn("Playwright стратегия не найдена, используем стандартный алгоритм");
+                sortedStrategies = strategies.stream()
+                        .sorted(Comparator.comparingInt(RedirectStrategy::getPriority))
+                        .collect(Collectors.toList());
+            }
+        } else {
+            // Обычный порядок приоритетов
+            sortedStrategies = strategies.stream()
+                    .sorted(Comparator.comparingInt(RedirectStrategy::getPriority))
+                    .collect(Collectors.toList());
+        }
+
+        log.info("Начинаем асинхронную обработку {} URLs с задержкой {}мс, usePlaywright={}",
+                urls.size(), delayMs, usePlaywright);
         
         for (int i = 0; i < urls.size(); i++) {
             RedirectUrlData urlData = urls.get(i);

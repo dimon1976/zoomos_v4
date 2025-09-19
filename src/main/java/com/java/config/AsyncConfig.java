@@ -47,11 +47,14 @@ public class AsyncConfig {
      */
     @Bean(name = "importTaskExecutor")
     public Executor importTaskExecutor() {
+        log.info("Создание importTaskExecutor с параметрами: core={}, max={}, queue={}, prefix='{}'",
+                importCorePoolSize, importMaxPoolSize, importQueueCapacity, importThreadNamePrefix);
+
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(importCorePoolSize);
-        executor.setMaxPoolSize(importMaxPoolSize);
-        executor.setQueueCapacity(importQueueCapacity);
-        executor.setThreadNamePrefix(importThreadNamePrefix);
+        executor.setCorePoolSize(Math.max(1, importCorePoolSize));
+        executor.setMaxPoolSize(Math.max(1, importMaxPoolSize));
+        executor.setQueueCapacity(Math.max(0, importQueueCapacity));
+        executor.setThreadNamePrefix(importThreadNamePrefix != null ? importThreadNamePrefix : "ImportExecutor-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
@@ -68,11 +71,14 @@ public class AsyncConfig {
      */
     @Bean(name = "exportTaskExecutor")
     public Executor exportTaskExecutor() {
+        log.info("Создание exportTaskExecutor с параметрами: core={}, max={}, queue={}, prefix='{}'",
+                exportCorePoolSize, exportMaxPoolSize, exportQueueCapacity, exportThreadNamePrefix);
+
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(exportCorePoolSize);
-        executor.setMaxPoolSize(exportMaxPoolSize);
-        executor.setQueueCapacity(exportQueueCapacity);
-        executor.setThreadNamePrefix(exportThreadNamePrefix);
+        executor.setCorePoolSize(Math.max(1, exportCorePoolSize));
+        executor.setMaxPoolSize(Math.max(1, exportMaxPoolSize));
+        executor.setQueueCapacity(Math.max(0, exportQueueCapacity));
+        executor.setThreadNamePrefix(exportThreadNamePrefix != null ? exportThreadNamePrefix : "ExportExecutor-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
