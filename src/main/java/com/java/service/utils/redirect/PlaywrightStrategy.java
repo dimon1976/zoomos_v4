@@ -59,12 +59,11 @@ public class PlaywrightStrategy implements RedirectStrategy {
                 
             Page page = context.newPage();
             
-            // Настройка увеличенных таймаутов для маркетплейсов
-            int extendedTimeout = Math.max(timeoutMs * 4, 60000); // Минимум 60 секунд
-            page.setDefaultTimeout(extendedTimeout);
-            page.setDefaultNavigationTimeout(extendedTimeout);
+            // Настройка таймаутов из интерфейса
+            page.setDefaultTimeout(timeoutMs);
+            page.setDefaultNavigationTimeout(timeoutMs);
 
-            log.debug("Установлены таймауты: default={}, navigation={}", extendedTimeout, extendedTimeout);
+            log.debug("Установлены таймауты: default={}, navigation={}", timeoutMs, timeoutMs);
             
             // Переменные для отслеживания редиректов
             int redirectCount = 0;
@@ -86,17 +85,17 @@ public class PlaywrightStrategy implements RedirectStrategy {
             });
             
             try {
-                log.debug("Playwright: навигация к URL: {} с таймаутом {}мс", url, extendedTimeout);
-                Response response = page.navigate(url, new Page.NavigateOptions().setTimeout(extendedTimeout));
+                log.debug("Playwright: навигация к URL: {} с таймаутом {}мс", url, timeoutMs);
+                Response response = page.navigate(url, new Page.NavigateOptions().setTimeout(timeoutMs));
                 
                 // Ждем загрузки страницы и возможных JavaScript-редиректов
                 try {
-                    page.waitForLoadState(LoadState.NETWORKIDLE, new Page.WaitForLoadStateOptions().setTimeout(20000));
+                    page.waitForLoadState(LoadState.NETWORKIDLE, new Page.WaitForLoadStateOptions().setTimeout(timeoutMs));
                 } catch (Exception e) {
                     log.debug("Не удалось дождаться NETWORKIDLE, продолжаем: {}", e.getMessage());
                     // Попробуем дождаться хотя бы базовой загрузки
                     try {
-                        page.waitForLoadState(LoadState.DOMCONTENTLOADED, new Page.WaitForLoadStateOptions().setTimeout(10000));
+                        page.waitForLoadState(LoadState.DOMCONTENTLOADED, new Page.WaitForLoadStateOptions().setTimeout(timeoutMs / 2));
                     } catch (Exception ex) {
                         log.debug("Не удалось дождаться DOMCONTENTLOADED: {}", ex.getMessage());
                     }
@@ -110,21 +109,21 @@ public class PlaywrightStrategy implements RedirectStrategy {
                         // Для Яндекс.Маркета важно дождаться инициализации JavaScript и редиректов
                         if (url.contains("market.yandex")) {
                             // Ждем изменения URL или стабилизации страницы
-                            page.waitForTimeout(2000); // Время для начальной загрузки
+                            page.waitForTimeout(timeoutMs / 5); // Время для начальной загрузки
 
                             // Пробуем дождаться конкретных элементов товара
                             try {
-                                page.locator("h1").first().waitFor(new Locator.WaitForOptions().setTimeout(5000));
+                                page.locator("h1").first().waitFor(new Locator.WaitForOptions().setTimeout(timeoutMs / 2));
                             } catch (Exception ex) {
                                 log.debug("Заголовок товара не найден, продолжаем");
                             }
                         } else {
-                            page.waitForTimeout(3000); // Даем время для инициализации JS
-                            page.locator("body").first().waitFor(new Locator.WaitForOptions().setTimeout(5000));
+                            page.waitForTimeout(timeoutMs / 3); // Даем время для инициализации JS
+                            page.locator("body").first().waitFor(new Locator.WaitForOptions().setTimeout(timeoutMs / 2));
                         }
 
                         // Еще одно ожидание на случай ленивой загрузки
-                        page.waitForTimeout(2000);
+                        page.waitForTimeout(timeoutMs / 5);
                     } catch (Exception e) {
                         log.debug("Ошибка при специальном ожидании маркетплейса: {}", e.getMessage());
                     }
@@ -150,8 +149,9 @@ public class PlaywrightStrategy implements RedirectStrategy {
                     urlChanged = true;
                 }
 
-                // Увеличенное время ожидания для сложных сайтов типа Яндекс.Маркет
-                for (int i = 0; i < 80; i++) { // Увеличено до 80 итераций (40 сек)
+                // Ожидание изменений URL в соответствии с пользовательским таймаутом
+                int maxIterations = timeoutMs / 500; // Количество итераций на основе таймаута
+                for (int i = 0; i < maxIterations; i++) {
                     page.waitForTimeout(500); // Ждем 500мс между проверками
 
                     String newUrl = page.url();
