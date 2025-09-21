@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Data Merger - Объединение данных',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Data Merger - Объединение данных',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Data Merger - Объединение данных</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .upload-area {
+            border: 2px dashed #28a745;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #218838;
+            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        }
+        .feature-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #28a745;
+        }
+        .process-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(45deg, #28a745, #218838);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            margin: 0 auto 15px;
+        }
+        .file-input-label {
+            display: block;
+            width: 100%;
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border: 1px dashed #28a745;
+            border-radius: 0.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .file-input-label:hover {
+            background: #e9ecef;
+            border-color: #218838;
+        }
+        .file-input {
+            display: none;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        <!-- Breadcrumb -->
+        <nav aria-label="breadcrumb" class="mb-4">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a th:href="@{/}" class="text-decoration-none">Главная</a></li>
+                <li class="breadcrumb-item"><a th:href="@{/utils}" class="text-decoration-none">Утилиты</a></li>
+                <li class="breadcrumb-item active">Data Merger</li>
+            </ol>
+        </nav>
+
+        <div class="row">
+            <!-- Левая колонка - Форма -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h4 class="card-title mb-0">
+                            <i class="fas fa-database me-2"></i>Объединение данных товаров
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- Сообщения -->
+                        <div th:if="${message}" class="alert alert-success alert-dismissible fade show">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <span th:text="${message}"></span>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+
+                        <div th:if="${error}" class="alert alert-danger alert-dismissible fade show">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <span th:text="${error}"></span>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+
+                        <!-- Форма загрузки файлов -->
+                        <form th:action="@{/utils/data-merger/upload}" method="post" enctype="multipart/form-data">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-file-csv me-1"></i>Исходный файл
+                                        </label>
+                                        <p class="text-muted small mb-2">CSV/Excel с товарами-оригиналами и их аналогами</p>
+                                        <label for="sourceFile" class="file-input-label">
+                                            <i class="fas fa-cloud-upload-alt me-2"></i>
+                                            Выберите исходный файл
+                                        </label>
+                                        <input type="file" id="sourceFile" name="sourceFile"
+                                               class="file-input" accept=".csv,.xlsx,.xls" required>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-link me-1"></i>Файл ссылок
+                                        </label>
+                                        <p class="text-muted small mb-2">CSV/Excel с моделями аналогов и ссылками</p>
+                                        <label for="linksFile" class="file-input-label">
+                                            <i class="fas fa-cloud-upload-alt me-2"></i>
+                                            Выберите файл ссылок
+                                        </label>
+                                        <input type="file" id="linksFile" name="linksFile"
+                                               class="file-input" accept=".csv,.xlsx,.xls" required>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="text-center">
+                                <button type="submit" class="btn btn-success btn-lg">
+                                    <i class="fas fa-cog me-2"></i>Обработать файлы
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Правая колонка - Информация -->
+            <div class="col-md-4">
+                <!-- Описание процесса -->
+                <div class="feature-card">
+                    <div class="process-icon">
+                        <i class="fas fa-info"></i>
+                    </div>
+                    <h5 class="text-center mb-3">Как это работает</h5>
+                    <ol class="small">
+                        <li><strong>Загрузите файлы:</strong> исходный файл с товарами и их аналогами, файл со ссылками на аналоги</li>
+                        <li><strong>Обработка:</strong> система найдет соответствия по моделям аналогов</li>
+                        <li><strong>Результат:</strong> развернутый файл со всеми комбинациями товар-аналог-ссылка</li>
+                    </ol>
+                </div>
+
+                <!-- Пример данных -->
+                <div class="feature-card">
+                    <div class="process-icon">
+                        <i class="fas fa-table"></i>
+                    </div>
+                    <h5 class="text-center mb-3">Пример результата</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="table-light">
+                                <tr style="font-size: 0.75rem;">
+                                    <th>ID</th>
+                                    <th>Оригинал</th>
+                                    <th>Аналог</th>
+                                    <th>Ссылка</th>
+                                </tr>
+                            </thead>
+                            <tbody style="font-size: 0.7rem;">
+                                <tr>
+                                    <td>001</td>
+                                    <td>Модель А</td>
+                                    <td>Аналог1</td>
+                                    <td>site1.com/...</td>
+                                </tr>
+                                <tr>
+                                    <td>001</td>
+                                    <td>Модель А</td>
+                                    <td>Аналог1</td>
+                                    <td>site2.com/...</td>
+                                </tr>
+                                <tr>
+                                    <td>001</td>
+                                    <td>Модель А</td>
+                                    <td>Аналог2</td>
+                                    <td>site1.com/...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Поддерживаемые форматы -->
+                <div class="feature-card">
+                    <div class="process-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <h5 class="text-center mb-3">Поддерживаемые форматы</h5>
+                    <ul class="small">
+                        <li><i class="fas fa-check text-success me-1"></i> CSV файлы (.csv)</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Excel файлы (.xlsx, .xls)</li>
+                        <li><i class="fas fa-info-circle text-info me-1"></i> Максимум 100,000 строк</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+    <script>
+        // Обновление текста при выборе файла
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInputs = document.querySelectorAll('.file-input');
+
+            fileInputs.forEach(input => {
+                input.addEventListener('change', function() {
+                    const label = this.previousElementSibling;
+                    if (this.files && this.files[0]) {
+                        const fileName = this.files[0].name;
+                        const fileSize = (this.files[0].size / 1024).toFixed(1);
+                        label.innerHTML = `<i class="fas fa-file-check me-2"></i>${fileName} (${fileSize} KB)`;
+                        label.classList.add('text-success');
+                    }
+                });
+            });
+        });
+    </script>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <!-- Дополнительные действия в шапке (пока пусто) -->
+</th:block>
+
+</html>

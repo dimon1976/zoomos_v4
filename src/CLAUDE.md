@@ -266,10 +266,12 @@ Real-time progress updates for long-running operations:
 * Если чего-то не знаешь, не придумывай, так и говори.
 * Обязательно закрывать запущенный сервер после тестирования
 * Проектируем код по принципам KISS, YAGNI, MVP, Fail Fast, итеративная разработка.
+* MD файлы пишем в соответствии с правилами markdownlint
 
 ## Current State Notes
 
 **Recently Completed** (as of 2025-08-30)
+
 - **Maintenance System**: Complete automated maintenance system with web interface
   - Web interface at `/maintenance` with 5 pages (index, files, database, system, operations)
   - Scheduled tasks with configurable cron expressions  
