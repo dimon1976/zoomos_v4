@@ -30,7 +30,10 @@
       "Bash(git push:*)",
       "mcp__playwright__browser_handle_dialog",
       "Bash(findstr:*)",
-      "Bash(cmd /c:*)"
+      "Bash(cmd /c:*)",
+      "Bash(git pull:*)",
+      "Bash(git merge:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
