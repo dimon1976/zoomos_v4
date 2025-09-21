@@ -90,7 +90,7 @@ public class UtilsController {
             "description", "Объединение товаров-оригиналов с аналогами и ссылками в развернутый файл",
             "icon", "fas fa-database",
             "url", "/utils/data-merger",
-            "status", "development"
+            "status", "ready"
         ));
 
         return utilities;

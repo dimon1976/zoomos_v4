@@ -27,7 +27,10 @@
       "Bash(pkill:*)",
       "Bash(netstat:*)",
       "mcp__playwright__browser_wait_for",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "mcp__playwright__browser_handle_dialog",
+      "Bash(findstr:*)",
+      "Bash(cmd /c:*)"
     ],
     "deny": [],
     "ask": []
