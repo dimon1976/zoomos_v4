@@ -1,0 +1,224 @@
+{
+    "version": "2.0.0",
+    "options": {
+        "env": {
+            "JAVA_HOME": "c:\\java\\jdk17",
+            "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8"
+        }
+    },
+    "tasks": [
+        {
+            "label": "chcp-utf8",
+            "type": "shell",
+            "command": "chcp",
+            "args": ["65001"],
+            "group": "build",
+            "presentation": {
+                "echo": false,
+                "reveal": "never",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "options": {
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": ["/c"]
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "maven: compile",
+            "type": "shell",
+            "command": "mvn",
+            "args": ["clean", "compile"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": "$maven-compiler-java"
+        },
+        {
+            "label": "maven: spring-boot:run (silent)",
+            "type": "shell",
+            "command": "mvn",
+            "args": ["spring-boot:run", "-Dspring-boot.run.profiles=silent"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": []
+        },
+        {
+            "label": "maven: spring-boot:run (dev)",
+            "type": "shell",
+            "command": "mvn",
+            "args": ["spring-boot:run", "-Dspring-boot.run.profiles=dev"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": []
+        },
+        {
+            "label": "maven: spring-boot:run (verbose)",
+            "type": "shell",
+            "command": "mvn",
+            "args": ["spring-boot:run", "-Dspring-boot.run.profiles=verbose"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": []
+        },
+        {
+            "label": "maven: spring-boot:run (prod)",
+            "type": "shell",
+            "command": "mvn",
+            "args": ["spring-boot:run", "-Dspring-boot.run.profiles=prod"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": []
+        },
+        {
+            "label": "maven: test",
+            "type": "shell",
+            "command": "mvn",
+            "args": ["test"],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": "$maven-compiler-java"
+        },
+        {
+            "label": "maven: clean",
+            "type": "shell",
+            "command": "mvn",
+            "args": ["clean"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": []
+        },
+        {
+            "label": "maven: package",
+            "type": "shell",
+            "command": "mvn",
+            "args": ["clean", "package", "-DskipTests"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": "$maven-compiler-java"
+        },
+        {
+            "label": "kill-java-processes",
+            "type": "shell",
+            "command": "taskkill",
+            "args": ["/F", "/IM", "java.exe"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared"
+            },
+            "options": {
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": ["/c"]
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "start-app-jar",
+            "type": "shell",
+            "command": "java",
+            "args": [
+                "-Xms512m",
+                "-Xmx2g",
+                "-XX:+UseG1GC",
+                "-Dfile.encoding=UTF-8",
+                "-jar",
+                "target/file-processing-app-1.0-SNAPSHOT.jar",
+                "--spring.profiles.active=silent"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": []
+        },
+        {
+            "label": "start-app-jar-optimized",
+            "type": "shell",
+            "command": "java",
+            "args": [
+                "-Xms1g",
+                "-Xmx4g",
+                "-XX:+UseG1GC",
+                "-XX:MaxGCPauseMillis=200",
+                "-XX:+UseStringDeduplication",
+                "-XX:+OptimizeStringConcat",
+                "-Dfile.encoding=UTF-8",
+                "-jar",
+                "target/file-processing-app-1.0-SNAPSHOT.jar",
+                "--spring.profiles.active=silent"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "dependsOn": "chcp-utf8",
+            "problemMatcher": []
+        }
+    ]
+}

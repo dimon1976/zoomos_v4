@@ -15,4 +15,5 @@ public class RedirectProcessingRequest {
     private boolean includeModel;
     private String idColumnName;
     private String modelColumnName;
+    private boolean usePlaywright; // Принудительно использовать Playwright
 }

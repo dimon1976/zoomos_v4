@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Data Merger - Документация',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Data Merger - Подробная документация',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Data Merger - Документация</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .example-file {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            white-space: pre-line;
+            overflow-x: auto;
+        }
+        .step-badge {
+            background-color: #007bff;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .highlight-box {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .warning-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .success-box {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/utils/data-merger" class="btn btn-primary">
+            <i class="fas fa-arrow-left"></i> К утилите
+        </a>
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-list"></i> Все утилиты
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+
+        <!-- Введение -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">
+                            <i class="fas fa-database"></i>
+                            Data Merger - Утилита объединения данных
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <p class="lead">Утилита для объединения информации о товарах-оригиналах с их аналогами и ссылками в единый развернутый файл.</p>
+
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                <div class="highlight-box">
+                                    <h6><i class="fas fa-file-upload text-primary"></i> Входные данные</h6>
+                                    <ul class="mb-0">
+                                        <li>Файл с товарами-оригиналами</li>
+                                        <li>Файл со ссылками на аналоги</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="highlight-box">
+                                    <h6><i class="fas fa-cogs text-success"></i> Обработка</h6>
+                                    <ul class="mb-0">
+                                        <li>Сопоставление по названию аналога</li>
+                                        <li>Объединение данных</li>
+                                        <li>Развертывание записей</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="highlight-box">
+                                    <h6><i class="fas fa-file-download text-info"></i> Результат</h6>
+                                    <ul class="mb-0">
+                                        <li>Единый файл со всеми данными</li>
+                                        <li>Формат CSV (Windows-1251, разделитель ;</li>
+                                        <li>Каждая ссылка в отдельной строке</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Пошаговая инструкция -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list-ol text-primary"></i>
+                            Пошаговая инструкция
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-start mb-3">
+                                    <span class="step-badge">1</span>
+                                    <div>
+                                        <h6>Загрузить файл с товарами-оригиналами</h6>
+                                        <p class="text-muted">Выберите файл Excel или CSV с товарами, их ID, аналогами и коэффициентами</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start mb-3">
+                                    <span class="step-badge">2</span>
+                                    <div>
+                                        <h6>Загрузить файл со ссылками</h6>
+                                        <p class="text-muted">Выберите файл с информацией о ссылках на аналоги</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start mb-3">
+                                    <span class="step-badge">3</span>
+                                    <div>
+                                        <h6>Указать наличие заголовков</h6>
+                                        <p class="text-muted">Отметьте галочками, если файлы содержат заголовки в первой строке</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-start mb-3">
+                                    <span class="step-badge">4</span>
+                                    <div>
+                                        <h6>Нажать "Анализировать файлы"</h6>
+                                        <p class="text-muted">Система определит структуру файлов и покажет настройки сопоставления</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start mb-3">
+                                    <span class="step-badge">5</span>
+                                    <div>
+                                        <h6>Настроить сопоставление полей</h6>
+                                        <p class="text-muted">Выберите какие колонки соответствуют нужным полям данных</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start mb-3">
+                                    <span class="step-badge">6</span>
+                                    <div>
+                                        <h6>Получить результат</h6>
+                                        <p class="text-muted">Скачать готовый файл с объединенными данными</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Примеры файлов -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-file-alt text-success"></i>
+                            Примеры входных файлов
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Файл с товарами-оригиналами -->
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-table text-primary"></i> Файл с товарами-оригиналами (source.xlsx)</h6>
+                                <div class="example-file">ID,Модель оригинал,Модель аналог,Коэффициент
+001,Модель А,Аналог1,1,200
+001,Модель А,Аналог2,0,800
+002,Модель Б,Аналог1,1,000
+002,Модель Б,Аналог3,1,500
+003,Модель В,Аналог2,0,900</div>
+
+                                <div class="warning-box mt-3">
+                                    <h6><i class="fas fa-exclamation-triangle"></i> Обязательные поля:</h6>
+                                    <ul class="mb-0">
+                                        <li><strong>ID</strong> - уникальный идентификатор товара</li>
+                                        <li><strong>Модель оригинал</strong> - название оригинального товара</li>
+                                        <li><strong>Модель аналог</strong> - название аналога (для связи)</li>
+                                        <li><strong>Коэффициент</strong> - численный коэффициент (до 3 знаков после запятой)</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <!-- Файл со ссылками -->
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-table text-info"></i> Файл со ссылками (links.xlsx)</h6>
+                                <div class="example-file">Модель аналог,Ссылка
+Аналог1,https://shop1.com/analog1
+Аналог1,https://shop2.com/analog1
+Аналог2,https://shop1.com/analog2
+Аналог3,https://shop3.com/analog3</div>
+
+                                <div class="warning-box mt-3">
+                                    <h6><i class="fas fa-exclamation-triangle"></i> Обязательные поля:</h6>
+                                    <ul class="mb-0">
+                                        <li><strong>Модель аналог</strong> - название аналога (для связи)</li>
+                                        <li><strong>Ссылка</strong> - URL ссылка на аналог</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Пример результата -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-file-export text-success"></i>
+                            Пример результата
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <h6><i class="fas fa-download text-success"></i> Результирующий файл (merged-data.csv)</h6>
+                        <div class="example-file">ID,Модель оригинал,Модель аналог,Коэффициент,Ссылка
+001,Модель А,Аналог1,1,200,https://shop1.com/analog1
+001,Модель А,Аналог1,1,200,https://shop2.com/analog1
+001,Модель А,Аналог2,0,800,https://shop1.com/analog2
+002,Модель Б,Аналог1,1,000,https://shop1.com/analog1
+002,Модель Б,Аналог1,1,000,https://shop2.com/analog1
+002,Модель Б,Аналог3,1,500,https://shop3.com/analog3
+003,Модель В,Аналог2,0,900,https://shop1.com/analog2</div>
+
+                        <div class="success-box mt-3">
+                            <h6><i class="fas fa-check-circle"></i> Результат объединения:</h6>
+                            <ul class="mb-0">
+                                <li>Каждая ссылка размещена в отдельной строке</li>
+                                <li>Все данные из исходного файла сохранены</li>
+                                <li>Добавлена колонка "Ссылка" из файла ссылок</li>
+                                <li>Файл сохранен в формате CSV с кодировкой Windows-1251</li>
+                                <li>Разделитель - точка с запятой (;)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Технические детали -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-cog text-secondary"></i>
+                            Технические детали
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-file-import"></i> Поддерживаемые форматы входных файлов:</h6>
+                                <ul>
+                                    <li>Excel (.xlsx, .xls)</li>
+                                    <li>CSV (.csv) - с автоопределением кодировки</li>
+                                    <li>Максимальный размер файла: 1200 MB</li>
+                                </ul>
+
+                                <h6 class="mt-3"><i class="fas fa-database"></i> Логика объединения:</h6>
+                                <ul>
+                                    <li>Связь осуществляется по полю "Модель аналог"</li>
+                                    <li>Для каждого товара создается запись для каждой найденной ссылки</li>
+                                    <li>Если ссылок нет - запись не включается в результат</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-file-export"></i> Параметры выходного файла:</h6>
+                                <ul>
+                                    <li>Формат: CSV</li>
+                                    <li>Кодировка: Windows-1251 (CP1251)</li>
+                                    <li>Разделитель полей: точка с запятой (;)</li>
+                                    <li>Кавычки: двойные (") при необходимости</li>
+                                </ul>
+
+                                <h6 class="mt-3"><i class="fas fa-calculator"></i> Обработка коэффициентов:</h6>
+                                <ul>
+                                    <li>Автоматическое преобразование запятых в точки</li>
+                                    <li>Сохранение до 3 знаков после запятой</li>
+                                    <li>Поддержка различных форматов чисел</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Частые вопросы -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-question-circle text-warning"></i>
+                            Частые вопросы
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="accordion" id="faqAccordion">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="faq1">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse1">
+                                        Что делать, если файлы не имеют заголовков?
+                                    </button>
+                                </h2>
+                                <div id="collapse1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body">
+                                        Снимите галочки "Файл содержит заголовки" для соответствующих файлов. В этом случае система будет использовать номера колонок (Колонка 1, Колонка 2, и т.д.) для настройки сопоставления.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="faq2">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse2">
+                                        Можно ли использовать файлы с разным количеством колонок?
+                                    </button>
+                                </h2>
+                                <div id="collapse2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body">
+                                        Да, утилита автоматически анализирует структуру каждого файла отдельно. Важно только правильно сопоставить нужные поля при настройке.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="faq3">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse3">
+                                        Что происходит с товарами, для которых нет ссылок?
+                                    </button>
+                                </h2>
+                                <div id="collapse3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body">
+                                        Товары, для которых не найдены соответствующие ссылки по названию аналога, не включаются в результирующий файл. Это сделано для того, чтобы в итоговом файле были только полные записи со ссылками.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="faq4">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse4">
+                                        Почему результат сохраняется в формате CSV, а не Excel?
+                                    </button>
+                                </h2>
+                                <div id="collapse4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body">
+                                        CSV формат обеспечивает максимальную совместимость и скорость обработки больших объемов данных. Кодировка Windows-1251 гарантирует корректное отображение русских символов в Excel и других программах.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Data Merger документация загружена');
+
+    // Автоматическое раскрытие первого FAQ при загрузке
+    const firstCollapse = document.getElementById('collapse1');
+    if (firstCollapse) {
+        const bsCollapse = new bootstrap.Collapse(firstCollapse, {
+            show: false
+        });
+    }
+});
+</script>
+</th:block>
+</html>

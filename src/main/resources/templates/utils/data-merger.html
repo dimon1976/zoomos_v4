@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Data Merger - Объединение данных',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Data Merger - Объединение данных',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Data Merger - Объединение данных</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .upload-area {
+            border: 2px dashed #28a745;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #218838;
+            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        }
+        .feature-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #28a745;
+        }
+        .process-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(45deg, #28a745, #218838);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            margin: 0 auto 15px;
+        }
+        .file-input-label {
+            display: block;
+            width: 100%;
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border: 1px dashed #28a745;
+            border-radius: 0.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .file-input-label:hover {
+            background: #e9ecef;
+            border-color: #218838;
+        }
+        .file-input {
+            display: none;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        <!-- Breadcrumb -->
+        <nav aria-label="breadcrumb" class="mb-4">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a th:href="@{/}" class="text-decoration-none">Главная</a></li>
+                <li class="breadcrumb-item"><a th:href="@{/utils}" class="text-decoration-none">Утилиты</a></li>
+                <li class="breadcrumb-item active">Data Merger</li>
+            </ol>
+        </nav>
+
+        <div class="row">
+            <!-- Левая колонка - Форма -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h4 class="card-title mb-0">
+                            <i class="fas fa-database me-2"></i>Объединение данных товаров
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- Сообщения -->
+                        <div th:if="${message}" class="alert alert-success alert-dismissible fade show">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <span th:text="${message}"></span>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+
+                        <div th:if="${error}" class="alert alert-danger alert-dismissible fade show">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <span th:text="${error}"></span>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+
+                        <!-- Динамические уведомления -->
+                        <div id="notifications" class="mb-3" style="display: none;">
+                            <!-- Здесь будут отображаться динамические уведомления -->
+                        </div>
+
+                        <!-- Форма загрузки файлов -->
+                        <form id="uploadForm" th:action="@{/utils/data-merger/upload}" method="post" enctype="multipart/form-data">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-file-csv me-1"></i>Исходный файл
+                                        </label>
+                                        <p class="text-muted small mb-2">CSV/Excel с товарами-оригиналами и их аналогами</p>
+                                        <label for="sourceFile" class="file-input-label">
+                                            <i class="fas fa-cloud-upload-alt me-2"></i>
+                                            Выберите исходный файл
+                                        </label>
+                                        <input type="file" id="sourceFile" name="sourceFile"
+                                               class="file-input" accept=".csv,.xlsx,.xls" required>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-link me-1"></i>Файл ссылок
+                                        </label>
+                                        <p class="text-muted small mb-2">CSV/Excel с моделями аналогов и ссылками</p>
+                                        <label for="linksFile" class="file-input-label">
+                                            <i class="fas fa-cloud-upload-alt me-2"></i>
+                                            Выберите файл ссылок
+                                        </label>
+                                        <input type="file" id="linksFile" name="linksFile"
+                                               class="file-input" accept=".csv,.xlsx,.xls" required>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Выбор формата экспорта -->
+                            <div class="row">
+                                <div class="col-12">
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-file-download me-1"></i>Формат результата
+                                        </label>
+                                        <div class="d-flex justify-content-center">
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="format" id="formatCsv" value="csv" checked>
+                                                <label class="form-check-label" for="formatCsv">
+                                                    <i class="fas fa-file-csv me-1"></i>CSV файл
+                                                </label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="format" id="formatExcel" value="excel">
+                                                <label class="form-check-label" for="formatExcel">
+                                                    <i class="fas fa-file-excel me-1"></i>Excel файл
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Секция маппинга столбцов (скрыта по умолчанию) -->
+                            <div id="mappingSection" style="display: none;">
+                                <div class="row">
+                                    <div class="col-12">
+                                        <h5 class="mb-3"><i class="fas fa-columns me-2"></i>Настройка маппинга столбцов</h5>
+
+                                        <!-- Опции файлов без заголовков -->
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="" id="sourceNoHeaders">
+                                                    <label class="form-check-label" for="sourceNoHeaders">
+                                                        Исходный файл без заголовков
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="" id="linksNoHeaders">
+                                                    <label class="form-check-label" for="linksNoHeaders">
+                                                        Файл ссылок без заголовков
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Маппинг исходного файла -->
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="card mb-3">
+                                                    <div class="card-header">
+                                                        <h6 class="mb-0">Исходный файл</h6>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <div id="sourceMapping">
+                                                            <!-- Динамически заполняется JavaScript -->
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Маппинг файла ссылок -->
+                                            <div class="col-md-6">
+                                                <div class="card mb-3">
+                                                    <div class="card-header">
+                                                        <h6 class="mb-0">Файл ссылок</h6>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <div id="linksMapping">
+                                                            <!-- Динамически заполняется JavaScript -->
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Выбор выходных полей -->
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Поля результата</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div id="outputFields">
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="checkbox" id="output_id" value="id" checked>
+                                                        <label class="form-check-label" for="output_id">ID</label>
+                                                    </div>
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="checkbox" id="output_originalModel" value="originalModel" checked>
+                                                        <label class="form-check-label" for="output_originalModel">Модель оригинал</label>
+                                                    </div>
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="checkbox" id="output_analogModel" value="analogModel" checked>
+                                                        <label class="form-check-label" for="output_analogModel">Модель аналог</label>
+                                                    </div>
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="checkbox" id="output_coefficient" value="coefficient" checked>
+                                                        <label class="form-check-label" for="output_coefficient">Коэффициент</label>
+                                                    </div>
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="checkbox" id="output_link" value="link" checked>
+                                                        <label class="form-check-label" for="output_link">Ссылка</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="text-center">
+                                <button type="button" id="analyzeBtn" class="btn btn-info btn-lg me-3">
+                                    <i class="fas fa-search me-2"></i>Анализировать файлы
+                                </button>
+                                <button type="button" id="processBtn" class="btn btn-success btn-lg" style="display: none;">
+                                    <i class="fas fa-play me-2"></i>Запустить обработку
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Правая колонка - Информация -->
+            <div class="col-md-4">
+                <!-- Описание процесса -->
+                <div class="feature-card">
+                    <div class="process-icon">
+                        <i class="fas fa-info"></i>
+                    </div>
+                    <h5 class="text-center mb-3">Как это работает</h5>
+                    <ol class="small">
+                        <li><strong>Загрузите файлы:</strong> исходный файл с товарами и их аналогами, файл со ссылками на аналоги</li>
+                        <li><strong>Обработка:</strong> система найдет соответствия по моделям аналогов</li>
+                        <li><strong>Результат:</strong> развернутый файл со всеми комбинациями товар-аналог-ссылка</li>
+                    </ol>
+                </div>
+
+                <!-- Пример данных -->
+                <div class="feature-card">
+                    <div class="process-icon">
+                        <i class="fas fa-table"></i>
+                    </div>
+                    <h5 class="text-center mb-3">Пример результата</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="table-light">
+                                <tr style="font-size: 0.75rem;">
+                                    <th>ID</th>
+                                    <th>Оригинал</th>
+                                    <th>Аналог</th>
+                                    <th>Ссылка</th>
+                                </tr>
+                            </thead>
+                            <tbody style="font-size: 0.7rem;">
+                                <tr>
+                                    <td>001</td>
+                                    <td>Модель А</td>
+                                    <td>Аналог1</td>
+                                    <td>site1.com/...</td>
+                                </tr>
+                                <tr>
+                                    <td>001</td>
+                                    <td>Модель А</td>
+                                    <td>Аналог1</td>
+                                    <td>site2.com/...</td>
+                                </tr>
+                                <tr>
+                                    <td>001</td>
+                                    <td>Модель А</td>
+                                    <td>Аналог2</td>
+                                    <td>site1.com/...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Поддерживаемые форматы -->
+                <div class="feature-card">
+                    <div class="process-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <h5 class="text-center mb-3">Поддерживаемые форматы</h5>
+                    <ul class="small">
+                        <li><i class="fas fa-check text-success me-1"></i> CSV файлы (.csv)</li>
+                        <li><i class="fas fa-check text-success me-1"></i> Excel файлы (.xlsx, .xls)</li>
+                        <li><i class="fas fa-info-circle text-info me-1"></i> Максимум 100,000 строк</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+    <script>
+        // Глобальные переменные
+        let analysisResult = null;
+
+        // Обновление текста при выборе файла
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInputs = document.querySelectorAll('.file-input');
+            const processBtn = document.getElementById('processBtn');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+
+            fileInputs.forEach(input => {
+                input.addEventListener('change', function() {
+                    const label = this.previousElementSibling;
+                    if (this.files && this.files[0]) {
+                        const fileName = this.files[0].name;
+                        const fileSize = (this.files[0].size / 1024).toFixed(1);
+                        label.innerHTML = `<i class="fas fa-file-check me-2"></i>${fileName} (${fileSize} KB)`;
+                        label.classList.add('text-success');
+                    }
+
+                    // Сбрасываем секцию маппинга при изменении файлов
+                    hideMappingSection();
+                });
+            });
+
+            // Анализ файлов
+            analyzeBtn.addEventListener('click', function() {
+                const sourceFile = document.getElementById('sourceFile').files[0];
+                const linksFile = document.getElementById('linksFile').files[0];
+
+                if (!sourceFile || !linksFile) {
+                    showNotification('Пожалуйста, выберите оба файла', 'warning');
+                    return;
+                }
+
+                analyzeFiles(sourceFile, linksFile);
+            });
+
+            // Обработка файлов
+            processBtn.addEventListener('click', function() {
+                const sourceFile = document.getElementById('sourceFile').files[0];
+                const linksFile = document.getElementById('linksFile').files[0];
+                const format = document.querySelector('input[name="format"]:checked').value;
+
+                if (!sourceFile || !linksFile) {
+                    showNotification('Пожалуйста, выберите оба файла', 'warning');
+                    return;
+                }
+
+                if (!analysisResult) {
+                    showNotification('Пожалуйста, сначала проанализируйте файлы', 'warning');
+                    return;
+                }
+
+                // Показываем индикатор загрузки
+                processBtn.disabled = true;
+                processBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Обработка...';
+
+                // Собираем текущее маппинг из формы
+                const config = getCurrentMappingConfig();
+
+                // Создаем FormData
+                const formData = new FormData();
+                formData.append('sourceFile', sourceFile);
+                formData.append('linksFile', linksFile);
+                formData.append('configJson', JSON.stringify(config));
+                formData.append('format', format);
+
+                // Отправляем запрос
+                fetch('/utils/data-merger/process-with-mapping', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error('Ошибка обработки файлов');
+                })
+                .then(blob => {
+                    // Определяем имя файла по формату
+                    const fileName = format === 'excel' ? 'merged_data.xlsx' : 'merged_data.csv';
+
+                    // Скачиваем файл
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+
+                    // Показываем успех
+                    showNotification('Файл успешно обработан и скачан!', 'success');
+
+                    // Перенаправление на страницу утилит через 3 секунды
+                    setTimeout(() => {
+                        window.location.href = '/utils';
+                    }, 3000);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showNotification('Ошибка обработки файлов: ' + error.message, 'error');
+                })
+                .finally(() => {
+                    // Восстанавливаем кнопку
+                    processBtn.disabled = false;
+                    processBtn.innerHTML = '<i class="fas fa-play me-2"></i>Запустить обработку';
+                });
+            });
+        });
+
+        // Функции для работы с анализом и маппингом
+        function analyzeFiles(sourceFile, linksFile) {
+            const analyzeBtn = document.getElementById('analyzeBtn');
+
+            // Показываем индикатор загрузки
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Анализ файлов...';
+
+            // Создаем FormData
+            const formData = new FormData();
+            formData.append('sourceFile', sourceFile);
+            formData.append('linksFile', linksFile);
+
+            // Отправляем запрос
+            fetch('/utils/data-merger/analyze', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('Ошибка анализа файлов');
+            })
+            .then(data => {
+                // Сохраняем результат анализа
+                analysisResult = data;
+
+                // Отображаем секцию маппинга
+                showMappingSection(data);
+
+                // Скрываем кнопку анализа и показываем кнопку обработки
+                analyzeBtn.style.display = 'none';
+                document.getElementById('processBtn').style.display = 'inline-block';
+
+                showNotification('Анализ файлов завершен! Настройте маппинг столбцов.', 'success');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('Ошибка анализа файлов: ' + error.message, 'error');
+            })
+            .finally(() => {
+                // Восстанавливаем кнопку
+                analyzeBtn.disabled = false;
+                analyzeBtn.innerHTML = '<i class="fas fa-search me-2"></i>Анализировать файлы';
+            });
+        }
+
+        function showMappingSection(data) {
+            const mappingSection = document.getElementById('mappingSection');
+            mappingSection.style.display = 'block';
+
+            // Заполняем маппинг исходного файла
+            buildSourceMappingUI(data.sourceHeaders, data.sourceFileMapping);
+
+            // Заполняем маппинг файла ссылок
+            buildLinksMappingUI(data.linksHeaders, data.linksFileMapping);
+        }
+
+        function hideMappingSection() {
+            const mappingSection = document.getElementById('mappingSection');
+            mappingSection.style.display = 'none';
+
+            // Скрываем кнопку обработки
+            document.getElementById('processBtn').style.display = 'none';
+
+            // Сбрасываем результат анализа
+            analysisResult = null;
+        }
+
+        function buildSourceMappingUI(headers, mapping) {
+            const container = document.getElementById('sourceMapping');
+            container.innerHTML = '';
+
+            const fields = [
+                { key: 'id', label: 'ID товара' },
+                { key: 'originalModel', label: 'Модель оригинал' },
+                { key: 'analogModel', label: 'Модель аналог' },
+                { key: 'coefficient', label: 'Коэффициент' }
+            ];
+
+            fields.forEach(field => {
+                const div = document.createElement('div');
+                div.className = 'mb-2';
+
+                const label = document.createElement('label');
+                label.className = 'form-label small';
+                label.textContent = field.label;
+
+                const select = document.createElement('select');
+                select.className = 'form-select form-select-sm';
+                select.name = 'source_' + field.key;
+                select.id = 'source_' + field.key;
+
+                // Добавляем опции
+                headers.forEach((header, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = `${index}: ${header}`;
+                    if (mapping[field.key] === index) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+
+                div.appendChild(label);
+                div.appendChild(select);
+                container.appendChild(div);
+            });
+        }
+
+        function buildLinksMappingUI(headers, mapping) {
+            const container = document.getElementById('linksMapping');
+            container.innerHTML = '';
+
+            const fields = [
+                { key: 'analogModel', label: 'Модель аналога' },
+                { key: 'link', label: 'Ссылка' }
+            ];
+
+            fields.forEach(field => {
+                const div = document.createElement('div');
+                div.className = 'mb-2';
+
+                const label = document.createElement('label');
+                label.className = 'form-label small';
+                label.textContent = field.label;
+
+                const select = document.createElement('select');
+                select.className = 'form-select form-select-sm';
+                select.name = 'links_' + field.key;
+                select.id = 'links_' + field.key;
+
+                // Добавляем опции
+                headers.forEach((header, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = `${index}: ${header}`;
+                    if (mapping[field.key] === index) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+
+                div.appendChild(label);
+                div.appendChild(select);
+                container.appendChild(div);
+            });
+        }
+
+        function getCurrentMappingConfig() {
+            // Собираем маппинг исходного файла
+            const sourceMapping = {
+                id: parseInt(document.getElementById('source_id').value),
+                originalModel: parseInt(document.getElementById('source_originalModel').value),
+                analogModel: parseInt(document.getElementById('source_analogModel').value),
+                coefficient: parseInt(document.getElementById('source_coefficient').value)
+            };
+
+            // Собираем маппинг файла ссылок
+            const linksMapping = {
+                analogModel: parseInt(document.getElementById('links_analogModel').value),
+                link: parseInt(document.getElementById('links_link').value)
+            };
+
+            // Собираем выбранные поля результата
+            const outputFields = [];
+            document.querySelectorAll('#outputFields input[type="checkbox"]:checked').forEach(checkbox => {
+                outputFields.push(checkbox.value);
+            });
+
+            // Получаем флаги файлов без заголовков
+            const sourceHasHeaders = !document.getElementById('sourceNoHeaders').checked;
+            const linksHasHeaders = !document.getElementById('linksNoHeaders').checked;
+
+            // Формируем полную конфигурацию
+            return {
+                sourceHeaders: analysisResult.sourceHeaders,
+                linksHeaders: analysisResult.linksHeaders,
+                sourceFileMapping: sourceMapping,
+                linksFileMapping: linksMapping,
+                outputFields: outputFields,
+                sourceHasHeaders: sourceHasHeaders,
+                linksHasHeaders: linksHasHeaders
+            };
+        }
+
+        // Функция для показа уведомлений вместо alert
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('notifications');
+
+            // Показываем контейнер если он скрыт
+            container.style.display = 'block';
+
+            // Определяем класс Bootstrap для типа уведомления
+            let alertClass = 'alert-info';
+            let icon = 'fas fa-info-circle';
+
+            switch(type) {
+                case 'success':
+                    alertClass = 'alert-success';
+                    icon = 'fas fa-check-circle';
+                    break;
+                case 'error':
+                case 'danger':
+                    alertClass = 'alert-danger';
+                    icon = 'fas fa-exclamation-triangle';
+                    break;
+                case 'warning':
+                    alertClass = 'alert-warning';
+                    icon = 'fas fa-exclamation-triangle';
+                    break;
+            }
+
+            // Создаем элемент уведомления
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert ${alertClass} alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                <i class="${icon} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+
+            // Очищаем старые уведомления и добавляем новое
+            container.innerHTML = '';
+            container.appendChild(alertDiv);
+
+            // Автоматически скрываем через 5 секунд для успешных уведомлений
+            if (type === 'success') {
+                setTimeout(() => {
+                    const alert = container.querySelector('.alert');
+                    if (alert) {
+                        alert.remove();
+                        if (container.children.length === 0) {
+                            container.style.display = 'none';
+                        }
+                    }
+                }, 5000);
+            }
+        }
+    </script>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/utils/data-merger/docs" class="btn btn-outline-info">
+            <i class="fas fa-book"></i> Документация с примерами
+        </a>
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> К списку утилит
+        </a>
+    </div>
+</th:block>
+
+</html>

@@ -234,7 +234,15 @@ Real-time updates for:
 
 ## Current State Notes
 
-**Recently Completed HTTP Redirect Utility Enhancements** (as of 2025-09-07):
+**Recently Completed Data Merger Utility Development** (as of 2025-09-22):
+- **Complete Implementation**: Data Merger utility with dual-file processing capability
+- **Enhanced File Processing**: Merges source products with link data using configurable column mapping
+- **Strategy Integration**: Uses existing FileAnalyzerService and FileGeneratorService architecture
+- **User Interface**: Bootstrap-based form with dynamic column mapping and progress tracking
+- **Error Handling**: Comprehensive validation and user-friendly error messages
+- **Testing**: Real-world testing with sample data files and various formats
+
+**Previously Completed HTTP Redirect Utility Enhancements** (as of 2025-09-07):
 - **Async Processing**: Complete dual-mode architecture - background processing for large files and quick sync mode for small files
 - **Enhanced UI**: Two processing modes with clear explanations and user guidance
 - **Strategy Pattern**: Fully tested three-tier system (CurlStrategy → PlaywrightStrategy → HttpClientStrategy)
@@ -252,11 +260,30 @@ Real-time updates for:
 
 **Architecture Insights**:
 - Uses dedicated `redirectTaskExecutor` thread pool (1-3 threads) for HTTP operations
-- Manual redirect following instead of curl -L to avoid User-Agent detection  
+- Manual redirect following instead of curl -L to avoid User-Agent detection
 - Preserves initial redirect HTTP codes (301/302) rather than final status (200)
 - Configurable delay between requests (0-5 seconds) to prevent rate limiting
 - Intelligent strategy escalation based on response analysis
 - Seamless integration with existing async/WebSocket notification system
+
+## Data Merger Utility
+
+### Purpose
+Utility for merging product data from two sources: source products with analogs and link data with product URLs.
+
+### Key Components
+- `DataMergerController` - Web interface at `/utils/data-merger` for file upload and processing
+- `DataMergerService` - Core business logic for data merging and validation
+- `DataMergerFieldMapping` - Configuration DTO for column mapping between files
+- Dynamic column mapping UI with real-time file preview
+- Integration with existing `FileAnalyzerService` and `FileGeneratorService`
+
+### Features
+- **Dual File Processing**: Handles source file (products+analogs) and links file separately
+- **Dynamic Column Mapping**: Users select which columns map to required fields
+- **Data Expansion**: Creates multiple output records for each analog-link combination
+- **Export Integration**: Uses existing CSV/Excel export system for consistent output
+- **Error Handling**: Comprehensive validation with user-friendly error messages
 
 ## Code References
 

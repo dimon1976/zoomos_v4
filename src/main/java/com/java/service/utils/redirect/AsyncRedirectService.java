@@ -37,15 +37,16 @@ public class AsyncRedirectService {
             sendProgressUpdate(operationId, "Начинаем обработку редиректов...", 0, request.getUrls().size());
             
             List<RedirectResult> results = redirectFinderService.processRedirects(
-                request.getUrls(), 
-                request.getMaxRedirects(), 
+                request.getUrls(),
+                request.getMaxRedirects(),
                 request.getTimeoutMs(),
                 request.getDelayMs(),
+                request.isUsePlaywright(),
                 (processed, total) -> {
                     // Прогресс колбэк
                     int percentage = (int) ((processed * 100.0) / total);
-                    sendProgressUpdate(operationId, 
-                        String.format("Обработано %d из %d URLs", processed, total), 
+                    sendProgressUpdate(operationId,
+                        String.format("Обработано %d из %d URLs", processed, total),
                         percentage, total);
                 }
             );

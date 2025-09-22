@@ -43,6 +43,10 @@ build/
 
 ### VS Code ###
 .vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
 ### Application specific ###
 /logs/
@@ -66,6 +70,7 @@ add-extend-statistics.md
 refactor-plan.md
 service-refactor-plan.md
 ИНСТРУКЦИИ_ЗАПУСКА.md
+VSCODE_SETUP.md
 !README.md
 !CLAUDE.md
 
@@ -74,3 +79,9 @@ service-refactor-plan.md
 
 # Конфигурационные файлы среды разработки
 /application-dev.properties
+# Исключить чувствительные файлы
+dependency-tree.txt
+log.txt
+*.log
+# IDE и временные файлы
+nul
