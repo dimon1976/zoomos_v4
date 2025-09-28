@@ -31,19 +31,71 @@
         <!-- Описание процесса -->
         <div class="row mb-4">
             <div class="col-12">
-                <th:block th:replace="~{fragments/info-sections :: howItWorks('Поиск финальных ссылок после редиректов', ${{#lists.toList(
-                    #maps.toMap('icon', 'fas fa-upload', 'title', 'Загрузка', 'description', 'Загрузите файл с URL для обработки'),
-                    #maps.toMap('icon', 'fas fa-cogs', 'title', 'Настройка', 'description', 'Выберите колонки и параметры обработки'),
-                    #maps.toMap('icon', 'fas fa-route', 'title', 'Обработка', 'description', 'Автоматическое следование по редиректам'),
-                    #maps.toMap('icon', 'fas fa-download', 'title', 'Результат', 'description', 'Файл с финальными URL и статистикой')
-                )}})}"></th:block>
+                <section class="info-section info-section--instructions">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-cogs"></i>
+                        <span>Поиск финальных ссылок после редиректов</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="info-section__process-steps">
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-upload"></i>
+                                </div>
+                                <div class="info-section__process-title">Загрузка</div>
+                                <div class="info-section__process-description">Загрузите файл с URL для обработки</div>
+                            </div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-cogs"></i>
+                                </div>
+                                <div class="info-section__process-title">Настройка</div>
+                                <div class="info-section__process-description">Выберите колонки и параметры обработки</div>
+                            </div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-route"></i>
+                                </div>
+                                <div class="info-section__process-title">Обработка</div>
+                                <div class="info-section__process-description">Автоматическое следование по редиректам</div>
+                            </div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <div class="info-section__process-title">Результат</div>
+                                <div class="info-section__process-description">Файл с финальными URL и статистикой</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
                 <!-- Стратегии защиты -->
-                <th:block th:replace="~{fragments/info-sections :: strategies('Стратегии защиты от антибот систем', ${{#lists.toList(
-                    #maps.toMap('name', 'cURL', 'description', 'основная стратегия', 'icon', 'fas fa-terminal', 'badgeClass', 'bg-success'),
-                    #maps.toMap('name', 'Playwright', 'description', 'обход блокировок', 'icon', 'fas fa-browser', 'badgeClass', 'bg-primary'),
-                    #maps.toMap('name', 'HttpClient', 'description', 'резервная', 'icon', 'fas fa-code', 'badgeClass', 'bg-secondary')
-                )}})}"></th:block>
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-shield-alt"></i>
+                        <span>Стратегии защиты от антибот систем</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="badge bg-success strategy-badge">
+                                <i class="fas fa-terminal"></i>
+                                <span>cURL</span>
+                                <small> - основная стратегия</small>
+                            </span>
+                            <span class="badge bg-primary strategy-badge">
+                                <i class="fas fa-browser"></i>
+                                <span>Playwright</span>
+                                <small> - обход блокировок</small>
+                            </span>
+                            <span class="badge bg-secondary strategy-badge">
+                                <i class="fas fa-code"></i>
+                                <span>HttpClient</span>
+                                <small> - резервная</small>
+                            </span>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
 
@@ -96,44 +148,73 @@
         <!-- Требования к файлу -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <th:block th:replace="~{fragments/info-sections :: requirements('Требования к файлу', '
-                    &lt;ul class=&quot;list-with-icons&quot;&gt;
-                        &lt;li&gt;Файл должен содержать колонку с URL (обязательно)&lt;/li&gt;
-                        &lt;li&gt;Колонки ID и Модель опциональны&lt;/li&gt;
-                        &lt;li&gt;URL должны начинаться с http:// или https://&lt;/li&gt;
-                        &lt;li&gt;Поддерживается до 20 редиректов на URL&lt;/li&gt;
-                        &lt;li&gt;Максимальный размер файла: 1200MB&lt;/li&gt;
-                    &lt;/ul&gt;
-                ')}"></th:block>
+                <section class="info-section info-section--requirements">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-file-alt"></i>
+                        <span>Требования к файлу</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <ul class="list-with-icons">
+                            <li>Файл должен содержать колонку с URL (обязательно)</li>
+                            <li>Колонки ID и Модель опциональны</li>
+                            <li>URL должны начинаться с http:// или https://</li>
+                            <li>Поддерживается до 20 редиректов на URL</li>
+                            <li>Максимальный размер файла: 1200MB</li>
+                        </ul>
+                    </div>
+                </section>
             </div>
         </div>
 
         <!-- Пример обработки данных -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <th:block th:replace="~{fragments/info-sections :: dataExample('Пример обработки',
-                    ${{#lists.toList(
-                        'ID: 12345',
-                        'URL: https://short.ly/abc123',
-                        'Модель: Товар А'
-                    )}},
-                    ${{#lists.toList(
-                        'ID: 12345',
-                        'Финальный URL: https://shop.example.com/product/12345',
-                        'Редиректов: 2 | Статус: OK | Стратегия: curl'
-                    )}})}"></th:block>
+                <section class="info-section info-section--examples">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-lightbulb"></i>
+                        <span>Пример обработки</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Исходные данные:</strong>
+                                <div class="code-example">
+                                    <div>ID: 12345</div>
+                                    <div>URL: https://short.ly/abc123</div>
+                                    <div>Модель: Товар А</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Результат:</strong>
+                                <div class="code-example">
+                                    <div>ID: 12345</div>
+                                    <div>Финальный URL: https://shop.example.com/product/12345</div>
+                                    <div>Редиректов: 2 | Статус: OK | Стратегия: curl</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
 
         <!-- Важные замечания -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <th:block th:replace="~{fragments/info-sections :: importantNotes(${{#lists.toList(
-                    #maps.toMap('text', 'Обработка большого количества URL может занять значительное время', 'type', 'warning'),
-                    #maps.toMap('text', 'Некоторые сайты могут блокировать автоматические запросы', 'type', 'warning'),
-                    #maps.toMap('text', 'Для заблокированных URL автоматически используется браузерная стратегия', 'type', 'info'),
-                    #maps.toMap('text', 'В результате указывается какая стратегия была использована', 'type', 'info')
-                )}})}"></th:block>
+                <section class="info-section info-section--warnings">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-exclamation-triangle"></i>
+                        <span>Важно знать</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <ul class="list-with-icons">
+                            <li class="list-item--warning">Обработка большого количества URL может занять значительное время</li>
+                            <li class="list-item--warning">Некоторые сайты могут блокировать автоматические запросы</li>
+                            <li>Для заблокированных URL автоматически используется браузерная стратегия</li>
+                            <li>В результате указывается какая стратегия была использована</li>
+                        </ul>
+                    </div>
+                </section>
             </div>
         </div>
     </div>

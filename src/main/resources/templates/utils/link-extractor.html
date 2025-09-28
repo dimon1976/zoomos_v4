@@ -31,12 +31,44 @@
         <!-- Описание процесса -->
         <div class="row mb-4">
             <div class="col-12">
-                <th:block th:replace="~{fragments/info-sections :: howItWorks('Сбор ссылок с привязкой к ID', ${{#lists.toList(
-                    #maps.toMap('icon', 'fas fa-upload', 'title', 'Загрузка', 'description', 'Загрузите Excel или CSV файл с данными'),
-                    #maps.toMap('icon', 'fas fa-columns', 'title', 'Настройка', 'description', 'Выберите колонку с идентификаторами'),
-                    #maps.toMap('icon', 'fas fa-search', 'title', 'Поиск', 'description', 'Автоматический поиск ссылок во всех колонках'),
-                    #maps.toMap('icon', 'fas fa-download', 'title', 'Результат', 'description', 'Файл с парами "ID - найденная ссылка"')
-                )}})}"></th:block>
+                <section class="info-section info-section--instructions">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-cogs"></i>
+                        <span>Сбор ссылок с привязкой к ID</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="info-section__process-steps">
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-upload"></i>
+                                </div>
+                                <div class="info-section__process-title">Загрузка</div>
+                                <div class="info-section__process-description">Загрузите Excel или CSV файл с данными</div>
+                            </div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-columns"></i>
+                                </div>
+                                <div class="info-section__process-title">Настройка</div>
+                                <div class="info-section__process-description">Выберите колонку с идентификаторами</div>
+                            </div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-search"></i>
+                                </div>
+                                <div class="info-section__process-title">Поиск</div>
+                                <div class="info-section__process-description">Автоматический поиск ссылок во всех колонках</div>
+                            </div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <div class="info-section__process-title">Результат</div>
+                                <div class="info-section__process-description">Файл с парами "ID - найденная ссылка"</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
 
@@ -89,32 +121,53 @@
         <!-- Требования к файлу -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <th:block th:replace="~{fragments/info-sections :: requirements('Требования к файлу', '
-                    <ul class="list-with-icons">
-                        <li>Файл должен содержать колонку с идентификаторами (ID)</li>
-                        <li>Ссылки могут находиться в любых колонках</li>
-                        <li>Поддерживаются ссылки вида http:// и https://</li>
-                        <li>В одной ячейке может быть несколько ссылок</li>
-                        <li>Максимальный размер файла: 1200MB</li>
-                    </ul>
-                ')}"></th:block>
+                <section class="info-section info-section--requirements">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-file-alt"></i>
+                        <span>Требования к файлу</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <ul class="list-with-icons">
+                            <li>Файл должен содержать колонку с идентификаторами (ID)</li>
+                            <li>Ссылки могут находиться в любых колонках</li>
+                            <li>Поддерживаются ссылки вида http:// и https://</li>
+                            <li>В одной ячейке может быть несколько ссылок</li>
+                            <li>Максимальный размер файла: 1200MB</li>
+                        </ul>
+                    </div>
+                </section>
             </div>
         </div>
 
         <!-- Пример обработки данных -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <th:block th:replace="~{fragments/info-sections :: dataExample('Что произойдет с данными',
-                    ${{#lists.toList(
-                        'ID: 12345',
-                        'Описание: Товар https://example.com/item1',
-                        'Цена: 1000 руб.',
-                        'Ссылка: https://shop.ru/product/123'
-                    )}},
-                    ${{#lists.toList(
-                        '12345 | https://example.com/item1 | Колонка 2',
-                        '12345 | https://shop.ru/product/123 | Колонка 4'
-                    )}})}"></th:block>
+                <section class="info-section info-section--examples">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-lightbulb"></i>
+                        <span>Что произойдет с данными</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Исходные данные:</strong>
+                                <div class="code-example">
+                                    <div>ID: 12345</div>
+                                    <div>Описание: Товар https://example.com/item1</div>
+                                    <div>Цена: 1000 руб.</div>
+                                    <div>Ссылка: https://shop.ru/product/123</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Результат:</strong>
+                                <div class="code-example">
+                                    <div>12345 | https://example.com/item1 | Колонка 2</div>
+                                    <div>12345 | https://shop.ru/product/123 | Колонка 4</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
     </div>

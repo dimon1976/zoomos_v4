@@ -31,30 +31,44 @@
         <!-- Описание утилиты -->
         <div class="row mb-4">
             <div class="col-md-8">
-                <th:block th:replace="~{fragments/info-sections :: description('Очистка URL', '
-                    <p class="mb-3">Утилита удаляет UTM-метки, реферальные и отслеживающие параметры из ссылок, оставляя чистые URL.</p>
-                    <div class="row">
-                        <div class="col-md-4 text-center">
-                            <div class="mb-2"><i class="fas fa-broom fa-2x text-primary"></i></div>
-                            <small>Удаление UTM параметров</small>
-                        </div>
-                        <div class="col-md-4 text-center">
-                            <div class="mb-2"><i class="fas fa-shield-alt fa-2x text-primary"></i></div>
-                            <small>Удаление реферальных меток</small>
-                        </div>
-                        <div class="col-md-4 text-center">
-                            <div class="mb-2"><i class="fas fa-eye-slash fa-2x text-primary"></i></div>
-                            <small>Удаление отслеживающих параметров</small>
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-info-circle"></i>
+                        <span>Очистка URL</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <p class="mb-3">Утилита удаляет UTM-метки, реферальные и отслеживающие параметры из ссылок, оставляя чистые URL.</p>
+                        <div class="row">
+                            <div class="col-md-4 text-center">
+                                <div class="mb-2"><i class="fas fa-broom fa-2x text-primary"></i></div>
+                                <small>Удаление UTM параметров</small>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <div class="mb-2"><i class="fas fa-shield-alt fa-2x text-primary"></i></div>
+                                <small>Удаление реферальных меток</small>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <div class="mb-2"><i class="fas fa-eye-slash fa-2x text-primary"></i></div>
+                                <small>Удаление отслеживающих параметров</small>
+                            </div>
                         </div>
                     </div>
-                ')}"></th:block>
+                </section>
             </div>
             <div class="col-md-4">
-                <th:block th:replace="~{fragments/info-sections :: features('Особенности', ${{#lists.toList(
-                    #maps.toMap('text', 'Сохранение параметра sku для Yandex Market'),
-                    #maps.toMap('text', 'Поддержка дополнительных колонок (ID, Model, Barcode)'),
-                    #maps.toMap('text', 'Экспорт в CSV и Excel')
-                )}}, 'description')}"></th:block>
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-star"></i>
+                        <span>Особенности</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <ul class="list-with-icons">
+                            <li>Сохранение параметра sku для Yandex Market</li>
+                            <li>Поддержка дополнительных колонок (ID, Model, Barcode)</li>
+                            <li>Экспорт в CSV и Excel</li>
+                        </ul>
+                    </div>
+                </section>
             </div>
         </div>
 
@@ -106,23 +120,44 @@
             
             <!-- Требования к файлу -->
             <div class="col-md-4">
-                <th:block th:replace="~{fragments/info-sections :: fileRequirements(${{#maps.toMap(
-                    'structure', #lists.toList(
-                        'Первая строка - заголовки колонок',
-                        'Обязательная колонка с URL',
-                        'Необязательные колонки: ID, Model, Barcode'
-                    ),
-                    'format', #lists.toList(
-                        'Полные URL (http:// или https://)',
-                        'Могут содержать параметры запроса',
-                        'Невалидные URL будут пропущены'
-                    ),
-                    'output', #lists.toList(
-                        'CSV или Excel файл',
-                        'Исходная URL | Очищенная URL',
-                        'Дополнительные колонки при наличии'
-                    )
-                )}})}"></th:block>
+                <section class="info-section info-section--requirements">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-file-alt"></i>
+                        <span>Требования к файлу</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-table text-success"></i> Структура файла</h6>
+                                <ul class="list-with-icons small">
+                                    <li>Первая строка - заголовки колонок</li>
+                                    <li>Обязательная колонка с URL</li>
+                                    <li>Необязательные колонки: ID, Model, Barcode</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-cog text-warning"></i> Формат данных</h6>
+                                <ul class="list-with-icons small">
+                                    <li>Полные URL (http:// или https://)</li>
+                                    <li>Могут содержать параметры запроса</li>
+                                    <li>Невалидные URL будут пропущены</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6><i class="fas fa-download text-info"></i> Результат</h6>
+                                <ul class="list-with-icons small">
+                                    <li>CSV или Excel файл</li>
+                                    <li>Исходная URL | Очищенная URL</li>
+                                    <li>Дополнительные колонки при наличии</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
     </div>

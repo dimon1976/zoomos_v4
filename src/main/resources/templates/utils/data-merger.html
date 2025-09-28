@@ -233,28 +233,111 @@
             <!-- Правая колонка - Информация -->
             <div class="col-md-4">
                 <!-- Описание процесса -->
-                <th:block th:replace="~{fragments/info-sections :: howItWorks(null, ${{#lists.toList(
-                    #maps.toMap('title', 'Загрузите файлы', 'description', 'исходный файл с товарами и их аналогами, файл со ссылками на аналоги'),
-                    #maps.toMap('title', 'Обработка', 'description', 'система найдет соответствия по моделям аналогов'),
-                    #maps.toMap('title', 'Результат', 'description', 'развернутый файл со всеми комбинациями товар-аналог-ссылка')
-                )}}}"></th:block>
+                <section class="info-section info-section--instructions">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-cogs"></i>
+                        <span>Как это работает</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">1</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Загрузите файлы</h6>
+                                        <p class="text-muted small mb-0">исходный файл с товарами и их аналогами, файл со ссылками на аналоги</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">2</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Обработка</h6>
+                                        <p class="text-muted small mb-0">система найдет соответствия по моделям аналогов</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start">
+                                    <div class="bg-warning text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">3</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Результат</h6>
+                                        <p class="text-muted small mb-0">развернутый файл со всеми комбинациями товар-аналог-ссылка</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
                 <!-- Пример данных -->
-                <th:block th:replace="~{fragments/info-sections :: tableExample('Пример результата',
-                    ${{#lists.toList('ID', 'Оригинал', 'Аналог', 'Ссылка')}},
-                    ${{#lists.toList(
-                        #lists.toList('001', 'Модель А', 'Аналог1', 'site1.com/...'),
-                        #lists.toList('001', 'Модель А', 'Аналог1', 'site2.com/...'),
-                        #lists.toList('001', 'Модель А', 'Аналог2', 'site1.com/...')
-                    )}}
-                )}"></th:block>
+                <section class="info-section info-section--examples">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-table"></i>
+                        <span>Пример результата</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Оригинал</th>
+                                        <th>Аналог</th>
+                                        <th>Ссылка</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>001</td>
+                                        <td>Модель А</td>
+                                        <td>Аналог1</td>
+                                        <td>site1.com/...</td>
+                                    </tr>
+                                    <tr>
+                                        <td>001</td>
+                                        <td>Модель А</td>
+                                        <td>Аналог1</td>
+                                        <td>site2.com/...</td>
+                                    </tr>
+                                    <tr>
+                                        <td>001</td>
+                                        <td>Модель А</td>
+                                        <td>Аналог2</td>
+                                        <td>site1.com/...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
 
                 <!-- Поддерживаемые форматы -->
-                <th:block th:replace="~{fragments/info-sections :: supportedFormats(${{#lists.toList(
-                    'CSV файлы (.csv)',
-                    'Excel файлы (.xlsx, .xls)',
-                    'Максимум 100,000 строк'
-                )}}}"></th:block>
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-file-alt"></i>
+                        <span>Поддерживаемые форматы</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <ul class="list-unstyled">
+                            <li class="mb-2">
+                                <i class="fas fa-check text-success me-2"></i>
+                                CSV файлы (.csv)
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-check text-success me-2"></i>
+                                Excel файлы (.xlsx, .xls)
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-check text-success me-2"></i>
+                                Максимум 100,000 строк
+                            </li>
+                        </ul>
+                    </div>
+                </section>
             </div>
         </div>
     </div>
