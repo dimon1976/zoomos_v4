@@ -13,19 +13,8 @@
 </head>
 
 <th:block th:fragment="styles">
+    <link th:href="@{/css/upload.css}" rel="stylesheet">
     <style>
-        .upload-area {
-            border: 2px dashed #28a745;
-            border-radius: 10px;
-            padding: 40px;
-            text-align: center;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            transition: all 0.3s ease;
-        }
-        .upload-area:hover {
-            border-color: #20c997;
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-        }
         .feature-card {
             background: white;
             border-radius: 8px;
@@ -129,22 +118,33 @@
                             Шаг 1: Загрузка файла
                         </h5>
 
-                        <form th:action="@{/utils/link-extractor/upload}" method="post" enctype="multipart/form-data">
-                            <div class="upload-area">
-                                <div class="mb-3">
-                                    <i class="fas fa-cloud-upload-alt fa-3x text-success mb-3"></i>
-                                    <h5>Выберите файл для обработки</h5>
-                                    <p class="text-muted">
-                                        Поддерживаются форматы: Excel (.xlsx, .xls) и CSV
-                                    </p>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <input type="file" class="form-control form-control-lg" name="file" 
-                                           accept=".xlsx,.xls,.csv" required>
-                                </div>
-                                
-                                <button type="submit" class="btn btn-success btn-lg">
+                        <form id="linkExtractorForm" th:action="@{/utils/link-extractor/upload}" method="post" enctype="multipart/form-data">
+                            <!-- Унифицированная зона загрузки -->
+                            <div class="upload-zone" id="linkExtractorZone">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                <h5>Выберите файл для обработки</h5>
+                                <p class="text-muted">Поддерживаются форматы: Excel (.xlsx, .xls), CSV (.csv), TXT (.txt)</p>
+
+                                <input type="file"
+                                       id="linkExtractorInput"
+                                       name="file"
+                                       accept=".csv,.xlsx,.xls,.txt"
+                                       class="d-none upload-input"
+                                       required>
+
+                                <button type="button"
+                                        id="linkExtractorBtn"
+                                        class="btn btn-primary mt-3 select-files-btn">
+                                    <i class="fas fa-folder-open me-1"></i>
+                                    Выбрать файл
+                                </button>
+                            </div>
+
+                            <!-- Область предпросмотра файлов -->
+                            <div id="linkExtractorPreview" class="file-preview-container mt-3"></div>
+
+                            <div class="d-grid gap-2 mt-4">
+                                <button type="submit" id="uploadBtn" class="btn btn-success btn-lg" disabled>
                                     <i class="fas fa-upload"></i> Загрузить и проанализировать
                                 </button>
                             </div>
@@ -206,37 +206,46 @@
 </th:block>
 
 <th:block th:fragment="scripts">
+<script th:src="@{/js/upload.js}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Обработка формы загрузки
-    const form = document.querySelector('form');
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const fileInput = form.querySelector('input[type="file"]');
-    
-    form.addEventListener('submit', function(e) {
-        if (!fileInput.files.length) {
+    const uploadBtn = document.getElementById('uploadBtn');
+
+    // Инициализация UploadManager
+    const config = {
+        zoneId: 'linkExtractorZone',
+        inputId: 'linkExtractorInput',
+        previewId: 'linkExtractorPreview',
+        buttonId: 'linkExtractorBtn',
+        allowedTypes: ['.csv', '.xlsx', '.xls', '.txt'],
+        maxFileSize: 600 * 1024 * 1024, // 600MB
+        multiple: false,
+        showFileSize: true,
+        showFileType: true,
+        onFileSelect: function(files) {
+            if (files.length > 0) {
+                uploadBtn.disabled = false;
+            }
+        },
+        onFileRemove: function() {
+            uploadBtn.disabled = true;
+        }
+    };
+
+    const uploadManager = new UploadManager(config);
+
+    // Обработка отправки формы
+    document.getElementById('linkExtractorForm').addEventListener('submit', function(e) {
+        const files = uploadManager.getSelectedFiles();
+        if (!files.length) {
             e.preventDefault();
-            alert('Выберите файл для загрузки');
+            uploadManager.showError('Выберите файл для загрузки');
             return;
         }
-        
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ файла...';
-    });
-    
-    // Показ имени выбранного файла
-    fileInput.addEventListener('change', function() {
-        const fileName = this.files[0]?.name;
-        if (fileName) {
-            const info = document.createElement('div');
-            info.className = 'alert alert-info mt-2';
-            info.innerHTML = `<i class="fas fa-file"></i> Выбран файл: <strong>${fileName}</strong>`;
-            
-            const existing = form.querySelector('.alert');
-            if (existing) existing.remove();
-            
-            this.parentNode.appendChild(info);
-        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ файла...';
+        uploadManager.setLoading(true);
     });
 });
 </script>
