@@ -13,19 +13,8 @@
 </head>
 
 <th:block th:fragment="styles">
+    <link rel="stylesheet" th:href="@{/css/upload.css}">
     <style>
-        .upload-area {
-            border: 2px dashed #28a745;
-            border-radius: 10px;
-            padding: 40px;
-            text-align: center;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            transition: all 0.3s ease;
-        }
-        .upload-area:hover {
-            border-color: #218838;
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-        }
         .feature-card {
             background: white;
             border-radius: 8px;
@@ -45,24 +34,6 @@
             color: white;
             font-size: 24px;
             margin: 0 auto 15px;
-        }
-        .file-input-label {
-            display: block;
-            width: 100%;
-            padding: 0.75rem;
-            background: #f8f9fa;
-            border: 1px dashed #28a745;
-            border-radius: 0.5rem;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .file-input-label:hover {
-            background: #e9ecef;
-            border-color: #218838;
-        }
-        .file-input {
-            display: none;
         }
     </style>
 </th:block>
@@ -115,12 +86,18 @@
                                             <i class="fas fa-file-csv me-1"></i>Исходный файл
                                         </label>
                                         <p class="text-muted small mb-2">CSV/Excel с товарами-оригиналами и их аналогами</p>
-                                        <label for="sourceFile" class="file-input-label">
-                                            <i class="fas fa-cloud-upload-alt me-2"></i>
-                                            Выберите исходный файл
-                                        </label>
-                                        <input type="file" id="sourceFile" name="sourceFile"
-                                               class="file-input" accept=".csv,.xlsx,.xls" required>
+                                        <!-- Унифицированная зона загрузки для исходного файла -->
+                                        <div class="upload-zone source-zone compact" id="sourceUploadZone">
+                                            <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                            <h6>Выберите исходный файл</h6>
+                                            <p class="text-muted small">CSV/Excel файл</p>
+                                            <input type="file" id="sourceFile" name="sourceFile"
+                                                   class="d-none upload-input" accept=".csv,.xlsx,.xls" required>
+                                            <button type="button" class="btn btn-success btn-sm select-files-btn" id="sourceSelectBtn">
+                                                <i class="fas fa-folder-open me-1"></i>Выбрать файл
+                                            </button>
+                                        </div>
+                                        <div id="sourceFilePreview" class="file-preview-container mt-2"></div>
                                     </div>
                                 </div>
 
@@ -130,12 +107,18 @@
                                             <i class="fas fa-link me-1"></i>Файл ссылок
                                         </label>
                                         <p class="text-muted small mb-2">CSV/Excel с моделями аналогов и ссылками</p>
-                                        <label for="linksFile" class="file-input-label">
-                                            <i class="fas fa-cloud-upload-alt me-2"></i>
-                                            Выберите файл ссылок
-                                        </label>
-                                        <input type="file" id="linksFile" name="linksFile"
-                                               class="file-input" accept=".csv,.xlsx,.xls" required>
+                                        <!-- Унифицированная зона загрузки для файла ссылок -->
+                                        <div class="upload-zone links-zone compact" id="linksUploadZone">
+                                            <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                            <h6>Выберите файл ссылок</h6>
+                                            <p class="text-muted small">CSV/Excel файл</p>
+                                            <input type="file" id="linksFile" name="linksFile"
+                                                   class="d-none upload-input" accept=".csv,.xlsx,.xls" required>
+                                            <button type="button" class="btn btn-info btn-sm select-files-btn" id="linksSelectBtn">
+                                                <i class="fas fa-folder-open me-1"></i>Выбрать файл
+                                            </button>
+                                        </div>
+                                        <div id="linksFilePreview" class="file-preview-container mt-2"></div>
                                     </div>
                                 </div>
                             </div>
@@ -341,35 +324,39 @@
 </th:block>
 
 <th:block th:fragment="scripts">
+    <script src="/js/upload.js"></script>
     <script>
         // Глобальные переменные
         let analysisResult = null;
+        let sourceUploadManager;
+        let linksUploadManager;
 
-        // Обновление текста при выборе файла
+        // Инициализация менеджеров загрузки
         document.addEventListener('DOMContentLoaded', function() {
-            const fileInputs = document.querySelectorAll('.file-input');
             const processBtn = document.getElementById('processBtn');
             const analyzeBtn = document.getElementById('analyzeBtn');
 
-            fileInputs.forEach(input => {
-                input.addEventListener('change', function() {
-                    const label = this.previousElementSibling;
-                    if (this.files && this.files[0]) {
-                        const fileName = this.files[0].name;
-                        const fileSize = (this.files[0].size / 1024).toFixed(1);
-                        label.innerHTML = `<i class="fas fa-file-check me-2"></i>${fileName} (${fileSize} KB)`;
-                        label.classList.add('text-success');
-                    }
+            // Инициализация менеджера для исходного файла
+            const sourceConfig = UploadConfig.dataMergerSource('sourceUploadZone', 'sourceFile', 'sourceFilePreview', 'sourceSelectBtn');
+            sourceConfig.onFileSelect = function(files) {
+                hideMappingSection();
+            };
+            sourceUploadManager = new UploadManager(sourceConfig);
 
-                    // Сбрасываем секцию маппинга при изменении файлов
-                    hideMappingSection();
-                });
-            });
+            // Инициализация менеджера для файла ссылок
+            const linksConfig = UploadConfig.dataMergerLinks('linksUploadZone', 'linksFile', 'linksFilePreview', 'linksSelectBtn');
+            linksConfig.onFileSelect = function(files) {
+                hideMappingSection();
+            };
+            linksUploadManager = new UploadManager(linksConfig);
 
             // Анализ файлов
             analyzeBtn.addEventListener('click', function() {
-                const sourceFile = document.getElementById('sourceFile').files[0];
-                const linksFile = document.getElementById('linksFile').files[0];
+                const sourceFiles = sourceUploadManager.getSelectedFiles();
+                const linksFiles = linksUploadManager.getSelectedFiles();
+
+                const sourceFile = sourceFiles.length > 0 ? sourceFiles[0] : null;
+                const linksFile = linksFiles.length > 0 ? linksFiles[0] : null;
 
                 if (!sourceFile || !linksFile) {
                     showNotification('Пожалуйста, выберите оба файла', 'warning');
@@ -381,8 +368,11 @@
 
             // Обработка файлов
             processBtn.addEventListener('click', function() {
-                const sourceFile = document.getElementById('sourceFile').files[0];
-                const linksFile = document.getElementById('linksFile').files[0];
+                const sourceFiles = sourceUploadManager.getSelectedFiles();
+                const linksFiles = linksUploadManager.getSelectedFiles();
+
+                const sourceFile = sourceFiles.length > 0 ? sourceFiles[0] : null;
+                const linksFile = linksFiles.length > 0 ? linksFiles[0] : null;
                 const format = document.querySelector('input[name="format"]:checked').value;
 
                 if (!sourceFile || !linksFile) {

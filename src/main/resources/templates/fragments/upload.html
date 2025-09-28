@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+
+<!-- Универсальная зона загрузки файлов -->
+<th:block th:fragment="uploadZone(config)">
+    <div class="upload-zone"
+         th:id="${config.zoneId}"
+         th:classappend="${config.cssClass != null ? config.cssClass : ''}"
+         th:attr="data-zone-type=${config.zoneType != null ? config.zoneType : 'single'}">
+
+        <!-- Иконка и заголовок -->
+        <i th:class="${config.icon != null ? config.icon : 'fas fa-cloud-upload-alt'} + ' fa-3x text-muted mb-3'"></i>
+        <h5 th:text="${config.title}">Загрузить файлы</h5>
+        <p class="text-muted" th:text="${config.description}">Описание зоны загрузки</p>
+
+        <!-- Скрытый input для файлов -->
+        <input type="file"
+               th:id="${config.inputId}"
+               th:name="${config.inputName != null ? config.inputName : 'files'}"
+               th:attr="accept=${config.acceptedTypes},multiple=${config.multiple}"
+               class="d-none upload-input"
+               th:required="${config.required}">
+
+        <!-- Кнопка выбора файлов -->
+        <button type="button"
+                th:id="${config.buttonId}"
+                class="btn btn-primary mt-3 select-files-btn"
+                th:classappend="${config.buttonClass != null ? config.buttonClass : ''}">
+            <i class="fas fa-folder-open me-1"></i>
+            <span th:text="${config.buttonText != null ? config.buttonText : 'Выбрать файлы'}">Выбрать файлы</span>
+        </button>
+    </div>
+
+    <!-- Область предпросмотра файлов -->
+    <div th:id="${config.previewId}" class="file-preview-container mt-3"></div>
+</th:block>
+
+<!-- Блок с информацией о файлах (дополнительный компонент) -->
+<th:block th:fragment="fileInfo(config)">
+    <div class="upload-info-card">
+        <h6 class="card-title">
+            <i th:class="${config.icon != null ? config.icon : 'fas fa-info-circle'} + ' me-2'"></i>
+            <span th:text="${config.title}">Информация</span>
+        </h6>
+        <ul class="small mb-0" th:if="${config.items != null}">
+            <li th:each="item : ${config.items}" th:text="${item}">Пункт информации</li>
+        </ul>
+        <p th:if="${config.text != null}" th:text="${config.text}" class="small mb-0">Дополнительный текст</p>
+    </div>
+</th:block>
+
+<!-- Базовая конфигурация для различных типов загрузки -->
+<th:block th:fragment="importUploadZone">
+    <th:block th:replace="~{fragments/upload :: uploadZone(${@uploadConfigService.getImportConfig()})}"></th:block>
+</th:block>
+
+<th:block th:fragment="dataMergerSourceZone">
+    <th:block th:replace="~{fragments/upload :: uploadZone(${@uploadConfigService.getDataMergerSourceConfig()})}"></th:block>
+</th:block>
+
+<th:block th:fragment="dataMergerLinksZone">
+    <th:block th:replace="~{fragments/upload :: uploadZone(${@uploadConfigService.getDataMergerLinksConfig()})}"></th:block>
+</th:block>
+
+</html>
