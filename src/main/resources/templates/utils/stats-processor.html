@@ -14,12 +14,7 @@
 
 <th:block th:fragment="styles">
     <link th:href="@{/css/upload.css}" rel="stylesheet">
-    <style>
-        .utility-info {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-left: 4px solid #28a745;
-        }
-    </style>
+    <link th:href="@{/css/info-sections.css}" rel="stylesheet">
 </th:block>
 
 <th:block th:fragment="pageActions">
@@ -33,27 +28,24 @@
 <th:block th:fragment="content">
     <div class="container-fluid">
         
-        <!-- Информация об утилите -->
+        <!-- Описание утилиты -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card utility-info">
-                    <div class="card-body">
-                        <div class="row align-items-center">
-                            <div class="col-md-2 text-center">
-                                <i class="fas fa-chart-line display-1 text-success"></i>
-                            </div>
-                            <div class="col-md-10">
-                                <h4 class="mb-2">Обработка файла статистики</h4>
-                                <p class="mb-1">Утилита обрабатывает файлы статистики с возможностью выбора колонок и изменения данных. Полный аналог старой версии с чекбоксами.</p>
-                                <div class="d-flex gap-4 mt-3">
-                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Выбор колонок чекбоксами</small>
-                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Замена источника данных</small>
-                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Экспорт в Excel/CSV</small>
-                                </div>
+                <th:block th:replace="~{fragments/info-sections :: description('Обработка файла статистики', '
+                    <div class="row align-items-center">
+                        <div class="col-md-2 text-center">
+                            <i class="fas fa-chart-line display-1 text-primary"></i>
+                        </div>
+                        <div class="col-md-10">
+                            <p class="mb-3">Утилита обрабатывает файлы статистики с возможностью выбора колонок и изменения данных. Полный аналог старой версии с чекбоксами.</p>
+                            <div class="d-flex flex-wrap gap-3">
+                                <div class="badge bg-success"><i class="fas fa-check-circle"></i> Выбор колонок чекбоксами</div>
+                                <div class="badge bg-success"><i class="fas fa-check-circle"></i> Замена источника данных</div>
+                                <div class="badge bg-success"><i class="fas fa-check-circle"></i> Экспорт в Excel/CSV</div>
                             </div>
                         </div>
                     </div>
-                </div>
+                ')}"></th:block>
             </div>
         </div>
 
@@ -121,42 +113,23 @@
         <!-- Информация о формате файла -->
         <div class="row mt-4">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="fas fa-info-circle text-info"></i>
-                            О файлах статистики
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <h6><i class="fas fa-table text-success"></i> Структура файла</h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success"></i> Файлы типа hoff.ru-sites-mapping-*.xlsx</li>
-                                    <li><i class="fas fa-check text-success"></i> 39 колонок с данными о товарах</li>
-                                    <li><i class="fas fa-check text-success"></i> Домен, ID сайта, товары, конкуренты</li>
-                                </ul>
-                            </div>
-                            <div class="col-md-4">
-                                <h6><i class="fas fa-filter text-warning"></i> Обработка данных</h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success"></i> Выбор нужных колонок чекбоксами</li>
-                                    <li><i class="fas fa-check text-success"></i> Замена источника для клиента</li>
-                                    <li><i class="fas fa-check text-success"></i> Добавление URL конкурентов и дат</li>
-                                </ul>
-                            </div>
-                            <div class="col-md-4">
-                                <h6><i class="fas fa-download text-primary"></i> Результат</h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success"></i> Обработанный файл в Excel/CSV</li>
-                                    <li><i class="fas fa-check text-success"></i> Только выбранные колонки</li>
-                                    <li><i class="fas fa-check text-success"></i> Измененные данные по настройкам</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <th:block th:replace="~{fragments/info-sections :: fileRequirements(${{#maps.toMap(
+                    'structure', #lists.toList(
+                        'Файлы типа hoff.ru-sites-mapping-*.xlsx',
+                        '39 колонок с данными о товарах',
+                        'Домен, ID сайта, товары, конкуренты'
+                    ),
+                    'format', #lists.toList(
+                        'Выбор нужных колонок чекбоксами',
+                        'Замена источника для клиента',
+                        'Добавление URL конкурентов и дат'
+                    ),
+                    'output', #lists.toList(
+                        'Обработанный файл в Excel/CSV',
+                        'Только выбранные колонки',
+                        'Измененные данные по настройкам'
+                    )
+                )}})}"></th:block>
             </div>
         </div>
     </div>

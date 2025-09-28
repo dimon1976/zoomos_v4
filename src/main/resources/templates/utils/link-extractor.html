@@ -14,28 +14,7 @@
 
 <th:block th:fragment="styles">
     <link th:href="@{/css/upload.css}" rel="stylesheet">
-    <style>
-        .feature-card {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            border-left: 4px solid #28a745;
-        }
-        .process-icon {
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(45deg, #28a745, #20c997);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 24px;
-            margin: 0 auto 15px;
-        }
-    </style>
+    <link th:href="@{/css/info-sections.css}" rel="stylesheet">
 </th:block>
 
 <th:block th:fragment="pageActions">
@@ -49,62 +28,15 @@
 <th:block th:fragment="content">
     <div class="container-fluid">
         
-        <!-- Описание утилиты -->
+        <!-- Описание процесса -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0">
-                            <i class="fas fa-link"></i>
-                            Сбор ссылок с привязкой к ID
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="mb-3">
-                            Утилита автоматически найдет все ссылки в файле и свяжет их с соответствующими ID.
-                            Поиск ведется по всем колонкам в каждой строке.
-                        </p>
-                        
-                        <div class="row">
-                            <div class="col-md-3">
-                                <div class="process-icon">
-                                    <i class="fas fa-upload"></i>
-                                </div>
-                                <h6 class="text-center">1. Загрузка</h6>
-                                <p class="text-center text-muted small">
-                                    Загрузите Excel или CSV файл с данными
-                                </p>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="process-icon">
-                                    <i class="fas fa-columns"></i>
-                                </div>
-                                <h6 class="text-center">2. Настройка</h6>
-                                <p class="text-center text-muted small">
-                                    Выберите колонку с идентификаторами
-                                </p>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="process-icon">
-                                    <i class="fas fa-search"></i>
-                                </div>
-                                <h6 class="text-center">3. Поиск</h6>
-                                <p class="text-center text-muted small">
-                                    Автоматический поиск ссылок во всех колонках
-                                </p>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="process-icon">
-                                    <i class="fas fa-download"></i>
-                                </div>
-                                <h6 class="text-center">4. Результат</h6>
-                                <p class="text-center text-muted small">
-                                    Файл с парами "ID - найденная ссылка"
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <th:block th:replace="~{fragments/info-sections :: howItWorks('Сбор ссылок с привязкой к ID', ${{#lists.toList(
+                    #maps.toMap('icon', 'fas fa-upload', 'title', 'Загрузка', 'description', 'Загрузите Excel или CSV файл с данными'),
+                    #maps.toMap('icon', 'fas fa-columns', 'title', 'Настройка', 'description', 'Выберите колонку с идентификаторами'),
+                    #maps.toMap('icon', 'fas fa-search', 'title', 'Поиск', 'description', 'Автоматический поиск ссылок во всех колонках'),
+                    #maps.toMap('icon', 'fas fa-download', 'title', 'Результат', 'description', 'Файл с парами "ID - найденная ссылка"')
+                )}})}"></th:block>
             </div>
         </div>
 
@@ -157,49 +89,32 @@
         <!-- Требования к файлу -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <div class="feature-card">
-                    <h6>
-                        <i class="fas fa-info-circle text-info"></i>
-                        Требования к файлу
-                    </h6>
-                    <ul class="mb-0">
+                <th:block th:replace="~{fragments/info-sections :: requirements('Требования к файлу', '
+                    <ul class="list-with-icons">
                         <li>Файл должен содержать колонку с идентификаторами (ID)</li>
                         <li>Ссылки могут находиться в любых колонках</li>
                         <li>Поддерживаются ссылки вида http:// и https://</li>
                         <li>В одной ячейке может быть несколько ссылок</li>
                         <li>Максимальный размер файла: 1200MB</li>
                     </ul>
-                </div>
+                ')}"></th:block>
             </div>
         </div>
 
-        <!-- Примеры -->
+        <!-- Пример обработки данных -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <div class="feature-card">
-                    <h6>
-                        <i class="fas fa-lightbulb text-warning"></i>
-                        Что произойдет с данными
-                    </h6>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <strong>Исходные данные:</strong>
-                            <div class="small text-muted mt-1">
-                                ID: 12345<br>
-                                Описание: Товар https://example.com/item1<br>
-                                Цена: 1000 руб.<br>
-                                Ссылка: https://shop.ru/product/123
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <strong>Результат:</strong>
-                            <div class="small text-muted mt-1">
-                                12345 | https://example.com/item1 | Колонка 2<br>
-                                12345 | https://shop.ru/product/123 | Колонка 4
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <th:block th:replace="~{fragments/info-sections :: dataExample('Что произойдет с данными',
+                    ${{#lists.toList(
+                        'ID: 12345',
+                        'Описание: Товар https://example.com/item1',
+                        'Цена: 1000 руб.',
+                        'Ссылка: https://shop.ru/product/123'
+                    )}},
+                    ${{#lists.toList(
+                        '12345 | https://example.com/item1 | Колонка 2',
+                        '12345 | https://shop.ru/product/123 | Колонка 4'
+                    )}})}"></th:block>
             </div>
         </div>
     </div>

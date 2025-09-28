@@ -14,12 +14,7 @@
 
 <th:block th:fragment="styles">
     <link th:href="@{/css/upload.css}" rel="stylesheet">
-    <style>
-        .utility-info {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-left: 4px solid #007bff;
-        }
-    </style>
+    <link th:href="@{/css/info-sections.css}" rel="stylesheet">
 </th:block>
 
 <th:block th:fragment="pageActions">
@@ -36,24 +31,27 @@
         <!-- Информация об утилите -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card utility-info">
-                    <div class="card-body">
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-barcode"></i>
+                        <span>Сопоставление штрихкодов</span>
+                    </h3>
+                    <div class="info-section__body">
                         <div class="row align-items-center">
                             <div class="col-md-2 text-center">
                                 <i class="fas fa-barcode display-1 text-primary"></i>
                             </div>
                             <div class="col-md-10">
-                                <h4 class="mb-2">Сопоставление штрихкодов</h4>
-                                <p class="mb-1">Утилита находит соответствия между штрихкодами в одном файле и создает результирующий файл с парами ID-штрихкод-URL.</p>
-                                <div class="d-flex gap-4 mt-3">
-                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Поддержка множественных штрихкодов через запятую</small>
-                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Валидация 13-символьных штрихкодов</small>
-                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Экспорт в Excel формат</small>
+                                <p class="mb-3">Утилита находит соответствия между штрихкодами в одном файле и создает результирующий файл с парами ID-штрихкод-URL.</p>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Поддержка множественных штрихкодов через запятую</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Валидация 13-символьных штрихкодов</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Экспорт в Excel формат</div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
 
@@ -117,46 +115,44 @@
             </div>
         </div>
 
-        <!-- Инструкция -->
+        <!-- Требования к файлу -->
         <div class="row mt-4">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="fas fa-info-circle text-info"></i>
-                            Требования к файлу
-                        </h5>
-                    </div>
-                    <div class="card-body">
+                <section class="info-section info-section--requirements">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-file-alt"></i>
+                        <span>Требования к файлу</span>
+                    </h3>
+                    <div class="info-section__body">
                         <div class="row">
                             <div class="col-md-4">
-                                <h6><i class="fas fa-table text-primary"></i> Структура файла</h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success"></i> Первая строка - заголовки колонок</li>
-                                    <li><i class="fas fa-check text-success"></i> Колонка с ID записей</li>
-                                    <li><i class="fas fa-check text-success"></i> Колонка со штрихкодами</li>
-                                    <li><i class="fas fa-check text-success"></i> Колонка с URL</li>
+                                <h6><i class="fas fa-table text-success"></i> Структура файла</h6>
+                                <ul class="list-with-icons small">
+                                    <li>Первая строка - заголовки колонок</li>
+                                    <li>Колонка с ID записей</li>
+                                    <li>Колонка со штрихкодами</li>
+                                    <li>Колонка с URL</li>
                                 </ul>
                             </div>
                             <div class="col-md-4">
                                 <h6><i class="fas fa-barcode text-warning"></i> Формат штрихкодов</h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success"></i> 13 символов (цифры)</li>
-                                    <li><i class="fas fa-check text-success"></i> Несколько ШК через запятую: "1234567890123,9876543210987"</li>
-                                    <li><i class="fas fa-times text-danger"></i> Неверные ШК будут пропущены</li>
+                                <ul class="list-with-icons small">
+                                    <li>13 символов (цифры)</li>
+                                    <li>Несколько ШК через запятую: "1234567890123,9876543210987"</li>
+                                    <li class="list-item--error">Неверные ШК будут пропущены</li>
                                 </ul>
                             </div>
                             <div class="col-md-4">
-                                <h6><i class="fas fa-download text-success"></i> Результат</h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success"></i> Excel файл с тремя колонками</li>
-                                    <li><i class="fas fa-check text-success"></i> ID | Штрихкод | URL</li>
-                                    <li><i class="fas fa-check text-success"></i> Отдельная строка для каждого ШК</li>
+                                <h6><i class="fas fa-download text-info"></i> Результат</h6>
+                                <ul class="list-with-icons small">
+                                    <li>Excel файл с тремя колонками</li>
+                                    <li>ID | Штрихкод | URL</li>
+                                    <li>Отдельная строка для каждого ШК</li>
                                 </ul>
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>

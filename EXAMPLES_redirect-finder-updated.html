@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru" xmlns:th="http://www.thymeleaf.org" 
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{layout/main :: html(
         title='Поиск финальных ссылок',
         content=~{::content},
@@ -15,6 +15,18 @@
 <th:block th:fragment="styles">
     <link th:href="@{/css/upload.css}" rel="stylesheet">
     <link th:href="@{/css/info-sections.css}" rel="stylesheet">
+    <style>
+        .strategy-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            border-radius: 0.25rem;
+            margin: 0.125rem;
+        }
+        .strategy-curl { background-color: #28a745; color: white; }
+        .strategy-playwright { background-color: #007bff; color: white; }
+        .strategy-httpclient { background-color: #6c757d; color: white; }
+    </style>
 </th:block>
 
 <th:block th:fragment="pageActions">
@@ -27,27 +39,37 @@
 
 <th:block th:fragment="content">
     <div class="container-fluid">
-        
-        <!-- Описание процесса -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <th:block th:replace="~{fragments/info-sections :: howItWorks('Поиск финальных ссылок после редиректов', ${{#lists.toList(
-                    #maps.toMap('icon', 'fas fa-upload', 'title', 'Загрузка', 'description', 'Загрузите файл с URL для обработки'),
-                    #maps.toMap('icon', 'fas fa-cogs', 'title', 'Настройка', 'description', 'Выберите колонки и параметры обработки'),
-                    #maps.toMap('icon', 'fas fa-route', 'title', 'Обработка', 'description', 'Автоматическое следование по редиректам'),
-                    #maps.toMap('icon', 'fas fa-download', 'title', 'Результат', 'description', 'Файл с финальными URL и статистикой')
-                )}})}"></th:block>
 
-                <!-- Стратегии защиты -->
-                <th:block th:replace="~{fragments/info-sections :: strategies('Стратегии защиты от антибот систем', ${{#lists.toList(
-                    #maps.toMap('name', 'cURL', 'description', 'основная стратегия', 'icon', 'fas fa-terminal', 'badgeClass', 'bg-success'),
-                    #maps.toMap('name', 'Playwright', 'description', 'обход блокировок', 'icon', 'fas fa-browser', 'badgeClass', 'bg-primary'),
-                    #maps.toMap('name', 'HttpClient', 'description', 'резервная', 'icon', 'fas fa-code', 'badgeClass', 'bg-secondary')
-                )}})}"></th:block>
-            </div>
-        </div>
+        <!-- ГЛАВНОЕ ОПИСАНИЕ УТИЛИТЫ -->
+        <th:block th:replace="~{fragments/info-sections :: description(
+            'Поиск финальных ссылок после редиректов',
+            'Утилита следует по HTTP редиректам и определяет финальные URL с защитой от антиботных систем. Использует многоуровневую систему стратегий для обхода блокировок.',
+            'large',
+            true
+        )}"></th:block>
 
-        <!-- Загрузка файла -->
+        <!-- ПРОЦЕСС РАБОТЫ -->
+        <th:block th:replace="~{fragments/info-sections :: howItWorks(
+            'Как это работает',
+            ${T(java.util.List).of(
+                T(java.util.Map).of('icon', 'fas fa-upload', 'title', 'Загрузка', 'description', 'Загрузите файл с URL для обработки'),
+                T(java.util.Map).of('icon', 'fas fa-cogs', 'title', 'Настройка', 'description', 'Выберите колонки и параметры обработки'),
+                T(java.util.Map).of('icon', 'fas fa-route', 'title', 'Обработка', 'description', 'Автоматическое следование по редиректам'),
+                T(java.util.Map).of('icon', 'fas fa-download', 'title', 'Результат', 'description', 'Файл с финальными URL и статистикой')
+            )}
+        )}"></th:block>
+
+        <!-- СТРАТЕГИИ ЗАЩИТЫ -->
+        <th:block th:replace="~{fragments/info-sections :: strategies(
+            'Стратегии защиты от антибот систем',
+            ${T(java.util.List).of(
+                T(java.util.Map).of('name', 'cURL - основная стратегия', 'icon', 'fas fa-terminal', 'badgeClass', 'bg-success', 'description', 'максимальная совместимость'),
+                T(java.util.Map).of('name', 'Playwright - обход блокировок', 'icon', 'fas fa-browser', 'badgeClass', 'bg-primary', 'description', 'для сложных сайтов'),
+                T(java.util.Map).of('name', 'HttpClient - резервная', 'icon', 'fas fa-code', 'badgeClass', 'bg-secondary', 'description', 'базовый fallback')
+            )}
+        )}"></th:block>
+
+        <!-- ФОРМА ЗАГРУЗКИ -->
         <div class="row">
             <div class="col-lg-8 mx-auto">
                 <div class="card">
@@ -93,47 +115,49 @@
             </div>
         </div>
 
-        <!-- Требования к файлу -->
+        <!-- ТРЕБОВАНИЯ К ФАЙЛУ -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <th:block th:replace="~{fragments/info-sections :: requirements('Требования к файлу', '
-                    &lt;ul class=&quot;list-with-icons&quot;&gt;
-                        &lt;li&gt;Файл должен содержать колонку с URL (обязательно)&lt;/li&gt;
-                        &lt;li&gt;Колонки ID и Модель опциональны&lt;/li&gt;
-                        &lt;li&gt;URL должны начинаться с http:// или https://&lt;/li&gt;
-                        &lt;li&gt;Поддерживается до 20 редиректов на URL&lt;/li&gt;
-                        &lt;li&gt;Максимальный размер файла: 1200MB&lt;/li&gt;
-                    &lt;/ul&gt;
-                ')}"></th:block>
+                <th:block th:replace="~{fragments/info-sections :: fileRequirements(
+                    ${T(java.util.Map).of(
+                        'structure', T(java.util.List).of('Файл должен содержать колонку с URL (обязательно)', 'Колонки ID и Модель опциональны', 'URL должны начинаться с http:// или https://'),
+                        'format', T(java.util.List).of('Поддерживается до 20 редиректов на URL', 'Максимальный размер файла: 1200MB'),
+                        'output', T(java.util.List).of('CSV или Excel файл с результатами', 'Добавляются колонки: финальный URL, количество редиректов, статус, стратегия')
+                    )}
+                )}"></th:block>
             </div>
         </div>
 
-        <!-- Пример обработки данных -->
+        <!-- ПРИМЕР ОБРАБОТКИ -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <th:block th:replace="~{fragments/info-sections :: dataExample('Пример обработки',
-                    ${{#lists.toList(
+                <th:block th:replace="~{fragments/info-sections :: dataExample(
+                    'Пример обработки',
+                    ${T(java.util.List).of(
                         'ID: 12345',
                         'URL: https://short.ly/abc123',
                         'Модель: Товар А'
-                    )}},
-                    ${{#lists.toList(
+                    )},
+                    ${T(java.util.List).of(
                         'ID: 12345',
                         'Финальный URL: https://shop.example.com/product/12345',
                         'Редиректов: 2 | Статус: OK | Стратегия: curl'
-                    )}})}"></th:block>
+                    )}
+                )}"></th:block>
             </div>
         </div>
 
-        <!-- Важные замечания -->
+        <!-- ВАЖНЫЕ ЗАМЕЧАНИЯ -->
         <div class="row mt-4">
             <div class="col-lg-8 mx-auto">
-                <th:block th:replace="~{fragments/info-sections :: importantNotes(${{#lists.toList(
-                    #maps.toMap('text', 'Обработка большого количества URL может занять значительное время', 'type', 'warning'),
-                    #maps.toMap('text', 'Некоторые сайты могут блокировать автоматические запросы', 'type', 'warning'),
-                    #maps.toMap('text', 'Для заблокированных URL автоматически используется браузерная стратегия', 'type', 'info'),
-                    #maps.toMap('text', 'В результате указывается какая стратегия была использована', 'type', 'info')
-                )}})}"></th:block>
+                <th:block th:replace="~{fragments/info-sections :: importantNotes(
+                    ${T(java.util.List).of(
+                        T(java.util.Map).of('text', 'Обработка большого количества URL может занять значительное время', 'type', 'warning'),
+                        T(java.util.Map).of('text', 'Некоторые сайты могут блокировать автоматические запросы', 'type', 'warning'),
+                        T(java.util.Map).of('text', 'Для заблокированных URL автоматически используется браузерная стратегия', 'type', 'info'),
+                        T(java.util.Map).of('text', 'В результате указывается какая стратегия была использована', 'type', 'info')
+                    )}
+                )}"></th:block>
             </div>
         </div>
     </div>

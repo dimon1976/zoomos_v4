@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Data Merger - Объединение данных',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Data Merger - Объединение данных',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Data Merger - Объединение данных</title>
+</head>
+
+<th:block th:fragment="styles">
+    <link rel="stylesheet" th:href="@{/css/upload.css}">
+    <link rel="stylesheet" th:href="@{/css/info-sections.css}">
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        <!-- Breadcrumb -->
+        <nav aria-label="breadcrumb" class="mb-4">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a th:href="@{/}" class="text-decoration-none">Главная</a></li>
+                <li class="breadcrumb-item"><a th:href="@{/utils}" class="text-decoration-none">Утилиты</a></li>
+                <li class="breadcrumb-item active">Data Merger</li>
+            </ol>
+        </nav>
+
+        <div class="row">
+            <!-- Левая колонка - Форма -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h4 class="card-title mb-0">
+                            <i class="fas fa-database me-2"></i>Объединение данных товаров
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- Сообщения -->
+                        <div th:if="${message}" class="alert alert-success alert-dismissible fade show">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <span th:text="${message}"></span>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+
+                        <div th:if="${error}" class="alert alert-danger alert-dismissible fade show">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <span th:text="${error}"></span>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+
+                        <!-- Динамические уведомления -->
+                        <div id="notifications" class="mb-3" style="display: none;">
+                            <!-- Здесь будут отображаться динамические уведомления -->
+                        </div>
+
+                        <!-- Форма загрузки файлов -->
+                        <form id="uploadForm" th:action="@{/utils/data-merger/upload}" method="post" enctype="multipart/form-data">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-file-csv me-1"></i>Исходный файл
+                                        </label>
+                                        <p class="text-muted small mb-2">CSV/Excel с товарами-оригиналами и их аналогами</p>
+                                        <!-- Унифицированная зона загрузки для исходного файла -->
+                                        <div class="upload-zone source-zone compact" id="sourceUploadZone">
+                                            <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                            <h6>Выберите исходный файл</h6>
+                                            <p class="text-muted small">CSV/Excel файл</p>
+                                            <input type="file" id="sourceFile" name="sourceFile"
+                                                   class="d-none upload-input" accept=".csv,.xlsx,.xls" required>
+                                            <button type="button" class="btn btn-success btn-sm select-files-btn" id="sourceSelectBtn">
+                                                <i class="fas fa-folder-open me-1"></i>Выбрать файл
+                                            </button>
+                                        </div>
+                                        <div id="sourceFilePreview" class="file-preview-container mt-2"></div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-link me-1"></i>Файл ссылок
+                                        </label>
+                                        <p class="text-muted small mb-2">CSV/Excel с моделями аналогов и ссылками</p>
+                                        <!-- Унифицированная зона загрузки для файла ссылок -->
+                                        <div class="upload-zone links-zone compact" id="linksUploadZone">
+                                            <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                            <h6>Выберите файл ссылок</h6>
+                                            <p class="text-muted small">CSV/Excel файл</p>
+                                            <input type="file" id="linksFile" name="linksFile"
+                                                   class="d-none upload-input" accept=".csv,.xlsx,.xls" required>
+                                            <button type="button" class="btn btn-info btn-sm select-files-btn" id="linksSelectBtn">
+                                                <i class="fas fa-folder-open me-1"></i>Выбрать файл
+                                            </button>
+                                        </div>
+                                        <div id="linksFilePreview" class="file-preview-container mt-2"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Выбор формата экспорта -->
+                            <div class="row">
+                                <div class="col-12">
+                                    <div class="mb-4">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-file-download me-1"></i>Формат результата
+                                        </label>
+                                        <div class="d-flex justify-content-center">
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="format" id="formatCsv" value="csv" checked>
+                                                <label class="form-check-label" for="formatCsv">
+                                                    <i class="fas fa-file-csv me-1"></i>CSV файл
+                                                </label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="format" id="formatExcel" value="excel">
+                                                <label class="form-check-label" for="formatExcel">
+                                                    <i class="fas fa-file-excel me-1"></i>Excel файл
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Секция маппинга столбцов (скрыта по умолчанию) -->
+                            <div id="mappingSection" style="display: none;">
+                                <!-- Опции файлов без заголовков -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="" id="sourceNoHeaders">
+                                            <label class="form-check-label" for="sourceNoHeaders">
+                                                Исходный файл без заголовков
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="" id="linksNoHeaders">
+                                            <label class="form-check-label" for="linksNoHeaders">
+                                                Файл ссылок без заголовков
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Маппинг столбцов -->
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Исходный файл</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div id="sourceMapping">
+                                                    <!-- Динамически заполняется JavaScript -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Маппинг файла ссылок -->
+                                    <div class="col-md-6">
+                                        <div class="card mb-3">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Файл ссылок</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div id="linksMapping">
+                                                    <!-- Динамически заполняется JavaScript -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Выбор выходных полей -->
+                                <div class="card mb-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Поля результата</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="outputFields">
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="checkbox" id="output_id" value="id" checked>
+                                                <label class="form-check-label" for="output_id">ID</label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="checkbox" id="output_originalModel" value="originalModel" checked>
+                                                <label class="form-check-label" for="output_originalModel">Модель оригинал</label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="checkbox" id="output_analogModel" value="analogModel" checked>
+                                                <label class="form-check-label" for="output_analogModel">Модель аналог</label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="checkbox" id="output_coefficient" value="coefficient" checked>
+                                                <label class="form-check-label" for="output_coefficient">Коэффициент</label>
+                                            </div>
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="checkbox" id="output_link" value="link" checked>
+                                                <label class="form-check-label" for="output_link">Ссылка</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="text-center">
+                                <button type="button" id="analyzeBtn" class="btn btn-info btn-lg me-3">
+                                    <i class="fas fa-search me-2"></i>Анализировать файлы
+                                </button>
+                                <button type="button" id="processBtn" class="btn btn-success btn-lg" style="display: none;">
+                                    <i class="fas fa-play me-2"></i>Запустить обработку
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Правая колонка - Информация -->
+            <div class="col-md-4">
+                <!-- КАК ЭТО РАБОТАЕТ -->
+                <th:block th:replace="~{fragments/info-sections :: howItWorks(
+                    'Как это работает',
+                    ${T(java.util.List).of(
+                        T(java.util.Map).of('icon', 'fas fa-file-upload', 'title', 'Загрузите файлы', 'description', 'Исходный файл с товарами и их аналогами, файл со ссылками'),
+                        T(java.util.Map).of('icon', 'fas fa-cogs', 'title', 'Обработка', 'description', 'Система найдет соответствия по моделям аналогов'),
+                        T(java.util.Map).of('icon', 'fas fa-download', 'title', 'Результат', 'description', 'Развернутый файл со всеми комбинациями товар-аналог-ссылка')
+                    )}
+                )}"></th:block>
+
+                <!-- ПРИМЕР РЕЗУЛЬТАТА -->
+                <th:block th:replace="~{fragments/info-sections :: tableExample(
+                    'Пример результата',
+                    ${T(java.util.List).of('ID', 'Оригинал', 'Аналог', 'Ссылка')},
+                    ${T(java.util.List).of(
+                        T(java.util.List).of('001', 'Модель А', 'Аналог1', 'site1.com/...'),
+                        T(java.util.List).of('001', 'Модель А', 'Аналог1', 'site2.com/...'),
+                        T(java.util.List).of('001', 'Модель А', 'Аналог2', 'site1.com/...')
+                    )}
+                )}"></th:block>
+
+                <!-- ПОДДЕРЖИВАЕМЫЕ ФОРМАТЫ -->
+                <th:block th:replace="~{fragments/info-sections :: supportedFormats(
+                    ${T(java.util.List).of(
+                        'CSV файлы (.csv)',
+                        'Excel файлы (.xlsx, .xls)',
+                        'Максимум 100,000 строк'
+                    )}
+                )}"></th:block>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+    <script src="/js/upload.js"></script>
+    <script>
+        // Глобальные переменные
+        let analysisResult = null;
+        let sourceUploadManager;
+        let linksUploadManager;
+
+        // Инициализация менеджеров загрузки
+        document.addEventListener('DOMContentLoaded', function() {
+            const processBtn = document.getElementById('processBtn');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+
+            // Инициализация менеджера для исходного файла
+            const sourceConfig = UploadConfig.dataMergerSource('sourceUploadZone', 'sourceFile', 'sourceFilePreview', 'sourceSelectBtn');
+            sourceConfig.onFileSelect = function(files) {
+                hideMappingSection();
+            };
+            sourceUploadManager = new UploadManager(sourceConfig);
+
+            // Инициализация менеджера для файла ссылок
+            const linksConfig = UploadConfig.dataMergerLinks('linksUploadZone', 'linksFile', 'linksFilePreview', 'linksSelectBtn');
+            linksConfig.onFileSelect = function(files) {
+                hideMappingSection();
+            };
+            linksUploadManager = new UploadManager(linksConfig);
+
+            // ... остальной JavaScript код остается без изменений
+        });
+    </script>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/utils/data-merger/docs" class="btn btn-outline-info">
+            <i class="fas fa-book"></i> Документация с примерами
+        </a>
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> К списку утилит
+        </a>
+    </div>
+</th:block>
+
+</html>

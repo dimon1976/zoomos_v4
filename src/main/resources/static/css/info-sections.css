@@ -1,0 +1,424 @@
+/*
+ * Унифицированная архитектура для информационных блоков
+ * Zoomos v4 - Стандартизированная система информационных компонентов
+ *
+ * Поддерживает 5 типов блоков:
+ * - description: описания функциональности
+ * - requirements: требования к файлам
+ * - examples: примеры и образцы
+ * - instructions: пошаговые инструкции
+ * - warnings: предупреждения и важная информация
+ */
+
+/* ===== ОСНОВНАЯ СТРУКТУРА ИНФОРМАЦИОННОГО БЛОКА ===== */
+.info-section {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border-left: 4px solid var(--info-border-color, #007bff);
+}
+
+.info-section:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+/* ===== ЗАГОЛОВОК БЛОКА ===== */
+.info-section__title {
+    margin: 0;
+    padding: 1rem 1.5rem 0.5rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #343a40;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.info-section__icon {
+    margin-right: 0.75rem;
+    font-size: 1.2rem;
+    color: var(--info-icon-color, #007bff);
+    flex-shrink: 0;
+}
+
+/* ===== СОДЕРЖИМОЕ БЛОКА ===== */
+.info-section__body {
+    padding: 1rem 1.5rem 1.5rem;
+    color: #495057;
+    line-height: 1.6;
+}
+
+.info-section__body > *:last-child {
+    margin-bottom: 0;
+}
+
+/* ===== ТИПЫ ИНФОРМАЦИОННЫХ БЛОКОВ ===== */
+
+/* Описания функциональности */
+.info-section--description {
+    --info-border-color: #007bff;
+    --info-icon-color: #007bff;
+    --info-bg-light: #f8f9ff;
+}
+
+.info-section--description .info-section__title {
+    background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+}
+
+/* Требования к файлам */
+.info-section--requirements {
+    --info-border-color: #28a745;
+    --info-icon-color: #28a745;
+    --info-bg-light: #f8fff8;
+}
+
+.info-section--requirements .info-section__title {
+    background: linear-gradient(135deg, #f8fff8 0%, #ffffff 100%);
+}
+
+/* Примеры и образцы */
+.info-section--examples {
+    --info-border-color: #6f42c1;
+    --info-icon-color: #6f42c1;
+    --info-bg-light: #f8f6ff;
+}
+
+.info-section--examples .info-section__title {
+    background: linear-gradient(135deg, #f8f6ff 0%, #ffffff 100%);
+}
+
+/* Пошаговые инструкции */
+.info-section--instructions {
+    --info-border-color: #17a2b8;
+    --info-icon-color: #17a2b8;
+    --info-bg-light: #f6feff;
+}
+
+.info-section--instructions .info-section__title {
+    background: linear-gradient(135deg, #f6feff 0%, #ffffff 100%);
+}
+
+/* Предупреждения и важная информация */
+.info-section--warnings {
+    --info-border-color: #dc3545;
+    --info-icon-color: #dc3545;
+    --info-bg-light: #fff8f8;
+}
+
+.info-section--warnings .info-section__title {
+    background: linear-gradient(135deg, #fff8f8 0%, #ffffff 100%);
+}
+
+.info-section--warnings {
+    border: 1px solid #f5c6cb;
+}
+
+/* ===== СПЕЦИАЛЬНЫЕ МОДИФИКАТОРЫ ===== */
+
+/* Компактный вариант */
+.info-section--compact {
+    margin-bottom: 1rem;
+}
+
+.info-section--compact .info-section__title {
+    padding: 0.75rem 1rem 0.25rem;
+    font-size: 1rem;
+}
+
+.info-section--compact .info-section__body {
+    padding: 0.75rem 1rem 1rem;
+}
+
+/* Крупный вариант */
+.info-section--large {
+    margin-bottom: 2rem;
+}
+
+.info-section--large .info-section__title {
+    padding: 1.5rem 2rem 0.75rem;
+    font-size: 1.25rem;
+}
+
+.info-section--large .info-section__body {
+    padding: 1.25rem 2rem 2rem;
+    font-size: 1.05rem;
+}
+
+/* Выделенный вариант */
+.info-section--highlighted {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-left-width: 6px;
+}
+
+.info-section--highlighted:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* ===== СОДЕРЖИМОЕ: СПИСКИ ===== */
+.info-section__body ul,
+.info-section__body ol {
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+
+.info-section__body li {
+    margin-bottom: 0.5rem;
+}
+
+.info-section__body li:last-child {
+    margin-bottom: 0;
+}
+
+/* Стилизованные списки с иконками */
+.info-section__body .list-with-icons {
+    list-style: none;
+    padding-left: 0;
+}
+
+.info-section__body .list-with-icons li {
+    position: relative;
+    padding-left: 1.75rem;
+}
+
+.info-section__body .list-with-icons li::before {
+    content: "\f00c";
+    font-family: "Font Awesome 5 Free";
+    font-weight: 900;
+    position: absolute;
+    left: 0;
+    top: 0.1rem;
+    color: var(--info-icon-color, #28a745);
+    font-size: 0.875rem;
+}
+
+/* Специальные типы элементов списков */
+.info-section__body .list-with-icons .list-item--warning::before {
+    content: "\f071";
+    color: #ffc107;
+}
+
+.info-section__body .list-with-icons .list-item--error::before {
+    content: "\f00d";
+    color: #dc3545;
+}
+
+.info-section__body .list-with-icons .list-item--info::before {
+    content: "\f05a";
+    color: #17a2b8;
+}
+
+/* ===== СОДЕРЖИМОЕ: ПРИМЕРЫ КОДА ===== */
+.info-section__body .code-example {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 1rem;
+    margin: 1rem 0;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    font-size: 0.875rem;
+    overflow-x: auto;
+}
+
+.info-section__body .code-example code {
+    background: none;
+    color: #e83e8c;
+    padding: 0;
+}
+
+/* ===== СОДЕРЖИМОЕ: ТАБЛИЦЫ ===== */
+.info-section__body .table {
+    margin-bottom: 1rem;
+}
+
+.info-section__body .table-responsive {
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+/* ===== СОДЕРЖИМОЕ: ПРОЦЕССЫ И ЭТАПЫ ===== */
+.info-section__process-steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+}
+
+.info-section__process-step {
+    text-align: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+
+.info-section__process-icon {
+    width: 50px;
+    height: 50px;
+    background: var(--info-icon-color, #007bff);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+    margin: 0 auto 0.75rem;
+}
+
+.info-section__process-title {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #343a40;
+}
+
+.info-section__process-description {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-bottom: 0;
+}
+
+/* ===== АДАПТИВНОСТЬ ===== */
+@media (max-width: 768px) {
+    .info-section {
+        margin-bottom: 1rem;
+    }
+
+    .info-section__title {
+        padding: 0.75rem 1rem 0.5rem;
+        font-size: 1rem;
+    }
+
+    .info-section__body {
+        padding: 0.75rem 1rem 1rem;
+        font-size: 0.95rem;
+    }
+
+    .info-section__process-steps {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .info-section__process-step {
+        padding: 0.75rem;
+    }
+
+    .info-section__process-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+        margin-bottom: 0.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .info-section__title {
+        flex-direction: column;
+        text-align: center;
+        padding: 1rem;
+    }
+
+    .info-section__icon {
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+        font-size: 1.5rem;
+    }
+
+    .info-section__body {
+        padding: 1rem;
+    }
+}
+
+/* ===== ТЕМНАЯ ТЕМА ===== */
+@media (prefers-color-scheme: dark) {
+    .info-section {
+        background: #2d3748;
+        color: #e2e8f0;
+        border-color: var(--info-border-color);
+    }
+
+    .info-section__title {
+        color: #f7fafc;
+        border-bottom-color: #4a5568;
+        background: linear-gradient(135deg, #374151 0%, #2d3748 100%);
+    }
+
+    .info-section__body {
+        color: #cbd5e0;
+    }
+
+    .info-section__body .code-example {
+        background: #1a202c;
+        border-color: #4a5568;
+        color: #e2e8f0;
+    }
+
+    .info-section__process-step {
+        background: #374151;
+        border-color: #4a5568;
+    }
+
+    .info-section__process-title {
+        color: #f7fafc;
+    }
+
+    .info-section__process-description {
+        color: #a0aec0;
+    }
+}
+
+/* ===== ACCESSIBILITY ===== */
+.info-section:focus-within {
+    outline: 2px solid var(--info-border-color);
+    outline-offset: 2px;
+}
+
+/* Улучшенная читаемость для средств чтения с экрана */
+.info-section__title .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ===== АНИМАЦИИ ===== */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.info-section--animated {
+    animation: fadeInUp 0.6s ease;
+}
+
+/* ===== ПЕЧАТЬ ===== */
+@media print {
+    .info-section {
+        box-shadow: none;
+        border: 1px solid #000;
+        break-inside: avoid;
+        margin-bottom: 1rem;
+    }
+
+    .info-section:hover {
+        transform: none;
+    }
+
+    .info-section__title {
+        background: none !important;
+    }
+}
