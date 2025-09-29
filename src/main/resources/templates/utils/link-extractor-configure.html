@@ -56,29 +56,47 @@
 <th:block th:fragment="content">
     <div class="container-fluid">
         
-        <!-- Информация о файле -->
+        <!-- Описание шага -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="mb-0">Шаг 2: Настройка колонок</h5>
-                    </div>
-                    <div class="card-body">
-                        <p>Выберите колонку с идентификаторами. Поиск ссылок будет производиться во всех остальных колонках.</p>
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-link"></i>
+                        <span>Шаг 2: Настройка колонок для сбора ссылок</span>
+                    </h3>
+                    <div class="info-section__body">
                         <div class="row">
-                            <div class="col-auto">
-                                <i class="fas fa-file-alt"></i>
-                                <strong>Файл:</strong> <span th:text="${fileMetadata.filename}">имя файла</span>
+                            <div class="col-md-8">
+                                <p class="mb-2">Выберите колонку с идентификаторами. Поиск ссылок будет производиться во всех остальных колонках.</p>
+                                <p class="mb-3">Утилита автоматически найдёт и извлечёт все URL ссылки из текста.</p>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="text-center">
+                                        <i class="fas fa-id-card fa-2x text-info mb-2"></i>
+                                        <div><small>Идентификаторы</small></div>
+                                    </div>
+                                    <div class="text-center">
+                                        <i class="fas fa-search fa-2x text-success mb-2"></i>
+                                        <div><small>Поиск ссылок</small></div>
+                                    </div>
+                                    <div class="text-center">
+                                        <i class="fas fa-external-link-alt fa-2x text-primary mb-2"></i>
+                                        <div><small>Извлечение URL</small></div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="col-auto">
-                                | <strong>Строк:</strong> <span th:text="${fileMetadata.totalRows}">0</span>
-                            </div>
-                            <div class="col-auto">
-                                | <strong>Колонок:</strong> <span th:text="${fileMetadata.totalColumns}">0</span>
+                            <div class="col-md-4">
+                                <div class="bg-light p-3 rounded">
+                                    <h6 class="text-muted mb-3">Информация о файле:</h6>
+                                    <ul class="list-with-icons mb-0">
+                                        <li><i class="fas fa-file text-primary"></i> <span th:text="${fileMetadata.filename}">имя файла</span></li>
+                                        <li><i class="fas fa-list text-info"></i> Строк: <span th:text="${fileMetadata.totalRows}">0</span></li>
+                                        <li><i class="fas fa-columns text-success"></i> Колонок: <span th:text="${fileMetadata.totalColumns}">0</span></li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
 
@@ -215,7 +233,7 @@
                             </table>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>

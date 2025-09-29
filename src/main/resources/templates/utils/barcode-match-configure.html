@@ -70,42 +70,59 @@
 <th:block th:fragment="content">
     <div class="container-fluid">
         
-        <!-- Индикатор шага -->
+        <!-- Описание шага -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card step-indicator">
-                    <div class="card-body">
-                        <div class="row align-items-center">
-                            <div class="col-md-2 text-center">
-                                <i class="fas fa-cog display-1"></i>
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-cogs"></i>
+                        <span>Шаг 2: Настройка колонок для сопоставления штрихкодов</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <p class="mb-2">Укажите, в каких колонках находятся ID, штрихкоды и URL для сопоставления.</p>
+                                <p class="mb-3">При выборе колонок они будут подсвечены в предварительном просмотре.</p>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="text-center">
+                                        <i class="fas fa-id-card fa-2x text-info mb-2"></i>
+                                        <div><small>ID исходных записей</small></div>
+                                    </div>
+                                    <div class="text-center">
+                                        <i class="fas fa-barcode fa-2x text-warning mb-2"></i>
+                                        <div><small>Штрихкоды</small></div>
+                                    </div>
+                                    <div class="text-center">
+                                        <i class="fas fa-link fa-2x text-success mb-2"></i>
+                                        <div><small>URL для сопоставления</small></div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="col-md-10">
-                                <h4 class="mb-2">Шаг 2: Настройка колонок</h4>
-                                <p class="mb-1">Укажите, в каких колонках находятся ID, штрихкоды и URL для сопоставления.</p>
-                                <small class="opacity-75">
-                                    <i class="fas fa-file"></i> 
-                                    Файл: <span th:text="${fileMetadata.filename}">filename.xlsx</span>
-                                    | Строк: <span th:text="${#lists.size(fileMetadata.sampleData)}">0</span>
-                                    | Колонок: <span th:text="${#lists.size(fileMetadata.columnHeaders)}">0</span>
-                                </small>
+                            <div class="col-md-4">
+                                <div class="bg-light p-3 rounded">
+                                    <h6 class="text-muted mb-3">Информация о файле:</h6>
+                                    <ul class="list-with-icons mb-0">
+                                        <li><i class="fas fa-file text-primary"></i> <span th:text="${fileMetadata.filename}">filename.xlsx</span></li>
+                                        <li><i class="fas fa-list text-info"></i> Строк: <span th:text="${#lists.size(fileMetadata.sampleData)}">0</span></li>
+                                        <li><i class="fas fa-columns text-success"></i> Колонок: <span th:text="${#lists.size(fileMetadata.columnHeaders)}">0</span></li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
 
         <div class="row">
             <!-- Форма настройки -->
             <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="fas fa-settings text-primary"></i>
-                            Выбор колонок
-                        </h5>
-                    </div>
-                    <div class="card-body">
+                <section class="info-section info-section--requirements">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-file-alt"></i>
+                        <span>Выбор колонок</span>
+                    </h3>
+                    <div class="info-section__body">
                         <form method="post" action="/utils/barcode-match/process" th:object="${barcodeMatchDto}">
                             <div class="mb-3">
                                 <label for="sourceIdColumn" class="form-label">
@@ -227,42 +244,38 @@
                             </div>
                         </form>
                     </div>
-                </div>
+                </section>
 
                 <!-- Информация о процессе -->
-                <div class="card mt-3">
-                    <div class="card-header">
-                        <h6 class="mb-0">
-                            <i class="fas fa-info-circle text-info"></i>
-                            Что произойдет
-                        </h6>
-                    </div>
-                    <div class="card-body">
-                        <ul class="list-unstyled small mb-0">
-                            <li><i class="fas fa-check text-success"></i> Извлечение данных из выбранных колонок</li>
-                            <li><i class="fas fa-check text-success"></i> Валидация штрихкодов (13 символов)</li>
-                            <li><i class="fas fa-check text-success"></i> Разделение множественных ШК</li>
-                            <li><i class="fas fa-check text-success"></i> Создание Excel с результатами</li>
-                            <li><i class="fas fa-check text-success"></i> Автоматическое скачивание</li>
+                <section class="info-section info-section--instructions mt-3">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-list-ol"></i>
+                        <span>Что произойдет</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <ul class="list-with-icons mb-0">
+                            <li><i class="fas fa-database text-success"></i> Извлечение данных из выбранных колонок</li>
+                            <li><i class="fas fa-check-circle text-success"></i> Валидация штрихкодов (13 символов)</li>
+                            <li><i class="fas fa-cut text-info"></i> Разделение множественных ШК</li>
+                            <li><i class="fas fa-file-excel text-success"></i> Создание файла с результатами</li>
+                            <li><i class="fas fa-download text-primary"></i> Автоматическое скачивание</li>
                         </ul>
                     </div>
-                </div>
+                </section>
             </div>
 
             <!-- Предварительный просмотр файла -->
             <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            <i class="fas fa-eye text-primary"></i>
-                            Предварительный просмотр
-                        </h5>
-                        <small class="text-muted">
-                            Показано первых <span th:text="${#lists.size(fileMetadata.sampleData) > 10 ? 10 : #lists.size(fileMetadata.sampleData)}">10</span> 
+                <section class="info-section info-section--examples">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-eye"></i>
+                        <span>Предварительный просмотр файла</span>
+                        <small class="text-muted ms-2">
+                            Показано первых <span th:text="${#lists.size(fileMetadata.sampleData) > 10 ? 10 : #lists.size(fileMetadata.sampleData)}">10</span>
                             из <span th:text="${#lists.size(fileMetadata.sampleData)}">0</span> строк
                         </small>
-                    </div>
-                    <div class="card-body p-0">
+                    </h3>
+                    <div class="info-section__body p-0">
                         <div class="file-preview">
                             <table class="table table-sm preview-table mb-0">
                                 <thead>
@@ -287,7 +300,7 @@
                             </table>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>
