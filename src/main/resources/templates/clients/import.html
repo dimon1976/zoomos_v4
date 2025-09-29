@@ -70,48 +70,105 @@
                     </form>
 
                     <div class="mt-4">
-                        <th:block th:replace="~{fragments/info-sections :: instructions('Как это работает', '
-                            <ol>
-                                <li>Выберите один или несколько файлов для импорта</li>
-                                <li>Система проанализирует структуру файлов</li>
-                                <li>Выберите подходящий шаблон импорта</li>
-                                <li>Запустите процесс импорта</li>
-                            </ol>
-                        ', 'compact')}"></th:block>
+                        <!-- Инструкции по работе -->
+                        <div class="info-section info-section--instructions info-section--compact">
+                            <h6 class="info-section__title">
+                                <i class="fas fa-list-ol info-section__icon"></i>
+                                Как это работает
+                            </h6>
+                            <div class="info-section__body">
+                                <ol>
+                                    <li>Выберите один или несколько файлов для импорта</li>
+                                    <li>Система проанализирует структуру файлов</li>
+                                    <li>Выберите подходящий шаблон импорта</li>
+                                    <li>Запустите процесс импорта</li>
+                                </ol>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="mt-3">
-                        <th:block th:replace="~{fragments/info-sections :: importantNotes(${{#lists.toList(
-                            #maps.toMap('text', 'Вы можете загрузить несколько файлов одновременно', 'type', 'info'),
-                            #maps.toMap('text', 'Максимальный размер каждого файла: 600 МБ', 'type', 'info')
-                        )}})}"></th:block>
+                        <!-- Важные заметки -->
+                        <div class="info-section info-section--warnings info-section--compact">
+                            <h6 class="info-section__title">
+                                <i class="fas fa-exclamation-triangle info-section__icon"></i>
+                                Важная информация
+                            </h6>
+                            <div class="info-section__body">
+                                <ul class="list-with-icons">
+                                    <li class="list-item--info">Вы можете загрузить несколько файлов одновременно</li>
+                                    <li class="list-item--info">Максимальный размер каждого файла: 600 МБ</li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <th:block th:replace="~{fragments/info-sections :: quickNavigation('Управление шаблонами', ${{#lists.toList(
-                #maps.toMap('text', 'Настроить шаблоны', 'url', '/clients/' + ${client.id} + '/import/templates', 'icon', 'fas fa-cog', 'buttonClass', 'btn-outline-primary')
-            )}})}"></th:block>
+            <!-- Управление шаблонами -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-cog me-2"></i>Управление шаблонами
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <a th:href="@{/clients/{id}/import/templates(id=${client.id})}"
+                       class="btn btn-outline-primary w-100">
+                        <i class="fas fa-cog me-1"></i>Настроить шаблоны
+                    </a>
+                </div>
+            </div>
 
             <div class="mt-3">
-                <th:block th:replace="~{fragments/info-sections :: features('Возможности', ${{#lists.toList(
-                    #maps.toMap('text', 'Автоматическое определение кодировки'),
-                    #maps.toMap('text', 'Поддержка CSV, Excel (XLS, XLSX)'),
-                    #maps.toMap('text', 'Валидация данных перед импортом'),
-                    #maps.toMap('text', 'Обработка больших файлов'),
-                    #maps.toMap('text', 'Детальные отчеты об ошибках')
-                )}}, 'description')}"></th:block>
+                <!-- Возможности системы -->
+                <div class="info-section info-section--description">
+                    <h6 class="info-section__title">
+                        <i class="fas fa-star info-section__icon"></i>
+                        Возможности
+                    </h6>
+                    <div class="info-section__body">
+                        <ul class="list-with-icons">
+                            <li>Автоматическое определение кодировки</li>
+                            <li>Поддержка CSV, Excel (XLS, XLSX)</li>
+                            <li>Валидация данных перед импортом</li>
+                            <li>Обработка больших файлов</li>
+                            <li>Детальные отчеты об ошибках</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             <!-- Навигация к другим разделам клиента -->
             <div class="mt-3">
-                <th:block th:replace="~{fragments/info-sections :: quickNavigation('Другие разделы', ${{#lists.toList(
-                    #maps.toMap('text', 'Обзор', 'url', '/clients/' + ${client.id}, 'icon', 'fas fa-home', 'buttonClass', 'btn-outline-secondary'),
-                    #maps.toMap('text', 'Экспорт', 'url', '/clients/' + ${client.id} + '/export', 'icon', 'fas fa-file-export', 'buttonClass', 'btn-outline-secondary'),
-                    #maps.toMap('text', 'Шаблоны', 'url', '/clients/' + ${client.id} + '/templates', 'icon', 'fas fa-file-alt', 'buttonClass', 'btn-outline-secondary'),
-                    #maps.toMap('text', 'История операций', 'url', '/clients/' + ${client.id} + '/operations', 'icon', 'fas fa-history', 'buttonClass', 'btn-outline-secondary')
-                )}})}"></th:block>
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="fas fa-sitemap me-2"></i>Другие разделы
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <a th:href="@{/clients/{id}(id=${client.id})}"
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-home me-1"></i>Обзор
+                            </a>
+                            <a th:href="@{/clients/{id}/export(id=${client.id})}"
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-file-export me-1"></i>Экспорт
+                            </a>
+                            <a th:href="@{/clients/{id}/templates(id=${client.id})}"
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-file-alt me-1"></i>Шаблоны
+                            </a>
+                            <a th:href="@{/clients/{id}/operations(id=${client.id})}"
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-history me-1"></i>История операций
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
