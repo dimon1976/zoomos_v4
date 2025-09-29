@@ -28,33 +28,6 @@
 <th:block th:fragment="content">
     <div class="container-fluid">
         
-        <!-- Описание утилиты -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <section class="info-section info-section--description">
-                    <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-info-circle"></i>
-                        <span>Обработка файла статистики</span>
-                    </h3>
-                    <div class="info-section__body">
-                        <div class="row align-items-center">
-                            <div class="col-md-2 text-center">
-                                <i class="fas fa-chart-line display-1 text-primary"></i>
-                            </div>
-                            <div class="col-md-10">
-                                <p class="mb-3">Утилита обрабатывает файлы статистики с возможностью выбора колонок и изменения данных. Полный аналог старой версии с чекбоксами.</p>
-                                <div class="d-flex flex-wrap gap-3">
-                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Выбор колонок чекбоксами</div>
-                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Замена источника данных</div>
-                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Экспорт в Excel/CSV</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            </div>
-        </div>
-
         <!-- Сообщения об ошибках/успехе -->
         <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
             <i class="fas fa-exclamation-triangle"></i>
@@ -68,14 +41,44 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
 
-        <!-- Загрузка файла -->
+        <!-- Описание утилиты - вверху -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-chart-bar"></i>
+                        <span>Обработка файлов статистики</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="row align-items-center">
+                            <div class="col-md-2 text-center">
+                                <i class="fas fa-table display-1 text-primary"></i>
+                            </div>
+                            <div class="col-md-10">
+                                <p class="mb-3">Утилита обрабатывает файлы статистики с возможностью выбора колонок и изменения данных для создания кастомизированных отчетов.</p>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Выбор колонок чекбоксами</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Замена данных</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Множественная загрузка</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Экспорт в Excel/CSV</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Основная структура: слева форма и требования, справа дополнительная информация -->
         <div class="row">
-            <div class="col-md-8 mx-auto">
+            <!-- Левая колонка - форма загрузки и требования -->
+            <div class="col-md-8">
+                <!-- Форма загрузки -->
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0">
-                            <i class="fas fa-upload text-success"></i>
-                            Шаг 1: Загрузка файла статистики
+                            <i class="fas fa-file-upload"></i>
+                            Шаг 1: Загрузка файлов статистики
                         </h5>
                     </div>
                     <div class="card-body">
@@ -83,7 +86,7 @@
                             <!-- Унифицированная зона загрузки -->
                             <div class="upload-zone" id="statsProcessorZone">
                                 <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
-                                <h5>Перетащите файлы статистики сюда или нажмите для выбора</h5>
+                                <h5>Выберите файлы статистики для обработки</h5>
                                 <p class="text-muted">Поддерживаемые форматы: Excel (.xlsx, .xls), CSV (.csv), JSON (.json)</p>
 
                                 <input type="file"
@@ -106,59 +109,120 @@
                             <div id="statsProcessorPreview" class="file-preview-container mt-3"></div>
 
                             <div class="d-grid gap-2 mt-4">
-                                <button type="submit" class="btn btn-success" id="uploadBtn" disabled>
+                                <button type="submit" class="btn btn-success btn-lg" id="uploadBtn" disabled>
                                     <i class="fas fa-cogs"></i> Анализировать и настроить обработку
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Информация о формате файла -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <section class="info-section info-section--requirements">
+                <!-- Требования к файлам - под формой -->
+                <div class="mt-4">
+                    <section class="info-section info-section--requirements">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-file-alt"></i>
+                            <span>Требования к файлам</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ul class="list-with-icons">
+                                <li>Файлы типа hoff.ru-sites-mapping-*.xlsx</li>
+                                <li>39 колонок с данными о товарах</li>
+                                <li>Домен, ID сайта, товары, конкуренты</li>
+                                <li>Выбор нужных колонок чекбоксами</li>
+                                <li>Замена источника для клиента</li>
+                                <li>Максимальный размер файла: 600MB</li>
+                            </ul>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Правая колонка - дополнительная информация -->
+            <div class="col-md-4">
+                <!-- Описание процесса -->
+                <section class="info-section info-section--instructions">
                     <h3 class="info-section__title">
                         <i class="info-section__icon fas fa-cogs"></i>
-                        <span>Требования к файлам</span>
+                        <span>Как это работает</span>
                     </h3>
                     <div class="info-section__body">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <h6 class="text-primary mb-2">
-                                    <i class="fas fa-sitemap me-1"></i>Структура файлов
-                                </h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success me-2"></i>Файлы типа hoff.ru-sites-mapping-*.xlsx</li>
-                                    <li><i class="fas fa-check text-success me-2"></i>39 колонок с данными о товарах</li>
-                                    <li><i class="fas fa-check text-success me-2"></i>Домен, ID сайта, товары, конкуренты</li>
-                                </ul>
+                        <div class="info-section__process-steps">
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-upload"></i>
+                                </div>
+                                <div class="info-section__process-title">Загрузка</div>
+                                <div class="info-section__process-description">Выберите файлы статистики</div>
                             </div>
-                            <div class="col-md-4">
-                                <h6 class="text-info mb-2">
-                                    <i class="fas fa-edit me-1"></i>Возможности обработки
-                                </h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success me-2"></i>Выбор нужных колонок чекбоксами</li>
-                                    <li><i class="fas fa-check text-success me-2"></i>Замена источника для клиента</li>
-                                    <li><i class="fas fa-check text-success me-2"></i>Добавление URL конкурентов и дат</li>
-                                </ul>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-columns"></i>
+                                </div>
+                                <div class="info-section__process-title">Настройка</div>
+                                <div class="info-section__process-description">Выбор колонок чекбоксами</div>
                             </div>
-                            <div class="col-md-4">
-                                <h6 class="text-warning mb-2">
-                                    <i class="fas fa-download me-1"></i>Формат результата
-                                </h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success me-2"></i>Обработанный файл в Excel/CSV</li>
-                                    <li><i class="fas fa-check text-success me-2"></i>Только выбранные колонки</li>
-                                    <li><i class="fas fa-check text-success me-2"></i>Измененные данные по настройкам</li>
-                                </ul>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-edit"></i>
+                                </div>
+                                <div class="info-section__process-title">Обработка</div>
+                                <div class="info-section__process-description">Замена и обработка данных</div>
+                            </div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <div class="info-section__process-title">Результат</div>
+                                <div class="info-section__process-description">Кастомизированный отчет</div>
                             </div>
                         </div>
                     </div>
                 </section>
+
+                <!-- Пример обработки -->
+                <div class="mt-3">
+                    <section class="info-section info-section--examples">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-lightbulb"></i>
+                            <span>Пример обработки</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <strong>Исходные данные:</strong>
+                                    <div class="code-example small">
+                                        39 колонок: домен, ID, товары, конкуренты
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <strong>Результат:</strong>
+                                    <div class="code-example small">
+                                        Выбранные колонки + измененные данные для клиента
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Дополнительные возможности -->
+                <div class="mt-3">
+                    <section class="info-section info-section--description">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-star"></i>
+                            <span>Возможности</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ul class="list-with-icons">
+                                <li>Множественная загрузка файлов</li>
+                                <li>Интерактивный выбор колонок</li>
+                                <li>Настройка замены источника</li>
+                                <li>Экспорт в различных форматах</li>
+                            </ul>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
     </div>

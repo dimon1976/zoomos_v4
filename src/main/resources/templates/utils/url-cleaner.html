@@ -28,53 +28,39 @@
 <th:block th:fragment="content">
     <div class="container-fluid">
         
-        <!-- Описание утилиты -->
+        <!-- Описание утилиты - вверху -->
         <div class="row mb-4">
-            <div class="col-md-8">
+            <div class="col-12">
                 <section class="info-section info-section--description">
                     <h3 class="info-section__title">
                         <i class="info-section__icon fas fa-info-circle"></i>
                         <span>Очистка URL</span>
                     </h3>
                     <div class="info-section__body">
-                        <p class="mb-3">Утилита удаляет UTM-метки, реферальные и отслеживающие параметры из ссылок, оставляя чистые URL.</p>
-                        <div class="row">
-                            <div class="col-md-4 text-center">
-                                <div class="mb-2"><i class="fas fa-broom fa-2x text-primary"></i></div>
-                                <small>Удаление UTM параметров</small>
+                        <div class="row align-items-center">
+                            <div class="col-md-2 text-center">
+                                <i class="fas fa-broom display-1 text-primary"></i>
                             </div>
-                            <div class="col-md-4 text-center">
-                                <div class="mb-2"><i class="fas fa-shield-alt fa-2x text-primary"></i></div>
-                                <small>Удаление реферальных меток</small>
-                            </div>
-                            <div class="col-md-4 text-center">
-                                <div class="mb-2"><i class="fas fa-eye-slash fa-2x text-primary"></i></div>
-                                <small>Удаление отслеживающих параметров</small>
+                            <div class="col-md-10">
+                                <p class="mb-3">Утилита удаляет UTM-метки, реферальные и отслеживающие параметры из ссылок, оставляя чистые URL.</p>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Удаление UTM параметров</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Удаление реферальных меток</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Поддержка доп. колонок</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Экспорт в CSV и Excel</div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </section>
             </div>
-            <div class="col-md-4">
-                <section class="info-section info-section--description">
-                    <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-star"></i>
-                        <span>Особенности</span>
-                    </h3>
-                    <div class="info-section__body">
-                        <ul class="list-with-icons">
-                            <li>Сохранение параметра sku для Yandex Market</li>
-                            <li>Поддержка дополнительных колонок (ID, Model, Barcode)</li>
-                            <li>Экспорт в CSV и Excel</li>
-                        </ul>
-                    </div>
-                </section>
-            </div>
         </div>
 
-        <!-- Форма загрузки файла -->
+        <!-- Основная структура: слева форма и требования, справа дополнительная информация -->
         <div class="row">
+            <!-- Левая колонка - форма загрузки и требования -->
             <div class="col-md-8">
+                <!-- Форма загрузки -->
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0">
@@ -116,48 +102,89 @@
                         </form>
                     </div>
                 </div>
+
+                <!-- Требования к файлу - под формой -->
+                <div class="mt-4">
+                    <section class="info-section info-section--requirements">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-file-alt"></i>
+                            <span>Требования к файлу</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ul class="list-with-icons">
+                                <li>Первая строка - заголовки колонок</li>
+                                <li>Обязательная колонка с URL</li>
+                                <li>Необязательные колонки: ID, Model, Barcode</li>
+                                <li>Полные URL (http:// или https://)</li>
+                                <li>Могут содержать параметры запроса</li>
+                                <li>Невалидные URL будут пропущены</li>
+                            </ul>
+                        </div>
+                    </section>
+                </div>
             </div>
-            
-            <!-- Требования к файлу -->
+
+            <!-- Правая колонка - дополнительная информация -->
             <div class="col-md-4">
-                <section class="info-section info-section--requirements">
+                <!-- Особенности утилиты -->
+                <section class="info-section info-section--description">
                     <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-file-alt"></i>
-                        <span>Требования к файлу</span>
+                        <i class="info-section__icon fas fa-star"></i>
+                        <span>Особенности</span>
                     </h3>
                     <div class="info-section__body">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <h6><i class="fas fa-table text-success"></i> Структура файла</h6>
-                                <ul class="list-with-icons small">
-                                    <li>Первая строка - заголовки колонок</li>
-                                    <li>Обязательная колонка с URL</li>
-                                    <li>Необязательные колонки: ID, Model, Barcode</li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <h6><i class="fas fa-cog text-warning"></i> Формат данных</h6>
-                                <ul class="list-with-icons small">
-                                    <li>Полные URL (http:// или https://)</li>
-                                    <li>Могут содержать параметры запроса</li>
-                                    <li>Невалидные URL будут пропущены</li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <h6><i class="fas fa-download text-info"></i> Результат</h6>
-                                <ul class="list-with-icons small">
-                                    <li>CSV или Excel файл</li>
-                                    <li>Исходная URL | Очищенная URL</li>
-                                    <li>Дополнительные колонки при наличии</li>
-                                </ul>
-                            </div>
-                        </div>
+                        <ul class="list-with-icons">
+                            <li>Сохранение параметра sku для Yandex Market</li>
+                            <li>Поддержка дополнительных колонок (ID, Model, Barcode)</li>
+                            <li>Экспорт в CSV и Excel</li>
+                        </ul>
                     </div>
                 </section>
+
+                <!-- Пример обработки -->
+                <div class="mt-3">
+                    <section class="info-section info-section--examples">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-lightbulb"></i>
+                            <span>Пример обработки</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <strong>Исходная URL:</strong>
+                                    <div class="code-example small">
+                                        https://example.com/product?utm_source=google&utm_medium=cpc&ref=123
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <strong>Очищенная URL:</strong>
+                                    <div class="code-example small">
+                                        https://example.com/product
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Инструкция по работе -->
+                <div class="mt-3">
+                    <section class="info-section info-section--instructions">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-list-ol"></i>
+                            <span>Как это работает</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ol>
+                                <li>Загрузите файл с URL</li>
+                                <li>Система проанализирует структуру</li>
+                                <li>Выберите колонки для обработки</li>
+                                <li>Запустите очистку URL</li>
+                                <li>Скачайте обработанный файл</li>
+                            </ol>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
     </div>

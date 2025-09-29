@@ -28,87 +28,46 @@
 <th:block th:fragment="content">
     <div class="container-fluid">
         
-        <!-- Описание процесса -->
+        <!-- Описание утилиты - вверху -->
         <div class="row mb-4">
             <div class="col-12">
-                <section class="info-section info-section--instructions">
+                <section class="info-section info-section--description">
                     <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-cogs"></i>
+                        <i class="info-section__icon fas fa-route"></i>
                         <span>Поиск финальных ссылок после редиректов</span>
                     </h3>
                     <div class="info-section__body">
-                        <div class="info-section__process-steps">
-                            <div class="info-section__process-step">
-                                <div class="info-section__process-icon">
-                                    <i class="fas fa-upload"></i>
-                                </div>
-                                <div class="info-section__process-title">Загрузка</div>
-                                <div class="info-section__process-description">Загрузите файл с URL для обработки</div>
+                        <div class="row align-items-center">
+                            <div class="col-md-2 text-center">
+                                <i class="fas fa-random display-1 text-primary"></i>
                             </div>
-                            <div class="info-section__process-step">
-                                <div class="info-section__process-icon">
-                                    <i class="fas fa-cogs"></i>
+                            <div class="col-md-10">
+                                <p class="mb-3">Утилита обрабатывает CSV/Excel файлы с URL для получения финальных ссылок после HTTP редиректов (301, 302, 307, 308).</p>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> 3 стратегии обхода блокировок</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Обработка до 20 редиректов</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Детальная статистика</div>
                                 </div>
-                                <div class="info-section__process-title">Настройка</div>
-                                <div class="info-section__process-description">Выберите колонки и параметры обработки</div>
                             </div>
-                            <div class="info-section__process-step">
-                                <div class="info-section__process-icon">
-                                    <i class="fas fa-route"></i>
-                                </div>
-                                <div class="info-section__process-title">Обработка</div>
-                                <div class="info-section__process-description">Автоматическое следование по редиректам</div>
-                            </div>
-                            <div class="info-section__process-step">
-                                <div class="info-section__process-icon">
-                                    <i class="fas fa-download"></i>
-                                </div>
-                                <div class="info-section__process-title">Результат</div>
-                                <div class="info-section__process-description">Файл с финальными URL и статистикой</div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Стратегии защиты -->
-                <section class="info-section info-section--description">
-                    <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-shield-alt"></i>
-                        <span>Стратегии защиты от антибот систем</span>
-                    </h3>
-                    <div class="info-section__body">
-                        <div class="d-flex flex-wrap gap-2">
-                            <span class="badge bg-success strategy-badge">
-                                <i class="fas fa-terminal"></i>
-                                <span>cURL</span>
-                                <small> - основная стратегия</small>
-                            </span>
-                            <span class="badge bg-primary strategy-badge">
-                                <i class="fas fa-browser"></i>
-                                <span>Playwright</span>
-                                <small> - обход блокировок</small>
-                            </span>
-                            <span class="badge bg-secondary strategy-badge">
-                                <i class="fas fa-code"></i>
-                                <span>HttpClient</span>
-                                <small> - резервная</small>
-                            </span>
                         </div>
                     </div>
                 </section>
             </div>
         </div>
 
-        <!-- Загрузка файла -->
+        <!-- Основная структура: слева форма и требования, справа дополнительная информация -->
         <div class="row">
-            <div class="col-lg-8 mx-auto">
+            <!-- Левая колонка - форма загрузки и требования -->
+            <div class="col-md-8">
+                <!-- Форма загрузки -->
                 <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title mb-4">
-                            <i class="fas fa-file-upload text-primary"></i>
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-file-upload"></i>
                             Шаг 1: Загрузка файла
                         </h5>
-
+                    </div>
+                    <div class="card-body">
                         <form id="redirectForm" th:action="@{/utils/redirect-finder/upload}" method="post" enctype="multipart/form-data">
                             <!-- Унифицированная зона загрузки -->
                             <div class="upload-zone" id="redirectFinderZone">
@@ -142,79 +101,145 @@
                         </form>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Требования к файлу -->
-        <div class="row mt-4">
-            <div class="col-lg-8 mx-auto">
-                <section class="info-section info-section--requirements">
+                <!-- Требования к файлу - под формой -->
+                <div class="mt-4">
+                    <section class="info-section info-section--requirements">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-file-alt"></i>
+                            <span>Требования к файлу</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ul class="list-with-icons">
+                                <li>Обязательная колонка с URL</li>
+                                <li>Колонки ID и Модель опциональны</li>
+                                <li>URL должны начинаться с http:// или https://</li>
+                                <li>Поддержка до 20 редиректов на URL</li>
+                                <li>Максимальный размер файла: 1200MB</li>
+                            </ul>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Правая колонка - дополнительная информация -->
+            <div class="col-md-4">
+                <!-- Описание процесса -->
+                <section class="info-section info-section--instructions">
                     <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-file-alt"></i>
-                        <span>Требования к файлу</span>
+                        <i class="info-section__icon fas fa-cogs"></i>
+                        <span>Как это работает</span>
                     </h3>
                     <div class="info-section__body">
-                        <ul class="list-with-icons">
-                            <li>Файл должен содержать колонку с URL (обязательно)</li>
-                            <li>Колонки ID и Модель опциональны</li>
-                            <li>URL должны начинаться с http:// или https://</li>
-                            <li>Поддерживается до 20 редиректов на URL</li>
-                            <li>Максимальный размер файла: 1200MB</li>
-                        </ul>
-                    </div>
-                </section>
-            </div>
-        </div>
-
-        <!-- Пример обработки данных -->
-        <div class="row mt-4">
-            <div class="col-lg-8 mx-auto">
-                <section class="info-section info-section--examples">
-                    <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-lightbulb"></i>
-                        <span>Пример обработки</span>
-                    </h3>
-                    <div class="info-section__body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <strong>Исходные данные:</strong>
-                                <div class="code-example">
-                                    <div>ID: 12345</div>
-                                    <div>URL: https://short.ly/abc123</div>
-                                    <div>Модель: Товар А</div>
+                        <div class="info-section__process-steps">
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-upload"></i>
                                 </div>
+                                <div class="info-section__process-title">Загрузка</div>
+                                <div class="info-section__process-description">Загрузите файл с URL</div>
                             </div>
-                            <div class="col-md-6">
-                                <strong>Результат:</strong>
-                                <div class="code-example">
-                                    <div>ID: 12345</div>
-                                    <div>Финальный URL: https://shop.example.com/product/12345</div>
-                                    <div>Редиректов: 2 | Статус: OK | Стратегия: curl</div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-cogs"></i>
                                 </div>
+                                <div class="info-section__process-title">Настройка</div>
+                                <div class="info-section__process-description">Колонки и параметры</div>
+                            </div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-route"></i>
+                                </div>
+                                <div class="info-section__process-title">Обработка</div>
+                                <div class="info-section__process-description">Следование по редиректам</div>
+                            </div>
+                            <div class="info-section__process-step">
+                                <div class="info-section__process-icon">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <div class="info-section__process-title">Результат</div>
+                                <div class="info-section__process-description">Финальные URL</div>
                             </div>
                         </div>
                     </div>
                 </section>
-            </div>
-        </div>
 
-        <!-- Важные замечания -->
-        <div class="row mt-4">
-            <div class="col-lg-8 mx-auto">
-                <section class="info-section info-section--warnings">
-                    <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-exclamation-triangle"></i>
-                        <span>Важно знать</span>
-                    </h3>
-                    <div class="info-section__body">
-                        <ul class="list-with-icons">
-                            <li class="list-item--warning">Обработка большого количества URL может занять значительное время</li>
-                            <li class="list-item--warning">Некоторые сайты могут блокировать автоматические запросы</li>
-                            <li>Для заблокированных URL автоматически используется браузерная стратегия</li>
-                            <li>В результате указывается какая стратегия была использована</li>
-                        </ul>
-                    </div>
-                </section>
+                <!-- Стратегии защиты -->
+                <div class="mt-3">
+                    <section class="info-section info-section--description">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-shield-alt"></i>
+                            <span>Антибот стратегии</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="badge bg-success strategy-badge">
+                                    <i class="fas fa-terminal"></i>
+                                    <span>cURL</span>
+                                    <small> - основная</small>
+                                </span>
+                                <span class="badge bg-primary strategy-badge">
+                                    <i class="fas fa-browser"></i>
+                                    <span>Playwright</span>
+                                    <small> - обход</small>
+                                </span>
+                                <span class="badge bg-secondary strategy-badge">
+                                    <i class="fas fa-code"></i>
+                                    <span>HttpClient</span>
+                                    <small> - резерв</small>
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Пример обработки -->
+                <div class="mt-3">
+                    <section class="info-section info-section--examples">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-lightbulb"></i>
+                            <span>Пример обработки</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <strong>Исходные данные:</strong>
+                                    <div class="code-example small">
+                                        ID: 12345<br>
+                                        URL: https://short.ly/abc123<br>
+                                        Модель: Товар А
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <strong>Результат:</strong>
+                                    <div class="code-example small">
+                                        ID: 12345<br>
+                                        Финальный URL: https://shop.example.com/product/12345<br>
+                                        Редиректов: 2 | Статус: OK | Стратегия: curl
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Важные замечания -->
+                <div class="mt-3">
+                    <section class="info-section info-section--warnings">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-exclamation-triangle"></i>
+                            <span>Важно знать</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ul class="list-with-icons">
+                                <li class="list-item--warning">Обработка может занять много времени</li>
+                                <li class="list-item--warning">Некоторые сайты блокируют запросы</li>
+                                <li>Автоматическое переключение стратегий</li>
+                                <li>Указание использованной стратегии</li>
+                            </ul>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
     </div>
