@@ -13,6 +13,7 @@
 </head>
 
 <th:block th:fragment="styles">
+    <link th:href="@{/css/info-sections.css}" rel="stylesheet">
     <style>
         .column-select {
             border-radius: 8px;
@@ -51,6 +52,56 @@
             background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
             color: white;
         }
+        .sidebar-info {
+            position: sticky;
+            top: 20px;
+        }
+        .preview-section {
+            border: 2px dashed #dee2e6;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+        .preview-section:hover {
+            border-color: #007bff;
+            box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+        }
+        .preview-section.show {
+            border-style: solid;
+            border-color: #007bff;
+            background: white;
+            box-shadow: 0 6px 20px rgba(0, 123, 255, 0.2);
+        }
+        .preview-header {
+            cursor: pointer;
+            padding: 1rem 1.5rem;
+            user-select: none;
+            border-radius: 12px 12px 0 0;
+        }
+        .preview-header:hover {
+            background: rgba(0, 123, 255, 0.05);
+        }
+
+        /* Иконки типов данных */
+        .data-type-icons {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+        .data-type-item {
+            text-align: center;
+            flex: 1;
+        }
+        .data-type-item i {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        .data-type-item small {
+            font-size: 0.8rem;
+            color: #6c757d;
+            display: block;
+        }
     </style>
 </th:block>
 
@@ -69,238 +120,245 @@
 
 <th:block th:fragment="content">
     <div class="container-fluid">
-        
-        <!-- Описание шага -->
-        <div class="row mb-4">
-            <div class="col-12">
+        <div class="row">
+            <!-- Основной контент -->
+            <div class="col-lg-8 col-md-7">
+
+                <!-- Описание шага -->
                 <section class="info-section info-section--description">
                     <h3 class="info-section__title">
                         <i class="info-section__icon fas fa-cogs"></i>
                         <span>Шаг 2: Настройка колонок для сопоставления штрихкодов</span>
                     </h3>
                     <div class="info-section__body">
-                        <div class="row">
-                            <div class="col-md-8">
-                                <p class="mb-2">Укажите, в каких колонках находятся ID, штрихкоды и URL для сопоставления.</p>
-                                <p class="mb-3">При выборе колонок они будут подсвечены в предварительном просмотре.</p>
-                                <div class="d-flex flex-wrap gap-3">
-                                    <div class="text-center">
-                                        <i class="fas fa-id-card fa-2x text-info mb-2"></i>
-                                        <div><small>ID исходных записей</small></div>
-                                    </div>
-                                    <div class="text-center">
-                                        <i class="fas fa-barcode fa-2x text-warning mb-2"></i>
-                                        <div><small>Штрихкоды</small></div>
-                                    </div>
-                                    <div class="text-center">
-                                        <i class="fas fa-link fa-2x text-success mb-2"></i>
-                                        <div><small>URL для сопоставления</small></div>
-                                    </div>
-                                </div>
+                        <p>Укажите, в каких колонках находятся ID, штрихкоды и URL для сопоставления.</p>
+                        <p>При выборе колонок они будут подсвечены в предварительном просмотре.</p>
+                        <div class="data-type-icons">
+                            <div class="data-type-item">
+                                <i class="fas fa-id-card text-info"></i>
+                                <small>ID исходных записей</small>
                             </div>
-                            <div class="col-md-4">
-                                <div class="bg-light p-3 rounded">
-                                    <h6 class="text-muted mb-3">Информация о файле:</h6>
-                                    <ul class="list-with-icons mb-0">
-                                        <li><i class="fas fa-file text-primary"></i> <span th:text="${fileMetadata.filename}">filename.xlsx</span></li>
-                                        <li><i class="fas fa-list text-info"></i> Строк: <span th:text="${#lists.size(fileMetadata.sampleData)}">0</span></li>
-                                        <li><i class="fas fa-columns text-success"></i> Колонок: <span th:text="${#lists.size(fileMetadata.columnHeaders)}">0</span></li>
-                                    </ul>
-                                </div>
+                            <div class="data-type-item">
+                                <i class="fas fa-barcode text-warning"></i>
+                                <small>Штрихкоды</small>
+                            </div>
+                            <div class="data-type-item">
+                                <i class="fas fa-link text-success"></i>
+                                <small>URL для сопоставления</small>
                             </div>
                         </div>
                     </div>
                 </section>
-            </div>
-        </div>
 
-        <div class="row">
-            <!-- Форма настройки -->
-            <div class="col-md-4">
-                <section class="info-section info-section--requirements">
-                    <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-file-alt"></i>
-                        <span>Выбор колонок</span>
-                    </h3>
-                    <div class="info-section__body">
-                        <form method="post" action="/utils/barcode-match/process" th:object="${barcodeMatchDto}">
-                            <div class="mb-3">
-                                <label for="sourceIdColumn" class="form-label">
-                                    <i class="fas fa-id-card text-info"></i> Колонка исходного ID
-                                </label>
-                                <select class="form-select column-select" 
-                                        id="sourceIdColumn" 
-                                        name="sourceIdColumn" 
-                                        th:field="*{sourceIdColumn}" 
-                                        required>
-                                    <option value="">Выберите колонку...</option>
-                                    <option th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
-                                            th:value="${iterStat.index}" 
-                                            th:text="${iterStat.index + 1} + '. ' + ${header}">
-                                        1. Column Name
-                                    </option>
-                                </select>
-                                <small class="form-text text-muted">ID исходных записей</small>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="sourceBarcodesColumn" class="form-label">
-                                    <i class="fas fa-barcode text-warning"></i> Колонка исходных штрихкодов
-                                </label>
-                                <select class="form-select column-select" 
-                                        id="sourceBarcodesColumn" 
-                                        name="sourceBarcodesColumn" 
-                                        th:field="*{sourceBarcodesColumn}" 
-                                        required>
-                                    <option value="">Выберите колонку...</option>
-                                    <option th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
-                                            th:value="${iterStat.index}" 
-                                            th:text="${iterStat.index + 1} + '. ' + ${header}">
-                                        1. Column Name
-                                    </option>
-                                </select>
-                                <small class="form-text text-muted">Штрихкоды для поиска совпадений</small>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="lookupBarcodesColumn" class="form-label">
-                                    <i class="fas fa-search text-primary"></i> Колонка справочных штрихкодов
-                                </label>
-                                <select class="form-select column-select" 
-                                        id="lookupBarcodesColumn" 
-                                        name="lookupBarcodesColumn" 
-                                        th:field="*{lookupBarcodesColumn}" 
-                                        required>
-                                    <option value="">Выберите колонку...</option>
-                                    <option th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
-                                            th:value="${iterStat.index}" 
-                                            th:text="${iterStat.index + 1} + '. ' + ${header}">
-                                        1. Column Name
-                                    </option>
-                                </select>
-                                <small class="form-text text-muted">Справочные штрихкоды для сопоставления</small>
-                            </div>
-
-                            <div class="mb-4">
-                                <label for="lookupUrlColumn" class="form-label">
-                                    <i class="fas fa-link text-success"></i> Колонка справочных URL
-                                </label>
-                                <select class="form-select column-select" 
-                                        id="lookupUrlColumn" 
-                                        name="lookupUrlColumn" 
-                                        th:field="*{lookupUrlColumn}" 
-                                        required>
-                                    <option value="">Выберите колонку...</option>
-                                    <option th:each="header, iterStat : ${fileMetadata.columnHeaders}" 
-                                            th:value="${iterStat.index}" 
-                                            th:text="${iterStat.index + 1} + '. ' + ${header}">
-                                        1. Column Name
-                                    </option>
-                                </select>
-                                <small class="form-text text-muted">URL соответствующие справочным ШК</small>
-                            </div>
-
-                            <!-- Настройки формата вывода -->
-                            <div class="card mb-4">
-                                <div class="card-header">
-                                    <h6 class="mb-0">
-                                        <i class="fas fa-file-export text-secondary"></i>
-                                        Формат результата
-                                    </h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-4">
-                                            <label for="outputFormat" class="form-label">Формат файла</label>
-                                            <select class="form-select" id="outputFormat" name="outputFormat" th:field="*{outputFormat}">
-                                                <option value="csv">CSV (UTF-8)</option>
-                                                <option value="excel">Excel (.xlsx)</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-4" id="csvDelimiterDiv">
-                                            <label for="csvDelimiter" class="form-label">Разделитель</label>
-                                            <select class="form-select" id="csvDelimiter" name="csvDelimiter" th:field="*{csvDelimiter}">
-                                                <option value=";">Точка с запятой (;)</option>
-                                                <option value=",">Запятая (,)</option>
-                                                <option value="|">Вертикальная черта (|)</option>
-                                                <option value="	">Табуляция</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-4" id="csvEncodingDiv">
-                                            <label for="csvEncoding" class="form-label">Кодировка</label>
-                                            <select class="form-select" id="csvEncoding" name="csvEncoding" th:field="*{csvEncoding}">
-                                                <option value="UTF-8">UTF-8</option>
-                                                <option value="Windows-1251">Windows-1251</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-success" id="processBtn" disabled>
-                                    <i class="fas fa-play"></i> Обработать и скачать
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </section>
-
-                <!-- Информация о процессе -->
-                <section class="info-section info-section--instructions mt-3">
-                    <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-list-ol"></i>
-                        <span>Что произойдет</span>
-                    </h3>
-                    <div class="info-section__body">
-                        <ul class="list-with-icons mb-0">
-                            <li><i class="fas fa-database text-success"></i> Извлечение данных из выбранных колонок</li>
-                            <li><i class="fas fa-check-circle text-success"></i> Валидация штрихкодов (13 символов)</li>
-                            <li><i class="fas fa-cut text-info"></i> Разделение множественных ШК</li>
-                            <li><i class="fas fa-file-excel text-success"></i> Создание файла с результатами</li>
-                            <li><i class="fas fa-download text-primary"></i> Автоматическое скачивание</li>
-                        </ul>
-                    </div>
-                </section>
-            </div>
-
-            <!-- Предварительный просмотр файла -->
-            <div class="col-md-8">
-                <section class="info-section info-section--examples">
-                    <h3 class="info-section__title">
-                        <i class="info-section__icon fas fa-eye"></i>
-                        <span>Предварительный просмотр файла</span>
-                        <small class="text-muted ms-2">
-                            Показано первых <span th:text="${#lists.size(fileMetadata.sampleData) > 10 ? 10 : #lists.size(fileMetadata.sampleData)}">10</span>
-                            из <span th:text="${#lists.size(fileMetadata.sampleData)}">0</span> строк
-                        </small>
-                    </h3>
-                    <div class="info-section__body p-0">
-                        <div class="file-preview">
-                            <table class="table table-sm preview-table mb-0">
-                                <thead>
-                                    <tr>
-                                        <th scope="col" 
-                                            th:each="header, iterStat : ${fileMetadata.columnHeaders}"
-                                            th:id="'header-' + ${iterStat.index}"
-                                            th:text="${iterStat.index + 1} + '. ' + ${header}">
+                <form method="post" action="/utils/barcode-match/process" th:object="${barcodeMatchDto}">
+                    <!-- Селекторы колонок -->
+                    <section class="info-section info-section--description">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-columns"></i>
+                            <span>Выбор колонок</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <div class="row">
+                                <div class="col-lg-6 col-md-6 mb-3">
+                                    <label for="sourceIdColumn" class="form-label">
+                                        <i class="fas fa-id-card text-info"></i> Колонка исходного ID
+                                    </label>
+                                    <select class="form-select column-select"
+                                            id="sourceIdColumn"
+                                            name="sourceIdColumn"
+                                            th:field="*{sourceIdColumn}"
+                                            required>
+                                        <option value="">Выберите колонку...</option>
+                                        <option th:each="header, iterStat : ${fileMetadata.columnHeaders}"
+                                                th:value="${iterStat.index}"
+                                                th:text="${iterStat.index + 1} + '. ' + ${header}">
                                             1. Column Name
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr th:each="row, rowStat : ${fileMetadata.sampleData}" th:if="${rowStat.index < 10}">
-                                        <td th:each="cell, cellStat : ${row}"
-                                            th:id="'cell-' + ${rowStat.index} + '-' + ${cellStat.index}"
-                                            th:text="${cell}">
-                                            Cell content
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                                        </option>
+                                    </select>
+                                    <small class="form-text text-muted">ID исходных записей</small>
+                                </div>
+
+                                <div class="col-lg-6 col-md-6 mb-3">
+                                    <label for="sourceBarcodesColumn" class="form-label">
+                                        <i class="fas fa-barcode text-warning"></i> Колонка исходных штрихкодов
+                                    </label>
+                                    <select class="form-select column-select"
+                                            id="sourceBarcodesColumn"
+                                            name="sourceBarcodesColumn"
+                                            th:field="*{sourceBarcodesColumn}"
+                                            required>
+                                        <option value="">Выберите колонку...</option>
+                                        <option th:each="header, iterStat : ${fileMetadata.columnHeaders}"
+                                                th:value="${iterStat.index}"
+                                                th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                            1. Column Name
+                                        </option>
+                                    </select>
+                                    <small class="form-text text-muted">Штрихкоды для поиска совпадений</small>
+                                </div>
+
+                                <div class="col-lg-6 col-md-6 mb-3">
+                                    <label for="lookupBarcodesColumn" class="form-label">
+                                        <i class="fas fa-search text-primary"></i> Колонка справочных штрихкодов
+                                    </label>
+                                    <select class="form-select column-select"
+                                            id="lookupBarcodesColumn"
+                                            name="lookupBarcodesColumn"
+                                            th:field="*{lookupBarcodesColumn}"
+                                            required>
+                                        <option value="">Выберите колонку...</option>
+                                        <option th:each="header, iterStat : ${fileMetadata.columnHeaders}"
+                                                th:value="${iterStat.index}"
+                                                th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                            1. Column Name
+                                        </option>
+                                    </select>
+                                    <small class="form-text text-muted">Справочные штрихкоды для сопоставления</small>
+                                </div>
+
+                                <div class="col-lg-6 col-md-6 mb-3">
+                                    <label for="lookupUrlColumn" class="form-label">
+                                        <i class="fas fa-link text-success"></i> Колонка справочных URL
+                                    </label>
+                                    <select class="form-select column-select"
+                                            id="lookupUrlColumn"
+                                            name="lookupUrlColumn"
+                                            th:field="*{lookupUrlColumn}"
+                                            required>
+                                        <option value="">Выберите колонку...</option>
+                                        <option th:each="header, iterStat : ${fileMetadata.columnHeaders}"
+                                                th:value="${iterStat.index}"
+                                                th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                            1. Column Name
+                                        </option>
+                                    </select>
+                                    <small class="form-text text-muted">URL соответствующие справочным ШК</small>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Предварительный просмотр файла -->
+                    <div class="preview-section mb-4" id="previewSection">
+                        <div class="preview-header" data-bs-toggle="collapse" data-bs-target="#filePreviewCollapse">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div>
+                                    <i class="fas fa-eye text-primary me-2"></i>
+                                    <strong>Предварительный просмотр файла</strong>
+                                    <small class="text-muted ms-2">
+                                        (Показано первых <span th:text="${#lists.size(fileMetadata.sampleData) > 10 ? 10 : #lists.size(fileMetadata.sampleData)}">10</span>
+                                        из <span th:text="${#lists.size(fileMetadata.sampleData)}">0</span> строк)
+                                    </small>
+                                </div>
+                                <i class="fas fa-chevron-down" id="previewToggleIcon"></i>
+                            </div>
+                        </div>
+                        <div class="collapse" id="filePreviewCollapse">
+                            <div class="p-3">
+                                <div class="file-preview">
+                                    <table class="table table-sm preview-table mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col"
+                                                    th:each="header, iterStat : ${fileMetadata.columnHeaders}"
+                                                    th:id="'header-' + ${iterStat.index}"
+                                                    th:text="${iterStat.index + 1} + '. ' + ${header}">
+                                                    1. Column Name
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr th:each="row, rowStat : ${fileMetadata.sampleData}" th:if="${rowStat.index < 10}">
+                                                <td th:each="cell, cellStat : ${row}"
+                                                    th:id="'cell-' + ${rowStat.index} + '-' + ${cellStat.index}"
+                                                    th:text="${cell}">
+                                                    Cell content
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </section>
+
+                    <!-- Настройки формата вывода -->
+                    <section class="info-section info-section--description">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-file-export"></i>
+                            <span>Формат результата</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <div class="row">
+                                <div class="col-lg-3 col-md-4 mb-3">
+                                    <label for="outputFormat" class="form-label">Формат файла</label>
+                                    <select class="form-select" id="outputFormat" name="outputFormat" th:field="*{outputFormat}">
+                                        <option value="csv">CSV (UTF-8)</option>
+                                        <option value="excel">Excel (.xlsx)</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-3 col-md-4 mb-3" id="csvDelimiterDiv">
+                                    <label for="csvDelimiter" class="form-label">Разделитель</label>
+                                    <select class="form-select" id="csvDelimiter" name="csvDelimiter" th:field="*{csvDelimiter}">
+                                        <option value=";">Точка с запятой (;)</option>
+                                        <option value=",">Запятая (,)</option>
+                                        <option value="|">Вертикальная черта (|)</option>
+                                        <option value="	">Табуляция</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-3 col-md-4 mb-3" id="csvEncodingDiv">
+                                    <label for="csvEncoding" class="form-label">Кодировка</label>
+                                    <select class="form-select" id="csvEncoding" name="csvEncoding" th:field="*{csvEncoding}">
+                                        <option value="UTF-8">UTF-8</option>
+                                        <option value="Windows-1251">Windows-1251</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-3 col-md-12 d-flex align-items-end mb-3">
+                                    <button type="submit" class="btn btn-success btn-lg w-100" id="processBtn" disabled>
+                                        <i class="fas fa-play"></i> Обработать
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </form>
+
+            </div>
+
+            <!-- Боковая панель справа -->
+            <div class="col-lg-4 col-md-5">
+                <div class="sidebar-info">
+                    <!-- Информация о файле -->
+                    <section class="info-section info-section--description">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-file"></i>
+                            <span>Информация о файле</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ul class="list-with-icons mb-0">
+                                <li><i class="fas fa-file-alt text-primary"></i> <span th:text="${fileMetadata.filename}">filename.xlsx</span></li>
+                                <li><i class="fas fa-columns text-success"></i> Колонок: <span th:text="${fileMetadata.totalColumns}">0</span></li>
+                            </ul>
+                        </div>
+                    </section>
+
+                    <!-- Информация о процессе -->
+                    <section class="info-section info-section--instructions">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-list-ol"></i>
+                            <span>Что произойдет</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ul class="list-with-icons mb-0">
+                                <li><i class="fas fa-database text-success"></i> Извлечение данных из выбранных колонок</li>
+                                <li><i class="fas fa-check-circle text-success"></i> Валидация штрихкодов (13 символов)</li>
+                                <li><i class="fas fa-cut text-info"></i> Разделение множественных ШК</li>
+                                <li><i class="fas fa-file-excel text-success"></i> Создание файла с результатами</li>
+                                <li><i class="fas fa-download text-primary"></i> Автоматическое скачивание</li>
+                            </ul>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
     </div>
@@ -411,6 +469,25 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 3000);
     }
     
+    // Анимация иконки и стилей при открытии/закрытии предварительного просмотра
+    const filePreviewCollapse = document.getElementById('filePreviewCollapse');
+    const previewToggleIcon = document.getElementById('previewToggleIcon');
+    const previewSection = document.getElementById('previewSection');
+
+    if (filePreviewCollapse && previewToggleIcon && previewSection) {
+        filePreviewCollapse.addEventListener('show.bs.collapse', function() {
+            previewToggleIcon.classList.remove('fa-chevron-down');
+            previewToggleIcon.classList.add('fa-chevron-up');
+            previewSection.classList.add('show');
+        });
+
+        filePreviewCollapse.addEventListener('hide.bs.collapse', function() {
+            previewToggleIcon.classList.remove('fa-chevron-up');
+            previewToggleIcon.classList.add('fa-chevron-down');
+            previewSection.classList.remove('show');
+        });
+    }
+
     // Первоначальная инициализация
     toggleCsvOptions();
     validateForm();

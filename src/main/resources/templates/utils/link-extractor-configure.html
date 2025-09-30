@@ -13,6 +13,7 @@
 </head>
 
 <th:block th:fragment="styles">
+    <link th:href="@{/css/info-sections.css}" rel="stylesheet">
     <style>
         .column-selector {
             margin-bottom: 1.5rem;
@@ -85,18 +86,22 @@
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <div class="bg-light p-3 rounded">
-                                    <h6 class="text-muted mb-3">Информация о файле:</h6>
-                                    <ul class="list-with-icons mb-0">
-                                        <li><i class="fas fa-file text-primary"></i> <span th:text="${fileMetadata.filename}">имя файла</span></li>
-                                        <li><i class="fas fa-list text-info"></i> Строк: <span th:text="${fileMetadata.totalRows}">0</span></li>
-                                        <li><i class="fas fa-columns text-success"></i> Колонок: <span th:text="${fileMetadata.totalColumns}">0</span></li>
-                                    </ul>
-                                </div>
+                                <section class="info-section info-section--description info-section--compact">
+                                    <h3 class="info-section__title">
+                                        <i class="info-section__icon fas fa-file"></i>
+                                        <span>Информация о файле</span>
+                                    </h3>
+                                    <div class="info-section__body">
+                                        <ul class="list-with-icons mb-0">
+                                            <li><i class="fas fa-file text-primary"></i> <span th:text="${fileMetadata.filename}">имя файла</span></li>
+                                            <li><i class="fas fa-columns text-success"></i> Колонок: <span th:text="${fileMetadata.totalColumns}">0</span></li>
+                                        </ul>
+                                    </div>
+                                </section>
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
             </div>
         </div>
 
@@ -177,15 +182,13 @@
                 </div>
 
                 <!-- What will happen -->
-                <div class="card mt-4">
-                    <div class="card-header">
-                        <h6 class="mb-0">
-                            <i class="fas fa-info-circle text-info"></i>
-                            Что произойдет
-                        </h6>
-                    </div>
-                    <div class="card-body">
-                        <ul class="mb-0">
+                <section class="info-section info-section--instructions mt-4">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-info-circle"></i>
+                        <span>Что произойдет</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <ul class="list-with-icons mb-0">
                             <li>Поиск ссылок (http:// и https://) во всех колонках каждой строки</li>
                             <li>Исключение колонки ID из поиска</li>
                             <li>Обработка нескольких ссылок в одной ячейке</li>
@@ -194,7 +197,7 @@
                             <li>Автоматическое скачивание результата</li>
                         </ul>
                     </div>
-                </div>
+                </section>
             </div>
 
             <!-- Preview -->
@@ -206,8 +209,7 @@
                             Предварительный просмотр
                         </h5>
                         <small class="text-muted">
-                            Показано первых <span th:text="${#lists.size(fileMetadata.sampleData)}">5</span> 
-                            из <span th:text="${fileMetadata.totalRows}">5</span> строк
+                            Показано первых <span th:text="${#lists.size(fileMetadata.sampleData)}">5</span> строк
                         </small>
                     </div>
                     <div class="card-body p-0">
