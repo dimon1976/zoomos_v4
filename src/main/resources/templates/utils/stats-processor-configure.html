@@ -318,6 +318,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const processBtn = document.getElementById('processBtn');
         processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обрабатывается...';
         processBtn.disabled = true;
+
+        // Восстанавливаем кнопку после скачивания (когда форма вернёт управление)
+        setTimeout(() => {
+            processBtn.innerHTML = '<i class="fas fa-download"></i> Обработать и скачать';
+            processBtn.disabled = false;
+        }, 2000);
     });
     
     // Обработка асинхронного режима

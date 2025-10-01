@@ -35,23 +35,24 @@ public class AsyncStatsProcessorService {
     @Async("utilsTaskExecutor")
     public void processStatsAsync(FileMetadata metadata, StatsProcessDto dto, String operationId) {
         log.info("Начинаем асинхронную обработку файла статистики: {}", metadata.getOriginalFilename());
-        
+
+        Path tempFilePath = null;
         try {
             // Обрабатываем файл
             byte[] processedData = statsProcessorService.processStatsFile(metadata, dto);
-            
+
             // Генерируем имя файла с датой и временем
             String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
             String extension = "xlsx".equalsIgnoreCase(dto.getOutputFormat()) ? ".xlsx" : ".csv";
             String filename = "stats_processed_" + timestamp + extension;
-            
+
             // Сохраняем в директорию экспорта
             Path exportPath = pathResolver.getAbsoluteExportDir().resolve(filename);
             Files.createDirectories(exportPath.getParent());
             Files.write(exportPath, processedData);
-            
+
             log.info("Файл статистики успешно обработан и сохранён: {}", exportPath.toAbsolutePath());
-            
+
             // Отправляем уведомление об успешном завершении
             notificationService.sendGeneralNotification(
                 "Файл обработан успешно! " +
@@ -59,16 +60,26 @@ public class AsyncStatsProcessorService {
                 "Результат сохранён: " + filename,
                 NotificationDto.NotificationType.SUCCESS
             );
-            
+
         } catch (Exception e) {
             log.error("Ошибка при асинхронной обработке файла статистики: {}", metadata.getOriginalFilename(), e);
-            
+
             // Отправляем уведомление об ошибке
             notificationService.sendGeneralNotification(
                 "Не удалось обработать файл " + metadata.getOriginalFilename() + ". " +
                 "Ошибка: " + e.getMessage(),
                 NotificationDto.NotificationType.ERROR
             );
+        } finally {
+            // Удаляем временный файл если он был создан FileGeneratorService
+            if (tempFilePath != null && Files.exists(tempFilePath)) {
+                try {
+                    Files.delete(tempFilePath);
+                    log.debug("Удалён временный файл: {}", tempFilePath);
+                } catch (IOException e) {
+                    log.warn("Не удалось удалить временный файл: {}", tempFilePath, e);
+                }
+            }
         }
     }
 }
