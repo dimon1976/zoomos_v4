@@ -102,21 +102,35 @@
                     </div>
                 </div>
 
-                <!-- Требования к файлу - под формой -->
+                <!-- Требования и возможности - под формой -->
                 <div class="mt-4">
                     <section class="info-section info-section--requirements">
                         <h3 class="info-section__title">
-                            <i class="info-section__icon fas fa-file-alt"></i>
-                            <span>Требования к файлу</span>
+                            <i class="info-section__icon fas fa-check-circle"></i>
+                            <span>Требования и возможности</span>
                         </h3>
                         <div class="info-section__body">
-                            <ul class="list-with-icons">
-                                <li>Обязательная колонка с URL</li>
-                                <li>Колонки ID и Модель опциональны</li>
-                                <li>URL должны начинаться с http:// или https://</li>
-                                <li>Поддержка до 20 редиректов на URL</li>
-                                <li>Максимальный размер файла: 1200MB</li>
-                            </ul>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6 class="text-primary mb-2"><i class="fas fa-exclamation-circle me-1"></i>Обязательно</h6>
+                                    <ul class="list-with-icons mb-3">
+                                        <li>Колонка с URL (http:// или https://)</li>
+                                        <li>Форматы: Excel (.xlsx, .xls), CSV</li>
+                                        <li>Заголовки в первой строке</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="text-success mb-2"><i class="fas fa-star me-1"></i>Возможности</h6>
+                                    <ul class="list-with-icons mb-3">
+                                        <li>До 20 редиректов на URL</li>
+                                        <li>3 стратегии обхода блокировок</li>
+                                        <li>Опциональные колонки ID и Модель</li>
+                                        <li>Синхронный и асинхронный режим</li>
+                                        <li>Детальная статистика обработки</li>
+                                        <li>Файлы до 1200MB</li>
+                                    </ul>
+                                </div>
+                            </div>
                         </div>
                     </section>
                 </div>
@@ -131,34 +145,44 @@
                         <span>Как это работает</span>
                     </h3>
                     <div class="info-section__body">
-                        <div class="info-section__process-steps">
-                            <div class="info-section__process-step">
-                                <div class="info-section__process-icon">
-                                    <i class="fas fa-upload"></i>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">1</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Загрузите файл</h6>
+                                        <p class="text-muted small mb-0">CSV или Excel файл с колонкой URL</p>
+                                    </div>
                                 </div>
-                                <div class="info-section__process-title">Загрузка</div>
-                                <div class="info-section__process-description">Загрузите файл с URL</div>
-                            </div>
-                            <div class="info-section__process-step">
-                                <div class="info-section__process-icon">
-                                    <i class="fas fa-cogs"></i>
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">2</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Настройте колонки</h6>
+                                        <p class="text-muted small mb-0">укажите столбцы URL, ID, модель и параметры обработки</p>
+                                    </div>
                                 </div>
-                                <div class="info-section__process-title">Настройка</div>
-                                <div class="info-section__process-description">Колонки и параметры</div>
-                            </div>
-                            <div class="info-section__process-step">
-                                <div class="info-section__process-icon">
-                                    <i class="fas fa-route"></i>
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">3</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Обработка редиректов</h6>
+                                        <p class="text-muted small mb-0">система следует по всем редиректам до финального URL</p>
+                                    </div>
                                 </div>
-                                <div class="info-section__process-title">Обработка</div>
-                                <div class="info-section__process-description">Следование по редиректам</div>
-                            </div>
-                            <div class="info-section__process-step">
-                                <div class="info-section__process-icon">
-                                    <i class="fas fa-download"></i>
+                                <div class="d-flex align-items-start">
+                                    <div class="bg-warning text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">4</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Получите результат</h6>
+                                        <p class="text-muted small mb-0">файл с финальными URL и статистикой</p>
+                                    </div>
                                 </div>
-                                <div class="info-section__process-title">Результат</div>
-                                <div class="info-section__process-description">Финальные URL</div>
                             </div>
                         </div>
                     </div>
