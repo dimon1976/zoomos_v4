@@ -171,8 +171,16 @@ function showNotification(message, type) {
 
 function addGroupStartClass() {
     document.querySelectorAll('.statistics-table tbody tr').forEach(tr => {
-        if (tr.querySelector('td[rowspan]')) tr.classList.add('group-start');
+        if (tr.querySelector('td[rowspan]') && !tr.classList.contains('group-start')) {
+            tr.classList.add('group-start');
+        }
     });
+}
+
+// Проверка на итоговую строку
+function isTotalSummaryRow(row) {
+    const groupCell = row.querySelector('td.total-summary-header');
+    return groupCell !== null;
 }
 
 function highlightMetrics() {
@@ -213,9 +221,15 @@ function initializeQuickFilters() {
 function calculateFilterCounts() {
     const groups = document.querySelectorAll('.statistics-table tbody tr.group-start');
     let warningCount = 0, criticalCount = 0, bothCount = 0;
-    const totalCount = groups.length;
+    let totalCount = 0;
 
     groups.forEach(groupRow => {
+        // Пропускаем итоговую строку при подсчете
+        if (isTotalSummaryRow(groupRow)) {
+            return;
+        }
+
+        totalCount++;
         const groupMetrics = getGroupMetrics(groupRow);
         const hasOnlyWarning = hasOnlyWarningDeviations(groupMetrics);
         const hasCritical = hasCriticalDeviations(groupMetrics);
@@ -346,6 +360,11 @@ function filterGroups(filterType) {
 }
 
 function toggleGroupVisibility(groupStartRow, shouldShow) {
+    // Итоговая строка всегда видима
+    if (isTotalSummaryRow(groupStartRow)) {
+        return;
+    }
+
     let currentRow = groupStartRow;
 
     // Скрываем/показываем все строки, принадлежащие этой группе

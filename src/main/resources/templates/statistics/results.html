@@ -182,6 +182,55 @@
         .date-mod-normal { background-color: var(--bs-gray-100) !important; color: #6c757d; }
         .date-mod-warning { background-color: var(--bs-warning-bg) !important; color: var(--bs-warning-text); }
         .date-mod-critical { background-color: var(--bs-danger-bg) !important; color: var(--bs-danger-text); }
+
+        /* Итоговая строка "ОБЩЕЕ КОЛИЧЕСТВО" */
+        .total-summary-row {
+            background-color: #fff3cd !important;
+            font-weight: 600;
+            border-top: 3px solid #ffc107 !important;
+            border-bottom: 3px solid #ffc107 !important;
+        }
+
+        .total-summary-header {
+            background-color: #ffc107 !important;
+            font-size: 1.1rem;
+            color: #000 !important;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-right: 3px solid #e0a800 !important;
+            padding: 12px !important;
+        }
+
+        .total-summary-row td {
+            background-color: #fff9e6 !important;
+            color: #000 !important;
+            border-color: #ffe69c !important;
+            padding: 10px !important;
+        }
+
+        .total-summary-row td:nth-child(2) {
+            background-color: #ffecb3 !important;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        /* Подсветка значений для итоговой строки */
+        .total-summary-row .metric-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #000 !important;
+        }
+
+        .total-summary-row .metric-change {
+            color: #000 !important;
+            font-weight: 600;
+        }
+
+        /* Отступ между итоговой строкой и остальными группами */
+        .statistics-table tbody tr.total-summary-row ~ tr:first-of-type td {
+            border-top: 15px solid transparent !important;
+        }
     </style>
 </head>
 <body>
@@ -359,8 +408,59 @@
             </tr>
             </thead>
             <tbody>
+            <!-- Итоговая строка "ОБЩЕЕ КОЛИЧЕСТВО" (первый элемент, если это итог) -->
+            <th:block th:if="${!#lists.isEmpty(comparison) and comparison[0].groupFieldValue == 'ОБЩЕЕ КОЛИЧЕСТВО'}">
+                <th:block th:with="totalGroup=${comparison[0]}, metricsMap=${totalGroup.operations[0].metrics}">
+                    <tr th:each="metric, iterStat : ${metricsMap}"
+                        th:class="${iterStat.first ? 'total-summary-row group-start' : 'total-summary-row'}">
+
+                        <td th:if="${iterStat.first}"
+                            th:rowspan="${metricsMap.size()}"
+                            class="total-summary-header"
+                            th:text="${totalGroup.groupFieldValue}">ОБЩЕЕ КОЛИЧЕСТВО</td>
+
+                        <!-- Название метрики -->
+                        <td class="fw-bold" th:text="${metric.key}">metricName</td>
+
+                        <!-- Значения метрик по операциям -->
+                        <td th:each="colOperation : ${comparison[0].operations}">
+                            <!-- Находим соответствующую операцию текущей группы -->
+                            <th:block th:each="groupOp : ${totalGroup.operations}">
+                                <th:block th:if="${groupOp.exportSessionId == colOperation.exportSessionId}">
+                                    <th:block th:with="metricValue=${groupOp.metrics[metric.key]}">
+                                        <div th:class="${metricValue == null ? 'metric-stable' :
+                                            (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-increase-warning'  :
+                                            (metricValue.changeType.name() == 'UP'   && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-increase-critical' :
+                                            (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'WARNING')  ? 'metric-decrease-warning'  :
+                                            (metricValue.changeType.name() == 'DOWN' && metricValue.alertLevel.name() == 'CRITICAL') ? 'metric-decrease-critical' :
+                                            'metric-stable'}">
+
+                                            <div class="metric-value"
+                                                 th:text="${metricValue != null ? metricValue.currentValue : '-'}">-
+                                            </div>
+
+                                            <div th:if="${metricValue != null and metricValue.previousValue != null}"
+                                                 class="metric-change">
+                                                <span th:attr="data-change=${metricValue.changePercentage}"
+                                                      th:classappend="${'change-' + metricValue.changeType.name().toLowerCase()}">
+                                                    <i th:class="${metricValue.changeType.name() == 'UP' ? 'fas fa-arrow-up' :
+                                                                   metricValue.changeType.name() == 'DOWN' ? 'fas fa-arrow-down' :
+                                                                   'fas fa-minus'}"></i>
+                                                    <span th:text="${#strings.concat(#numbers.formatDecimal(T(java.lang.Math).abs(metricValue.changePercentage), 1, 1), '%')}">0.0%</span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </th:block>
+                                </th:block>
+                            </th:block>
+                        </td>
+                    </tr>
+                </th:block>
+            </th:block>
+
+            <!-- Обычные группы (пропускаем первый элемент если это "ОБЩЕЕ КОЛИЧЕСТВО") -->
             <th:block th:each="group : ${comparison}">
-                <th:block th:if="${!#lists.isEmpty(group.operations)}">
+                <th:block th:if="${group.groupFieldValue != 'ОБЩЕЕ КОЛИЧЕСТВО' and !#lists.isEmpty(group.operations)}">
                     <th:block th:with="metricsMap=${group.operations[0].metrics}">
                         <!-- Итерируемся по метрикам -->
                         <tr th:each="metric, iterStat : ${metricsMap}">
