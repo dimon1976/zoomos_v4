@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Поиск финальных ссылок',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Поиск финальных ссылок',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Поиск финальных ссылок</title>
+</head>
+
+<th:block th:fragment="styles">
+    <link th:href="@{/css/upload.css}" rel="stylesheet">
+    <link th:href="@{/css/info-sections.css}" rel="stylesheet">
+    <style>
+        .strategy-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            border-radius: 0.25rem;
+            margin: 0.125rem;
+        }
+        .strategy-curl { background-color: #28a745; color: white; }
+        .strategy-playwright { background-color: #007bff; color: white; }
+        .strategy-httpclient { background-color: #6c757d; color: white; }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> К утилитам
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+
+        <!-- ГЛАВНОЕ ОПИСАНИЕ УТИЛИТЫ -->
+        <th:block th:replace="~{fragments/info-sections :: description(
+            'Поиск финальных ссылок после редиректов',
+            'Утилита следует по HTTP редиректам и определяет финальные URL с защитой от антиботных систем. Использует многоуровневую систему стратегий для обхода блокировок.',
+            'large',
+            true
+        )}"></th:block>
+
+        <!-- ПРОЦЕСС РАБОТЫ -->
+        <th:block th:replace="~{fragments/info-sections :: howItWorks(
+            'Как это работает',
+            ${T(java.util.List).of(
+                T(java.util.Map).of('icon', 'fas fa-upload', 'title', 'Загрузка', 'description', 'Загрузите файл с URL для обработки'),
+                T(java.util.Map).of('icon', 'fas fa-cogs', 'title', 'Настройка', 'description', 'Выберите колонки и параметры обработки'),
+                T(java.util.Map).of('icon', 'fas fa-route', 'title', 'Обработка', 'description', 'Автоматическое следование по редиректам'),
+                T(java.util.Map).of('icon', 'fas fa-download', 'title', 'Результат', 'description', 'Файл с финальными URL и статистикой')
+            )}
+        )}"></th:block>
+
+        <!-- СТРАТЕГИИ ЗАЩИТЫ -->
+        <th:block th:replace="~{fragments/info-sections :: strategies(
+            'Стратегии защиты от антибот систем',
+            ${T(java.util.List).of(
+                T(java.util.Map).of('name', 'cURL - основная стратегия', 'icon', 'fas fa-terminal', 'badgeClass', 'bg-success', 'description', 'максимальная совместимость'),
+                T(java.util.Map).of('name', 'Playwright - обход блокировок', 'icon', 'fas fa-browser', 'badgeClass', 'bg-primary', 'description', 'для сложных сайтов'),
+                T(java.util.Map).of('name', 'HttpClient - резервная', 'icon', 'fas fa-code', 'badgeClass', 'bg-secondary', 'description', 'базовый fallback')
+            )}
+        )}"></th:block>
+
+        <!-- ФОРМА ЗАГРУЗКИ -->
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">
+                            <i class="fas fa-file-upload text-primary"></i>
+                            Шаг 1: Загрузка файла
+                        </h5>
+
+                        <form id="redirectForm" th:action="@{/utils/redirect-finder/upload}" method="post" enctype="multipart/form-data">
+                            <!-- Унифицированная зона загрузки -->
+                            <div class="upload-zone" id="redirectFinderZone">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                <h5>Выберите файл с URL для обработки</h5>
+                                <p class="text-muted">Поддерживаются форматы: Excel (.xlsx, .xls), CSV (.csv)</p>
+
+                                <input type="file"
+                                       id="redirectFinderInput"
+                                       name="file"
+                                       accept=".csv,.xlsx,.xls"
+                                       class="d-none upload-input"
+                                       required>
+
+                                <button type="button"
+                                        id="redirectFinderBtn"
+                                        class="btn btn-primary mt-3 select-files-btn">
+                                    <i class="fas fa-folder-open me-1"></i>
+                                    Выбрать файл
+                                </button>
+                            </div>
+
+                            <!-- Область предпросмотра файлов -->
+                            <div id="redirectFinderPreview" class="file-preview-container mt-3"></div>
+
+                            <div class="d-grid gap-2 mt-4">
+                                <button type="submit" id="uploadBtn" class="btn btn-danger btn-lg" disabled>
+                                    <i class="fas fa-upload"></i> Загрузить и проанализировать
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ТРЕБОВАНИЯ К ФАЙЛУ -->
+        <div class="row mt-4">
+            <div class="col-lg-8 mx-auto">
+                <th:block th:replace="~{fragments/info-sections :: fileRequirements(
+                    ${T(java.util.Map).of(
+                        'structure', T(java.util.List).of('Файл должен содержать колонку с URL (обязательно)', 'Колонки ID и Модель опциональны', 'URL должны начинаться с http:// или https://'),
+                        'format', T(java.util.List).of('Поддерживается до 20 редиректов на URL', 'Максимальный размер файла: 1200MB'),
+                        'output', T(java.util.List).of('CSV или Excel файл с результатами', 'Добавляются колонки: финальный URL, количество редиректов, статус, стратегия')
+                    )}
+                )}"></th:block>
+            </div>
+        </div>
+
+        <!-- ПРИМЕР ОБРАБОТКИ -->
+        <div class="row mt-4">
+            <div class="col-lg-8 mx-auto">
+                <th:block th:replace="~{fragments/info-sections :: dataExample(
+                    'Пример обработки',
+                    ${T(java.util.List).of(
+                        'ID: 12345',
+                        'URL: https://short.ly/abc123',
+                        'Модель: Товар А'
+                    )},
+                    ${T(java.util.List).of(
+                        'ID: 12345',
+                        'Финальный URL: https://shop.example.com/product/12345',
+                        'Редиректов: 2 | Статус: OK | Стратегия: curl'
+                    )}
+                )}"></th:block>
+            </div>
+        </div>
+
+        <!-- ВАЖНЫЕ ЗАМЕЧАНИЯ -->
+        <div class="row mt-4">
+            <div class="col-lg-8 mx-auto">
+                <th:block th:replace="~{fragments/info-sections :: importantNotes(
+                    ${T(java.util.List).of(
+                        T(java.util.Map).of('text', 'Обработка большого количества URL может занять значительное время', 'type', 'warning'),
+                        T(java.util.Map).of('text', 'Некоторые сайты могут блокировать автоматические запросы', 'type', 'warning'),
+                        T(java.util.Map).of('text', 'Для заблокированных URL автоматически используется браузерная стратегия', 'type', 'info'),
+                        T(java.util.Map).of('text', 'В результате указывается какая стратегия была использована', 'type', 'info')
+                    )}
+                )}"></th:block>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script th:src="@{/js/upload.js}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadBtn = document.getElementById('uploadBtn');
+
+    // Инициализация UploadManager
+    const config = {
+        zoneId: 'redirectFinderZone',
+        inputId: 'redirectFinderInput',
+        previewId: 'redirectFinderPreview',
+        buttonId: 'redirectFinderBtn',
+        allowedTypes: ['.csv', '.xlsx', '.xls'],
+        maxFileSize: 600 * 1024 * 1024, // 600MB
+        multiple: false,
+        showFileSize: true,
+        showFileType: true,
+        onFileSelect: function(files) {
+            if (files.length > 0) {
+                uploadBtn.disabled = false;
+            }
+        },
+        onFileRemove: function() {
+            uploadBtn.disabled = true;
+        }
+    };
+
+    const uploadManager = new UploadManager(config);
+
+    // Обработка отправки формы
+    document.getElementById('redirectForm').addEventListener('submit', function(e) {
+        const files = uploadManager.getSelectedFiles();
+        if (!files.length) {
+            e.preventDefault();
+            uploadManager.showError('Выберите файл для загрузки');
+            return;
+        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ файла...';
+        uploadManager.setLoading(true);
+    });
+});
+</script>
+</th:block>
+</html>

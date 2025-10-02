@@ -52,68 +52,85 @@
         <!-- Описание системы утилит -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="fas fa-info-circle text-primary"></i>
-                            О системе утилит
-                        </h5>
-                    </div>
-                    <div class="card-body">
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-info-circle"></i>
+                        <span>Система утилит для обработки файлов</span>
+                    </h3>
+                    <div class="info-section__body">
                         <div class="row">
                             <div class="col-md-8">
-                                <p><strong>Система утилит для обработки файлов</strong></p>
-                                <p class="mb-1">Набор специализированных инструментов для работы с данными без сохранения в базу данных.</p>
-                                <p class="mb-0">Все утилиты работают по принципу: загрузил файл → настроил параметры → получил результат.</p>
+                                <p class="mb-2">Набор специализированных инструментов для работы с данными без сохранения в базу данных.</p>
+                                <p class="mb-3">Все утилиты работают по принципу: <strong>загрузил файл → настроил параметры → получил результат</strong>.</p>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="text-center">
+                                        <i class="fas fa-file-alt fa-2x text-primary mb-2"></i>
+                                        <div><small>Поддержка CSV/Excel</small></div>
+                                    </div>
+                                    <div class="text-center">
+                                        <i class="fas fa-cog fa-2x text-success mb-2"></i>
+                                        <div><small>Гибкие настройки</small></div>
+                                    </div>
+                                    <div class="text-center">
+                                        <i class="fas fa-download fa-2x text-info mb-2"></i>
+                                        <div><small>Мгновенный результат</small></div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="col-md-4 text-end">
-                                <div class="d-flex flex-column gap-2">
-                                    <div><i class="fas fa-file-upload text-muted"></i> Загрузка до 1200MB</div>
-                                    <div><i class="fas fa-clock text-muted"></i> Обработка без сохранения</div>
-                                    <div><i class="fas fa-download text-muted"></i> Результат сразу на скачивание</div>
+                            <div class="col-md-4">
+                                <div class="bg-light p-3 rounded">
+                                    <h6 class="text-muted mb-3">Возможности системы:</h6>
+                                    <ul class="list-with-icons mb-0">
+                                        <li><i class="fas fa-upload text-success"></i> Загрузка до 1200MB</li>
+                                        <li><i class="fas fa-clock text-warning"></i> Обработка без сохранения</li>
+                                        <li><i class="fas fa-download text-primary"></i> Результат сразу на скачивание</li>
+                                        <li><i class="fas fa-shield-alt text-info"></i> Локальная обработка</li>
+                                    </ul>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
 
         <!-- Список утилит -->
         <div class="row">
             <div th:each="utility : ${utilities}" class="col-md-6 col-lg-3 mb-4">
-                <div class="card utility-card h-100" 
+                <div class="card utility-card h-100 d-flex flex-column"
                      th:classappend="${utility.status == 'disabled'} ? 'bg-light' : ''">
-                    <div class="card-body text-center">
-                        <div class="utility-icon" 
+                    <div class="card-body text-center flex-grow-1 d-flex flex-column">
+                        <div class="utility-icon mb-3"
                              th:classappend="${utility.status == 'ready'} ? 'text-success' : (${utility.status == 'development'} ? 'text-warning' : 'text-muted')">
                             <i th:class="${utility.icon}"></i>
                         </div>
-                        <h5 class="card-title" th:text="${utility.title}">Название утилиты</h5>
-                        <p class="card-text" th:text="${utility.description}">Описание утилиты</p>
-                        <div th:switch="${utility.status}">
-                            <a th:case="ready" 
-                               th:href="${utility.url}" 
-                               class="btn btn-success">
-                                <i class="fas fa-arrow-right"></i> Использовать
-                            </a>
-                            <button th:case="development" 
-                                    type="button" 
-                                    class="btn btn-warning" 
-                                    disabled>
-                                <i class="fas fa-hammer"></i> В разработке
-                            </button>
-                            <button th:case="disabled" 
-                                    type="button" 
-                                    class="btn btn-secondary" 
-                                    disabled>
-                                <i class="fas fa-ban"></i> Недоступно
-                            </button>
+                        <h5 class="card-title mb-3" th:text="${utility.title}">Название утилиты</h5>
+                        <p class="card-text flex-grow-1 mb-4" th:text="${utility.description}">Описание утилиты</p>
+                        <div class="mt-auto">
+                            <div th:switch="${utility.status}">
+                                <a th:case="ready"
+                                   th:href="${utility.url}"
+                                   class="btn btn-success btn-lg w-100">
+                                    <i class="fas fa-arrow-right"></i> Использовать
+                                </a>
+                                <button th:case="development"
+                                        type="button"
+                                        class="btn btn-warning btn-lg w-100"
+                                        disabled>
+                                    <i class="fas fa-hammer"></i> В разработке
+                                </button>
+                                <button th:case="disabled"
+                                        type="button"
+                                        class="btn btn-secondary btn-lg w-100"
+                                        disabled>
+                                    <i class="fas fa-ban"></i> Недоступно
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <div class="card-footer bg-light">
+                    <div class="card-footer bg-light text-center">
                         <small class="text-muted">
-                            <span class="status-indicator" 
+                            <span class="status-indicator"
                                   th:classappend="'status-' + ${utility.status}"></span>
                             <span th:switch="${utility.status}">
                                 <span th:case="ready">Готово к использованию</span>
@@ -129,45 +146,58 @@
         <!-- Инструкция по использованию -->
         <div class="row mt-4">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="fas fa-book text-secondary"></i>
-                            Как использовать утилиты
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-3 text-center mb-3">
-                                <div class="display-6 text-primary mb-2">1</div>
-                                <h6>Выбор утилиты</h6>
-                                <p class="small text-muted">Нажмите на нужную утилиту из списка выше</p>
-                            </div>
-                            <div class="col-md-3 text-center mb-3">
-                                <div class="display-6 text-success mb-2">2</div>
-                                <h6>Загрузка файла</h6>
-                                <p class="small text-muted">Загрузите файл для обработки (Excel, CSV)</p>
-                            </div>
-                            <div class="col-md-3 text-center mb-3">
-                                <div class="display-6 text-warning mb-2">3</div>
-                                <h6>Настройка параметров</h6>
-                                <p class="small text-muted">Выберите нужные колонки и параметры обработки</p>
-                            </div>
-                            <div class="col-md-3 text-center mb-3">
-                                <div class="display-6 text-info mb-2">4</div>
-                                <h6>Получение результата</h6>
-                                <p class="small text-muted">Скачайте готовый файл с результатами</p>
+                <section class="info-section info-section--instructions">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-list-ol"></i>
+                        <span>Как использовать утилиты</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="info-section__process-steps">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="info-section__process-step text-center mb-3">
+                                        <div class="info-section__process-icon">
+                                            <i class="fas fa-mouse-pointer"></i>
+                                        </div>
+                                        <div class="info-section__process-title">Выбор утилиты</div>
+                                        <div class="info-section__process-description">Нажмите на нужную утилиту из списка выше</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="info-section__process-step text-center mb-3">
+                                        <div class="info-section__process-icon">
+                                            <i class="fas fa-upload"></i>
+                                        </div>
+                                        <div class="info-section__process-title">Загрузка файла</div>
+                                        <div class="info-section__process-description">Загрузите файл для обработки (Excel, CSV)</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="info-section__process-step text-center mb-3">
+                                        <div class="info-section__process-icon">
+                                            <i class="fas fa-cogs"></i>
+                                        </div>
+                                        <div class="info-section__process-title">Настройка параметров</div>
+                                        <div class="info-section__process-description">Выберите нужные колонки и параметры обработки</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="info-section__process-step text-center mb-3">
+                                        <div class="info-section__process-icon">
+                                            <i class="fas fa-download"></i>
+                                        </div>
+                                        <div class="info-section__process-title">Получение результата</div>
+                                        <div class="info-section__process-description">Скачайте готовый файл с результатами</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <hr>
-                        <div class="text-center">
-                            <small class="text-muted">
-                                <i class="fas fa-shield-alt"></i> 
-                                Все файлы обрабатываются локально и не сохраняются на сервере после завершения операции
-                            </small>
+                        <div class="mt-3 p-3 bg-light rounded text-center">
+                            <i class="fas fa-shield-alt text-success"></i>
+                            <strong>Безопасность:</strong> Все файлы обрабатываются локально и не сохраняются на сервере после завершения операции
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>

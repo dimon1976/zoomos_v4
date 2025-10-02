@@ -119,27 +119,31 @@ public class ExportStatisticsWriterService {
         // Сохраняем статистику изменений дат по группам (если есть)
         if (dateModificationsByGroup != null && !dateModificationsByGroup.isEmpty()) {
             log.debug("Сохранение статистики изменений дат по {} группам", dateModificationsByGroup.size());
-            
+
             for (Map.Entry<String, Integer> entry : dateModificationsByGroup.entrySet()) {
                 String groupValue = entry.getKey();
                 Integer modificationsCount = entry.getValue();
-                
+
                 if (modificationsCount != null && modificationsCount > 0) {
+                    // Получаем количество записей именно в этой группе
+                    List<Map<String, Object>> groupRows = groupedData.get(groupValue);
+                    long groupRecordsCount = groupRows != null ? groupRows.size() : 0L;
+
                     ExportStatistics dateModStats = ExportStatistics.builder()
                             .exportSession(session)
                             .groupFieldName(groupField)
                             .groupFieldValue(groupValue)
                             .countFieldName("DATE_MODIFICATIONS")
                             .countValue(modificationsCount.longValue())
-                            .totalRecordsCount(totalProcessedRecords != null ? totalProcessedRecords.longValue() : 0L)
+                            .totalRecordsCount(groupRecordsCount)
                             .dateModificationsCount(modificationsCount.longValue())
                             .modificationType("DATE_ADJUSTMENT")
                             .build();
-                            
+
                     statisticsToSave.add(dateModStats);
-                    
-                    log.debug("Группа '{}': сохранена статистика изменений дат - {} записей",
-                            groupValue, modificationsCount);
+
+                    log.debug("Группа '{}': сохранена статистика изменений дат - {} из {} записей",
+                            groupValue, modificationsCount, groupRecordsCount);
                 }
             }
         }

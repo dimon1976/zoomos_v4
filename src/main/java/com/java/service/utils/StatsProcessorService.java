@@ -90,7 +90,17 @@ public class StatsProcessorService {
             );
 
             // Читаем сгенерированный файл в массив байт
-            return java.nio.file.Files.readAllBytes(generatedFile);
+            byte[] fileData = java.nio.file.Files.readAllBytes(generatedFile);
+
+            // Удаляем временный файл сразу после чтения
+            try {
+                java.nio.file.Files.delete(generatedFile);
+                log.debug("Удалён временный файл: {}", generatedFile);
+            } catch (IOException deleteEx) {
+                log.warn("Не удалось удалить временный файл: {}", generatedFile, deleteEx);
+            }
+
+            return fileData;
 
         } catch (Exception e) {
             log.error("Ошибка при обработке файла статистики: {}", metadata.getOriginalFilename(), e);

@@ -128,6 +128,14 @@ public class ExportStatisticsService {
             }
         }
 
+        // Добавляем итоговую строку "ОБЩЕЕ КОЛИЧЕСТВО" в начало списка
+        if (!comparisons.isEmpty()) {
+            StatisticsComparisonDto totalSummary = calculateTotalSummary(
+                    statisticsByGroup, sessions, request, operationNamesCache);
+            comparisons.add(0, totalSummary);
+            log.debug("Добавлена итоговая строка 'ОБЩЕЕ КОЛИЧЕСТВО' в начало списка");
+        }
+
         return comparisons;
     }
 
@@ -388,6 +396,112 @@ public class ExportStatisticsService {
                 .totalCount(totalCount)
                 .modificationPercentage(modificationPercentage)
                 .alertLevel(alertLevel)
+                .build();
+    }
+
+    /**
+     * Вычисляет метрики с отклонениями для итоговых сумм (перегрузка для Map)
+     */
+    private Map<String, StatisticsComparisonDto.MetricValue> calculateMetrics(
+            Map<String, Long> currentTotals,
+            Map<String, Long> previousTotals,
+            StatisticsRequestDto request) {
+
+        Map<String, StatisticsComparisonDto.MetricValue> metrics = new HashMap<>();
+
+        // Для каждого поля вычисляем метрику
+        for (Map.Entry<String, Long> entry : currentTotals.entrySet()) {
+            String fieldName = entry.getKey();
+            Long currentValue = entry.getValue();
+            Long previousValue = previousTotals.get(fieldName);
+
+            StatisticsComparisonDto.MetricValue metric = calculateMetricValue(
+                    currentValue, previousValue,
+                    request.getWarningPercentage(), request.getCriticalPercentage());
+
+            metrics.put(fieldName, metric);
+        }
+
+        return metrics;
+    }
+
+    /**
+     * Вычисляет общие итоги по всем группам для каждой операции экспорта
+     */
+    private StatisticsComparisonDto calculateTotalSummary(
+            Map<String, List<ExportStatistics>> statisticsByGroup,
+            List<ExportSession> sessions,
+            StatisticsRequestDto request,
+            Map<Long, String> operationNamesCache) {
+
+        log.debug("Вычисление общих итогов для {} групп и {} операций",
+                statisticsByGroup.size(), sessions.size());
+
+        // 1. Собираем все статистики по сессиям (из всех групп)
+        Map<Long, List<ExportStatistics>> allStatsBySession = new HashMap<>();
+        for (List<ExportStatistics> groupStats : statisticsByGroup.values()) {
+            for (ExportStatistics stat : groupStats) {
+                allStatsBySession
+                    .computeIfAbsent(stat.getExportSession().getId(), k -> new ArrayList<>())
+                    .add(stat);
+            }
+        }
+
+        // 2. Создаем итоговые операции
+        List<StatisticsComparisonDto.OperationStatistics> totalOperations = new ArrayList<>();
+
+        sessions.stream()
+                .sorted((s1, s2) -> s2.getStartedAt().compareTo(s1.getStartedAt())) // новые первыми
+                .forEach(session -> {
+                    List<ExportStatistics> sessionStats = allStatsBySession.get(session.getId());
+
+                    if (sessionStats != null && !sessionStats.isEmpty()) {
+                        // Суммируем метрики (группируем по countFieldName и суммируем countValue)
+                        // Исключаем DATE_MODIFICATIONS из итогов
+                        Map<String, Long> totalMetrics = sessionStats.stream()
+                                .filter(stat -> !"DATE_MODIFICATIONS".equals(stat.getCountFieldName()))
+                                .collect(Collectors.groupingBy(
+                                        ExportStatistics::getCountFieldName,
+                                        Collectors.summingLong(ExportStatistics::getCountValue)
+                                ));
+
+                        // Находим предыдущую сессию и суммируем её метрики
+                        ExportSession previousSession = findPreviousSession(session, sessions);
+                        Map<String, Long> previousTotalMetrics = Collections.emptyMap();
+
+                        if (previousSession != null) {
+                            List<ExportStatistics> previousSessionStats = allStatsBySession.get(previousSession.getId());
+                            if (previousSessionStats != null && !previousSessionStats.isEmpty()) {
+                                previousTotalMetrics = previousSessionStats.stream()
+                                        .filter(stat -> !"DATE_MODIFICATIONS".equals(stat.getCountFieldName()))
+                                        .collect(Collectors.groupingBy(
+                                                ExportStatistics::getCountFieldName,
+                                                Collectors.summingLong(ExportStatistics::getCountValue)
+                                        ));
+                            }
+                        }
+
+                        // Создаем MetricValue с процентами изменений
+                        Map<String, StatisticsComparisonDto.MetricValue> metrics =
+                                calculateMetrics(totalMetrics, previousTotalMetrics, request);
+
+                        log.debug("Итоги для операции {}: метрик={}, totalMetrics={}",
+                                session.getId(), metrics.size(), totalMetrics);
+
+                        totalOperations.add(StatisticsComparisonDto.OperationStatistics.builder()
+                                .exportSessionId(session.getId())
+                                .operationId(session.getFileOperation().getId())
+                                .operationName(operationNamesCache.get(session.getId()))
+                                .exportDate(session.getStartedAt())
+                                .metrics(metrics)
+                                .dateModificationStats(null) // нет статистики дат для итогов
+                                .build());
+                    }
+                });
+
+        return StatisticsComparisonDto.builder()
+                .groupFieldValue("ОБЩЕЕ КОЛИЧЕСТВО")
+                .operations(totalOperations)
                 .build();
     }
 }

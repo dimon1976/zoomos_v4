@@ -196,12 +196,12 @@ public class LinkExtractorService {
      */
     private List<List<String>> readExcelFile(FileMetadata metadata) throws IOException {
         List<List<String>> data = new ArrayList<>();
-        
+
         try (FileInputStream fis = new FileInputStream(metadata.getTempFilePath());
              org.apache.poi.ss.usermodel.Workbook workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(fis)) {
-            
+
             org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0); // Читаем первый лист
-            
+
             for (org.apache.poi.ss.usermodel.Row row : sheet) {
                 List<String> rowData = new ArrayList<>();
                 for (org.apache.poi.ss.usermodel.Cell cell : row) {
@@ -209,16 +209,30 @@ public class LinkExtractorService {
                     if (cell != null) {
                         switch (cell.getCellType()) {
                             case STRING:
+                                // Для текстовых ячеек берем значение напрямую
                                 cellValue = cell.getStringCellValue();
                                 break;
                             case NUMERIC:
-                                cellValue = String.valueOf(cell.getNumericCellValue());
+                                // Для числовых ячеек проверяем - целое число или дробное
+                                double numericValue = cell.getNumericCellValue();
+                                if (numericValue == Math.floor(numericValue)) {
+                                    // Целое число - форматируем без десятичной точки
+                                    cellValue = String.format("%.0f", numericValue);
+                                } else {
+                                    // Дробное число - оставляем как есть
+                                    cellValue = String.valueOf(numericValue);
+                                }
                                 break;
                             case BOOLEAN:
                                 cellValue = String.valueOf(cell.getBooleanCellValue());
                                 break;
                             case FORMULA:
-                                cellValue = cell.getCellFormula();
+                                // Для формул пытаемся получить вычисленное значение
+                                try {
+                                    cellValue = cell.getStringCellValue();
+                                } catch (IllegalStateException e) {
+                                    cellValue = String.valueOf(cell.getNumericCellValue());
+                                }
                                 break;
                             default:
                                 cellValue = "";
@@ -229,7 +243,7 @@ public class LinkExtractorService {
                 data.add(rowData);
             }
         }
-        
+
         return data;
     }
 
@@ -271,11 +285,20 @@ public class LinkExtractorService {
         List<LinkExtractResult> results = new ArrayList<>();
         log.info("=== НАЧАЛО ИЗВЛЕЧЕНИЯ ССЫЛОК ===");
         log.info("Всего строк для обработки: {}", data.size());
-        
+
+        if (data.isEmpty()) {
+            log.warn("Нет данных для обработки");
+            return results;
+        }
+
+        // Получаем общее количество столбцов из заголовка (первой строки)
+        int totalColumns = data.get(0).size();
+        log.info("Всего столбцов в файле: {}", totalColumns);
+
         int rowIndex = 0;
         for (List<String> row : data) {
             log.debug("Обработка строки {}: {}", rowIndex, row);
-            
+
             if (row.size() <= dto.getIdColumn()) {
                 log.debug("Строка {} пропущена: размер {} меньше ID колонки {}", rowIndex, row.size(), dto.getIdColumn());
                 rowIndex++;
@@ -284,28 +307,29 @@ public class LinkExtractorService {
 
             String id = getColumnValue(row, dto.getIdColumn());
             log.debug("ID из строки {}: '{}'", rowIndex, id);
-            
+
             if (isEmpty(id)) {
                 log.debug("Пропущена строка {} с пустым ID", rowIndex);
                 rowIndex++;
                 continue;
             }
 
-            // Поиск URL во всех колонках строки (кроме колонки ID)
+            // Поиск URL во ВСЕХ колонках файла (кроме колонки ID)
+            // Используем totalColumns вместо row.size() для обработки всех столбцов
             int urlsFoundInRow = 0;
-            for (int columnIndex = 0; columnIndex < row.size(); columnIndex++) {
+            for (int columnIndex = 0; columnIndex < totalColumns; columnIndex++) {
                 if (columnIndex == dto.getIdColumn()) {
                     log.debug("Пропускаем ID колонку {}", columnIndex);
                     continue; // Пропускаем колонку ID
                 }
-                
+
                 String cellValue = getColumnValue(row, columnIndex);
                 log.debug("Значение колонки {} в строке {}: '{}'", columnIndex, rowIndex, cellValue);
-                
+
                 if (!isEmpty(cellValue)) {
                     List<String> urls = extractUrlsFromText(cellValue);
                     log.debug("Найдено {} URL в колонке {}: {}", urls.size(), columnIndex, urls);
-                    
+
                     for (String url : urls) {
                         LinkExtractResult result = new LinkExtractResult();
                         result.setId(id);
@@ -320,10 +344,10 @@ public class LinkExtractorService {
             log.debug("В строке {} найдено {} URL", rowIndex, urlsFoundInRow);
             rowIndex++;
         }
-        
+
         log.info("Обработано строк: {}, найдено ссылок: {}", data.size(), results.size());
         log.info("=== ОКОНЧАНИЕ ИЗВЛЕЧЕНИЯ ССЫЛОК ===");
-        
+
         return results;
     }
 

@@ -13,33 +13,8 @@
 </head>
 
 <th:block th:fragment="styles">
-    <style>
-        .upload-zone {
-            border: 2px dashed #dee2e6;
-            border-radius: 8px;
-            padding: 3rem;
-            text-align: center;
-            transition: border-color 0.3s ease;
-            background-color: #f8f9fa;
-        }
-        .upload-zone:hover {
-            border-color: #007bff;
-            background-color: #e7f3ff;
-        }
-        .upload-zone.dragover {
-            border-color: #007bff;
-            background-color: #e7f3ff;
-        }
-        .file-icon {
-            font-size: 4rem;
-            color: #6c757d;
-            margin-bottom: 1rem;
-        }
-        .utility-info {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-left: 4px solid #28a745;
-        }
-    </style>
+    <link th:href="@{/css/upload.css}" rel="stylesheet">
+    <link th:href="@{/css/info-sections.css}" rel="stylesheet">
 </th:block>
 
 <th:block th:fragment="pageActions">
@@ -53,30 +28,6 @@
 <th:block th:fragment="content">
     <div class="container-fluid">
         
-        <!-- Информация об утилите -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card utility-info">
-                    <div class="card-body">
-                        <div class="row align-items-center">
-                            <div class="col-md-2 text-center">
-                                <i class="fas fa-chart-line display-1 text-success"></i>
-                            </div>
-                            <div class="col-md-10">
-                                <h4 class="mb-2">Обработка файла статистики</h4>
-                                <p class="mb-1">Утилита обрабатывает файлы статистики с возможностью выбора колонок и изменения данных. Полный аналог старой версии с чекбоксами.</p>
-                                <div class="d-flex gap-4 mt-3">
-                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Выбор колонок чекбоксами</small>
-                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Замена источника данных</small>
-                                    <small class="text-muted"><i class="fas fa-check-circle text-success"></i> Экспорт в Excel/CSV</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Сообщения об ошибках/успехе -->
         <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
             <i class="fas fa-exclamation-triangle"></i>
@@ -90,93 +41,209 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
 
-        <!-- Загрузка файла -->
+        <!-- Описание утилиты - вверху -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-chart-bar"></i>
+                        <span>Обработка файлов статистики</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="row align-items-center">
+                            <div class="col-md-2 text-center">
+                                <i class="fas fa-table display-1 text-primary"></i>
+                            </div>
+                            <div class="col-md-10">
+                                <p class="mb-3">Утилита обрабатывает файлы статистики с возможностью выбора колонок и изменения данных для создания кастомизированных отчетов.</p>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Выбор колонок чекбоксами</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Замена данных</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Множественная загрузка</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Экспорт в Excel/CSV</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Основная структура: слева форма и требования, справа дополнительная информация -->
         <div class="row">
-            <div class="col-md-8 mx-auto">
+            <!-- Левая колонка - форма загрузки и требования -->
+            <div class="col-md-8">
+                <!-- Форма загрузки -->
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0">
-                            <i class="fas fa-upload text-success"></i>
-                            Шаг 1: Загрузка файла статистики
+                            <i class="fas fa-file-upload"></i>
+                            Шаг 1: Загрузка файлов статистики
                         </h5>
                     </div>
                     <div class="card-body">
                         <form id="uploadForm" method="post" action="/utils/stats-processor/upload" enctype="multipart/form-data">
-                            <div class="upload-zone" id="uploadZone">
-                                <div class="file-icon">
-                                    <i class="fas fa-cloud-upload-alt"></i>
-                                </div>
-                                <h5>Перетащите файл статистики сюда или нажмите для выбора</h5>
-                                <p class="text-muted mb-3">Поддерживаемые форматы: Excel (.xlsx)</p>
-                                <input type="file" 
-                                       class="form-control" 
-                                       id="file" 
-                                       name="file" 
-                                       accept=".xlsx,.xls" 
-                                       style="display: none;" 
+                            <!-- Унифицированная зона загрузки -->
+                            <div class="upload-zone" id="statsProcessorZone">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                <h5>Выберите файлы статистики для обработки</h5>
+                                <p class="text-muted">Поддерживаемые форматы: Excel (.xlsx, .xls), CSV (.csv), JSON (.json)</p>
+
+                                <input type="file"
+                                       id="statsProcessorInput"
+                                       name="file"
+                                       accept=".csv,.xlsx,.xls,.json"
+                                       class="d-none upload-input"
+                                       multiple
                                        required>
-                                <button type="button" class="btn btn-outline-success" id="selectFileBtn">
-                                    <i class="fas fa-folder-open"></i> Выбрать файл
+
+                                <button type="button"
+                                        id="statsProcessorBtn"
+                                        class="btn btn-primary mt-3 select-files-btn">
+                                    <i class="fas fa-folder-open me-1"></i>
+                                    Выбрать файлы
                                 </button>
                             </div>
-                            
-                            <div id="fileInfo" class="mt-3" style="display: none;">
-                                <div class="alert alert-info">
-                                    <i class="fas fa-file-excel"></i>
-                                    <span id="fileName"></span>
-                                    <span id="fileSize" class="text-muted"></span>
-                                </div>
-                            </div>
+
+                            <!-- Область предпросмотра файлов -->
+                            <div id="statsProcessorPreview" class="file-preview-container mt-3"></div>
 
                             <div class="d-grid gap-2 mt-4">
-                                <button type="submit" class="btn btn-success" id="uploadBtn" disabled>
+                                <button type="submit" class="btn btn-success btn-lg" id="uploadBtn" disabled>
                                     <i class="fas fa-cogs"></i> Анализировать и настроить обработку
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Информация о формате файла -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="fas fa-info-circle text-info"></i>
-                            О файлах статистики
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <h6><i class="fas fa-table text-success"></i> Структура файла</h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success"></i> Файлы типа hoff.ru-sites-mapping-*.xlsx</li>
-                                    <li><i class="fas fa-check text-success"></i> 39 колонок с данными о товарах</li>
-                                    <li><i class="fas fa-check text-success"></i> Домен, ID сайта, товары, конкуренты</li>
-                                </ul>
+                <!-- Требования и возможности - под формой -->
+                <div class="mt-4">
+                    <section class="info-section info-section--requirements">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-check-circle"></i>
+                            <span>Требования и возможности</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6 class="text-primary mb-2"><i class="fas fa-exclamation-circle me-1"></i>Обязательно</h6>
+                                    <ul class="list-with-icons mb-3">
+                                        <li>Файлы типа hoff.ru-sites-mapping-*.xlsx</li>
+                                        <li>39 колонок со структурой данных</li>
+                                        <li>Форматы: Excel, CSV, JSON</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="text-success mb-2"><i class="fas fa-star me-1"></i>Возможности</h6>
+                                    <ul class="list-with-icons mb-3">
+                                        <li>Выбор колонок чекбоксами</li>
+                                        <li>Замена источника для клиента</li>
+                                        <li>Множественная загрузка файлов</li>
+                                        <li>Экспорт в Excel и CSV</li>
+                                        <li>Файлы до 600MB</li>
+                                    </ul>
+                                </div>
                             </div>
-                            <div class="col-md-4">
-                                <h6><i class="fas fa-filter text-warning"></i> Обработка данных</h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success"></i> Выбор нужных колонок чекбоксами</li>
-                                    <li><i class="fas fa-check text-success"></i> Замена источника для клиента</li>
-                                    <li><i class="fas fa-check text-success"></i> Добавление URL конкурентов и дат</li>
-                                </ul>
-                            </div>
-                            <div class="col-md-4">
-                                <h6><i class="fas fa-download text-primary"></i> Результат</h6>
-                                <ul class="list-unstyled small">
-                                    <li><i class="fas fa-check text-success"></i> Обработанный файл в Excel/CSV</li>
-                                    <li><i class="fas fa-check text-success"></i> Только выбранные колонки</li>
-                                    <li><i class="fas fa-check text-success"></i> Измененные данные по настройкам</li>
-                                </ul>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Правая колонка - дополнительная информация -->
+            <div class="col-md-4">
+                <!-- Описание процесса -->
+                <section class="info-section info-section--instructions">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-cogs"></i>
+                        <span>Как это работает</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">1</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Загрузите файлы</h6>
+                                        <p class="text-muted small mb-0">Excel, CSV или JSON файлы со статистикой</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">2</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Выберите колонки</h6>
+                                        <p class="text-muted small mb-0">отметьте нужные колонки чекбоксами из 39 доступных</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start mb-3">
+                                    <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">3</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Замените данные</h6>
+                                        <p class="text-muted small mb-0">укажите новые значения для источника или других полей</p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-start">
+                                    <div class="bg-warning text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px; flex-shrink: 0;">
+                                        <span class="fw-bold small">4</span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">Скачайте отчет</h6>
+                                        <p class="text-muted small mb-0">кастомизированный файл в нужном формате</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
+                </section>
+
+                <!-- Пример обработки -->
+                <div class="mt-3">
+                    <section class="info-section info-section--examples">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-lightbulb"></i>
+                            <span>Пример обработки</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <strong>Исходные данные:</strong>
+                                    <div class="code-example small">
+                                        39 колонок: домен, ID, товары, конкуренты
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <strong>Результат:</strong>
+                                    <div class="code-example small">
+                                        Выбранные колонки + измененные данные для клиента
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Дополнительные возможности -->
+                <div class="mt-3">
+                    <section class="info-section info-section--description">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-star"></i>
+                            <span>Возможности</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ul class="list-with-icons">
+                                <li>Множественная загрузка файлов</li>
+                                <li>Интерактивный выбор колонок</li>
+                                <li>Настройка замены источника</li>
+                                <li>Экспорт в различных форматах</li>
+                            </ul>
+                        </div>
+                    </section>
                 </div>
             </div>
         </div>
@@ -184,84 +251,48 @@
 </th:block>
 
 <th:block th:fragment="scripts">
+<script th:src="@{/js/upload.js}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const uploadZone = document.getElementById('uploadZone');
-    const fileInput = document.getElementById('file');
-    const selectFileBtn = document.getElementById('selectFileBtn');
     const uploadBtn = document.getElementById('uploadBtn');
-    const fileInfo = document.getElementById('fileInfo');
-    const fileName = document.getElementById('fileName');
-    const fileSize = document.getElementById('fileSize');
-    
-    // Клик по зоне загрузки
-    uploadZone.addEventListener('click', function() {
-        fileInput.click();
-    });
-    
-    // Клик по кнопке выбора файла
-    selectFileBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        fileInput.click();
-    });
-    
-    // Изменение файла
-    fileInput.addEventListener('change', function() {
-        handleFileSelection(this.files[0]);
-    });
-    
-    // Drag & Drop
-    uploadZone.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        uploadZone.classList.add('dragover');
-    });
-    
-    uploadZone.addEventListener('dragleave', function() {
-        uploadZone.classList.remove('dragover');
-    });
-    
-    uploadZone.addEventListener('drop', function(e) {
-        e.preventDefault();
-        uploadZone.classList.remove('dragover');
-        
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            fileInput.files = files;
-            handleFileSelection(files[0]);
+
+    // Инициализация UploadManager (множественная загрузка)
+    const config = {
+        zoneId: 'statsProcessorZone',
+        inputId: 'statsProcessorInput',
+        previewId: 'statsProcessorPreview',
+        buttonId: 'statsProcessorBtn',
+        allowedTypes: ['.csv', '.xlsx', '.xls', '.json'],
+        maxFileSize: 600 * 1024 * 1024, // 600MB
+        multiple: true, // Множественная загрузка
+        showFileSize: true,
+        showFileType: true,
+        onFileSelect: function(files) {
+            if (files.length > 0) {
+                uploadBtn.disabled = false;
+            }
+        },
+        onFileRemove: function(removedFile, index, remainingFiles) {
+            if (remainingFiles.length === 0) {
+                uploadBtn.disabled = true;
+            }
         }
-    });
-    
-    function handleFileSelection(file) {
-        if (!file) return;
-        
-        // Проверка типа файла
-        const allowedTypes = ['.xlsx', '.xls'];
-        const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-        
-        if (!allowedTypes.includes(fileExtension)) {
-            alert('Поддерживаются только файлы Excel: ' + allowedTypes.join(', '));
+    };
+
+    const uploadManager = new UploadManager(config);
+
+    // Показать спиннер при отправке
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        const files = uploadManager.getSelectedFiles();
+        if (!files.length) {
+            e.preventDefault();
+            uploadManager.showError('Выберите хотя бы один файл для загрузки');
             return;
         }
-        
-        // Отображение информации о файле
-        fileName.textContent = file.name;
-        fileSize.textContent = '(' + formatFileSize(file.size) + ')';
-        fileInfo.style.display = 'block';
-        uploadBtn.disabled = false;
-    }
-    
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-    
-    // Показать спиннер при отправке
-    document.getElementById('uploadForm').addEventListener('submit', function() {
+
         uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализируется...';
         uploadBtn.disabled = true;
+        uploadManager.setLoading(true);
     });
 });
 </script>

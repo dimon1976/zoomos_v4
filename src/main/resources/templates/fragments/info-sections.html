@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Фрагменты информационных блоков</title>
+</head>
+<body>
+    <!--
+    Унифицированные фрагменты для информационных блоков
+    Поддерживаемые типы:
+    - description: описания функциональности
+    - requirements: требования к файлам
+    - examples: примеры и образцы
+    - instructions: пошаговые инструкции
+    - warnings: предупреждения и важная информация
+
+    Модификаторы размера:
+    - compact: компактный вариант
+    - large: крупный вариант
+    - highlighted: выделенный вариант
+    -->
+
+    <!-- ОСНОВНОЙ ФРАГМЕНТ ИНФОРМАЦИОННОГО БЛОКА -->
+    <section th:fragment="infoSection(type, title, icon, content, size, animated)"
+             th:class="|info-section info-section--${type} ${size != null ? 'info-section--' + size : ''} ${animated ? 'info-section--animated' : ''}|">
+
+        <h3 class="info-section__title">
+            <i th:class="|info-section__icon ${icon}|" th:attr="aria-hidden=true"></i>
+            <span th:text="${title}">Заголовок блока</span>
+        </h3>
+
+        <div class="info-section__body" th:utext="${content}">
+            Содержимое блока
+        </div>
+    </section>
+
+    <!-- ОПИСАНИЕ ФУНКЦИОНАЛЬНОСТИ -->
+    <th:block th:fragment="description(title, content, size, animated)">
+        <th:block th:replace="~{fragments/info-sections :: infoSection('description', ${title}, 'fas fa-info-circle', ${content}, ${size}, ${animated})}"></th:block>
+    </th:block>
+
+    <!-- ТРЕБОВАНИЯ К ФАЙЛАМ -->
+    <th:block th:fragment="requirements(title, content, size, animated)">
+        <th:block th:replace="~{fragments/info-sections :: infoSection('requirements', ${title}, 'fas fa-file-alt', ${content}, ${size}, ${animated})}"></th:block>
+    </th:block>
+
+    <!-- ПРИМЕРЫ И ОБРАЗЦЫ -->
+    <th:block th:fragment="examples(title, content, size, animated)">
+        <th:block th:replace="~{fragments/info-sections :: infoSection('examples', ${title}, 'fas fa-lightbulb', ${content}, ${size}, ${animated})}"></th:block>
+    </th:block>
+
+    <!-- ПОШАГОВЫЕ ИНСТРУКЦИИ -->
+    <th:block th:fragment="instructions(title, content, size, animated)">
+        <th:block th:replace="~{fragments/info-sections :: infoSection('instructions', ${title}, 'fas fa-list-ol', ${content}, ${size}, ${animated})}"></th:block>
+    </th:block>
+
+    <!-- ПРЕДУПРЕЖДЕНИЯ -->
+    <th:block th:fragment="warnings(title, content, size, animated)">
+        <th:block th:replace="~{fragments/info-sections :: infoSection('warnings', ${title}, 'fas fa-exclamation-triangle', ${content}, ${size}, ${animated})}"></th:block>
+    </th:block>
+
+    <!-- СПЕЦИАЛИЗИРОВАННЫЕ ФРАГМЕНТЫ -->
+
+    <!-- БЛОК "КАК ЭТО РАБОТАЕТ" С ПРОЦЕССАМИ -->
+    <section th:fragment="howItWorks(title, steps)" class="info-section info-section--instructions">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-cogs"></i>
+            <span th:text="${title} ?: 'Как это работает'">Как это работает</span>
+        </h3>
+
+        <div class="info-section__body">
+            <div class="info-section__process-steps">
+                <div th:each="step, iterStat : ${steps}" class="info-section__process-step">
+                    <div class="info-section__process-icon">
+                        <i th:class="${step.icon}" th:if="${step.icon}"></i>
+                        <span th:unless="${step.icon}" th:text="${iterStat.count}">1</span>
+                    </div>
+                    <div class="info-section__process-title" th:text="${step.title}">Шаг</div>
+                    <div class="info-section__process-description" th:text="${step.description}">Описание шага</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- БЛОК ВОЗМОЖНОСТЕЙ/ОСОБЕННОСТЕЙ -->
+    <section th:fragment="features(title, features, type)"
+             th:class="|info-section info-section--${type ?: 'description'}|">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-star"></i>
+            <span th:text="${title} ?: 'Возможности'">Возможности</span>
+        </h3>
+
+        <div class="info-section__body">
+            <ul class="list-with-icons">
+                <li th:each="feature : ${features}"
+                    th:class="${feature.type != null ? 'list-item--' + feature.type : ''}"
+                    th:text="${feature.text}">Функция</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- БЛОК ТРЕБОВАНИЙ К ФАЙЛУ -->
+    <section th:fragment="fileRequirements(requirements)" class="info-section info-section--requirements">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-file-alt"></i>
+            <span>Требования к файлу</span>
+        </h3>
+
+        <div class="info-section__body">
+            <div class="row" th:if="${requirements.structure}">
+                <div class="col-md-4">
+                    <h6><i class="fas fa-table text-success"></i> Структура файла</h6>
+                    <ul class="list-with-icons small">
+                        <li th:each="req : ${requirements.structure}" th:text="${req}">Требование</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="row" th:if="${requirements.format}">
+                <div class="col-md-4">
+                    <h6><i class="fas fa-cog text-warning"></i> Формат данных</h6>
+                    <ul class="list-with-icons small">
+                        <li th:each="req : ${requirements.format}" th:text="${req}">Требование</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="row" th:if="${requirements.output}">
+                <div class="col-md-4">
+                    <h6><i class="fas fa-download text-info"></i> Результат</h6>
+                    <ul class="list-with-icons small">
+                        <li th:each="req : ${requirements.output}" th:text="${req}">Требование</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- БЛОК С ПРИМЕРОМ ДАННЫХ -->
+    <section th:fragment="dataExample(title, beforeData, afterData)" class="info-section info-section--examples">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-lightbulb"></i>
+            <span th:text="${title} ?: 'Пример обработки'">Пример обработки</span>
+        </h3>
+
+        <div class="info-section__body">
+            <div class="row">
+                <div class="col-md-6" th:if="${beforeData}">
+                    <strong>Исходные данные:</strong>
+                    <div class="code-example">
+                        <div th:each="line : ${beforeData}" th:text="${line}">Данные</div>
+                    </div>
+                </div>
+                <div class="col-md-6" th:if="${afterData}">
+                    <strong>Результат:</strong>
+                    <div class="code-example">
+                        <div th:each="line : ${afterData}" th:text="${line}">Результат</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- БЛОК С ТАБЛИЦЕЙ ПРИМЕРА -->
+    <section th:fragment="tableExample(title, headers, rows)" class="info-section info-section--examples">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-table"></i>
+            <span th:text="${title} ?: 'Пример результата'">Пример результата</span>
+        </h3>
+
+        <div class="info-section__body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th th:each="header : ${headers}" th:text="${header}">Заголовок</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="row : ${rows}">
+                            <td th:each="cell : ${row}" th:text="${cell}">Ячейка</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- БЛОК ПОДДЕРЖИВАЕМЫХ ФОРМАТОВ -->
+    <section th:fragment="supportedFormats(formats)" class="info-section info-section--requirements info-section--compact">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-file"></i>
+            <span>Поддерживаемые форматы</span>
+        </h3>
+
+        <div class="info-section__body">
+            <ul class="list-with-icons">
+                <li th:each="format : ${formats}" th:text="${format}">Формат файла</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- БЛОК СТРАТЕГИЙ/МЕТОДОВ -->
+    <section th:fragment="strategies(title, strategies)" class="info-section info-section--description">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-shield-alt"></i>
+            <span th:text="${title} ?: 'Стратегии обработки'">Стратегии обработки</span>
+        </h3>
+
+        <div class="info-section__body">
+            <div class="d-flex flex-wrap gap-2">
+                <span th:each="strategy : ${strategies}"
+                      th:class="|badge ${strategy.badgeClass} strategy-badge|">
+                    <i th:class="${strategy.icon}" th:if="${strategy.icon}"></i>
+                    <span th:text="${strategy.name}">Стратегия</span>
+                    <small th:if="${strategy.description}" th:text="' - ' + ${strategy.description}"></small>
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <!-- БЛОК ВАЖНЫХ ЗАМЕЧАНИЙ -->
+    <section th:fragment="importantNotes(notes)" class="info-section info-section--warnings">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-exclamation-triangle"></i>
+            <span>Важно знать</span>
+        </h3>
+
+        <div class="info-section__body">
+            <ul class="list-with-icons">
+                <li th:each="note : ${notes}"
+                    th:class="${note.type != null ? 'list-item--' + note.type : ''}"
+                    th:text="${note.text}">Важное замечание</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- КОМПАКТНЫЙ БЛОК НАВИГАЦИИ -->
+    <section th:fragment="quickNavigation(title, links)" class="info-section info-section--description info-section--compact">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-sitemap"></i>
+            <span th:text="${title} ?: 'Быстрая навигация'">Быстрая навигация</span>
+        </h3>
+
+        <div class="info-section__body">
+            <div class="d-grid gap-2">
+                <a th:each="link : ${links}"
+                   th:href="${link.url}"
+                   th:class="|btn ${link.buttonClass ?: 'btn-outline-secondary'} btn-sm|">
+                    <i th:class="${link.icon}" th:if="${link.icon}"></i>
+                    <span th:text="${link.text}">Ссылка</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- БЛОК СТАТИСТИКИ/МЕТРИК -->
+    <section th:fragment="metrics(title, metrics)" class="info-section info-section--description">
+        <h3 class="info-section__title">
+            <i class="info-section__icon fas fa-chart-bar"></i>
+            <span th:text="${title} ?: 'Характеристики'">Характеристики</span>
+        </h3>
+
+        <div class="info-section__body">
+            <div class="row">
+                <div th:each="metric : ${metrics}" class="col-6 col-md-4 mb-2">
+                    <div class="text-center">
+                        <div class="h5 mb-1" th:text="${metric.value}">100</div>
+                        <small class="text-muted" th:text="${metric.label}">Метрика</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</body>
+</html>

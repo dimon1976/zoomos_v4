@@ -13,45 +13,8 @@
 </head>
 
 <th:block th:fragment="styles">
-    <style>
-        .file-drop-zone {
-            border: 2px dashed #ddd;
-            border-radius: 8px;
-            padding: 3rem 2rem;
-            text-align: center;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            background: #fafafa;
-        }
-        .file-drop-zone:hover,
-        .file-drop-zone.dragover {
-            border-color: #007bff;
-            background: #f8f9ff;
-        }
-        .file-drop-zone.dragover {
-            border-style: solid;
-            background: #e7f3ff;
-        }
-        .file-info {
-            display: none;
-            margin-top: 1rem;
-            padding: 1rem;
-            background: #e8f5e8;
-            border: 1px solid #c3e6c3;
-            border-radius: 4px;
-        }
-        .requirement-item {
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #eee;
-        }
-        .requirement-item:last-child {
-            border-bottom: none;
-        }
-        .feature-icon {
-            color: #28a745;
-            margin-right: 8px;
-        }
-    </style>
+    <link th:href="@{/css/upload.css}" rel="stylesheet">
+    <link th:href="@{/css/info-sections.css}" rel="stylesheet">
 </th:block>
 
 <th:block th:fragment="pageActions">
@@ -65,61 +28,39 @@
 <th:block th:fragment="content">
     <div class="container-fluid">
         
-        <!-- Описание утилиты -->
+        <!-- Описание утилиты - вверху -->
         <div class="row mb-4">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">
-                            <i class="fas fa-link"></i>
-                            Очистка URL
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <h4>Очистка URL</h4>
-                        <p>Утилита удаляет UTM-метки, реферальные и отслеживающие параметры из ссылок, оставляя чистые URL.</p>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="feature-icon">
-                                    <i class="fas fa-broom"></i> Удаление UTM параметров
-                                </div>
+            <div class="col-12">
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-info-circle"></i>
+                        <span>Очистка URL</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <div class="row align-items-center">
+                            <div class="col-md-2 text-center">
+                                <i class="fas fa-broom display-1 text-primary"></i>
                             </div>
-                            <div class="col-md-4">
-                                <div class="feature-icon">
-                                    <i class="fas fa-shield-alt"></i> Удаление реферальных меток
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="feature-icon">
-                                    <i class="fas fa-eye-slash"></i> Удаление отслеживающих параметров
+                            <div class="col-md-10">
+                                <p class="mb-3">Утилита удаляет UTM-метки, реферальные и отслеживающие параметры из ссылок, оставляя чистые URL.</p>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Удаление UTM параметров</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Удаление реферальных меток</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Поддержка доп. колонок</div>
+                                    <div class="badge bg-success"><i class="fas fa-check-circle"></i> Экспорт в CSV и Excel</div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h6 class="mb-0">
-                            <i class="fas fa-star text-warning"></i>
-                            Особенности
-                        </h6>
-                    </div>
-                    <div class="card-body">
-                        <ul class="list-unstyled mb-0">
-                            <li><i class="fas fa-check-circle text-success me-2"></i>Сохранение параметра sku для Yandex Market</li>
-                            <li><i class="fas fa-check-circle text-success me-2"></i>Поддержка дополнительных колонок (ID, Model, Barcode)</li>
-                            <li><i class="fas fa-check-circle text-success me-2"></i>Экспорт в CSV и Excel</li>
-                        </ul>
-                    </div>
-                </div>
+                </section>
             </div>
         </div>
 
-        <!-- Форма загрузки файла -->
+        <!-- Основная структура: слева форма и требования, справа дополнительная информация -->
         <div class="row">
+            <!-- Левая колонка - форма загрузки и требования -->
             <div class="col-md-8">
+                <!-- Форма загрузки -->
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0">
@@ -129,29 +70,30 @@
                     </div>
                     <div class="card-body">
                         <form th:action="@{/utils/url-cleaner/upload}" method="post" enctype="multipart/form-data" id="uploadForm">
-                            <div class="file-drop-zone" id="fileDropZone">
-                                <div class="mb-3">
-                                    <i class="fas fa-cloud-upload-alt display-4 text-muted"></i>
-                                </div>
+                            <!-- Унифицированная зона загрузки -->
+                            <div class="upload-zone" id="urlCleanerZone">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
                                 <h5>Перетащите файл сюда или нажмите для выбора</h5>
-                                <p class="text-muted">Поддерживаемые форматы: Excel (.xlsx, .xls), CSV (.csv)</p>
-                                <button type="button" class="btn btn-outline-primary" id="selectFileBtn">
-                                    <i class="fas fa-folder-open"></i> Выбрать файл
+                                <p class="text-muted">Поддерживаемые форматы: Excel (.xlsx, .xls), CSV (.csv), TXT (.txt)</p>
+
+                                <input type="file"
+                                       id="urlCleanerInput"
+                                       name="file"
+                                       accept=".csv,.xlsx,.xls,.txt"
+                                       class="d-none upload-input"
+                                       required>
+
+                                <button type="button"
+                                        id="urlCleanerBtn"
+                                        class="btn btn-primary mt-3 select-files-btn">
+                                    <i class="fas fa-folder-open me-1"></i>
+                                    Выбрать файл
                                 </button>
-                                <input type="file" id="fileInput" name="file" accept=".xlsx,.xls,.csv" style="display: none;">
                             </div>
-                            <div class="file-info" id="fileInfo">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <i class="fas fa-file-alt"></i>
-                                        <span id="fileName">Имя файла</span>
-                                        <span class="text-muted">(<span id="fileSize">Размер</span>)</span>
-                                    </div>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" id="removeFileBtn">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                            </div>
+
+                            <!-- Область предпросмотра файлов -->
+                            <div id="urlCleanerPreview" class="file-preview-container mt-3"></div>
+
                             <div class="text-end mt-3">
                                 <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
                                     Анализировать файл
@@ -160,43 +102,88 @@
                         </form>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Требования к файлу -->
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="fas fa-info-circle"></i>
-                            Требования к файлу
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="requirement-item">
-                            <h6><i class="fas fa-list"></i> Структура файла</h6>
-                            <ul class="small mb-0">
+
+                <!-- Требования к файлу - под формой -->
+                <div class="mt-4">
+                    <section class="info-section info-section--requirements">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-file-alt"></i>
+                            <span>Требования к файлу</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ul class="list-with-icons">
                                 <li>Первая строка - заголовки колонок</li>
                                 <li>Обязательная колонка с URL</li>
                                 <li>Необязательные колонки: ID, Model, Barcode</li>
-                            </ul>
-                        </div>
-                        <div class="requirement-item">
-                            <h6><i class="fas fa-link"></i> Формат URL</h6>
-                            <ul class="small mb-0">
                                 <li>Полные URL (http:// или https://)</li>
                                 <li>Могут содержать параметры запроса</li>
                                 <li>Невалидные URL будут пропущены</li>
                             </ul>
                         </div>
-                        <div class="requirement-item">
-                            <h6><i class="fas fa-download"></i> Результат</h6>
-                            <ul class="small mb-0">
-                                <li>CSV или Excel файл</li>
-                                <li>Исходная URL | Очищенная URL</li>
-                                <li>Дополнительные колонки при наличии</li>
-                            </ul>
-                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Правая колонка - дополнительная информация -->
+            <div class="col-md-4">
+                <!-- Особенности утилиты -->
+                <section class="info-section info-section--description">
+                    <h3 class="info-section__title">
+                        <i class="info-section__icon fas fa-star"></i>
+                        <span>Особенности</span>
+                    </h3>
+                    <div class="info-section__body">
+                        <ul class="list-with-icons">
+                            <li>Сохранение параметра sku для Yandex Market</li>
+                            <li>Поддержка дополнительных колонок (ID, Model, Barcode)</li>
+                            <li>Экспорт в CSV и Excel</li>
+                        </ul>
                     </div>
+                </section>
+
+                <!-- Пример обработки -->
+                <div class="mt-3">
+                    <section class="info-section info-section--examples">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-lightbulb"></i>
+                            <span>Пример обработки</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <strong>Исходная URL:</strong>
+                                    <div class="code-example small">
+                                        https://example.com/product?utm_source=google&utm_medium=cpc&ref=123
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <strong>Очищенная URL:</strong>
+                                    <div class="code-example small">
+                                        https://example.com/product
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Инструкция по работе -->
+                <div class="mt-3">
+                    <section class="info-section info-section--instructions">
+                        <h3 class="info-section__title">
+                            <i class="info-section__icon fas fa-list-ol"></i>
+                            <span>Как это работает</span>
+                        </h3>
+                        <div class="info-section__body">
+                            <ol>
+                                <li>Загрузите файл с URL</li>
+                                <li>Система проанализирует структуру</li>
+                                <li>Выберите колонки для обработки</li>
+                                <li>Запустите очистку URL</li>
+                                <li>Скачайте обработанный файл</li>
+                            </ol>
+                        </div>
+                    </section>
                 </div>
             </div>
         </div>
@@ -204,100 +191,46 @@
 </th:block>
 
 <th:block th:fragment="scripts">
+<script th:src="@{/js/upload.js}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const fileDropZone = document.getElementById('fileDropZone');
-    const fileInput = document.getElementById('fileInput');
-    const selectFileBtn = document.getElementById('selectFileBtn');
-    const fileInfo = document.getElementById('fileInfo');
-    const fileName = document.getElementById('fileName');
-    const fileSize = document.getElementById('fileSize');
-    const removeFileBtn = document.getElementById('removeFileBtn');
     const uploadBtn = document.getElementById('uploadBtn');
-    const uploadForm = document.getElementById('uploadForm');
 
-    // Drag and drop functionality
-    fileDropZone.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        fileDropZone.classList.add('dragover');
-    });
-
-    fileDropZone.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        fileDropZone.classList.remove('dragover');
-    });
-
-    fileDropZone.addEventListener('drop', function(e) {
-        e.preventDefault();
-        fileDropZone.classList.remove('dragover');
-        
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            handleFile(files[0]);
+    // Инициализация UploadManager
+    const config = {
+        zoneId: 'urlCleanerZone',
+        inputId: 'urlCleanerInput',
+        previewId: 'urlCleanerPreview',
+        buttonId: 'urlCleanerBtn',
+        allowedTypes: ['.csv', '.xlsx', '.xls', '.txt'],
+        maxFileSize: 600 * 1024 * 1024, // 600MB
+        multiple: false,
+        showFileSize: true,
+        showFileType: true,
+        onFileSelect: function(files) {
+            if (files.length > 0) {
+                uploadBtn.disabled = false;
+            }
+        },
+        onFileRemove: function() {
+            uploadBtn.disabled = true;
         }
-    });
+    };
 
-    // Click to select file
-    fileDropZone.addEventListener('click', function() {
-        fileInput.click();
-    });
+    const uploadManager = new UploadManager(config);
 
-    selectFileBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        fileInput.click();
-    });
-
-    // File input change
-    fileInput.addEventListener('change', function() {
-        if (this.files.length > 0) {
-            handleFile(this.files[0]);
-        }
-    });
-
-    // Remove file
-    removeFileBtn.addEventListener('click', function() {
-        fileInput.value = '';
-        fileInfo.style.display = 'none';
-        uploadBtn.disabled = true;
-    });
-
-    function handleFile(file) {
-        // Check file type
-        const allowedTypes = [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-excel',
-            'text/csv'
-        ];
-        
-        if (!allowedTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|csv)$/i)) {
-            alert('Пожалуйста, выберите файл Excel (.xlsx, .xls) или CSV (.csv)');
+    // Обработка отправки формы
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        const files = uploadManager.getSelectedFiles();
+        if (!files.length) {
+            e.preventDefault();
+            uploadManager.showError('Выберите файл для загрузки');
             return;
         }
 
-        // Update file info
-        fileName.textContent = file.name;
-        fileSize.textContent = formatFileSize(file.size);
-        fileInfo.style.display = 'block';
-        uploadBtn.disabled = false;
-        
-        // Update DataTransfer object for the input
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        fileInput.files = dt.files;
-    }
-
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    // Form submission
-    uploadForm.addEventListener('submit', function() {
         uploadBtn.disabled = true;
         uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализируется...';
+        uploadManager.setLoading(true);
     });
 });
 </script>

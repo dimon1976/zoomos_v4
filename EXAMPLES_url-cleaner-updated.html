@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Очистка URL',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Очистка URL',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Очистка URL</title>
+</head>
+
+<th:block th:fragment="styles">
+    <link th:href="@{/css/upload.css}" rel="stylesheet">
+    <link th:href="@{/css/info-sections.css}" rel="stylesheet">
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Назад к утилитам
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+
+        <!-- ОПИСАНИЕ УТИЛИТЫ -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <th:block th:replace="~{fragments/info-sections :: description(
+                    'Очистка URL',
+                    'Утилита удаляет UTM-метки, реферальные и отслеживающие параметры из ссылок, оставляя чистые URL.',
+                    'large',
+                    true
+                )}"></th:block>
+            </div>
+            <div class="col-md-4">
+                <!-- ОСОБЕННОСТИ -->
+                <th:block th:replace="~{fragments/info-sections :: features(
+                    'Особенности',
+                    ${T(java.util.List).of(
+                        T(java.util.Map).of('text', 'Сохранение параметра sku для Yandex Market'),
+                        T(java.util.Map).of('text', 'Поддержка дополнительных колонок (ID, Model, Barcode)'),
+                        T(java.util.Map).of('text', 'Экспорт в CSV и Excel')
+                    )},
+                    'description'
+                )}"></th:block>
+            </div>
+        </div>
+
+        <!-- ВОЗМОЖНОСТИ -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <th:block th:replace="~{fragments/info-sections :: features(
+                    'Что удаляется',
+                    ${T(java.util.List).of(
+                        T(java.util.Map).of('text', 'UTM параметры (utm_source, utm_medium, utm_campaign и др.)'),
+                        T(java.util.Map).of('text', 'Реферальные метки (ref, referrer, affiliate_id и др.)'),
+                        T(java.util.Map).of('text', 'Отслеживающие параметры (fbclid, gclid, yclid и др.)')
+                    )},
+                    'requirements'
+                )}"></th:block>
+            </div>
+        </div>
+
+        <!-- ФОРМА ЗАГРУЗКИ -->
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-upload"></i>
+                            Шаг 1: Загрузка файла
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form th:action="@{/utils/url-cleaner/upload}" method="post" enctype="multipart/form-data" id="uploadForm">
+                            <!-- Унифицированная зона загрузки -->
+                            <div class="upload-zone" id="urlCleanerZone">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                <h5>Перетащите файл сюда или нажмите для выбора</h5>
+                                <p class="text-muted">Поддерживаемые форматы: Excel (.xlsx, .xls), CSV (.csv), TXT (.txt)</p>
+
+                                <input type="file"
+                                       id="urlCleanerInput"
+                                       name="file"
+                                       accept=".csv,.xlsx,.xls,.txt"
+                                       class="d-none upload-input"
+                                       required>
+
+                                <button type="button"
+                                        id="urlCleanerBtn"
+                                        class="btn btn-primary mt-3 select-files-btn">
+                                    <i class="fas fa-folder-open me-1"></i>
+                                    Выбрать файл
+                                </button>
+                            </div>
+
+                            <!-- Область предпросмотра файлов -->
+                            <div id="urlCleanerPreview" class="file-preview-container mt-3"></div>
+
+                            <div class="text-end mt-3">
+                                <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
+                                    Анализировать файл
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ТРЕБОВАНИЯ К ФАЙЛУ -->
+            <div class="col-md-4">
+                <th:block th:replace="~{fragments/info-sections :: fileRequirements(
+                    ${T(java.util.Map).of(
+                        'structure', T(java.util.List).of('Первая строка - заголовки колонок', 'Обязательная колонка с URL', 'Необязательные колонки: ID, Model, Barcode'),
+                        'format', T(java.util.List).of('Полные URL (http:// или https://)', 'Могут содержать параметры запроса', 'Невалидные URL будут пропущены'),
+                        'output', T(java.util.List).of('CSV или Excel файл', 'Исходная URL | Очищенная URL', 'Дополнительные колонки при наличии')
+                    )}
+                )}"></th:block>
+            </div>
+        </div>
+
+        <!-- ПРИМЕР ОЧИСТКИ -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <th:block th:replace="~{fragments/info-sections :: dataExample(
+                    'Пример очистки URL',
+                    ${T(java.util.List).of(
+                        'Исходная URL:',
+                        'https://shop.example.com/product?id=123&utm_source=google&utm_medium=cpc&utm_campaign=sale&fbclid=abc123&ref=affiliate'
+                    )},
+                    ${T(java.util.List).of(
+                        'Очищенная URL:',
+                        'https://shop.example.com/product?id=123'
+                    )}
+                )}"></th:block>
+            </div>
+        </div>
+
+        <!-- ПОДДЕРЖИВАЕМЫЕ ФОРМАТЫ -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <th:block th:replace="~{fragments/info-sections :: supportedFormats(
+                    ${T(java.util.List).of(
+                        'CSV файлы (.csv)',
+                        'Excel файлы (.xlsx, .xls)',
+                        'Текстовые файлы (.txt)',
+                        'Максимальный размер: 600MB'
+                    )}
+                )}"></th:block>
+            </div>
+            <div class="col-md-6">
+                <!-- ВАЖНЫЕ ЗАМЕЧАНИЯ -->
+                <th:block th:replace="~{fragments/info-sections :: importantNotes(
+                    ${T(java.util.List).of(
+                        T(java.util.Map).of('text', 'Сохраняется параметр sku для Yandex Market', 'type', 'info'),
+                        T(java.util.Map).of('text', 'Обрабатываются только валидные URL', 'type', 'warning'),
+                        T(java.util.Map).of('text', 'Результат сохраняет структуру исходного файла', 'type', 'info')
+                    )}
+                )}"></th:block>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script th:src="@{/js/upload.js}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadBtn = document.getElementById('uploadBtn');
+
+    // Инициализация UploadManager
+    const config = {
+        zoneId: 'urlCleanerZone',
+        inputId: 'urlCleanerInput',
+        previewId: 'urlCleanerPreview',
+        buttonId: 'urlCleanerBtn',
+        allowedTypes: ['.csv', '.xlsx', '.xls', '.txt'],
+        maxFileSize: 600 * 1024 * 1024, // 600MB
+        multiple: false,
+        showFileSize: true,
+        showFileType: true,
+        onFileSelect: function(files) {
+            if (files.length > 0) {
+                uploadBtn.disabled = false;
+            }
+        },
+        onFileRemove: function() {
+            uploadBtn.disabled = true;
+        }
+    };
+
+    const uploadManager = new UploadManager(config);
+
+    // Обработка отправки формы
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        const files = uploadManager.getSelectedFiles();
+        if (!files.length) {
+            e.preventDefault();
+            uploadManager.showError('Выберите файл для загрузки');
+            return;
+        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализируется...';
+        uploadManager.setLoading(true);
+    });
+});
+</script>
+</th:block>
+</html>

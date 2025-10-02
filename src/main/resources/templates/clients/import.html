@@ -11,45 +11,9 @@
 <head>
     <title th:text="${client.name + ' - Импорт файлов'}">Клиент - Импорт файлов</title>
     <style>
-        .file-upload-area {
-            border: 2px dashed #dee2e6;
-            border-radius: 8px;
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background-color: #f8f9fa;
-        }
-        .file-upload-area:hover,
-        .file-upload-area.dragover {
-            border-color: #0d6efd;
-            background-color: #e7f1ff;
-        }
-        .file-preview {
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 10px;
-            margin: 5px 0;
-            background-color: #f8f9fa;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .file-preview .file-info {
-            flex-grow: 1;
-        }
-        .file-preview .file-size {
-            color: #6c757d;
-            font-size: 0.875rem;
-        }
-        .file-preview .remove-file {
-            color: #dc3545;
-            cursor: pointer;
-            padding: 5px;
-        }
-        .file-preview .remove-file:hover {
-            color: #bb2d3b;
-        }
+        /* Подключение унифицированных стилей через отдельный CSS файл */
+        @import url('/css/upload.css');
+        @import url('/css/info-sections.css');
     </style>
 </head>
 <body>
@@ -81,18 +45,19 @@
                     <form th:action="@{/import/{clientId}/upload(clientId=${client.id})}"
                           method="post" enctype="multipart/form-data" id="quickImportForm">
 
-                        <div class="file-upload-area" id="fileUploadArea">
+                        <!-- Унифицированная зона загрузки файлов -->
+                        <div class="upload-zone" id="fileUploadArea">
                             <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
                             <h5>Перетащите файлы сюда или нажмите для выбора</h5>
                             <p class="text-muted">Поддерживаемые форматы: CSV, Excel (XLS, XLSX), TXT</p>
-                            <input type="file" class="form-control d-none" id="files" name="files"
+                            <input type="file" class="d-none upload-input" id="files" name="files"
                                    multiple required accept=".csv,.xlsx,.xls,.txt">
-                            <button type="button" class="btn btn-primary mt-3" id="selectFilesBtn">
+                            <button type="button" class="btn btn-primary mt-3 select-files-btn" id="selectFilesBtn">
                                 <i class="fas fa-folder-open me-1"></i>Выбрать файлы
                             </button>
                         </div>
-
-                        <div id="selectedFiles" class="mt-4"></div>
+                        <!-- Область предпросмотра файлов -->
+                        <div id="selectedFiles" class="file-preview-container mt-3"></div>
 
                         <div class="mt-3" id="uploadActions" style="display: none;">
                             <button type="submit" class="btn btn-success" id="uploadBtn">
@@ -105,71 +70,103 @@
                     </form>
 
                     <div class="mt-4">
-                        <h6>Как это работает:</h6>
-                        <ol>
-                            <li>Выберите один или несколько файлов для импорта</li>
-                            <li>Система проанализирует структуру файлов</li>
-                            <li>Выберите подходящий шаблон импорта</li>
-                            <li>Запустите процесс импорта</li>
-                        </ol>
+                        <!-- Инструкции по работе -->
+                        <div class="info-section info-section--instructions info-section--compact">
+                            <h6 class="info-section__title">
+                                <i class="fas fa-list-ol info-section__icon"></i>
+                                Как это работает
+                            </h6>
+                            <div class="info-section__body">
+                                <ol>
+                                    <li>Выберите один или несколько файлов для импорта</li>
+                                    <li>Система проанализирует структуру файлов</li>
+                                    <li>Выберите подходящий шаблон импорта</li>
+                                    <li>Запустите процесс импорта</li>
+                                </ol>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="alert alert-info mt-3">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Совет:</strong> Вы можете загрузить несколько файлов одновременно.
-                        Максимальный размер каждого файла: 600 МБ.
+                    <div class="mt-3">
+                        <!-- Важные заметки -->
+                        <div class="info-section info-section--warnings info-section--compact">
+                            <h6 class="info-section__title">
+                                <i class="fas fa-exclamation-triangle info-section__icon"></i>
+                                Важная информация
+                            </h6>
+                            <div class="info-section__body">
+                                <ul class="list-with-icons">
+                                    <li class="list-item--info">Вы можете загрузить несколько файлов одновременно</li>
+                                    <li class="list-item--info">Максимальный размер каждого файла: 600 МБ</li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card bg-light">
-                <div class="card-body">
-                    <h6 class="card-title">
+            <!-- Управление шаблонами -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
                         <i class="fas fa-cog me-2"></i>Управление шаблонами
                     </h6>
-                    <p class="card-text small">Настройте шаблоны для автоматического импорта данных</p>
-                    <a th:href="@{/clients/{clientId}/import/templates(clientId=${client.id})}"
-                       class="btn btn-outline-primary btn-sm">
+                </div>
+                <div class="card-body">
+                    <a th:href="@{/clients/{id}/import/templates(id=${client.id})}"
+                       class="btn btn-outline-primary w-100">
                         <i class="fas fa-cog me-1"></i>Настроить шаблоны
                     </a>
                 </div>
             </div>
 
-            <div class="card mt-3">
-                <div class="card-body">
-                    <h6 class="card-title">
-                        <i class="fas fa-info-circle me-2"></i>Возможности
+            <div class="mt-3">
+                <!-- Возможности системы -->
+                <div class="info-section info-section--description">
+                    <h6 class="info-section__title">
+                        <i class="fas fa-star info-section__icon"></i>
+                        Возможности
                     </h6>
-                    <ul class="small mb-0">
-                        <li>Автоматическое определение кодировки</li>
-                        <li>Поддержка CSV, Excel (XLS, XLSX)</li>
-                        <li>Валидация данных перед импортом</li>
-                        <li>Обработка больших файлов</li>
-                        <li>Детальные отчеты об ошибках</li>
-                    </ul>
+                    <div class="info-section__body">
+                        <ul class="list-with-icons">
+                            <li>Автоматическое определение кодировки</li>
+                            <li>Поддержка CSV, Excel (XLS, XLSX)</li>
+                            <li>Валидация данных перед импортом</li>
+                            <li>Обработка больших файлов</li>
+                            <li>Детальные отчеты об ошибках</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 
             <!-- Навигация к другим разделам клиента -->
-            <div class="card mt-3">
-                <div class="card-body">
-                    <h6 class="card-title">
-                        <i class="fas fa-sitemap me-2"></i>Другие разделы
-                    </h6>
-                    <div class="d-grid gap-2">
-                        <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-outline-secondary btn-sm">
-                            <i class="fas fa-home me-1"></i>Обзор
-                        </a>
-                        <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-outline-secondary btn-sm">
-                            <i class="fas fa-file-export me-1"></i>Экспорт
-                        </a>
-                        <a th:href="@{/clients/{id}/templates(id=${client.id})}" class="btn btn-outline-secondary btn-sm">
-                            <i class="fas fa-file-alt me-1"></i>Шаблоны
-                        </a>
-                        <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-outline-secondary btn-sm">
-                            <i class="fas fa-history me-1"></i>История операций
-                        </a>
+            <div class="mt-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="fas fa-sitemap me-2"></i>Другие разделы
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <a th:href="@{/clients/{id}(id=${client.id})}"
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-home me-1"></i>Обзор
+                            </a>
+                            <a th:href="@{/clients/{id}/export(id=${client.id})}"
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-file-export me-1"></i>Экспорт
+                            </a>
+                            <a th:href="@{/clients/{id}/templates(id=${client.id})}"
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-file-alt me-1"></i>Шаблоны
+                            </a>
+                            <a th:href="@{/clients/{id}/operations(id=${client.id})}"
+                               class="btn btn-outline-secondary">
+                                <i class="fas fa-history me-1"></i>История операций
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -177,104 +174,38 @@
     </div>
 </section>
 
+<script src="/js/upload.js"></script>
 <script>
-    // Drag and Drop функциональность
-    const fileUploadArea = document.getElementById('fileUploadArea');
-    const fileInput = document.getElementById('files');
-    const selectedFilesDiv = document.getElementById('selectedFiles');
-    const uploadActions = document.getElementById('uploadActions');
+    // Инициализация UploadManager для импорта файлов
+    let uploadManager;
 
-    // Обработчики drag and drop
-    fileUploadArea.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        fileUploadArea.classList.add('dragover');
-    });
+    document.addEventListener('DOMContentLoaded', function() {
+        const uploadActions = document.getElementById('uploadActions');
 
-    fileUploadArea.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        fileUploadArea.classList.remove('dragover');
-    });
+        // Создаем конфигурацию для импорта
+        const config = UploadConfig.importFiles('fileUploadArea', 'files', 'selectedFiles', 'selectFilesBtn');
 
-    fileUploadArea.addEventListener('drop', function(e) {
-        e.preventDefault();
-        fileUploadArea.classList.remove('dragover');
-        const files = e.dataTransfer.files;
-        fileInput.files = files;
-        displaySelectedFiles();
-    });
-
-    // Обработчик кнопки выбора файлов
-    document.getElementById('selectFilesBtn').addEventListener('click', function(e) {
-        e.stopPropagation(); // Предотвращаем всплытие события
-        fileInput.click();
-    });
-
-    // Обработчик клика на область drag-and-drop (но не на кнопку)
-    fileUploadArea.addEventListener('click', function(e) {
-        // Если клик был по кнопке или её дочерним элементам, игнорируем
-        if (e.target.closest('#selectFilesBtn')) {
-            return;
-        }
-        fileInput.click();
-    });
-
-    fileInput.addEventListener('change', displaySelectedFiles);
-
-    function displaySelectedFiles() {
-        const files = fileInput.files;
-        if (files.length === 0) {
-            selectedFilesDiv.innerHTML = '';
-            uploadActions.style.display = 'none';
-            return;
-        }
-
-        let html = '<div class="mt-3"><h6>Выбранные файлы:</h6>';
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const fileSize = formatFileSize(file.size);
-            html += `
-                <div class="file-preview">
-                    <div class="file-info">
-                        <strong>${file.name}</strong>
-                        <div class="file-size">${fileSize}</div>
-                    </div>
-                    <span class="remove-file" onclick="removeFile(${i})" title="Удалить файл">
-                        <i class="fas fa-times"></i>
-                    </span>
-                </div>
-            `;
-        }
-        html += '</div>';
-
-        selectedFilesDiv.innerHTML = html;
-        uploadActions.style.display = 'block';
-    }
-
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    function removeFile(index) {
-        const dt = new DataTransfer();
-        const files = fileInput.files;
-
-        for (let i = 0; i < files.length; i++) {
-            if (i !== index) {
-                dt.items.add(files[i]);
+        // Добавляем обработчики событий
+        config.onFileSelect = function(files) {
+            if (files.length > 0) {
+                uploadActions.style.display = 'block';
             }
-        }
+        };
 
-        fileInput.files = dt.files;
-        displaySelectedFiles();
-    }
+        config.onFileRemove = function(file, index) {
+            if (uploadManager.getSelectedFiles().length === 0) {
+                uploadActions.style.display = 'none';
+            }
+        };
 
+        // Инициализируем менеджер загрузки
+        uploadManager = new UploadManager(config);
+    });
+
+    // Функция очистки для обратной совместимости
     function clearFiles() {
-        fileInput.value = '';
-        displaySelectedFiles();
+        uploadManager.clearFiles();
+        document.getElementById('uploadActions').style.display = 'none';
     }
 
     // Валидация формы перед отправкой
