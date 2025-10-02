@@ -409,6 +409,45 @@ class UploadManager {
         if (this.input) this.input.disabled = false;
         if (this.button) this.button.disabled = false;
     }
+
+    /**
+     * Очищает event listeners и освобождает ресурсы
+     * Вызывайте этот метод при уничтожении компонента для предотвращения утечек памяти
+     */
+    destroy() {
+        // Удаляем event listeners
+        if (this.input) {
+            this.input.removeEventListener('change', this.handleFileSelect);
+        }
+
+        if (this.button) {
+            this.button.removeEventListener('click', this.handleButtonClick);
+        }
+
+        if (this.zone) {
+            this.zone.removeEventListener('click', this.handleZoneClick);
+            this.zone.removeEventListener('dragover', this.handleDragOver);
+            this.zone.removeEventListener('dragleave', this.handleDragLeave);
+            this.zone.removeEventListener('drop', this.handleDrop);
+        }
+
+        // Очищаем файлы и preview
+        this.clearFiles();
+
+        // Удаляем контейнер уведомлений, если он был создан
+        const notificationContainer = document.getElementById('upload-notifications');
+        if (notificationContainer && notificationContainer.parentNode) {
+            notificationContainer.remove();
+        }
+
+        // Очищаем ссылки на DOM элементы
+        this.zone = null;
+        this.input = null;
+        this.preview = null;
+        this.button = null;
+        this.selectedFiles = [];
+        this.config = null;
+    }
 }
 
 // Утилитарные функции для создания стандартных конфигураций
