@@ -419,24 +419,31 @@ function displayDateModifications() {
         return;
     }
 
-    // Собираем статистику изменений дат из всех групп и всех операций
+    // Собираем статистику изменений дат ТОЛЬКО из последней операции каждой группы
     const allDateMods = [];
 
     statisticsData.forEach(group => {
         if (group.operations && group.operations.length > 0) {
-            group.operations.forEach(operation => {
-                // Ищем статистику изменений дат в операции
-                if (operation.dateModificationStats) {
-                    console.debug('Найдена статистика изменений дат для группы:', group.groupFieldValue, operation.dateModificationStats);
-                    allDateMods.push({
-                        group: group.groupFieldValue,
-                        operation: operation.operationName,
-                        exportDate: operation.exportDate,
-                        operationId: operation.operationId,
-                        ...operation.dateModificationStats
-                    });
-                }
-            });
+            // Находим операцию с самой последней датой экспорта (самая новая операция)
+            const latestOperation = group.operations.reduce((latest, current) => {
+                if (!latest) return current;
+                const latestDate = new Date(latest.exportDate);
+                const currentDate = new Date(current.exportDate);
+                return currentDate > latestDate ? current : latest;
+            }, null);
+
+            // Берем статистику изменений дат только из последней операции
+            if (latestOperation && latestOperation.dateModificationStats) {
+                console.debug('Найдена статистика изменений дат для группы (последняя операция):',
+                    group.groupFieldValue, latestOperation.dateModificationStats);
+                allDateMods.push({
+                    group: group.groupFieldValue,
+                    operation: latestOperation.operationName,
+                    exportDate: latestOperation.exportDate,
+                    operationId: latestOperation.operationId,
+                    ...latestOperation.dateModificationStats
+                });
+            }
         }
     });
 
