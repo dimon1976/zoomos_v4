@@ -282,12 +282,35 @@ public class ExportStatisticsService {
                         .currentValue(currentValue)
                         .previousValue(previousValue);
 
-        if (previousValue == null || previousValue == 0) {
+        // Если нет предыдущего значения - не можем рассчитать изменение
+        if (previousValue == null) {
             return metricBuilder
                     .changePercentage(0.0)
                     .changeType(StatisticsComparisonDto.ChangeType.STABLE)
                     .alertLevel(StatisticsComparisonDto.AlertLevel.NORMAL)
                     .build();
+        }
+
+        // Если предыдущее значение было 0, а текущее не 0 - это рост на 100%
+        if (previousValue == 0) {
+            if (currentValue == 0) {
+                return metricBuilder
+                        .changePercentage(0.0)
+                        .changeType(StatisticsComparisonDto.ChangeType.STABLE)
+                        .alertLevel(StatisticsComparisonDto.AlertLevel.NORMAL)
+                        .build();
+            } else {
+                // Был 0, стало currentValue - это рост на 100%
+                double changePercentage = 100.0;
+                StatisticsComparisonDto.AlertLevel alertLevel = determineAlertLevel(
+                        changePercentage, warningPercentage, criticalPercentage);
+
+                return metricBuilder
+                        .changePercentage(changePercentage)
+                        .changeType(StatisticsComparisonDto.ChangeType.UP)
+                        .alertLevel(alertLevel)
+                        .build();
+            }
         }
 
         // Вычисляем процент изменения
