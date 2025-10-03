@@ -1,0 +1,126 @@
+version: '3.8'
+
+# =======================================================
+# ZOOMOS V4 - Docker Compose Configuration
+# =======================================================
+
+services:
+  # -------------------------------------------------------
+  # PostgreSQL Database (ОТКЛЮЧЕН - используется локальная БД)
+  # -------------------------------------------------------
+  # postgres:
+  #   image: postgres:16
+  #   container_name: zoomos_postgres
+  #   restart: unless-stopped
+  #   platform: linux/amd64
+  #
+  #   environment:
+  #     POSTGRES_DB: zoomos_v4
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: root
+  #     PGDATA: /var/lib/postgresql/data/pgdata
+  #
+  #   ports:
+  #     - "5432:5432"
+  #
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres -d zoomos_v4"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 10s
+  #
+  #   networks:
+  #     - zoomos_network
+
+  # -------------------------------------------------------
+  # Zoomos v4 Application
+  # -------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zoomos_app
+    restart: unless-stopped
+
+    # Убрана зависимость от Docker PostgreSQL
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+
+    ports:
+      - "8081:8081"
+
+    environment:
+      # Spring профиль
+      SPRING_PROFILES_ACTIVE: docker
+
+      # Database connection к локальной БД на хосте
+      # host.docker.internal указывает на хост-машину из Docker контейнера
+      SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/zoomos_v4
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: root
+
+      # JVM memory settings (можно настроить под ваш сервер)
+      JAVA_OPTS: >-
+        -Xms512m
+        -Xmx2048m
+        -XX:+UseContainerSupport
+        -XX:MaxRAMPercentage=75.0
+        -XX:+ExitOnOutOfMemoryError
+        -Djava.security.egd=file:/dev/./urandom
+
+      # Playwright browser path
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+
+    volumes:
+      # Постоянное хранение загруженных файлов
+      - app_uploads:/app/data/upload
+      - app_exports:/app/data/upload/exports
+      - app_temp:/app/data/temp
+      - app_logs:/app/logs
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+    networks:
+      - zoomos_network
+
+# -------------------------------------------------------
+# Volumes для постоянного хранения данных
+# -------------------------------------------------------
+volumes:
+  postgres_data:
+    name: zoomos_postgres_data
+    driver: local
+
+  app_uploads:
+    name: zoomos_uploads
+    driver: local
+
+  app_exports:
+    name: zoomos_exports
+    driver: local
+
+  app_temp:
+    name: zoomos_temp
+    driver: local
+
+  app_logs:
+    name: zoomos_logs
+    driver: local
+
+# -------------------------------------------------------
+# Network для коммуникации между контейнерами
+# -------------------------------------------------------
+networks:
+  zoomos_network:
+    name: zoomos_network
+    driver: bridge
