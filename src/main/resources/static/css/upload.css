@@ -18,6 +18,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    will-change: transform, background-color, border-color;
 }
 
 .upload-zone:hover,
@@ -61,6 +62,7 @@
     transition: all 0.2s ease;
     z-index: 2;
     position: relative;
+    will-change: transform;
 }
 
 .select-files-btn:hover {
@@ -88,6 +90,7 @@
     justify-content: space-between;
     align-items: center;
     transition: all 0.2s ease;
+    will-change: background-color, border-color;
 }
 
 .file-preview:hover {
@@ -127,6 +130,7 @@
     border-radius: 3px;
     transition: all 0.2s ease;
     font-size: 16px;
+    will-change: background-color, color;
 }
 
 .file-preview .remove-file:hover {

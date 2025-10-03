@@ -1,0 +1,54 @@
+# =======================================================
+# Docker Build Exclusions
+# =======================================================
+
+# Maven build artifacts
+target/
+!target/*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Logs
+logs/
+*.log
+
+# Data directories (будут создаваться в runtime)
+data/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Documentation (не нужна в образе)
+*.md
+docs/
+
+# Docker files (не нужны внутри образа)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Test files
+src/test/
+
+# Maven wrapper (используем системный maven)
+.mvn/
+mvnw
+mvnw.cmd
