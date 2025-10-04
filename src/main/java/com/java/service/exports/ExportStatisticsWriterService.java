@@ -6,6 +6,7 @@ import com.java.model.entity.ExportSession;
 import com.java.model.entity.ExportStatistics;
 import com.java.model.entity.ExportTemplate;
 import com.java.repository.ExportStatisticsRepository;
+import com.java.util.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,8 @@ import java.util.*;
 @Slf4j
 @RequiredArgsConstructor
 public class ExportStatisticsWriterService {
+
+    private static final int MAX_FILTER_VALUES = 50; // Максимум уникальных значений для фильтрации
 
     private final ExportStatisticsRepository statisticsRepository;
     private final ObjectMapper objectMapper;
@@ -44,9 +47,9 @@ public class ExportStatisticsWriterService {
         }
 
         // Получаем настройки статистики из шаблона
-        List<String> countFields = parseJsonStringList(template.getStatisticsCountFields());
+        List<String> countFields = JsonUtils.parseJsonStringList(template.getStatisticsCountFields());
         String groupField = template.getStatisticsGroupField();
-        List<String> filterFields = parseJsonStringList(template.getStatisticsFilterFields());
+        List<String> filterFields = JsonUtils.parseJsonStringList(template.getStatisticsFilterFields());
 
         if (countFields.isEmpty()) {
             log.warn("Нет полей для подсчета в шаблоне ID: {}", template.getId());
@@ -97,6 +100,14 @@ public class ExportStatisticsWriterService {
 
             // Получаем уникальные значения фильтра
             Set<String> uniqueValues = getUniqueFilterValues(exportedData, filterColumnName);
+
+            // Валидация: проверка на высококардинальность
+            if (uniqueValues.size() > MAX_FILTER_VALUES) {
+                log.warn("Поле фильтрации '{}' имеет {} уникальных значений (макс {}). " +
+                        "Фильтрация пропущена для предотвращения взрывного роста данных.",
+                        filterField, uniqueValues.size(), MAX_FILTER_VALUES);
+                continue; // Пропускаем это поле фильтрации
+            }
 
             log.debug("Поле фильтрации '{}' (колонка '{}'): {} уникальных значений",
                     filterField, filterColumnName, uniqueValues.size());
@@ -252,21 +263,6 @@ public class ExportStatisticsWriterService {
         return !stringValue.isEmpty() && !"null".equalsIgnoreCase(stringValue);
     }
 
-    /**
-     * Парсит JSON строку в список строк
-     */
-    private List<String> parseJsonStringList(String json) {
-        if (json == null || json.trim().isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            log.error("Ошибка парсинга JSON списка: {}", json, e);
-            return new ArrayList<>();
-        }
-    }
 
     /**
      * Получает уникальные значения для указанного поля фильтрации

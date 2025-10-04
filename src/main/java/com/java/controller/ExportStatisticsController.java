@@ -9,6 +9,7 @@ import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
 import com.java.service.statistics.ExportStatisticsService;
 import com.java.service.statistics.StatisticsSettingsService;
+import com.java.util.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -82,6 +83,18 @@ public class ExportStatisticsController {
                 request, filterField, filterValue);
 
         try {
+            // Валидация параметров фильтра
+            if ((filterField != null && filterField.trim().isEmpty()) ||
+                (filterValue != null && filterValue.trim().isEmpty())) {
+                throw new IllegalArgumentException("Параметры фильтра не могут быть пустыми");
+            }
+
+            // Проверка: если указан filterField, должен быть и filterValue (и наоборот)
+            if ((filterField != null && filterValue == null) ||
+                (filterField == null && filterValue != null)) {
+                throw new IllegalArgumentException("Оба параметра фильтра должны быть указаны одновременно");
+            }
+
             // Вычисляем статистику с учетом фильтра
             List<StatisticsComparisonDto> comparison = statisticsService.calculateComparison(
                     request, filterField, filterValue);
@@ -320,7 +333,7 @@ public class ExportStatisticsController {
                     .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
 
             // Получаем поля фильтрации из шаблона
-            List<String> filterFields = parseJsonStringList(template.getStatisticsFilterFields());
+            List<String> filterFields = JsonUtils.parseJsonStringList(template.getStatisticsFilterFields());
 
             if (filterFields.isEmpty()) {
                 return Map.of(); // Пустой Map если нет полей фильтрации
@@ -344,23 +357,5 @@ public class ExportStatisticsController {
         }
     }
 
-    /**
-     * Парсит JSON строку в список строк
-     */
-    private List<String> parseJsonStringList(String json) {
-        if (json == null || json.trim().isEmpty()) {
-            return List.of();
-        }
-
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper =
-                    new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.readValue(json,
-                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            log.error("Ошибка парсинга JSON списка: {}", json, e);
-            return List.of();
-        }
-    }
 
 }
