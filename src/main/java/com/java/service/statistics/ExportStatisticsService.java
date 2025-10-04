@@ -27,10 +27,22 @@ public class ExportStatisticsService {
     private final StatisticsSettingsService settingsService;
 
     /**
-     * Вычисляет статистику для выбранных операций экспорта
+     * Вычисляет статистику для выбранных операций экспорта (без фильтра)
      */
     public List<StatisticsComparisonDto> calculateComparison(StatisticsRequestDto request) {
-        log.info("Расчет статистики для операций: {}", request.getExportSessionIds());
+        return calculateComparison(request, null, null);
+    }
+
+    /**
+     * Вычисляет статистику для выбранных операций экспорта с учётом фильтра
+     */
+    public List<StatisticsComparisonDto> calculateComparison(
+            StatisticsRequestDto request,
+            String filterFieldName,
+            String filterFieldValue) {
+
+        log.info("Расчет статистики для операций: {} с фильтром: {}={}",
+                request.getExportSessionIds(), filterFieldName, filterFieldValue);
 
         // Получаем шаблон
         ExportTemplate template = templateRepository.findByIdWithFieldsAndFilters(request.getTemplateId())
@@ -47,9 +59,20 @@ public class ExportStatisticsService {
             return Collections.emptyList();
         }
 
-        // Получаем сохранённую статистику для всех сессий
+        // Получаем статистику с учётом фильтра
         List<Long> sessionIds = sessions.stream().map(ExportSession::getId).toList();
-        List<ExportStatistics> allStatistics = statisticsRepository.findByExportSessionIds(sessionIds);
+        List<ExportStatistics> allStatistics;
+
+        if (filterFieldName != null && filterFieldValue != null) {
+            // Получаем отфильтрованную статистику
+            allStatistics = statisticsRepository.findBySessionIdsAndFilter(
+                    sessionIds, filterFieldName, filterFieldValue);
+            log.debug("Получено {} записей отфильтрованной статистики", allStatistics.size());
+        } else {
+            // Получаем общую статистику (filter = NULL)
+            allStatistics = statisticsRepository.findBySessionIdsWithoutFilter(sessionIds);
+            log.debug("Получено {} записей общей статистики", allStatistics.size());
+        }
 
         if (allStatistics.isEmpty()) {
             log.warn("Нет сохранённой статистики для сессий: {}", sessionIds);
