@@ -45,6 +45,13 @@ public class ExportStatistics {
     @Column(name = "filter_conditions", columnDefinition = "TEXT")
     private String filterConditions; // JSON условий фильтрации (может не использоваться)
 
+    // Новые поля для фильтрации по дополнительным полям (V15)
+    @Column(name = "filter_field_name")
+    private String filterFieldName;
+
+    @Column(name = "filter_field_value")
+    private String filterFieldValue;
+
     @Column(name = "date_modifications_count", nullable = false)
     @Builder.Default
     private Long dateModificationsCount = 0L;
