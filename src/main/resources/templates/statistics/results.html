@@ -384,6 +384,42 @@
         </div>
     </div>
 
+    <!-- Панель фильтров по полям (показывается если есть поля фильтрации в шаблоне) -->
+    <div th:unless="${#lists.isEmpty(comparison)}" id="fieldFilterPanel" class="filter-controls mb-3" style="display: none;">
+        <h6 class="mb-3"><i class="fas fa-filter me-2"></i>Фильтрация по полям данных</h6>
+        <div class="row align-items-end">
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Поле фильтрации:</label>
+                <select id="filterFieldSelect" class="form-select" onchange="onFilterFieldChange()">
+                    <option value="">Выберите поле...</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Значение:</label>
+                <select id="filterValueSelect" class="form-select" disabled onchange="onFilterValueChange()">
+                    <option value="">Сначала выберите поле</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button type="button" class="btn btn-primary me-2" onclick="applyFilter()" disabled id="applyFilterBtn">
+                    <i class="fas fa-check me-1"></i>Применить
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="resetFilter()">
+                    <i class="fas fa-times me-1"></i>Сбросить
+                </button>
+            </div>
+        </div>
+
+        <!-- Индикатор активного фильтра -->
+        <div id="activeFilterIndicator" class="alert alert-info mt-3" style="display: none; margin-bottom: 0;">
+            <i class="fas fa-filter me-2"></i>
+            <strong>Активный фильтр:</strong> <span id="activeFilterText"></span>
+            <button type="button" class="btn btn-sm btn-outline-info ms-3" onclick="resetFilter()">
+                <i class="fas fa-times me-1"></i>Сбросить
+            </button>
+        </div>
+    </div>
+
     <!-- Таблица статистики -->
     <div th:unless="${#lists.isEmpty(comparison)}" class="table-responsive">
         <table class="table table-bordered statistics-table">
@@ -591,11 +627,220 @@
     const statisticsDataFromTemplate = /*[[${comparison}]]*/ [];
     const warningThresholdFromTemplate = /*[[${warningPercentage}]]*/ 10;
     const criticalThresholdFromTemplate = /*[[${criticalPercentage}]]*/ 20;
+    const templateId = /*[[${request.templateId}]]*/ null;
+    const sessionIds = /*[[${request.exportSessionIds}]]*/ [];
+    const activeFilterField = /*[[${filterField}]]*/ null;
+    const activeFilterValue = /*[[${filterValue}]]*/ null;
+
+    // Глобальные переменные для хранения данных фильтров
+    let filterFieldsData = {};
 
     document.addEventListener('DOMContentLoaded', () => {
         // Инициализируем данные в загруженном скрипте
         initializeStatisticsData(statisticsDataFromTemplate, warningThresholdFromTemplate, criticalThresholdFromTemplate);
+
+        // Загружаем фильтры если есть templateId и sessionIds
+        if (templateId && sessionIds && sessionIds.length > 0) {
+            loadFilterFields();
+        }
+
+        // Проверяем активный фильтр при загрузке
+        checkActiveFilter();
     });
+
+    /**
+     * Загружает доступные поля фильтрации и их значения с сервера
+     */
+    async function loadFilterFields() {
+        try {
+            // Формируем URL для запроса
+            const sessionIdsParam = sessionIds.join(',');
+            const url = `/statistics/filter-values?templateId=${templateId}&sessionIds=${sessionIdsParam}`;
+
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error('Ошибка загрузки фильтров');
+            }
+
+            filterFieldsData = await response.json();
+
+            // Если есть поля фильтрации - показываем панель
+            if (Object.keys(filterFieldsData).length > 0) {
+                document.getElementById('fieldFilterPanel').style.display = 'block';
+
+                // Заполняем select полей фильтрации
+                const filterFieldSelect = document.getElementById('filterFieldSelect');
+                filterFieldSelect.innerHTML = '<option value="">Выберите поле...</option>';
+
+                for (const [fieldName, values] of Object.entries(filterFieldsData)) {
+                    const option = document.createElement('option');
+                    option.value = fieldName;
+                    option.textContent = fieldName;
+                    filterFieldSelect.appendChild(option);
+                }
+
+                // Если есть активный фильтр - восстанавливаем его
+                if (activeFilterField && filterFieldsData[activeFilterField]) {
+                    filterFieldSelect.value = activeFilterField;
+                    onFilterFieldChange();
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки фильтров:', error);
+        }
+    }
+
+    /**
+     * Обработчик изменения поля фильтрации
+     */
+    function onFilterFieldChange() {
+        const filterFieldSelect = document.getElementById('filterFieldSelect');
+        const filterValueSelect = document.getElementById('filterValueSelect');
+        const selectedField = filterFieldSelect.value;
+
+        if (!selectedField) {
+            // Сброс выбора
+            filterValueSelect.innerHTML = '<option value="">Сначала выберите поле</option>';
+            filterValueSelect.disabled = true;
+            document.getElementById('applyFilterBtn').disabled = true;
+            return;
+        }
+
+        // Заполняем select значений
+        const values = filterFieldsData[selectedField] || [];
+        filterValueSelect.innerHTML = '<option value="">Выберите значение...</option>';
+
+        values.forEach(value => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            filterValueSelect.appendChild(option);
+        });
+
+        filterValueSelect.disabled = false;
+
+        // Если есть активное значение - восстанавливаем его
+        if (activeFilterField === selectedField && activeFilterValue) {
+            filterValueSelect.value = activeFilterValue;
+            document.getElementById('applyFilterBtn').disabled = false;
+        }
+    }
+
+    /**
+     * Обработчик изменения значения фильтра
+     */
+    function onFilterValueChange() {
+        const filterValueSelect = document.getElementById('filterValueSelect');
+        const selectedValue = filterValueSelect.value;
+
+        // Активируем кнопку "Применить" только если выбрано значение
+        document.getElementById('applyFilterBtn').disabled = !selectedValue;
+    }
+
+    /**
+     * Применяет выбранный фильтр (отправляет POST-запрос с формой)
+     */
+    function applyFilter() {
+        const filterField = document.getElementById('filterFieldSelect').value;
+        const filterValue = document.getElementById('filterValueSelect').value;
+
+        if (!filterField || !filterValue) {
+            alert('Пожалуйста, выберите поле и значение фильтра');
+            return;
+        }
+
+        // Создаём форму для POST-запроса
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/statistics/analyze';
+
+        // Добавляем существующие параметры из request
+        const addHiddenField = (name, value) => {
+            if (value !== null && value !== undefined) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            }
+        };
+
+        // Передаём templateId
+        addHiddenField('templateId', templateId);
+
+        // Передаём exportSessionIds (массив)
+        if (sessionIds && sessionIds.length > 0) {
+            sessionIds.forEach(id => {
+                addHiddenField('exportSessionIds', id);
+            });
+        }
+
+        // Передаём пороги предупреждений
+        addHiddenField('warningPercentage', warningThresholdFromTemplate);
+        addHiddenField('criticalPercentage', criticalThresholdFromTemplate);
+
+        // Добавляем параметры фильтра
+        addHiddenField('filterField', filterField);
+        addHiddenField('filterValue', filterValue);
+
+        // Отправляем форму
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    /**
+     * Сбрасывает фильтр (отправляет POST-запрос без параметров фильтра)
+     */
+    function resetFilter() {
+        // Создаём форму для POST-запроса
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/statistics/analyze';
+
+        // Добавляем существующие параметры из request
+        const addHiddenField = (name, value) => {
+            if (value !== null && value !== undefined) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            }
+        };
+
+        // Передаём templateId
+        addHiddenField('templateId', templateId);
+
+        // Передаём exportSessionIds (массив)
+        if (sessionIds && sessionIds.length > 0) {
+            sessionIds.forEach(id => {
+                addHiddenField('exportSessionIds', id);
+            });
+        }
+
+        // Передаём пороги предупреждений
+        addHiddenField('warningPercentage', warningThresholdFromTemplate);
+        addHiddenField('criticalPercentage', criticalThresholdFromTemplate);
+
+        // НЕ добавляем filterField и filterValue - это и есть сброс
+
+        // Отправляем форму
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    /**
+     * Проверяет и показывает индикатор активного фильтра при загрузке
+     */
+    function checkActiveFilter() {
+        if (activeFilterField && activeFilterValue) {
+            const indicator = document.getElementById('activeFilterIndicator');
+            const indicatorText = document.getElementById('activeFilterText');
+
+            indicatorText.textContent = `${activeFilterField} = "${activeFilterValue}"`;
+            indicator.style.display = 'block';
+        }
+    }
     /*]]>*/
 </script>
 

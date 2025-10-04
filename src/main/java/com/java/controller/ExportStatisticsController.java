@@ -73,14 +73,18 @@ public class ExportStatisticsController {
      */
     @PostMapping("/analyze")
     public String analyzeStatistics(@ModelAttribute StatisticsRequestDto request,
+                                    @RequestParam(required = false) String filterField,
+                                    @RequestParam(required = false) String filterValue,
                                     RedirectAttributes redirectAttributes,
                                     Long clientId,
                                     Model model) {
-        log.debug("POST запрос на анализ статистики: {}", request);
+        log.debug("POST запрос на анализ статистики: {} с фильтром: {}={}",
+                request, filterField, filterValue);
 
         try {
-            // Вычисляем статистику
-            List<StatisticsComparisonDto> comparison = statisticsService.calculateComparison(request);
+            // Вычисляем статистику с учетом фильтра
+            List<StatisticsComparisonDto> comparison = statisticsService.calculateComparison(
+                    request, filterField, filterValue);
 
             if (comparison.isEmpty()) {
                 redirectAttributes.addFlashAttribute("warningMessage",
@@ -92,6 +96,8 @@ public class ExportStatisticsController {
             model.addAttribute("comparison", comparison);
             model.addAttribute("clientId", clientId);
             model.addAttribute("request", request);
+            model.addAttribute("filterField", filterField);
+            model.addAttribute("filterValue", filterValue);
             model.addAttribute("warningPercentage",
                     request.getWarningPercentage() != null ? request.getWarningPercentage() : settingsService.getWarningPercentage());
             model.addAttribute("criticalPercentage",
@@ -293,6 +299,67 @@ public class ExportStatisticsController {
                     "success", false,
                     "error", e.getMessage()
             );
+        }
+    }
+
+    /**
+     * API endpoint для получения доступных значений фильтров
+     */
+    @GetMapping("/filter-values")
+    @ResponseBody
+    public Map<String, List<String>> getFilterValues(
+            @RequestParam Long templateId,
+            @RequestParam List<Long> sessionIds) {
+
+        log.debug("GET запрос на получение значений фильтров для шаблона {} и сессий {}",
+                templateId, sessionIds);
+
+        try {
+            // Получаем шаблон
+            var template = templateRepository.findById(templateId)
+                    .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
+
+            // Получаем поля фильтрации из шаблона
+            List<String> filterFields = parseJsonStringList(template.getStatisticsFilterFields());
+
+            if (filterFields.isEmpty()) {
+                return Map.of(); // Пустой Map если нет полей фильтрации
+            }
+
+            // Для каждого поля получаем уникальные значения
+            Map<String, List<String>> result = new java.util.HashMap<>();
+
+            for (String filterField : filterFields) {
+                List<String> values = statisticsRepository.findDistinctFilterValues(
+                        sessionIds, filterField);
+                result.put(filterField, values);
+            }
+
+            log.debug("Найдено {} полей фильтрации с значениями", result.size());
+            return result;
+
+        } catch (Exception e) {
+            log.error("Ошибка получения значений фильтров", e);
+            return Map.of();
+        }
+    }
+
+    /**
+     * Парсит JSON строку в список строк
+     */
+    private List<String> parseJsonStringList(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return List.of();
+        }
+
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(json,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            log.error("Ошибка парсинга JSON списка: {}", json, e);
+            return List.of();
         }
     }
 

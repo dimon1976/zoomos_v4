@@ -64,4 +64,47 @@ public interface ExportStatisticsRepository extends JpaRepository<ExportStatisti
      * Получает количество записей статистики для сессии
      */
     long countByExportSessionId(Long exportSessionId);
+
+    /**
+     * Получает общую статистику (без фильтра) для нескольких сессий
+     */
+    @Query("SELECT es FROM ExportStatistics es " +
+           "WHERE es.exportSession.id IN :sessionIds " +
+           "AND es.filterFieldName IS NULL " +
+           "ORDER BY es.exportSession.startedAt DESC, es.groupFieldValue, es.countFieldName")
+    List<ExportStatistics> findBySessionIdsWithoutFilter(@Param("sessionIds") List<Long> sessionIds);
+
+    /**
+     * Получает отфильтрованную статистику для нескольких сессий
+     */
+    @Query("SELECT es FROM ExportStatistics es " +
+           "WHERE es.exportSession.id IN :sessionIds " +
+           "AND es.filterFieldName = :filterFieldName " +
+           "AND es.filterFieldValue = :filterFieldValue " +
+           "ORDER BY es.exportSession.startedAt DESC, es.groupFieldValue, es.countFieldName")
+    List<ExportStatistics> findBySessionIdsAndFilter(
+            @Param("sessionIds") List<Long> sessionIds,
+            @Param("filterFieldName") String filterFieldName,
+            @Param("filterFieldValue") String filterFieldValue);
+
+    /**
+     * Получает уникальные значения фильтра для указанного поля в нескольких сессиях
+     */
+    @Query("SELECT DISTINCT es.filterFieldValue FROM ExportStatistics es " +
+           "WHERE es.exportSession.id IN :sessionIds " +
+           "AND es.filterFieldName = :filterFieldName " +
+           "AND es.filterFieldValue IS NOT NULL " +
+           "ORDER BY es.filterFieldValue")
+    List<String> findDistinctFilterValues(
+            @Param("sessionIds") List<Long> sessionIds,
+            @Param("filterFieldName") String filterFieldName);
+
+    /**
+     * Получает уникальные названия полей фильтрации в нескольких сессиях
+     */
+    @Query("SELECT DISTINCT es.filterFieldName FROM ExportStatistics es " +
+           "WHERE es.exportSession.id IN :sessionIds " +
+           "AND es.filterFieldName IS NOT NULL " +
+           "ORDER BY es.filterFieldName")
+    List<String> findDistinctFilterFields(@Param("sessionIds") List<Long> sessionIds);
 }
