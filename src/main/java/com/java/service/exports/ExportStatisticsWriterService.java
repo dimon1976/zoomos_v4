@@ -46,6 +46,7 @@ public class ExportStatisticsWriterService {
         // Получаем настройки статистики из шаблона
         List<String> countFields = parseJsonStringList(template.getStatisticsCountFields());
         String groupField = template.getStatisticsGroupField();
+        List<String> filterFields = parseJsonStringList(template.getStatisticsFilterFields());
 
         if (countFields.isEmpty()) {
             log.warn("Нет полей для подсчета в шаблоне ID: {}", template.getId());
@@ -61,8 +62,8 @@ public class ExportStatisticsWriterService {
         // Создаем маппинг entity field -> export column
         Map<String, String> fieldMapping = createFieldMapping(template);
 
-        log.info("Сохранение статистики для сессии ID: {}, поле группировки: {}, полей для подсчета: {}",
-                session.getId(), groupField, countFields.size());
+        log.info("Сохранение статистики для сессии ID: {}, группировка: {}, подсчет: {}, фильтрация: {}",
+                session.getId(), groupField, countFields.size(), filterFields.size());
         log.debug("Маппинг полей: {}", fieldMapping);
         log.debug("Доступные поля в первой строке данных: {}",
                 exportedData.isEmpty() ? "нет данных" : exportedData.get(0).keySet());
@@ -80,71 +81,45 @@ public class ExportStatisticsWriterService {
 
         // Получаем статистику изменений дат из контекста (если есть)
         Map<String, Integer> dateModificationsByGroup = (Map<String, Integer>) context.get("dateModificationsByGroup");
-        Integer totalDateModifications = (Integer) context.get("totalDateModifications");
-        Integer totalProcessedRecords = (Integer) context.get("totalProcessedRecords");
-        
+
         // Для каждой группы подсчитываем статистику
         List<ExportStatistics> statisticsToSave = new ArrayList<>();
 
-        for (Map.Entry<String, List<Map<String, Object>>> groupEntry : groupedData.entrySet()) {
-            String groupValue = groupEntry.getKey();
-            List<Map<String, Object>> groupRows = groupEntry.getValue();
+        // 1. СОХРАНЯЕМ ОБЩУЮ СТАТИСТИКУ (filter = NULL)
+        log.debug("Сохранение общей статистики без фильтра");
+        statisticsToSave.addAll(calculateStatistics(session, template, groupedData,
+                groupField, countFields, fieldMapping,
+                null, null, dateModificationsByGroup));
 
-            log.debug("Обработка группы '{}' с {} строками", groupValue, groupRows.size());
+        // 2. СОХРАНЯЕМ СТАТИСТИКУ ДЛЯ КАЖДОГО ФИЛЬТРА
+        for (String filterField : filterFields) {
+            String filterColumnName = getExportColumnName(filterField, fieldMapping);
 
-            // Для каждого поля подсчета вычисляем количество непустых значений
-            for (String countField : countFields) {
-                // Получаем название колонки в экспортных данных
-                String countColumnName = getExportColumnName(countField, fieldMapping);
-                long countValue = countNonEmptyValues(groupRows, countColumnName);
+            // Получаем уникальные значения фильтра
+            Set<String> uniqueValues = getUniqueFilterValues(exportedData, filterColumnName);
 
-                ExportStatistics statistics = ExportStatistics.builder()
-                        .exportSession(session)
-                        .groupFieldName(groupField) // сохраняем исходное название поля
-                        .groupFieldValue(groupValue)
-                        .countFieldName(countField) // сохраняем исходное название поля
-                        .countValue(countValue)
-                        .totalRecordsCount((long) groupRows.size())
-                        .dateModificationsCount(0L) // для обычной статистики всегда 0
-                        .modificationType("STANDARD")
-                        .build();
+            log.debug("Поле фильтрации '{}' (колонка '{}'): {} уникальных значений",
+                    filterField, filterColumnName, uniqueValues.size());
 
-                statisticsToSave.add(statistics);
+            // Для каждого значения фильтра
+            for (String filterValue : uniqueValues) {
+                // Фильтруем данные по значению
+                List<Map<String, Object>> filteredData = filterDataByValue(exportedData,
+                        filterColumnName,
+                        filterValue);
 
-                log.debug("Группа '{}', поле '{}' (колонка '{}'): {} значений",
-                        groupValue, countField, countColumnName, countValue);
-            }
-        }
-        
-        // Сохраняем статистику изменений дат по группам (если есть)
-        if (dateModificationsByGroup != null && !dateModificationsByGroup.isEmpty()) {
-            log.debug("Сохранение статистики изменений дат по {} группам", dateModificationsByGroup.size());
+                // Группируем отфильтрованные данные
+                Map<String, List<Map<String, Object>>> filteredGroupedData =
+                        groupDataByField(filteredData, groupColumnName);
 
-            for (Map.Entry<String, Integer> entry : dateModificationsByGroup.entrySet()) {
-                String groupValue = entry.getKey();
-                Integer modificationsCount = entry.getValue();
+                log.debug("Фильтр '{}={}': отфильтровано {} записей, {} групп",
+                        filterField, filterValue, filteredData.size(), filteredGroupedData.size());
 
-                if (modificationsCount != null && modificationsCount > 0) {
-                    // Получаем количество записей именно в этой группе
-                    List<Map<String, Object>> groupRows = groupedData.get(groupValue);
-                    long groupRecordsCount = groupRows != null ? groupRows.size() : 0L;
-
-                    ExportStatistics dateModStats = ExportStatistics.builder()
-                            .exportSession(session)
-                            .groupFieldName(groupField)
-                            .groupFieldValue(groupValue)
-                            .countFieldName("DATE_MODIFICATIONS")
-                            .countValue(modificationsCount.longValue())
-                            .totalRecordsCount(groupRecordsCount)
-                            .dateModificationsCount(modificationsCount.longValue())
-                            .modificationType("DATE_ADJUSTMENT")
-                            .build();
-
-                    statisticsToSave.add(dateModStats);
-
-                    log.debug("Группа '{}': сохранена статистика изменений дат - {} из {} записей",
-                            groupValue, modificationsCount, groupRecordsCount);
-                }
+                // Пересчитываем метрики для отфильтрованных данных
+                statisticsToSave.addAll(calculateStatistics(session, template, filteredGroupedData,
+                        groupField, countFields, fieldMapping,
+                        filterField, filterValue,
+                        dateModificationsByGroup));
             }
         }
 
@@ -291,5 +266,93 @@ public class ExportStatisticsWriterService {
             log.error("Ошибка парсинга JSON списка: {}", json, e);
             return new ArrayList<>();
         }
+    }
+
+    /**
+     * Получает уникальные значения для указанного поля фильтрации
+     */
+    private Set<String> getUniqueFilterValues(List<Map<String, Object>> data, String filterColumnName) {
+        return data.stream()
+                .map(row -> getGroupValue(row, filterColumnName))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    /**
+     * Фильтрует данные по значению указанного поля
+     */
+    private List<Map<String, Object>> filterDataByValue(List<Map<String, Object>> data,
+                                                         String filterColumnName,
+                                                         String filterValue) {
+        return data.stream()
+                .filter(row -> {
+                    String value = getGroupValue(row, filterColumnName);
+                    return value.equals(filterValue);
+                })
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Вычисляет статистику для группированных данных
+     */
+    private List<ExportStatistics> calculateStatistics(ExportSession session,
+                                                       ExportTemplate template,
+                                                       Map<String, List<Map<String, Object>>> groupedData,
+                                                       String groupField,
+                                                       List<String> countFields,
+                                                       Map<String, String> fieldMapping,
+                                                       String filterFieldName,
+                                                       String filterFieldValue,
+                                                       Map<String, Integer> dateModificationsByGroup) {
+
+        List<ExportStatistics> statistics = new ArrayList<>();
+
+        for (Map.Entry<String, List<Map<String, Object>>> groupEntry : groupedData.entrySet()) {
+            String groupValue = groupEntry.getKey();
+            List<Map<String, Object>> groupRows = groupEntry.getValue();
+
+            // Статистика по полям подсчета
+            for (String countField : countFields) {
+                String countColumnName = getExportColumnName(countField, fieldMapping);
+                long countValue = countNonEmptyValues(groupRows, countColumnName);
+
+                ExportStatistics stat = ExportStatistics.builder()
+                        .exportSession(session)
+                        .groupFieldName(groupField)
+                        .groupFieldValue(groupValue)
+                        .countFieldName(countField)
+                        .countValue(countValue)
+                        .totalRecordsCount((long) groupRows.size())
+                        .filterFieldName(filterFieldName)
+                        .filterFieldValue(filterFieldValue)
+                        .dateModificationsCount(0L)
+                        .modificationType("STANDARD")
+                        .build();
+
+                statistics.add(stat);
+            }
+
+            // Статистика изменений дат (если есть)
+            if (dateModificationsByGroup != null && dateModificationsByGroup.containsKey(groupValue)) {
+                Integer modificationsCount = dateModificationsByGroup.get(groupValue);
+                if (modificationsCount != null && modificationsCount > 0) {
+                    ExportStatistics dateModStats = ExportStatistics.builder()
+                            .exportSession(session)
+                            .groupFieldName(groupField)
+                            .groupFieldValue(groupValue)
+                            .countFieldName("DATE_MODIFICATIONS")
+                            .countValue(modificationsCount.longValue())
+                            .totalRecordsCount((long) groupRows.size())
+                            .filterFieldName(filterFieldName)
+                            .filterFieldValue(filterFieldValue)
+                            .dateModificationsCount(modificationsCount.longValue())
+                            .modificationType("DATE_ADJUSTMENT")
+                            .build();
+
+                    statistics.add(dateModStats);
+                }
+            }
+        }
+
+        return statistics;
     }
 }
