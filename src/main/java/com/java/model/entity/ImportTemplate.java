@@ -22,7 +22,8 @@ import java.util.List;
  * Шаблон импорта для маппинга полей файла на поля сущности
  */
 @Entity
-@Table(name = "import_templates")
+@Table(name = "import_templates",
+       uniqueConstraints = @UniqueConstraint(columnNames = {"name", "client_id"}))
 @Data
 @Builder
 @NoArgsConstructor
@@ -33,7 +34,7 @@ public class ImportTemplate {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "name", nullable = false, unique = true)
+    @Column(name = "name", nullable = false)
     private String name;
 
     @Column(name = "description")
