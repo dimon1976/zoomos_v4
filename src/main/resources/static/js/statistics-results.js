@@ -271,14 +271,16 @@ function getGroupMetrics(groupStartRow, firstOperationOnly = false) {
 
             const firstOperationCell = cells[firstOperationIndex];
 
-            // Проверяем наличие классов отклонений в первой операции
-            if (firstOperationCell && (
-                firstOperationCell.classList.contains('metric-decrease-warning') ||
-                firstOperationCell.classList.contains('metric-decrease-critical') ||
-                firstOperationCell.classList.contains('metric-increase-warning') ||
-                firstOperationCell.classList.contains('metric-increase-critical')
-            )) {
-                metrics.push(firstOperationCell);
+            // Проверяем наличие классов отклонений во вложенных элементах первой операции
+            // Классы применяются к внутреннему div, а не к td напрямую
+            if (firstOperationCell) {
+                const deviationElements = firstOperationCell.querySelectorAll(
+                    '.metric-decrease-warning, .metric-decrease-critical, ' +
+                    '.metric-increase-warning, .metric-increase-critical'
+                );
+                if (deviationElements.length > 0) {
+                    metrics.push(...deviationElements);
+                }
             }
         } else {
             // Старое поведение - собираем отклонения из всех операций
