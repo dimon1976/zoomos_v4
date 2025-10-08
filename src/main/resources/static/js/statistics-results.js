@@ -230,7 +230,7 @@ function calculateFilterCounts() {
         }
 
         totalCount++;
-        const groupMetrics = getGroupMetrics(groupRow);
+        const groupMetrics = getGroupMetrics(groupRow, true); // Только первая (самая новая) операция
         const hasOnlyWarning = hasOnlyWarningDeviations(groupMetrics);
         const hasCritical = hasCriticalDeviations(groupMetrics);
         const hasAny = hasAnyDeviations(groupMetrics);
@@ -252,15 +252,40 @@ function calculateFilterCounts() {
     if (totalCountEl) totalCountEl.textContent = totalCount;
 }
 
-function getGroupMetrics(groupStartRow) {
+function getGroupMetrics(groupStartRow, firstOperationOnly = false) {
     const metrics = [];
     let currentRow = groupStartRow;
 
     // Собираем все строки метрик для этой группы
     // Группа включает строку с rowspan и все следующие строки до следующей группы
     do {
-        const metricCells = currentRow.querySelectorAll('.metric-decrease-warning, .metric-decrease-critical, .metric-increase-warning, .metric-increase-critical');
-        metrics.push(...metricCells);
+        if (firstOperationOnly) {
+            // Берем только первую колонку операции (самая новая операция)
+            const cells = currentRow.querySelectorAll('td');
+
+            // Определяем индекс первой операции:
+            // - Если в строке есть td с rowspan (первая строка группы): индекс = 2 ([Группа] [Метрика] [Op1])
+            // - Если нет rowspan (остальные строки): индекс = 1 ([Метрика] [Op1])
+            const hasRowspan = currentRow.querySelector('td[rowspan]') !== null;
+            const firstOperationIndex = hasRowspan ? 2 : 1;
+
+            const firstOperationCell = cells[firstOperationIndex];
+
+            // Проверяем наличие классов отклонений в первой операции
+            if (firstOperationCell && (
+                firstOperationCell.classList.contains('metric-decrease-warning') ||
+                firstOperationCell.classList.contains('metric-decrease-critical') ||
+                firstOperationCell.classList.contains('metric-increase-warning') ||
+                firstOperationCell.classList.contains('metric-increase-critical')
+            )) {
+                metrics.push(firstOperationCell);
+            }
+        } else {
+            // Старое поведение - собираем отклонения из всех операций
+            const metricCells = currentRow.querySelectorAll('.metric-decrease-warning, .metric-decrease-critical, .metric-increase-warning, .metric-increase-critical');
+            metrics.push(...metricCells);
+        }
+
         currentRow = currentRow.nextElementSibling;
     } while (currentRow && !currentRow.querySelector('td[rowspan]'));
 
@@ -330,7 +355,7 @@ function filterGroups(filterType) {
             try {
                 groups.forEach(groupRow => {
                     try {
-                        const groupMetrics = getGroupMetrics(groupRow);
+                        const groupMetrics = getGroupMetrics(groupRow, true); // Только первая (самая новая) операция
                         const shouldShow = shouldShowGroup(groupMetrics, filterType);
 
                         toggleGroupVisibility(groupRow, shouldShow);
