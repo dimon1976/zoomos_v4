@@ -1,5 +1,6 @@
 package com.java.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -27,6 +28,7 @@ public class StatisticsHistoryDto {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class DataPoint {
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
         private ZonedDateTime date;     // Дата операции экспорта
         private Long value;             // Значение метрики
         private Long exportSessionId;   // ID сессии экспорта
