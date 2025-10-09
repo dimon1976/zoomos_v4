@@ -165,7 +165,7 @@ public class ExportStatisticsService {
     /**
      * Генерирует название операции для отображения в статистике
      */
-    private String generateOperationName(ExportSession session, ExportTemplate template) {
+    public String generateOperationName(ExportSession session, ExportTemplate template) {
         String nameSource = template.getOperationNameSource();
         log.debug("generateOperationName: sessionId={}, templateId={}, operationNameSource='{}'",
             session.getId(), template.getId(), nameSource);

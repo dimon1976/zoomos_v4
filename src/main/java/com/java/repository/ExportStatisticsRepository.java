@@ -107,4 +107,57 @@ public interface ExportStatisticsRepository extends JpaRepository<ExportStatisti
            "AND es.filterFieldName IS NOT NULL " +
            "ORDER BY es.filterFieldName")
     List<String> findDistinctFilterFields(@Param("sessionIds") List<Long> sessionIds);
+
+    /**
+     * Получает историю значений метрики для конкретной группы по всем операциям шаблона
+     * Используется для построения графиков трендов
+     */
+    @Query("SELECT es FROM ExportStatistics es " +
+           "JOIN FETCH es.exportSession sess " +
+           "WHERE sess.template.id = :templateId " +
+           "AND es.groupFieldValue = :groupValue " +
+           "AND es.countFieldName = :metricName " +
+           "AND ((:filterFieldName IS NULL AND es.filterFieldName IS NULL) " +
+           "     OR (es.filterFieldName = :filterFieldName AND es.filterFieldValue = :filterFieldValue)) " +
+           "ORDER BY sess.startedAt DESC")
+    List<ExportStatistics> findHistoryForMetric(
+            @Param("templateId") Long templateId,
+            @Param("groupValue") String groupValue,
+            @Param("metricName") String metricName,
+            @Param("filterFieldName") String filterFieldName,
+            @Param("filterFieldValue") String filterFieldValue);
+
+    /**
+     * Получает историю для всех групп по одной метрике (для построения сводных графиков)
+     */
+    @Query("SELECT es FROM ExportStatistics es " +
+           "JOIN FETCH es.exportSession sess " +
+           "WHERE sess.template.id = :templateId " +
+           "AND es.countFieldName = :metricName " +
+           "AND ((:filterFieldName IS NULL AND es.filterFieldName IS NULL) " +
+           "     OR (es.filterFieldName = :filterFieldName AND es.filterFieldValue = :filterFieldValue)) " +
+           "ORDER BY sess.startedAt DESC, es.groupFieldValue")
+    List<ExportStatistics> findHistoryForMetricAllGroups(
+            @Param("templateId") Long templateId,
+            @Param("metricName") String metricName,
+            @Param("filterFieldName") String filterFieldName,
+            @Param("filterFieldValue") String filterFieldValue);
+
+    /**
+     * Получает список уникальных групп для шаблона (исключая ОБЩЕЕ КОЛИЧЕСТВО)
+     */
+    @Query("SELECT DISTINCT es.groupFieldValue FROM ExportStatistics es " +
+           "WHERE es.exportSession.template.id = :templateId " +
+           "AND es.groupFieldValue != 'ОБЩЕЕ КОЛИЧЕСТВО' " +
+           "ORDER BY es.groupFieldValue")
+    List<String> findDistinctGroupValuesByTemplateId(@Param("templateId") Long templateId);
+
+    /**
+     * Получает список уникальных метрик для шаблона
+     */
+    @Query("SELECT DISTINCT es.countFieldName FROM ExportStatistics es " +
+           "WHERE es.exportSession.template.id = :templateId " +
+           "AND es.countFieldName != 'DATE_MODIFICATIONS' " +
+           "ORDER BY es.countFieldName")
+    List<String> findDistinctMetricNamesByTemplateId(@Param("templateId") Long templateId);
 }

@@ -2,12 +2,14 @@
 package com.java.controller;
 
 import com.java.dto.StatisticsComparisonDto;
+import com.java.dto.StatisticsHistoryDto;
 import com.java.dto.StatisticsRequestDto;
 import com.java.model.entity.ExportSession;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
 import com.java.service.statistics.ExportStatisticsService;
+import com.java.service.statistics.HistoricalStatisticsService;
 import com.java.service.statistics.StatisticsSettingsService;
 import com.java.util.JsonUtils;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,7 @@ import java.util.Map;
 public class ExportStatisticsController {
 
     private final ExportStatisticsService statisticsService;
+    private final HistoricalStatisticsService historicalStatisticsService;
     private final StatisticsSettingsService settingsService;
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
@@ -354,6 +357,91 @@ public class ExportStatisticsController {
         } catch (Exception e) {
             log.error("Ошибка получения значений фильтров", e);
             return Map.of();
+        }
+    }
+
+    /**
+     * API endpoint для получения исторических данных метрики для конкретной группы
+     * GET /statistics/history?templateId=1&groupValue=Group1&metricName=price&limit=50
+     */
+    @GetMapping("/history")
+    @ResponseBody
+    public StatisticsHistoryDto getMetricHistory(
+            @RequestParam Long templateId,
+            @RequestParam String groupValue,
+            @RequestParam String metricName,
+            @RequestParam(required = false) String filterFieldName,
+            @RequestParam(required = false) String filterFieldValue,
+            @RequestParam(defaultValue = "50") int limit) {
+
+        log.debug("GET запрос на историю метрики: templateId={}, group={}, metric={}, filter={}={}, limit={}",
+                templateId, groupValue, metricName, filterFieldName, filterFieldValue, limit);
+
+        try {
+            return historicalStatisticsService.getHistoryForMetric(
+                    templateId, groupValue, metricName, filterFieldName, filterFieldValue, limit);
+        } catch (Exception e) {
+            log.error("Ошибка получения истории метрики", e);
+            throw new RuntimeException("Ошибка получения истории: " + e.getMessage());
+        }
+    }
+
+    /**
+     * API endpoint для получения истории всех групп по одной метрике
+     * GET /statistics/history/all-groups?templateId=1&metricName=price&limit=50
+     */
+    @GetMapping("/history/all-groups")
+    @ResponseBody
+    public List<StatisticsHistoryDto> getMetricHistoryAllGroups(
+            @RequestParam Long templateId,
+            @RequestParam String metricName,
+            @RequestParam(required = false) String filterFieldName,
+            @RequestParam(required = false) String filterFieldValue,
+            @RequestParam(defaultValue = "50") int limit) {
+
+        log.debug("GET запрос на историю всех групп для метрики: templateId={}, metric={}, filter={}={}, limit={}",
+                templateId, metricName, filterFieldName, filterFieldValue, limit);
+
+        try {
+            return historicalStatisticsService.getHistoryForMetricAllGroups(
+                    templateId, metricName, filterFieldName, filterFieldValue, limit);
+        } catch (Exception e) {
+            log.error("Ошибка получения истории всех групп", e);
+            throw new RuntimeException("Ошибка получения истории: " + e.getMessage());
+        }
+    }
+
+    /**
+     * API endpoint для получения списка доступных метрик для шаблона
+     * GET /statistics/metrics?templateId=1
+     */
+    @GetMapping("/metrics")
+    @ResponseBody
+    public List<String> getAvailableMetrics(@RequestParam Long templateId) {
+        log.debug("GET запрос на список метрик для шаблона: {}", templateId);
+
+        try {
+            return historicalStatisticsService.getAvailableMetrics(templateId);
+        } catch (Exception e) {
+            log.error("Ошибка получения списка метрик", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * API endpoint для получения списка доступных групп для шаблона
+     * GET /statistics/groups?templateId=1
+     */
+    @GetMapping("/groups")
+    @ResponseBody
+    public List<String> getAvailableGroups(@RequestParam Long templateId) {
+        log.debug("GET запрос на список групп для шаблона: {}", templateId);
+
+        try {
+            return historicalStatisticsService.getAvailableGroups(templateId);
+        } catch (Exception e) {
+            log.error("Ошибка получения списка групп", e);
+            return List.of();
         }
     }
 

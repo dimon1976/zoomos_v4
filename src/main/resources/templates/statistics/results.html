@@ -231,6 +231,47 @@
         .statistics-table tbody tr.total-summary-row ~ tr:first-of-type td {
             border-top: 15px solid transparent !important;
         }
+
+        /* ===== Стили для исторических графиков ===== */
+        #metricTabs .nav-link {
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        #metricTabs .nav-link:hover {
+            background-color: var(--bs-gray-100);
+        }
+
+        #metricTabs .nav-link.active {
+            background-color: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .tab-content {
+            min-height: 400px;
+        }
+
+        /* Карточки графиков */
+        .card.shadow-sm {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+
+        .card.shadow-sm:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        /* Загрузчик графиков */
+        .chart-loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -563,53 +604,21 @@
         </table>
     </div>
 
-    <!-- Детальная информация (аккордеон) -->
-    <div th:unless="${#lists.isEmpty(comparison)}" class="mt-4">
-        <h5>Детальная информация</h5>
-        <div class="accordion" id="detailsAccordion">
-            <div th:each="group, groupStat : ${comparison}" class="accordion-item">
-                <h2 class="accordion-header" th:id="'heading' + ${groupStat.index}">
-                    <button class="accordion-button collapsed" type="button"
-                            data-bs-toggle="collapse"
-                            th:data-bs-target="'#collapse' + ${groupStat.index}"
-                            th:aria-controls="'collapse' + ${groupStat.index}">
-                        <strong th:text="${group.groupFieldValue}">Группа</strong>
-                        <span class="ms-auto me-3">
-                            <small class="text-muted" th:text="${#lists.size(group.operations)} + ' операций'">3 операции</small>
-                        </span>
-                    </button>
-                </h2>
-                <div th:id="'collapse' + ${groupStat.index}"
-                     class="accordion-collapse collapse"
-                     th:aria-labelledby="'heading' + ${groupStat.index}">
-                    <div class="accordion-body">
-                        <div class="row">
-                            <div th:each="operation : ${group.operations}" class="col-md-4 mb-3">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h6 class="mb-0">Операция #<span th:text="${operation.operationId}">1</span></h6>
-                                        <small class="text-muted"
-                                               th:text="${#temporals.format(operation.exportDate, 'dd.MM.yyyy HH:mm', T(java.time.ZoneId).systemDefault())}">01.01.2025 10:00</small>
-                                    </div>
-                                    <div class="card-body">
-                                        <div th:each="metric : ${operation.metrics}" class="mb-2">
-                                            <div class="d-flex justify-content-between">
-                                                <span th:text="${metric.key}">Метрика:</span>
-                                                <strong th:text="${metric.value.currentValue}">100</strong>
-                                            </div>
-                                            <div th:if="${metric.value.previousValue != null}" class="text-muted small">
-                                                Изменение:
-                                                <span th:classappend="${'change-' + metric.value.changeType.name().toLowerCase()}"
-                                                      th:text="${#numbers.formatDecimal(metric.value.changePercentage, 1, 1)} + '%'">+5.0%</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <!-- Исторические тренды -->
+    <div th:unless="${#lists.isEmpty(comparison)}" class="mt-5">
+        <h5 class="mb-4">
+            <i class="fas fa-chart-line me-2"></i>Исторические тренды
+            <small class="text-muted">(по всем сохраненным операциям)</small>
+        </h5>
+
+        <!-- Вкладки для метрик -->
+        <ul class="nav nav-tabs" id="metricTabs" role="tablist">
+            <!-- Вкладки будут созданы динамически через JavaScript -->
+        </ul>
+
+        <!-- Содержимое вкладок -->
+        <div class="tab-content mt-4" id="metricTabsContent">
+            <!-- Контент вкладок будет создан динамически через JavaScript -->
         </div>
     </div>
 </section>
@@ -621,6 +630,7 @@
 </button>
 
 <script src="/js/statistics-results.js"></script>
+<script src="/js/statistics-charts.js"></script>
 <script th:inline="javascript">
     /*<![CDATA[*/
     // Инициализация данных из Thymeleaf
@@ -646,6 +656,11 @@
 
         // Проверяем активный фильтр при загрузке
         checkActiveFilter();
+
+        // Инициализируем графики трендов
+        if (templateId && statisticsDataFromTemplate && statisticsDataFromTemplate.length > 0) {
+            initializeHistoricalCharts();
+        }
     });
 
     /**
@@ -839,6 +854,147 @@
 
             indicatorText.textContent = `${activeFilterField} = "${activeFilterValue}"`;
             indicator.style.display = 'block';
+        }
+    }
+
+    /**
+     * Инициализирует исторические графики трендов
+     */
+    async function initializeHistoricalCharts() {
+        try {
+            console.log('Инициализация исторических графиков...');
+
+            // Получаем список доступных метрик с сервера
+            const metricsResponse = await fetch(`/statistics/metrics?templateId=${templateId}`);
+            if (!metricsResponse.ok) {
+                throw new Error('Ошибка загрузки списка метрик');
+            }
+            const metrics = await metricsResponse.json();
+
+            if (!metrics || metrics.length === 0) {
+                console.warn('Нет доступных метрик для отображения графиков');
+                return;
+            }
+
+            console.log('Найдено метрик:', metrics.length, metrics);
+
+            // Создаем вкладки для каждой метрики
+            const metricTabs = document.getElementById('metricTabs');
+            const metricTabsContent = document.getElementById('metricTabsContent');
+
+            if (!metricTabs || !metricTabsContent) {
+                console.error('Контейнеры для вкладок не найдены');
+                return;
+            }
+
+            // Очищаем контейнеры
+            metricTabs.innerHTML = '';
+            metricTabsContent.innerHTML = '';
+
+            // Создаем вкладку для каждой метрики
+            metrics.forEach((metricName, index) => {
+                const isFirst = index === 0;
+                const metricId = `metric-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+                // Создаем таб
+                const tab = document.createElement('li');
+                tab.className = 'nav-item';
+                tab.innerHTML = `
+                    <button class="nav-link ${isFirst ? 'active' : ''}"
+                            id="${metricId}-tab"
+                            data-bs-toggle="tab"
+                            data-bs-target="#${metricId}"
+                            type="button"
+                            role="tab"
+                            aria-controls="${metricId}"
+                            aria-selected="${isFirst}">
+                        ${metricName}
+                    </button>
+                `;
+                metricTabs.appendChild(tab);
+
+                // Создаем контент вкладки
+                const tabPane = document.createElement('div');
+                tabPane.className = `tab-pane fade ${isFirst ? 'show active' : ''}`;
+                tabPane.id = metricId;
+                tabPane.setAttribute('role', 'tabpanel');
+                tabPane.setAttribute('aria-labelledby', `${metricId}-tab`);
+                tabPane.innerHTML = `
+                    <div class="row" id="${metricId}-charts">
+                        <!-- Графики будут загружены здесь -->
+                    </div>
+                `;
+                metricTabsContent.appendChild(tabPane);
+
+                // Загружаем графики при переключении на вкладку
+                const tabButton = tab.querySelector('.nav-link');
+                tabButton.addEventListener('shown.bs.tab', async () => {
+                    const chartsContainer = document.getElementById(`${metricId}-charts`);
+                    // Проверяем, не загружены ли уже графики
+                    if (chartsContainer.children.length === 0) {
+                        await loadMetricCharts(metricName, `#${metricId}-charts`);
+                    }
+                });
+
+                // Загружаем графики для первой вкладки сразу
+                if (isFirst) {
+                    setTimeout(() => {
+                        loadMetricCharts(metricName, `#${metricId}-charts`);
+                    }, 100);
+                }
+            });
+
+        } catch (error) {
+            console.error('Ошибка инициализации исторических графиков:', error);
+        }
+    }
+
+    /**
+     * Загружает графики для конкретной метрики
+     */
+    async function loadMetricCharts(metricName, containerSelector) {
+        try {
+            console.log(`Загрузка графиков для метрики: ${metricName}`);
+
+            // Показываем индикатор загрузки
+            const container = document.querySelector(containerSelector);
+            if (!container) {
+                console.error('Container not found:', containerSelector);
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="col-12 text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Загрузка графиков...</span>
+                    </div>
+                    <p class="text-muted mt-2">Загрузка исторических данных...</p>
+                </div>
+            `;
+
+            // Используем функцию из statistics-charts.js
+            await loadAllGroupsCharts(
+                containerSelector,
+                templateId,
+                metricName,
+                activeFilterField,
+                activeFilterValue,
+                50 // лимит точек на график
+            );
+
+        } catch (error) {
+            console.error('Ошибка загрузки графиков метрики:', error);
+            const container = document.querySelector(containerSelector);
+            if (container) {
+                container.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle me-2"></i>
+                            Ошибка загрузки графиков: ${error.message}
+                        </div>
+                    </div>
+                `;
+            }
         }
     }
     /*]]>*/
