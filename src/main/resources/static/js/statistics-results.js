@@ -211,11 +211,24 @@ function highlightMetrics() {
     });
 }
 
+// ===== Константы для индексов ячеек таблицы =====
+const FIRST_OP_CELL_INDEX_WITH_GROUP = 2;  // [Группа] [Метрика] [Операция1]
+const FIRST_OP_CELL_INDEX_WITHOUT_GROUP = 1; // [Метрика] [Операция1]
+
 // ===== Фильтры быстрого доступа =====
 function initializeQuickFilters() {
     calculateFilterCounts();
     bindFilterEvents();
     updateFilterStatus();
+}
+
+/**
+ * Получает метрики только из последней (самой новой) операции группы
+ * @param {HTMLElement} groupRow - строка начала группы
+ * @returns {Array} - массив элементов с классами отклонений
+ */
+function getLatestOperationMetrics(groupRow) {
+    return getGroupMetrics(groupRow, true);
 }
 
 function calculateFilterCounts() {
@@ -230,7 +243,7 @@ function calculateFilterCounts() {
         }
 
         totalCount++;
-        const groupMetrics = getGroupMetrics(groupRow, true); // Только первая (самая новая) операция
+        const groupMetrics = getLatestOperationMetrics(groupRow);
         const hasOnlyWarning = hasOnlyWarningDeviations(groupMetrics);
         const hasCritical = hasCriticalDeviations(groupMetrics);
         const hasAny = hasAnyDeviations(groupMetrics);
@@ -256,6 +269,9 @@ function getGroupMetrics(groupStartRow, firstOperationOnly = false) {
     const metrics = [];
     let currentRow = groupStartRow;
 
+    // Селектор для классов отклонений
+    const DEVIATION_SELECTOR = '.metric-decrease-warning, .metric-decrease-critical, .metric-increase-warning, .metric-increase-critical';
+
     // Собираем все строки метрик для этой группы
     // Группа включает строку с rowspan и все следующие строки до следующей группы
     do {
@@ -263,28 +279,28 @@ function getGroupMetrics(groupStartRow, firstOperationOnly = false) {
             // Берем только первую колонку операции (самая новая операция)
             const cells = currentRow.querySelectorAll('td');
 
-            // Определяем индекс первой операции:
-            // - Если в строке есть td с rowspan (первая строка группы): индекс = 2 ([Группа] [Метрика] [Op1])
-            // - Если нет rowspan (остальные строки): индекс = 1 ([Метрика] [Op1])
+            // Определяем индекс первой операции используя константы
             const hasRowspan = currentRow.querySelector('td[rowspan]') !== null;
-            const firstOperationIndex = hasRowspan ? 2 : 1;
+            const firstOperationIndex = hasRowspan ? FIRST_OP_CELL_INDEX_WITH_GROUP : FIRST_OP_CELL_INDEX_WITHOUT_GROUP;
 
             const firstOperationCell = cells[firstOperationIndex];
 
+            // Проверяем существование ячейки перед обращением к ней
+            if (!firstOperationCell) {
+                console.warn('Ячейка первой операции не найдена для строки:', currentRow);
+                currentRow = currentRow.nextElementSibling;
+                continue;
+            }
+
             // Проверяем наличие классов отклонений во вложенных элементах первой операции
             // Классы применяются к внутреннему div, а не к td напрямую
-            if (firstOperationCell) {
-                const deviationElements = firstOperationCell.querySelectorAll(
-                    '.metric-decrease-warning, .metric-decrease-critical, ' +
-                    '.metric-increase-warning, .metric-increase-critical'
-                );
-                if (deviationElements.length > 0) {
-                    metrics.push(...deviationElements);
-                }
+            const deviationElements = firstOperationCell.querySelectorAll(DEVIATION_SELECTOR);
+            if (deviationElements.length > 0) {
+                metrics.push(...deviationElements);
             }
         } else {
             // Старое поведение - собираем отклонения из всех операций
-            const metricCells = currentRow.querySelectorAll('.metric-decrease-warning, .metric-decrease-critical, .metric-increase-warning, .metric-increase-critical');
+            const metricCells = currentRow.querySelectorAll(DEVIATION_SELECTOR);
             metrics.push(...metricCells);
         }
 
@@ -357,7 +373,7 @@ function filterGroups(filterType) {
             try {
                 groups.forEach(groupRow => {
                     try {
-                        const groupMetrics = getGroupMetrics(groupRow, true); // Только первая (самая новая) операция
+                        const groupMetrics = getLatestOperationMetrics(groupRow);
                         const shouldShow = shouldShowGroup(groupMetrics, filterType);
 
                         toggleGroupVisibility(groupRow, shouldShow);
