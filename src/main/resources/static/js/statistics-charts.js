@@ -29,11 +29,24 @@ function createTrendChart(canvasId, historyData) {
 
     // Подготовка данных
     const labels = historyData.dataPoints.map(point => {
+        // Парсим ZonedDateTime из Java (формат: 2025-01-21T15:30:00+03:00)
         const date = new Date(point.date);
-        return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+        return date.toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        });
     });
 
     const values = historyData.dataPoints.map(point => point.value);
+
+    console.log('Chart data:', {
+        groupValue: historyData.groupValue,
+        metricName: historyData.metricName,
+        dataPoints: historyData.dataPoints.length,
+        firstDate: historyData.dataPoints[0]?.date,
+        parsedFirstDate: labels[0]
+    });
 
     // Вычисляем линию тренда
     const trendLine = calculateTrendLine(values);
@@ -53,21 +66,22 @@ function createTrendChart(canvasId, historyData) {
                     data: values,
                     borderColor: trendColor.border,
                     backgroundColor: backgroundGradient,
-                    borderWidth: 2,
+                    borderWidth: 3,
                     fill: true,
                     tension: 0.3, // Сглаживание линии
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
                     pointBackgroundColor: trendColor.point,
                     pointBorderColor: '#fff',
-                    pointBorderWidth: 2
+                    pointBorderWidth: 3,
+                    pointHoverBorderWidth: 3
                 },
                 {
                     label: 'Линия тренда',
                     data: trendLine,
                     borderColor: trendColor.trend,
-                    borderWidth: 2,
-                    borderDash: [5, 5], // Пунктирная линия
+                    borderWidth: 3,
+                    borderDash: [8, 4], // Пунктирная линия (увеличена)
                     fill: false,
                     pointRadius: 0,
                     tension: 0
@@ -76,8 +90,7 @@ function createTrendChart(canvasId, historyData) {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
-            aspectRatio: 2,
+            maintainAspectRatio: false,
             interaction: {
                 mode: 'index',
                 intersect: false,
@@ -87,25 +100,51 @@ function createTrendChart(canvasId, historyData) {
                     display: true,
                     text: historyData.groupValue,
                     font: {
-                        size: 14,
+                        size: 16,
                         weight: 'bold'
+                    },
+                    padding: {
+                        top: 10,
+                        bottom: 5
                     }
                 },
                 subtitle: {
                     display: true,
                     text: historyData.trendInfo.description,
                     font: {
-                        size: 11,
+                        size: 13,
                         style: 'italic'
                     },
-                    color: trendColor.text
+                    color: trendColor.text,
+                    padding: {
+                        bottom: 15
+                    }
                 },
                 legend: {
                     display: true,
-                    position: 'bottom'
+                    position: 'bottom',
+                    labels: {
+                        font: {
+                            size: 12
+                        },
+                        padding: 15
+                    }
                 },
                 tooltip: {
                     enabled: true,
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    footerFont: {
+                        size: 12
+                    },
+                    padding: 12,
+                    displayColors: true,
                     callbacks: {
                         title: function(context) {
                             const index = context[0].dataIndex;
@@ -125,24 +164,43 @@ function createTrendChart(canvasId, historyData) {
                             const index = context[0].dataIndex;
                             const point = historyData.dataPoints[index];
                             const date = new Date(point.date);
-                            return 'Дата: ' + date.toLocaleDateString('ru-RU', {
+                            const formattedDate = date.toLocaleString('ru-RU', {
                                 day: '2-digit',
                                 month: 'long',
                                 year: 'numeric',
                                 hour: '2-digit',
                                 minute: '2-digit'
                             });
+                            return `Дата: ${formattedDate}\nЗначение: ${point.value.toLocaleString('ru-RU')}`;
                         }
                     }
                 }
             },
             scales: {
+                x: {
+                    ticks: {
+                        font: {
+                            size: 12
+                        },
+                        maxRotation: 45,
+                        minRotation: 0
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
                 y: {
                     beginAtZero: true,
                     ticks: {
+                        font: {
+                            size: 12
+                        },
                         callback: function(value) {
                             return value.toLocaleString('ru-RU');
                         }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
                     }
                 }
             }
@@ -359,8 +417,8 @@ async function loadAllGroupsCharts(containerSelector, templateId, metricName, fi
             const chartCard = document.createElement('div');
             chartCard.className = 'card shadow-sm';
             chartCard.innerHTML = `
-                <div class="card-body">
-                    <canvas id="chart-${metricName}-${index}" height="200"></canvas>
+                <div class="card-body" style="height: 400px;">
+                    <canvas id="chart-${metricName}-${index}"></canvas>
                 </div>
             `;
 
