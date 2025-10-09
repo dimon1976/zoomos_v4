@@ -444,3 +444,334 @@ function destroyAllCharts() {
     });
     Object.keys(chartInstances).forEach(key => delete chartInstances[key]);
 }
+
+/**
+ * Создаёт комбинированный график на всю ширину со всеми группами
+ *
+ * @param {string} canvasId - ID canvas элемента
+ * @param {Array} allGroupsData - Массив данных всех групп от API
+ * @returns {Chart} - Экземпляр графика Chart.js
+ */
+function createCombinedChart(canvasId, allGroupsData) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        console.error('Canvas element not found:', canvasId);
+        return null;
+    }
+
+    const ctx = canvas.getContext('2d');
+
+    // Уничтожаем существующий график если есть
+    if (chartInstances[canvasId]) {
+        chartInstances[canvasId].destroy();
+    }
+
+    // Палитра цветов для разных групп
+    const colorPalette = [
+        { border: '#667eea', bg: 'rgba(102, 126, 234, 0.1)' },
+        { border: '#f093fb', bg: 'rgba(240, 147, 251, 0.1)' },
+        { border: '#4facfe', bg: 'rgba(79, 172, 254, 0.1)' },
+        { border: '#43e97b', bg: 'rgba(67, 233, 123, 0.1)' },
+        { border: '#fa709a', bg: 'rgba(250, 112, 154, 0.1)' },
+        { border: '#fee140', bg: 'rgba(254, 225, 64, 0.1)' },
+        { border: '#30cfd0', bg: 'rgba(48, 207, 208, 0.1)' },
+        { border: '#a8edea', bg: 'rgba(168, 237, 234, 0.1)' },
+        { border: '#ff9a9e', bg: 'rgba(255, 154, 158, 0.1)' },
+        { border: '#fad0c4', bg: 'rgba(250, 208, 196, 0.1)' }
+    ];
+
+    // Создаём datasets для каждой группы
+    const datasets = allGroupsData.map((groupData, index) => {
+        const color = colorPalette[index % colorPalette.length];
+
+        // Парсим даты и значения
+        const data = groupData.dataPoints.map(point => ({
+            x: new Date(point.date),
+            y: point.value
+        }));
+
+        return {
+            label: groupData.groupValue,
+            data: data,
+            borderColor: color.border,
+            backgroundColor: color.bg,
+            borderWidth: 2,
+            fill: false,
+            tension: 0.3,
+            pointRadius: 4,
+            pointHoverRadius: 8,
+            pointBackgroundColor: color.border,
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+        };
+    });
+
+    // Конфигурация графика
+    const config = {
+        type: 'line',
+        data: {
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: allGroupsData[0]?.metricName || 'Сравнение групп',
+                    font: {
+                        size: 20,
+                        weight: 'bold'
+                    },
+                    padding: {
+                        top: 15,
+                        bottom: 20
+                    }
+                },
+                subtitle: {
+                    display: true,
+                    text: 'Используйте колесо мыши для масштабирования • Drag для перемещения • Двойной клик для сброса',
+                    font: {
+                        size: 12,
+                        style: 'italic'
+                    },
+                    color: '#6c757d',
+                    padding: {
+                        bottom: 15
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 13
+                        },
+                        padding: 15,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
+                    },
+                    onClick: function(e, legendItem, legend) {
+                        // Переключаем видимость линии при клике на легенду
+                        const index = legendItem.datasetIndex;
+                        const chart = legend.chart;
+                        const meta = chart.getDatasetMeta(index);
+
+                        meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+                        chart.update();
+                    }
+                },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    footerFont: {
+                        size: 11
+                    },
+                    padding: 12,
+                    displayColors: true,
+                    callbacks: {
+                        title: function(context) {
+                            const date = new Date(context[0].parsed.x);
+                            return date.toLocaleString('ru-RU', {
+                                day: '2-digit',
+                                month: 'long',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                        },
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += context.parsed.y.toLocaleString('ru-RU');
+                            }
+                            return label;
+                        },
+                        footer: function(context) {
+                            const groupData = allGroupsData[context[0].datasetIndex];
+                            const point = groupData.dataPoints[context[0].dataIndex];
+                            return `Операция: ${point.operationName}`;
+                        }
+                    }
+                },
+                zoom: {
+                    pan: {
+                        enabled: true,
+                        mode: 'x',
+                        modifierKey: null
+                    },
+                    zoom: {
+                        wheel: {
+                            enabled: true,
+                            speed: 0.1
+                        },
+                        pinch: {
+                            enabled: true
+                        },
+                        mode: 'x'
+                    },
+                    limits: {
+                        x: {min: 'original', max: 'original'},
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'day',
+                        displayFormats: {
+                            day: 'dd MMM yyyy',
+                            hour: 'HH:mm'
+                        },
+                        tooltipFormat: 'dd MMM yyyy HH:mm'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Дата операции',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        },
+                        maxRotation: 45,
+                        minRotation: 0
+                    },
+                    grid: {
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Значение',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        },
+                        callback: function(value) {
+                            return value.toLocaleString('ru-RU');
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.08)'
+                    }
+                }
+            }
+        }
+    };
+
+    // Создаем график
+    const chart = new Chart(ctx, config);
+    chartInstances[canvasId] = chart;
+
+    return chart;
+}
+
+/**
+ * Загружает и отображает комбинированный график для метрики
+ *
+ * @param {string} containerSelector - CSS селектор контейнера для графика
+ * @param {number} templateId - ID шаблона
+ * @param {string} metricName - Название метрики
+ * @param {string|null} filterFieldName - Поле фильтрации (опционально)
+ * @param {string|null} filterFieldValue - Значение фильтра (опционально)
+ * @param {number} limit - Максимальное количество точек
+ */
+async function loadCombinedChart(containerSelector, templateId, metricName, filterFieldName = null, filterFieldValue = null, limit = 50) {
+    try {
+        console.log(`Загрузка комбинированного графика для метрики: ${metricName}`);
+
+        // Формируем URL для API запроса
+        let url = `/statistics/history/all-groups?templateId=${templateId}&metricName=${encodeURIComponent(metricName)}&limit=${limit}`;
+
+        if (filterFieldName && filterFieldValue) {
+            url += `&filterFieldName=${encodeURIComponent(filterFieldName)}&filterFieldValue=${encodeURIComponent(filterFieldValue)}`;
+        }
+
+        // Загружаем данные
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const allGroupsData = await response.json();
+
+        if (!allGroupsData || allGroupsData.length === 0) {
+            console.warn('Нет данных для отображения комбинированного графика');
+            return;
+        }
+
+        // Получаем контейнер
+        const container = document.querySelector(containerSelector);
+        if (!container) {
+            console.error('Container not found:', containerSelector);
+            return;
+        }
+
+        // Создаём HTML для графика
+        container.innerHTML = `
+            <div class="card border-0 shadow-sm">
+                <div class="card-body" style="height: 600px; position: relative;">
+                    <canvas id="combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}"></canvas>
+                    <div class="text-center mt-3">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="resetChartZoom('combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}')">
+                            <i class="fas fa-search-minus me-1"></i>Сбросить масштаб
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Создаём график
+        const canvasId = `combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        createCombinedChart(canvasId, allGroupsData);
+
+    } catch (error) {
+        console.error('Ошибка загрузки комбинированного графика:', error);
+        const container = document.querySelector(containerSelector);
+        if (container) {
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Ошибка загрузки графика: ${error.message}
+                </div>
+            `;
+        }
+    }
+}
+
+/**
+ * Сбрасывает масштаб графика
+ */
+function resetChartZoom(canvasId) {
+    const chart = chartInstances[canvasId];
+    if (chart && chart.resetZoom) {
+        chart.resetZoom();
+    }
+}

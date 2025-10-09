@@ -272,6 +272,28 @@
             transform: translate(-50%, -50%);
             z-index: 10;
         }
+
+        /* Переключатель режимов отображения */
+        .btn-check:checked + .btn-outline-primary {
+            background-color: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+
+        /* Комбинированный график - контейнер */
+        #metricTabsContent .card-body {
+            position: relative;
+        }
+
+        /* Кнопка сброса масштаба */
+        .card-body .btn-outline-secondary {
+            opacity: 0.8;
+            transition: opacity 0.2s ease;
+        }
+
+        .card-body .btn-outline-secondary:hover {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -606,10 +628,25 @@
 
     <!-- Исторические тренды -->
     <div th:unless="${#lists.isEmpty(comparison)}" class="mt-5">
-        <h5 class="mb-4">
-            <i class="fas fa-chart-line me-2"></i>Исторические тренды
-            <small class="text-muted">(по всем сохраненным операциям)</small>
-        </h5>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="mb-0">
+                <i class="fas fa-chart-line me-2"></i>Исторические тренды
+                <small class="text-muted">(по всем сохраненным операциям)</small>
+            </h5>
+
+            <!-- Переключатель режимов отображения -->
+            <div class="btn-group" role="group" aria-label="Режим отображения графиков">
+                <input type="radio" class="btn-check" name="chartViewMode" id="viewModeCombined" value="combined" autocomplete="off">
+                <label class="btn btn-outline-primary" for="viewModeCombined">
+                    <i class="fas fa-chart-area me-1"></i>Комбинированный вид
+                </label>
+
+                <input type="radio" class="btn-check" name="chartViewMode" id="viewModeGrid" value="grid" autocomplete="off" checked>
+                <label class="btn btn-outline-primary" for="viewModeGrid">
+                    <i class="fas fa-th me-1"></i>Сетка графиков
+                </label>
+            </div>
+        </div>
 
         <!-- Вкладки для метрик -->
         <ul class="nav nav-tabs" id="metricTabs" role="tablist">
@@ -660,6 +697,37 @@
         // Инициализируем графики трендов
         if (templateId && statisticsDataFromTemplate && statisticsDataFromTemplate.length > 0) {
             initializeHistoricalCharts();
+        }
+
+        // Восстанавливаем сохраненный режим отображения графиков
+        const savedMode = localStorage.getItem('chartViewMode');
+        if (savedMode) {
+            const radio = document.getElementById(savedMode === 'combined' ? 'viewModeCombined' : 'viewModeGrid');
+            if (radio) {
+                radio.checked = true;
+            }
+        }
+
+        // Обработчики переключения режима отображения
+        const viewModeCombined = document.getElementById('viewModeCombined');
+        const viewModeGrid = document.getElementById('viewModeGrid');
+
+        if (viewModeCombined) {
+            viewModeCombined.addEventListener('change', function() {
+                if (this.checked) {
+                    setChartViewMode('combined');
+                    reloadActiveMetricCharts();
+                }
+            });
+        }
+
+        if (viewModeGrid) {
+            viewModeGrid.addEventListener('change', function() {
+                if (this.checked) {
+                    setChartViewMode('grid');
+                    reloadActiveMetricCharts();
+                }
+            });
         }
     });
 
@@ -972,15 +1040,46 @@
                 </div>
             `;
 
-            // Используем функцию из statistics-charts.js
-            await loadAllGroupsCharts(
-                containerSelector,
-                templateId,
-                metricName,
-                activeFilterField,
-                activeFilterValue,
-                50 // лимит точек на график
-            );
+            // Проверяем выбранный режим отображения
+            const viewMode = getChartViewMode();
+
+            if (viewMode === 'combined') {
+                // Комбинированный вид - один большой график со всеми группами
+                container.innerHTML = `
+                    <div class="col-12">
+                        <div class="card shadow-sm">
+                            <div class="card-body" style="height: 600px; position: relative;">
+                                <canvas id="combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}"></canvas>
+                                <button type="button" class="btn btn-sm btn-outline-secondary position-absolute"
+                                        style="top: 10px; right: 10px; z-index: 100;"
+                                        onclick="resetChartZoom('combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}')">
+                                    <i class="fas fa-undo me-1"></i>Сброс масштаба
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Загружаем комбинированный график из statistics-charts.js
+                await loadCombinedChart(
+                    `combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                    templateId,
+                    metricName,
+                    activeFilterField,
+                    activeFilterValue,
+                    50 // лимит точек на график
+                );
+            } else {
+                // Сеточный вид - отдельные графики для каждой группы
+                await loadAllGroupsCharts(
+                    containerSelector,
+                    templateId,
+                    metricName,
+                    activeFilterField,
+                    activeFilterValue,
+                    50 // лимит точек на график
+                );
+            }
 
         } catch (error) {
             console.error('Ошибка загрузки графиков метрики:', error);
@@ -996,6 +1095,69 @@
                 `;
             }
         }
+    }
+
+    /**
+     * Получает текущий режим отображения графиков из localStorage или по умолчанию
+     */
+    function getChartViewMode() {
+        // Пытаемся получить из localStorage
+        const savedMode = localStorage.getItem('chartViewMode');
+        if (savedMode) {
+            return savedMode;
+        }
+
+        // Проверяем выбранный radio button
+        const combinedRadio = document.getElementById('viewModeCombined');
+        const gridRadio = document.getElementById('viewModeGrid');
+
+        if (combinedRadio && combinedRadio.checked) {
+            return 'combined';
+        } else if (gridRadio && gridRadio.checked) {
+            return 'grid';
+        }
+
+        // По умолчанию - сетка
+        return 'grid';
+    }
+
+    /**
+     * Сохраняет режим отображения графиков в localStorage
+     */
+    function setChartViewMode(mode) {
+        localStorage.setItem('chartViewMode', mode);
+    }
+
+    /**
+     * Перезагружает активную вкладку с графиками
+     */
+    function reloadActiveMetricCharts() {
+        // Находим активную вкладку
+        const activeTab = document.querySelector('#metricTabs .nav-link.active');
+        if (!activeTab) {
+            console.warn('Активная вкладка не найдена');
+            return;
+        }
+
+        // Получаем ID контента вкладки
+        const targetId = activeTab.getAttribute('data-bs-target');
+        if (!targetId) {
+            console.warn('Target ID не найден для активной вкладки');
+            return;
+        }
+
+        // Получаем контейнер графиков
+        const chartsContainer = document.querySelector(`${targetId}-charts`);
+        if (!chartsContainer) {
+            console.warn('Контейнер графиков не найден:', `${targetId}-charts`);
+            return;
+        }
+
+        // Извлекаем имя метрики из текста вкладки
+        const metricName = activeTab.textContent.trim();
+
+        // Перезагружаем графики
+        loadMetricCharts(metricName, `${targetId}-charts`);
     }
     /*]]>*/
 </script>
