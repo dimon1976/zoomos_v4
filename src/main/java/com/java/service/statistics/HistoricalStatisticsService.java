@@ -43,7 +43,6 @@ public class HistoricalStatisticsService {
      * @return исторические данные с трендом
      */
     @Transactional(readOnly = true)
-    @Cacheable(value = "statisticsHistory", key = "#templateId + '_' + #groupValue + '_' + #metricName + '_' + #filterFieldName + '_' + #filterFieldValue + '_' + #limit")
     public StatisticsHistoryDto getHistoryForMetric(
             Long templateId,
             String groupValue,
@@ -60,6 +59,8 @@ public class HistoricalStatisticsService {
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден: " + templateId));
 
         Long clientId = template.getClient().getId();
+
+        log.debug("Получение данных для clientId={}", clientId);
 
         // Получаем исторические данные из БД
         List<ExportStatistics> history = statisticsRepository.findHistoryForMetric(
@@ -118,7 +119,6 @@ public class HistoricalStatisticsService {
      * @return список историй для каждой группы
      */
     @Transactional(readOnly = true)
-    @Cacheable(value = "statisticsHistoryAllGroups", key = "#templateId + '_' + #metricName + '_' + #filterFieldName + '_' + #filterFieldValue + '_' + #limit")
     public List<StatisticsHistoryDto> getHistoryForMetricAllGroups(
             Long templateId,
             String metricName,
@@ -154,12 +154,14 @@ public class HistoricalStatisticsService {
      * @return список названий метрик
      */
     @Transactional(readOnly = true)
-    @Cacheable(value = "statisticsMetrics", key = "#templateId")
     public List<String> getAvailableMetrics(Long templateId) {
         ExportTemplate template = templateRepository.findById(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден: " + templateId));
 
-        return statisticsRepository.findDistinctMetricNamesByTemplateId(templateId, template.getClient().getId());
+        Long clientId = template.getClient().getId();
+        log.debug("Получение метрик для templateId={}, clientId={}", templateId, clientId);
+
+        return statisticsRepository.findDistinctMetricNamesByTemplateId(templateId, clientId);
     }
 
     /**
@@ -169,12 +171,14 @@ public class HistoricalStatisticsService {
      * @return список значений групп
      */
     @Transactional(readOnly = true)
-    @Cacheable(value = "statisticsGroups", key = "#templateId")
     public List<String> getAvailableGroups(Long templateId) {
         ExportTemplate template = templateRepository.findById(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден: " + templateId));
 
-        return statisticsRepository.findDistinctGroupValuesByTemplateId(templateId, template.getClient().getId());
+        Long clientId = template.getClient().getId();
+        log.debug("Получение групп для templateId={}, clientId={}", templateId, clientId);
+
+        return statisticsRepository.findDistinctGroupValuesByTemplateId(templateId, clientId);
     }
 
     /**
