@@ -490,23 +490,29 @@ function createCombinedChart(canvasId, allGroupsData) {
         chartInstances[canvasId].destroy();
     }
 
-    // Палитра цветов для разных групп
-    const colorPalette = [
-        { border: '#667eea', bg: 'rgba(102, 126, 234, 0.1)' },
-        { border: '#f093fb', bg: 'rgba(240, 147, 251, 0.1)' },
-        { border: '#4facfe', bg: 'rgba(79, 172, 254, 0.1)' },
-        { border: '#43e97b', bg: 'rgba(67, 233, 123, 0.1)' },
-        { border: '#fa709a', bg: 'rgba(250, 112, 154, 0.1)' },
-        { border: '#fee140', bg: 'rgba(254, 225, 64, 0.1)' },
-        { border: '#30cfd0', bg: 'rgba(48, 207, 208, 0.1)' },
-        { border: '#a8edea', bg: 'rgba(168, 237, 234, 0.1)' },
-        { border: '#ff9a9e', bg: 'rgba(255, 154, 158, 0.1)' },
-        { border: '#fad0c4', bg: 'rgba(250, 208, 196, 0.1)' }
-    ];
+    // Цвета линий на основе трендов для лучшей читаемости
+    const getTrendBasedColor = (direction) => {
+        switch (direction) {
+            case 'STRONG_GROWTH':
+                return { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' };  // Зелёный
+            case 'GROWTH':
+                return { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' };  // Бирюзовый
+            case 'STABLE':
+                return { border: '#6c757d', bg: 'rgba(108, 117, 125, 0.1)' };  // Серый
+            case 'DECLINE':
+                return { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' };  // Жёлтый
+            case 'STRONG_DECLINE':
+                return { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' };  // Красный
+            default:
+                return { border: '#6c757d', bg: 'rgba(108, 117, 125, 0.1)' };
+        }
+    };
 
     // Создаём datasets для каждой группы
     const datasets = allGroupsData.map((groupData, index) => {
-        const color = colorPalette[index % colorPalette.length];
+        // Цвет линии на основе тренда
+        const trendInfo = groupData.trendInfo;
+        const color = getTrendBasedColor(trendInfo.direction);
 
         // Парсим даты и значения
         const data = groupData.dataPoints.map(point => ({
@@ -514,21 +520,22 @@ function createCombinedChart(canvasId, allGroupsData) {
             y: point.value
         }));
 
-        // Формируем label с индикатором тренда
-        const trendInfo = groupData.trendInfo;
-        const trendIcon = getTrendIcon(trendInfo.direction);
-        const trendLabel = `${groupData.groupValue} ${trendIcon} ${trendInfo.description}`;
+        // Формируем label без тренда (тренд теперь показывается через цвет)
+        const trendLabel = groupData.groupValue;
+
+        // Толщина линии зависит от силы тренда
+        const borderWidth = (trendInfo.direction.includes('STRONG') ? 3 : 2);
 
         return {
             label: trendLabel,
             data: data,
             borderColor: color.border,
             backgroundColor: color.bg,
-            borderWidth: 2,
+            borderWidth: borderWidth,  // Жирнее для сильных трендов
             fill: false,
             tension: 0.3,
-            pointRadius: 4,
-            pointHoverRadius: 8,
+            pointRadius: 5,
+            pointHoverRadius: 9,
             pointBackgroundColor: color.border,
             pointBorderColor: '#fff',
             pointBorderWidth: 2,
@@ -548,8 +555,9 @@ function createCombinedChart(canvasId, allGroupsData) {
             responsive: true,
             maintainAspectRatio: false,
             interaction: {
-                mode: 'index',
-                intersect: false,
+                mode: 'nearest',  // Показываем только ближайшую точку
+                intersect: true,  // Только при наведении на точку
+                axis: 'x'
             },
             plugins: {
                 title: {
@@ -577,66 +585,37 @@ function createCombinedChart(canvasId, allGroupsData) {
                     }
                 },
                 legend: {
-                    display: true,
-                    position: 'top',
-                    labels: {
-                        font: {
-                            size: 13
-                        },
-                        padding: 15,
-                        usePointStyle: true,
-                        pointStyle: 'circle'
-                    },
-                    onClick: function(e, legendItem, legend) {
-                        // Переключаем видимость линии при клике на легенду
-                        const index = legendItem.datasetIndex;
-                        const chart = legend.chart;
-                        const meta = chart.getDatasetMeta(index);
-
-                        meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
-                        chart.update();
-                    }
+                    display: false  // Отключаем легенду - используем таблицу вместо неё
                 },
                 tooltip: {
                     enabled: true,
-                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.9)',
                     titleFont: {
-                        size: 14,
+                        size: 13,
                         weight: 'bold'
                     },
                     bodyFont: {
-                        size: 13
+                        size: 12
                     },
-                    footerFont: {
-                        size: 11
-                    },
-                    padding: 12,
-                    displayColors: true,
+                    padding: 10,
+                    displayColors: false,  // Убираем цветной квадратик
                     callbacks: {
                         title: function(context) {
-                            const date = new Date(context[0].parsed.x);
-                            return date.toLocaleString('ru-RU', {
-                                day: '2-digit',
-                                month: 'long',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                            });
+                            // Название группы БЕЗ тренда
+                            return context[0].dataset.groupValue || '';
                         },
                         label: function(context) {
-                            let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
-                            }
-                            if (context.parsed.y !== null) {
-                                label += context.parsed.y.toLocaleString('ru-RU');
-                            }
-                            return label;
+                            // Только значение
+                            return `Значение: ${context.parsed.y.toLocaleString('ru-RU')}`;
                         },
-                        footer: function(context) {
-                            const groupData = allGroupsData[context[0].datasetIndex];
-                            const point = groupData.dataPoints[context[0].dataIndex];
-                            return `Операция: ${point.operationName}`;
+                        afterLabel: function(context) {
+                            // Дата операции
+                            const date = new Date(context.parsed.x);
+                            return date.toLocaleDateString('ru-RU', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                            });
                         }
                     }
                 },
@@ -1055,6 +1034,37 @@ function populateTrendTable(tableId, canvasId, allGroupsData) {
         return;
     }
 
+    // Сохраняем оригинальные данные для сортировки
+    table.dataset.originalData = JSON.stringify(allGroupsData);
+    table.dataset.canvasId = canvasId;
+
+    // Делаем заголовки кликабельными для сортировки
+    const headers = table.querySelectorAll('thead th');
+    headers.forEach((header, index) => {
+        // Пропускаем первую (цвет) и последнюю (действия) колонки
+        if (index > 0 && index < headers.length - 1) {
+            header.style.cursor = 'pointer';
+            header.style.userSelect = 'none';
+            header.classList.add('sortable-header');
+
+            // Добавляем обработчик клика
+            header.addEventListener('click', () => {
+                sortTable(tableId, index);
+            });
+        }
+    });
+
+    // Рендерим строки таблицы
+    renderTableRows(tableId, canvasId, allGroupsData);
+}
+
+/**
+ * Рендерит строки таблицы
+ */
+function renderTableRows(tableId, canvasId, allGroupsData) {
+    const table = document.getElementById(tableId);
+    const tbody = table.querySelector('tbody');
+
     // Очищаем tbody
     tbody.innerHTML = '';
 
@@ -1071,8 +1081,11 @@ function populateTrendTable(tableId, canvasId, allGroupsData) {
 
         // Получаем цвет линии из datasets
         const chart = chartInstances[canvasId];
-        const dataset = chart?.data.datasets[index];
+        const dataset = chart?.data.datasets.find(ds => ds.groupValue === groupData.groupValue);
         const lineColor = dataset?.borderColor || '#6c757d';
+
+        // Находим индекс dataset'а для правильной работы toggleLineVisibility
+        const datasetIndex = chart?.data.datasets.findIndex(ds => ds.groupValue === groupData.groupValue) || 0;
 
         // Определяем класс для тренда
         const trendClass = getTrendClass(trendInfo.direction);
@@ -1084,16 +1097,16 @@ function populateTrendTable(tableId, canvasId, allGroupsData) {
             <td style="background-color: ${lineColor}; border-left: 4px solid ${lineColor};"></td>
             <td><strong>${groupData.groupValue}</strong></td>
             <td><span class="badge ${trendClass}">${trendIcon} ${trendInfo.description}</span></td>
-            <td class="text-end">${min.toLocaleString('ru-RU')}</td>
-            <td class="text-end">${max.toLocaleString('ru-RU')}</td>
-            <td class="text-end">${avg.toFixed(0).toLocaleString('ru-RU')}</td>
-            <td class="text-end">
+            <td class="text-end" data-value="${min}">${min.toLocaleString('ru-RU')}</td>
+            <td class="text-end" data-value="${max}">${max.toLocaleString('ru-RU')}</td>
+            <td class="text-end" data-value="${avg}">${avg.toFixed(0).toLocaleString('ru-RU')}</td>
+            <td class="text-end" data-value="${trendInfo.changePercentage}">
                 <span class="${trendInfo.direction.includes('GROWTH') ? 'text-success' : trendInfo.direction.includes('DECLINE') ? 'text-danger' : 'text-secondary'}">
                     ${trendInfo.changePercentage > 0 ? '+' : ''}${trendInfo.changePercentage.toFixed(1)}%
                 </span>
             </td>
             <td class="text-center">
-                <button class="btn btn-sm btn-outline-primary" onclick="toggleLineVisibility('${canvasId}', ${index})" title="Показать/скрыть линию">
+                <button class="btn btn-sm btn-outline-primary" onclick="toggleLineVisibility('${canvasId}', ${datasetIndex})" title="Показать/скрыть линию">
                     <i class="fas fa-eye"></i>
                 </button>
             </td>
@@ -1101,6 +1114,84 @@ function populateTrendTable(tableId, canvasId, allGroupsData) {
 
         tbody.appendChild(row);
     });
+}
+
+/**
+ * Сортирует таблицу по указанной колонке
+ */
+function sortTable(tableId, columnIndex) {
+    const table = document.getElementById(tableId);
+    const canvasId = table.dataset.canvasId;
+    const allGroupsData = JSON.parse(table.dataset.originalData);
+
+    // Получаем текущее направление сортировки
+    const headers = table.querySelectorAll('thead th');
+    const currentHeader = headers[columnIndex];
+    const currentDirection = currentHeader.dataset.sortDirection || 'asc';
+    const newDirection = currentDirection === 'asc' ? 'desc' : 'asc';
+
+    // Очищаем индикаторы сортировки у всех заголовков
+    headers.forEach(h => {
+        h.dataset.sortDirection = '';
+        const icon = h.querySelector('.sort-icon');
+        if (icon) icon.remove();
+    });
+
+    // Устанавливаем новое направление
+    currentHeader.dataset.sortDirection = newDirection;
+
+    // Добавляем иконку сортировки
+    const icon = document.createElement('i');
+    icon.className = `fas fa-sort-${newDirection === 'asc' ? 'up' : 'down'} ms-1 sort-icon`;
+    currentHeader.appendChild(icon);
+
+    // Сортируем данные
+    const sortedData = [...allGroupsData].sort((a, b) => {
+        let valueA, valueB;
+
+        switch (columnIndex) {
+            case 1: // Группа
+                valueA = a.groupValue.toLowerCase();
+                valueB = b.groupValue.toLowerCase();
+                break;
+            case 2: // Тренд
+                // Сортируем по направлению тренда
+                const trendOrder = { 'STRONG_GROWTH': 5, 'GROWTH': 4, 'STABLE': 3, 'DECLINE': 2, 'STRONG_DECLINE': 1 };
+                valueA = trendOrder[a.trendInfo.direction] || 0;
+                valueB = trendOrder[b.trendInfo.direction] || 0;
+                break;
+            case 3: // Min
+                valueA = Math.min(...a.dataPoints.map(p => p.value));
+                valueB = Math.min(...b.dataPoints.map(p => p.value));
+                break;
+            case 4: // Max
+                valueA = Math.max(...a.dataPoints.map(p => p.value));
+                valueB = Math.max(...b.dataPoints.map(p => p.value));
+                break;
+            case 5: // Среднее
+                valueA = a.dataPoints.reduce((sum, p) => sum + p.value, 0) / a.dataPoints.length;
+                valueB = b.dataPoints.reduce((sum, p) => sum + p.value, 0) / b.dataPoints.length;
+                break;
+            case 6: // Изменение
+                valueA = a.trendInfo.changePercentage;
+                valueB = b.trendInfo.changePercentage;
+                break;
+            default:
+                return 0;
+        }
+
+        // Сравниваем значения
+        if (typeof valueA === 'string') {
+            return newDirection === 'asc'
+                ? valueA.localeCompare(valueB, 'ru')
+                : valueB.localeCompare(valueA, 'ru');
+        } else {
+            return newDirection === 'asc' ? valueA - valueB : valueB - valueA;
+        }
+    });
+
+    // Перерендериваем таблицу с отсортированными данными
+    renderTableRows(tableId, canvasId, sortedData);
 }
 
 /**

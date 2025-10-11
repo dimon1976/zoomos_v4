@@ -344,6 +344,22 @@
         .card:fullscreen .chart-controls {
             background-color: rgba(248, 249, 250, 0.98);
         }
+
+        /* Стили для сортируемых заголовков таблицы */
+        .sortable-header {
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s ease;
+        }
+
+        .sortable-header:hover {
+            background-color: #e2e6ea !important;
+        }
+
+        .sortable-header .sort-icon {
+            transition: color 0.2s ease;
+            color: #667eea;
+        }
     </style>
 </head>
 <body>
