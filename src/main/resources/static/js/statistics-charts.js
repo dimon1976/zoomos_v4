@@ -285,6 +285,24 @@ function getTrendColor(direction) {
 }
 
 /**
+ * Возвращает Unicode иконку для направления тренда
+ */
+function getTrendIcon(direction) {
+    switch (direction) {
+        case 'STRONG_GROWTH':
+            return '⬆️'; // Двойная стрелка вверх
+        case 'GROWTH':
+            return '↗️'; // Стрелка вверх-вправо
+        case 'DECLINE':
+            return '↘️'; // Стрелка вниз-вправо
+        case 'STRONG_DECLINE':
+            return '⬇️'; // Двойная стрелка вниз
+        default: // STABLE
+            return '➡️'; // Стрелка вправо
+    }
+}
+
+/**
  * Создает градиентную заливку для графика
  */
 function createGradient(ctx, height, colors) {
@@ -496,8 +514,13 @@ function createCombinedChart(canvasId, allGroupsData) {
             y: point.value
         }));
 
+        // Формируем label с индикатором тренда
+        const trendInfo = groupData.trendInfo;
+        const trendIcon = getTrendIcon(trendInfo.direction);
+        const trendLabel = `${groupData.groupValue} ${trendIcon} ${trendInfo.description}`;
+
         return {
-            label: groupData.groupValue,
+            label: trendLabel,
             data: data,
             borderColor: color.border,
             backgroundColor: color.bg,
@@ -508,7 +531,10 @@ function createCombinedChart(canvasId, allGroupsData) {
             pointHoverRadius: 8,
             pointBackgroundColor: color.border,
             pointBorderColor: '#fff',
-            pointBorderWidth: 2
+            pointBorderWidth: 2,
+            // Сохраняем доп. данные для таблицы
+            trendInfo: trendInfo,
+            groupValue: groupData.groupValue
         };
     });
 
@@ -757,6 +783,8 @@ async function loadCombinedChart(containerSelector, templateId, metricName, filt
 
         // Создаём HTML для графика
         const canvasId = `combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        const tableId = `trend-table-${canvasId}`;
+
         container.innerHTML = `
             <div class="col-12">
                 <div class="card border-0 shadow-sm" id="chart-container-${canvasId}">
@@ -784,13 +812,45 @@ async function loadCombinedChart(containerSelector, templateId, metricName, filt
                         </div>
                     </div>
                 </div>
+                <!-- Таблица статистики трендов -->
+                <div class="card border-0 shadow-sm mt-3">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Детальная статистика трендов</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0" id="${tableId}">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 40px;"></th>
+                                        <th>Группа</th>
+                                        <th>Тренд</th>
+                                        <th class="text-end">Min</th>
+                                        <th class="text-end">Max</th>
+                                        <th class="text-end">Среднее</th>
+                                        <th class="text-end">Изменение</th>
+                                        <th class="text-center">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Заполняется через JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
 
         // Создаём график после небольшой задержки, чтобы DOM успел обновиться
         setTimeout(() => {
             console.log(`Создание графика с ID: ${canvasId}`);
-            createCombinedChart(canvasId, allGroupsData);
+            const chart = createCombinedChart(canvasId, allGroupsData);
+
+            // Заполняем таблицу статистики
+            if (chart) {
+                populateTrendTable(tableId, canvasId, allGroupsData);
+            }
         }, 100);
 
     } catch (error) {
@@ -977,4 +1037,116 @@ function showNotification(message, type = 'info') {
             document.body.removeChild(notification);
         }, 300);
     }, 3000);
+}
+
+/**
+ * Заполняет таблицу статистики трендов
+ */
+function populateTrendTable(tableId, canvasId, allGroupsData) {
+    const table = document.getElementById(tableId);
+    if (!table) {
+        console.error('Таблица не найдена:', tableId);
+        return;
+    }
+
+    const tbody = table.querySelector('tbody');
+    if (!tbody) {
+        console.error('tbody не найден в таблице');
+        return;
+    }
+
+    // Очищаем tbody
+    tbody.innerHTML = '';
+
+    // Заполняем строки для каждой группы
+    allGroupsData.forEach((groupData, index) => {
+        const trendInfo = groupData.trendInfo;
+        const dataPoints = groupData.dataPoints;
+
+        // Вычисляем статистику
+        const values = dataPoints.map(p => p.value);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const avg = values.reduce((a, b) => a + b, 0) / values.length;
+
+        // Получаем цвет линии из datasets
+        const chart = chartInstances[canvasId];
+        const dataset = chart?.data.datasets[index];
+        const lineColor = dataset?.borderColor || '#6c757d';
+
+        // Определяем класс для тренда
+        const trendClass = getTrendClass(trendInfo.direction);
+        const trendIcon = getTrendIcon(trendInfo.direction);
+
+        // Создаём строку
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td style="background-color: ${lineColor}; border-left: 4px solid ${lineColor};"></td>
+            <td><strong>${groupData.groupValue}</strong></td>
+            <td><span class="badge ${trendClass}">${trendIcon} ${trendInfo.description}</span></td>
+            <td class="text-end">${min.toLocaleString('ru-RU')}</td>
+            <td class="text-end">${max.toLocaleString('ru-RU')}</td>
+            <td class="text-end">${avg.toFixed(0).toLocaleString('ru-RU')}</td>
+            <td class="text-end">
+                <span class="${trendInfo.direction.includes('GROWTH') ? 'text-success' : trendInfo.direction.includes('DECLINE') ? 'text-danger' : 'text-secondary'}">
+                    ${trendInfo.changePercentage > 0 ? '+' : ''}${trendInfo.changePercentage.toFixed(1)}%
+                </span>
+            </td>
+            <td class="text-center">
+                <button class="btn btn-sm btn-outline-primary" onclick="toggleLineVisibility('${canvasId}', ${index})" title="Показать/скрыть линию">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </td>
+        `;
+
+        tbody.appendChild(row);
+    });
+}
+
+/**
+ * Возвращает CSS класс для badge тренда
+ */
+function getTrendClass(direction) {
+    switch (direction) {
+        case 'STRONG_GROWTH':
+            return 'bg-success';
+        case 'GROWTH':
+            return 'bg-info';
+        case 'DECLINE':
+            return 'bg-warning text-dark';
+        case 'STRONG_DECLINE':
+            return 'bg-danger';
+        default:
+            return 'bg-secondary';
+    }
+}
+
+/**
+ * Переключает видимость конкретной линии
+ */
+function toggleLineVisibility(canvasId, datasetIndex) {
+    const chart = chartInstances[canvasId];
+    if (!chart) {
+        console.error('График не найден:', canvasId);
+        return;
+    }
+
+    const meta = chart.getDatasetMeta(datasetIndex);
+    meta.hidden = !meta.hidden;
+    chart.update();
+
+    // Обновляем иконку кнопки
+    const button = event.target.closest('button');
+    if (button) {
+        const icon = button.querySelector('i');
+        if (meta.hidden) {
+            icon.className = 'fas fa-eye-slash';
+            button.classList.remove('btn-outline-primary');
+            button.classList.add('btn-outline-secondary');
+        } else {
+            icon.className = 'fas fa-eye';
+            button.classList.remove('btn-outline-secondary');
+            button.classList.add('btn-outline-primary');
+        }
+    }
 }
