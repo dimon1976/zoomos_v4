@@ -1045,24 +1045,10 @@
 
             if (viewMode === 'combined') {
                 // Комбинированный вид - один большой график со всеми группами
-                container.innerHTML = `
-                    <div class="col-12">
-                        <div class="card shadow-sm">
-                            <div class="card-body" style="height: 600px; position: relative;">
-                                <canvas id="combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}"></canvas>
-                                <button type="button" class="btn btn-sm btn-outline-secondary position-absolute"
-                                        style="top: 10px; right: 10px; z-index: 100;"
-                                        onclick="resetChartZoom('combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}')">
-                                    <i class="fas fa-undo me-1"></i>Сброс масштаба
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
                 // Загружаем комбинированный график из statistics-charts.js
+                // Функция loadCombinedChart сама создаст необходимую HTML структуру
                 await loadCombinedChart(
-                    `combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                    containerSelector,  // Передаём селектор контейнера, а не ID canvas
                     templateId,
                     metricName,
                     activeFilterField,

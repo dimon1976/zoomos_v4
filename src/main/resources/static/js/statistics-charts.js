@@ -453,16 +453,22 @@ function destroyAllCharts() {
  * @returns {Chart} - Экземпляр графика Chart.js
  */
 function createCombinedChart(canvasId, allGroupsData) {
+    console.log(`createCombinedChart вызвана с canvasId: ${canvasId}`);
+    console.log(`Данные для ${allGroupsData.length} групп:`, allGroupsData);
+
     const canvas = document.getElementById(canvasId);
     if (!canvas) {
         console.error('Canvas element not found:', canvasId);
         return null;
     }
 
+    console.log('Canvas элемент найден:', canvas);
+
     const ctx = canvas.getContext('2d');
 
     // Уничтожаем существующий график если есть
     if (chartInstances[canvasId]) {
+        console.log('Уничтожаем существующий график');
         chartInstances[canvasId].destroy();
     }
 
@@ -687,9 +693,11 @@ function createCombinedChart(canvasId, allGroupsData) {
     };
 
     // Создаем график
+    console.log('Создание графика Chart.js с конфигурацией:', config);
     const chart = new Chart(ctx, config);
     chartInstances[canvasId] = chart;
 
+    console.log('График успешно создан:', chart);
     return chart;
 }
 
@@ -706,6 +714,7 @@ function createCombinedChart(canvasId, allGroupsData) {
 async function loadCombinedChart(containerSelector, templateId, metricName, filterFieldName = null, filterFieldValue = null, limit = 50) {
     try {
         console.log(`Загрузка комбинированного графика для метрики: ${metricName}`);
+        console.log(`Container selector: ${containerSelector}`);
 
         // Формируем URL для API запроса
         let url = `/statistics/history/all-groups?templateId=${templateId}&metricName=${encodeURIComponent(metricName)}&limit=${limit}`;
@@ -714,6 +723,8 @@ async function loadCombinedChart(containerSelector, templateId, metricName, filt
             url += `&filterFieldName=${encodeURIComponent(filterFieldName)}&filterFieldValue=${encodeURIComponent(filterFieldValue)}`;
         }
 
+        console.log(`Fetching data from: ${url}`);
+
         // Загружаем данные
         const response = await fetch(url);
         if (!response.ok) {
@@ -721,9 +732,19 @@ async function loadCombinedChart(containerSelector, templateId, metricName, filt
         }
 
         const allGroupsData = await response.json();
+        console.log(`Получено данных для ${allGroupsData.length} групп`);
 
         if (!allGroupsData || allGroupsData.length === 0) {
             console.warn('Нет данных для отображения комбинированного графика');
+            const container = document.querySelector(containerSelector);
+            if (container) {
+                container.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Нет исторических данных для отображения комбинированного графика
+                    </div>
+                `;
+            }
             return;
         }
 
@@ -735,22 +756,27 @@ async function loadCombinedChart(containerSelector, templateId, metricName, filt
         }
 
         // Создаём HTML для графика
+        const canvasId = `combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
         container.innerHTML = `
-            <div class="card border-0 shadow-sm">
-                <div class="card-body" style="height: 600px; position: relative;">
-                    <canvas id="combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}"></canvas>
-                    <div class="text-center mt-3">
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="resetChartZoom('combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}')">
-                            <i class="fas fa-search-minus me-1"></i>Сбросить масштаб
-                        </button>
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body" style="height: 600px; position: relative;">
+                        <canvas id="${canvasId}"></canvas>
+                        <div class="text-center mt-3">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="resetChartZoom('${canvasId}')">
+                                <i class="fas fa-search-minus me-1"></i>Сбросить масштаб
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         `;
 
-        // Создаём график
-        const canvasId = `combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
-        createCombinedChart(canvasId, allGroupsData);
+        // Создаём график после небольшой задержки, чтобы DOM успел обновиться
+        setTimeout(() => {
+            console.log(`Создание графика с ID: ${canvasId}`);
+            createCombinedChart(canvasId, allGroupsData);
+        }, 100);
 
     } catch (error) {
         console.error('Ошибка загрузки комбинированного графика:', error);
