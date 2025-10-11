@@ -763,8 +763,17 @@ async function loadCombinedChart(containerSelector, templateId, metricName, filt
                     <div class="card-body" style="height: 600px; position: relative;">
                         <canvas id="${canvasId}"></canvas>
                         <div class="text-center mt-3">
-                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="resetChartZoom('${canvasId}')">
+                            <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="resetChartZoom('${canvasId}')">
                                 <i class="fas fa-search-minus me-1"></i>Сбросить масштаб
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="toggleAllLines('${canvasId}')">
+                                <i class="fas fa-eye-slash me-1"></i>Скрыть все
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-success me-2" onclick="downloadChartImage('${canvasId}', 'png')">
+                                <i class="fas fa-download me-1"></i>PNG
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleFullscreen('${canvasId}')">
+                                <i class="fas fa-expand me-1"></i>Полный экран
                             </button>
                         </div>
                     </div>
@@ -800,4 +809,153 @@ function resetChartZoom(canvasId) {
     if (chart && chart.resetZoom) {
         chart.resetZoom();
     }
+}
+
+/**
+ * Переключает видимость всех линий на графике
+ */
+function toggleAllLines(canvasId) {
+    const chart = chartInstances[canvasId];
+    if (!chart) {
+        console.error('График не найден:', canvasId);
+        return;
+    }
+
+    // Проверяем текущее состояние - все ли линии видимы
+    const allVisible = chart.data.datasets.every((dataset, index) => {
+        const meta = chart.getDatasetMeta(index);
+        return !meta.hidden;
+    });
+
+    // Переключаем состояние всех линий
+    chart.data.datasets.forEach((dataset, index) => {
+        const meta = chart.getDatasetMeta(index);
+        meta.hidden = allVisible; // Если все видимы - скрываем, иначе показываем
+    });
+
+    chart.update();
+
+    // Обновляем текст кнопки
+    const button = event.target.closest('button');
+    if (button) {
+        const icon = button.querySelector('i');
+        const textNode = Array.from(button.childNodes).find(node => node.nodeType === Node.TEXT_NODE);
+
+        if (allVisible) {
+            icon.className = 'fas fa-eye me-1';
+            if (textNode) textNode.textContent = 'Показать все';
+        } else {
+            icon.className = 'fas fa-eye-slash me-1';
+            if (textNode) textNode.textContent = 'Скрыть все';
+        }
+    }
+}
+
+/**
+ * Скачивает график как изображение
+ */
+function downloadChartImage(canvasId, format = 'png') {
+    const chart = chartInstances[canvasId];
+    if (!chart) {
+        console.error('График не найден:', canvasId);
+        return;
+    }
+
+    try {
+        // Получаем изображение в base64
+        const image = chart.toBase64Image();
+
+        // Создаём ссылку для скачивания
+        const link = document.createElement('a');
+        link.href = image;
+        link.download = `chart-${canvasId}-${new Date().getTime()}.${format}`;
+
+        // Триггерим скачивание
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Показываем уведомление
+        showNotification('Графики сохранен как ' + format.toUpperCase(), 'success');
+    } catch (error) {
+        console.error('Ошибка при экспорте графика:', error);
+        showNotification('Ошибка при экспорте графика', 'error');
+    }
+}
+
+/**
+ * Переключает полноэкранный режим для графика
+ */
+function toggleFullscreen(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        console.error('Canvas не найден:', canvasId);
+        return;
+    }
+
+    // Находим родительский card элемент
+    const cardElement = canvas.closest('.card');
+    if (!cardElement) {
+        console.error('Card контейнер не найден');
+        return;
+    }
+
+    if (!document.fullscreenElement) {
+        // Входим в полноэкранный режим
+        if (cardElement.requestFullscreen) {
+            cardElement.requestFullscreen();
+        } else if (cardElement.webkitRequestFullscreen) {
+            cardElement.webkitRequestFullscreen();
+        } else if (cardElement.msRequestFullscreen) {
+            cardElement.msRequestFullscreen();
+        }
+
+        // Обновляем иконку кнопки
+        const button = event.target.closest('button');
+        if (button) {
+            const icon = button.querySelector('i');
+            if (icon) icon.className = 'fas fa-compress me-1';
+        }
+    } else {
+        // Выходим из полноэкранного режима
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+
+        // Обновляем иконку кнопки
+        const button = event.target.closest('button');
+        if (button) {
+            const icon = button.querySelector('i');
+            if (icon) icon.className = 'fas fa-expand me-1';
+        }
+    }
+}
+
+/**
+ * Показывает всплывающее уведомление
+ */
+function showNotification(message, type = 'info') {
+    // Создаём уведомление
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'} position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px; animation: slideIn 0.3s ease-out;';
+    notification.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+        ${message}
+    `;
+
+    // Добавляем на страницу
+    document.body.appendChild(notification);
+
+    // Удаляем через 3 секунды
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 3000);
 }
