@@ -759,22 +759,28 @@ async function loadCombinedChart(containerSelector, templateId, metricName, filt
         const canvasId = `combined-chart-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
         container.innerHTML = `
             <div class="col-12">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body" style="height: 600px; position: relative;">
-                        <canvas id="${canvasId}"></canvas>
-                        <div class="text-center mt-3">
-                            <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="resetChartZoom('${canvasId}')">
-                                <i class="fas fa-search-minus me-1"></i>Сбросить масштаб
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="toggleAllLines('${canvasId}')">
-                                <i class="fas fa-eye-slash me-1"></i>Скрыть все
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-success me-2" onclick="downloadChartImage('${canvasId}', 'png')">
-                                <i class="fas fa-download me-1"></i>PNG
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleFullscreen('${canvasId}')">
-                                <i class="fas fa-expand me-1"></i>Полный экран
-                            </button>
+                <div class="card border-0 shadow-sm" id="chart-container-${canvasId}">
+                    <div class="card-body" style="height: 600px; position: relative; display: flex; flex-direction: column;">
+                        <!-- Панель управления сверху -->
+                        <div class="chart-controls mb-3 d-flex justify-content-between align-items-center" style="flex-shrink: 0;">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary" onclick="resetChartZoom('${canvasId}')" title="Сбросить масштаб">
+                                    <i class="fas fa-search-minus"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="toggleAllLines('${canvasId}')" title="Скрыть все линии">
+                                    <i class="fas fa-eye-slash"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-success" onclick="downloadChartImage('${canvasId}', 'png')" title="Скачать PNG">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-info" onclick="toggleFullscreen('${canvasId}')" title="Полный экран">
+                                    <i class="fas fa-expand"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Canvas занимает оставшееся пространство -->
+                        <div style="flex-grow: 1; position: relative;">
+                            <canvas id="${canvasId}"></canvas>
                         </div>
                     </div>
                 </div>
@@ -900,21 +906,41 @@ function toggleFullscreen(canvasId) {
         return;
     }
 
+    // Добавляем обработчик события fullscreenchange для обновления иконки
+    const updateFullscreenButton = () => {
+        const button = cardElement.querySelector('.btn-outline-info');
+        if (button) {
+            const icon = button.querySelector('i');
+            if (document.fullscreenElement === cardElement) {
+                if (icon) icon.className = 'fas fa-compress';
+                button.title = 'Выход из полноэкранного режима';
+            } else {
+                if (icon) icon.className = 'fas fa-expand';
+                button.title = 'Полный экран';
+            }
+        }
+    };
+
+    // Добавляем слушатель один раз
+    if (!cardElement.hasAttribute('data-fullscreen-listener')) {
+        cardElement.setAttribute('data-fullscreen-listener', 'true');
+        document.addEventListener('fullscreenchange', updateFullscreenButton);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+        document.addEventListener('mozfullscreenchange', updateFullscreenButton);
+        document.addEventListener('MSFullscreenChange', updateFullscreenButton);
+    }
+
     if (!document.fullscreenElement) {
         // Входим в полноэкранный режим
         if (cardElement.requestFullscreen) {
-            cardElement.requestFullscreen();
+            cardElement.requestFullscreen().catch(err => {
+                console.error('Ошибка при входе в fullscreen:', err);
+                showNotification('Не удалось войти в полноэкранный режим', 'error');
+            });
         } else if (cardElement.webkitRequestFullscreen) {
             cardElement.webkitRequestFullscreen();
         } else if (cardElement.msRequestFullscreen) {
             cardElement.msRequestFullscreen();
-        }
-
-        // Обновляем иконку кнопки
-        const button = event.target.closest('button');
-        if (button) {
-            const icon = button.querySelector('i');
-            if (icon) icon.className = 'fas fa-compress me-1';
         }
     } else {
         // Выходим из полноэкранного режима
@@ -924,13 +950,6 @@ function toggleFullscreen(canvasId) {
             document.webkitExitFullscreen();
         } else if (document.msExitFullscreen) {
             document.msExitFullscreen();
-        }
-
-        // Обновляем иконку кнопки
-        const button = event.target.closest('button');
-        if (button) {
-            const icon = button.querySelector('i');
-            if (icon) icon.className = 'fas fa-expand me-1';
         }
     }
 }
