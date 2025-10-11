@@ -490,29 +490,35 @@ function createCombinedChart(canvasId, allGroupsData) {
         chartInstances[canvasId].destroy();
     }
 
-    // Цвета линий на основе трендов для лучшей читаемости
-    const getTrendBasedColor = (direction) => {
-        switch (direction) {
-            case 'STRONG_GROWTH':
-                return { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)' };  // Зелёный
-            case 'GROWTH':
-                return { border: '#20c997', bg: 'rgba(32, 201, 151, 0.1)' };  // Бирюзовый
-            case 'STABLE':
-                return { border: '#6c757d', bg: 'rgba(108, 117, 125, 0.1)' };  // Серый
-            case 'DECLINE':
-                return { border: '#ffc107', bg: 'rgba(255, 193, 7, 0.1)' };  // Жёлтый
-            case 'STRONG_DECLINE':
-                return { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)' };  // Красный
-            default:
-                return { border: '#6c757d', bg: 'rgba(108, 117, 125, 0.1)' };
-        }
-    };
+    // Яркая палитра цветов для различия групп
+    const colorPalette = [
+        { border: '#667eea', bg: 'rgba(102, 126, 234, 0.1)' },  // Фиолетовый
+        { border: '#f093fb', bg: 'rgba(240, 147, 251, 0.1)' },  // Розовый
+        { border: '#4facfe', bg: 'rgba(79, 172, 254, 0.1)' },   // Голубой
+        { border: '#43e97b', bg: 'rgba(67, 233, 123, 0.1)' },   // Зелёный
+        { border: '#fa709a', bg: 'rgba(250, 112, 154, 0.1)' },  // Малиновый
+        { border: '#fee140', bg: 'rgba(254, 225, 64, 0.1)' },   // Жёлтый
+        { border: '#30cfd0', bg: 'rgba(48, 207, 208, 0.1)' },   // Бирюзовый
+        { border: '#ff6b6b', bg: 'rgba(255, 107, 107, 0.1)' },  // Коралловый
+        { border: '#5f27cd', bg: 'rgba(95, 39, 205, 0.1)' },    // Индиго
+        { border: '#00d2d3', bg: 'rgba(0, 210, 211, 0.1)' },    // Циан
+        { border: '#ff9ff3', bg: 'rgba(255, 159, 243, 0.1)' },  // Светло-розовый
+        { border: '#54a0ff', bg: 'rgba(84, 160, 255, 0.1)' },   // Синий
+        { border: '#48dbfb', bg: 'rgba(72, 219, 251, 0.1)' },   // Светло-голубой
+        { border: '#1dd1a1', bg: 'rgba(29, 209, 161, 0.1)' },   // Мятный
+        { border: '#feca57', bg: 'rgba(254, 202, 87, 0.1)' },   // Золотой
+        { border: '#ff6348', bg: 'rgba(255, 99, 72, 0.1)' },    // Томатный
+        { border: '#ff4757', bg: 'rgba(255, 71, 87, 0.1)' },    // Красный
+        { border: '#747d8c', bg: 'rgba(116, 125, 140, 0.1)' },  // Серо-синий
+        { border: '#2f3542', bg: 'rgba(47, 53, 66, 0.1)' },     // Тёмно-серый
+        { border: '#a29bfe', bg: 'rgba(162, 155, 254, 0.1)' }   // Лавандовый
+    ];
 
     // Создаём datasets для каждой группы
     const datasets = allGroupsData.map((groupData, index) => {
-        // Цвет линии на основе тренда
+        // Цвет из палитры по индексу (циклично)
+        const color = colorPalette[index % colorPalette.length];
         const trendInfo = groupData.trendInfo;
-        const color = getTrendBasedColor(trendInfo.direction);
 
         // Парсим даты и значения
         const data = groupData.dataPoints.map(point => ({
