@@ -37,6 +37,14 @@ public interface FileOperationRepository extends JpaRepository<FileOperation, Lo
             "ORDER BY fo.startedAt DESC")
     List<FileOperation> findRecentImportOperations(@Param("client") Client client, Pageable pageable);
 
+    // Найти успешно завершенные операции импорта клиента (для экспорта)
+    @Query("SELECT fo FROM FileOperation fo " +
+            "WHERE fo.client = :client " +
+            "AND fo.operationType = 'IMPORT' " +
+            "AND fo.status = 'COMPLETED' " +
+            "ORDER BY fo.startedAt DESC")
+    List<FileOperation> findSuccessfulImportOperations(@Param("client") Client client, Pageable pageable);
+
     // Подсчет по статусам
     Long countByStatus(FileOperation.OperationStatus status);
     Long countByStatusIn(List<FileOperation.OperationStatus> statuses);

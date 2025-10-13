@@ -56,12 +56,21 @@
                             </tr>
                             </thead>
                             <tbody>
-                            <tr th:each="op : ${recentOperations}">
+                            <tr th:each="op : ${recentOperations}"
+                                th:classappend="${op.status.name() == 'FAILED' ? 'table-danger' : ''}">
                                 <td>
                                     <input class="form-check-input" type="checkbox" name="selectedOperationIds"
-                                           th:value="${op.id}">
+                                           th:value="${op.id}"
+                                           th:disabled="${op.status.name() == 'FAILED'}"
+                                           th:title="${op.status.name() == 'FAILED' ? 'Импорт завершился с ошибкой: ' + op.errorMessage : ''}">
                                 </td>
-                                <td th:text="${op.id}">1</td>
+                                <td>
+                                    <span th:text="${op.id}">1</span>
+                                    <span th:if="${op.status.name() == 'FAILED'}" class="badge bg-danger ms-1"
+                                          th:title="${op.errorMessage}">
+                                        <i class="fas fa-exclamation-triangle"></i> Ошибка
+                                    </span>
+                                </td>
                                 <td th:text="${op.fileName}">file.csv</td>
                                 <td th:text="${#temporals.format(op.startedAt, 'dd.MM.yyyy HH:mm')}">01.01.2024 00:00</td>
                             </tr>
