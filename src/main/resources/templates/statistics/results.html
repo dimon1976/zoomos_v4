@@ -273,93 +273,6 @@
             z-index: 10;
         }
 
-        /* Переключатель режимов отображения */
-        .btn-check:checked + .btn-outline-primary {
-            background-color: #667eea;
-            border-color: #667eea;
-            color: white;
-        }
-
-        /* Комбинированный график - контейнер */
-        #metricTabsContent .card-body {
-            position: relative;
-        }
-
-        /* Кнопка сброса масштаба */
-        .card-body .btn-outline-secondary {
-            opacity: 0.8;
-            transition: opacity 0.2s ease;
-        }
-
-        .card-body .btn-outline-secondary:hover {
-            opacity: 1;
-        }
-
-        /* Анимации для уведомлений */
-        @keyframes slideIn {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-        }
-
-        /* Стили для fullscreen режима */
-        .card:fullscreen {
-            width: 100vw;
-            height: 100vh;
-            max-width: 100vw;
-            max-height: 100vh;
-            margin: 0;
-            border-radius: 0;
-        }
-
-        .card:fullscreen .card-body {
-            height: 100vh !important;
-            padding: 20px;
-        }
-
-        /* Панель управления графиком */
-        .chart-controls {
-            background-color: rgba(248, 249, 250, 0.95);
-            padding: 10px;
-            border-radius: 6px;
-            border: 1px solid #dee2e6;
-        }
-
-        .card:fullscreen .chart-controls {
-            background-color: rgba(248, 249, 250, 0.98);
-        }
-
-        /* Стили для сортируемых заголовков таблицы */
-        .sortable-header {
-            cursor: pointer;
-            user-select: none;
-            transition: background-color 0.2s ease;
-        }
-
-        .sortable-header:hover {
-            background-color: #e2e6ea !important;
-        }
-
-        .sortable-header .sort-icon {
-            transition: color 0.2s ease;
-            color: #667eea;
-        }
     </style>
 </head>
 <body>
@@ -694,25 +607,10 @@
 
     <!-- Исторические тренды -->
     <div th:unless="${#lists.isEmpty(comparison)}" class="mt-5">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h5 class="mb-0">
-                <i class="fas fa-chart-line me-2"></i>Исторические тренды
-                <small class="text-muted">(по всем сохраненным операциям)</small>
-            </h5>
-
-            <!-- Переключатель режимов отображения -->
-            <div class="btn-group" role="group" aria-label="Режим отображения графиков">
-                <input type="radio" class="btn-check" name="chartViewMode" id="viewModeCombined" value="combined" autocomplete="off">
-                <label class="btn btn-outline-primary" for="viewModeCombined">
-                    <i class="fas fa-chart-area me-1"></i>Комбинированный вид
-                </label>
-
-                <input type="radio" class="btn-check" name="chartViewMode" id="viewModeGrid" value="grid" autocomplete="off" checked>
-                <label class="btn btn-outline-primary" for="viewModeGrid">
-                    <i class="fas fa-th me-1"></i>Сетка графиков
-                </label>
-            </div>
-        </div>
+        <h5 class="mb-4">
+            <i class="fas fa-chart-line me-2"></i>Исторические тренды
+            <small class="text-muted">(по всем сохраненным операциям)</small>
+        </h5>
 
         <!-- Вкладки для метрик -->
         <ul class="nav nav-tabs" id="metricTabs" role="tablist">
@@ -763,37 +661,6 @@
         // Инициализируем графики трендов
         if (templateId && statisticsDataFromTemplate && statisticsDataFromTemplate.length > 0) {
             initializeHistoricalCharts();
-        }
-
-        // Восстанавливаем сохраненный режим отображения графиков
-        const savedMode = localStorage.getItem('chartViewMode');
-        if (savedMode) {
-            const radio = document.getElementById(savedMode === 'combined' ? 'viewModeCombined' : 'viewModeGrid');
-            if (radio) {
-                radio.checked = true;
-            }
-        }
-
-        // Обработчики переключения режима отображения
-        const viewModeCombined = document.getElementById('viewModeCombined');
-        const viewModeGrid = document.getElementById('viewModeGrid');
-
-        if (viewModeCombined) {
-            viewModeCombined.addEventListener('change', function() {
-                if (this.checked) {
-                    setChartViewMode('combined');
-                    reloadActiveMetricCharts();
-                }
-            });
-        }
-
-        if (viewModeGrid) {
-            viewModeGrid.addEventListener('change', function() {
-                if (this.checked) {
-                    setChartViewMode('grid');
-                    reloadActiveMetricCharts();
-                }
-            });
         }
     });
 
@@ -1106,32 +973,15 @@
                 </div>
             `;
 
-            // Проверяем выбранный режим отображения
-            const viewMode = getChartViewMode();
-
-            if (viewMode === 'combined') {
-                // Комбинированный вид - один большой график со всеми группами
-                // Загружаем комбинированный график из statistics-charts.js
-                // Функция loadCombinedChart сама создаст необходимую HTML структуру
-                await loadCombinedChart(
-                    containerSelector,  // Передаём селектор контейнера, а не ID canvas
-                    templateId,
-                    metricName,
-                    activeFilterField,
-                    activeFilterValue,
-                    50 // лимит точек на график
-                );
-            } else {
-                // Сеточный вид - отдельные графики для каждой группы
-                await loadAllGroupsCharts(
-                    containerSelector,
-                    templateId,
-                    metricName,
-                    activeFilterField,
-                    activeFilterValue,
-                    50 // лимит точек на график
-                );
-            }
+            // Загружаем графики в сеточном виде - отдельный график для каждой группы
+            await loadAllGroupsCharts(
+                containerSelector,
+                templateId,
+                metricName,
+                activeFilterField,
+                activeFilterValue,
+                50 // лимит точек на график
+            );
 
         } catch (error) {
             console.error('Ошибка загрузки графиков метрики:', error);
@@ -1149,68 +999,6 @@
         }
     }
 
-    /**
-     * Получает текущий режим отображения графиков из localStorage или по умолчанию
-     */
-    function getChartViewMode() {
-        // Пытаемся получить из localStorage
-        const savedMode = localStorage.getItem('chartViewMode');
-        if (savedMode) {
-            return savedMode;
-        }
-
-        // Проверяем выбранный radio button
-        const combinedRadio = document.getElementById('viewModeCombined');
-        const gridRadio = document.getElementById('viewModeGrid');
-
-        if (combinedRadio && combinedRadio.checked) {
-            return 'combined';
-        } else if (gridRadio && gridRadio.checked) {
-            return 'grid';
-        }
-
-        // По умолчанию - сетка
-        return 'grid';
-    }
-
-    /**
-     * Сохраняет режим отображения графиков в localStorage
-     */
-    function setChartViewMode(mode) {
-        localStorage.setItem('chartViewMode', mode);
-    }
-
-    /**
-     * Перезагружает активную вкладку с графиками
-     */
-    function reloadActiveMetricCharts() {
-        // Находим активную вкладку
-        const activeTab = document.querySelector('#metricTabs .nav-link.active');
-        if (!activeTab) {
-            console.warn('Активная вкладка не найдена');
-            return;
-        }
-
-        // Получаем ID контента вкладки
-        const targetId = activeTab.getAttribute('data-bs-target');
-        if (!targetId) {
-            console.warn('Target ID не найден для активной вкладки');
-            return;
-        }
-
-        // Получаем контейнер графиков
-        const chartsContainer = document.querySelector(`${targetId}-charts`);
-        if (!chartsContainer) {
-            console.warn('Контейнер графиков не найден:', `${targetId}-charts`);
-            return;
-        }
-
-        // Извлекаем имя метрики из текста вкладки
-        const metricName = activeTab.textContent.trim();
-
-        // Перезагружаем графики
-        loadMetricCharts(metricName, `${targetId}-charts`);
-    }
     /*]]>*/
 </script>
 
