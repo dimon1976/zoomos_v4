@@ -449,7 +449,43 @@
         formatSelect.addEventListener('change', toggleSettings);
         toggleSettings();
         toggleStatisticsSettings();
+
+        // Автозаполнение порядкового номера при добавлении поля
+        autoFillFieldOrder();
+
+        // Отслеживаем кнопку "Добавить поле" через MutationObserver
+        const observer = new MutationObserver(function(mutations) {
+            autoFillFieldOrder();
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
     });
+
+    // Функция для автозаполнения порядкового номера нового поля
+    function autoFillFieldOrder() {
+        const fieldOrderInputs = document.querySelectorAll('input[name$="].fieldOrder"]');
+        if (fieldOrderInputs.length === 0) return;
+
+        // Находим максимальный порядковый номер
+        let maxOrder = 0;
+        fieldOrderInputs.forEach(input => {
+            const value = parseInt(input.value);
+            if (!isNaN(value) && value > maxOrder) {
+                maxOrder = value;
+            }
+        });
+
+        // Проставляем следующий номер для пустых полей
+        fieldOrderInputs.forEach(input => {
+            if (!input.value || input.value === '' || input.value === '0') {
+                input.value = maxOrder + 1;
+                maxOrder++;
+            }
+        });
+    }
 
     // Функции для управления нормализацией
     function toggleNormalization(index) {
