@@ -51,22 +51,15 @@ public class HistoricalStatisticsService {
             String filterFieldValue,
             int limit) {
 
-        log.info("Получение истории для метрики: templateId={}, group={}, metric={}, filter={}={}",
-                templateId, groupValue, metricName, filterFieldName, filterFieldValue);
-
         // Проверяем существование шаблона и получаем clientId
         ExportTemplate template = templateRepository.findById(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден: " + templateId));
 
         Long clientId = template.getClient().getId();
 
-        log.debug("Получение данных для clientId={}", clientId);
-
         // Получаем исторические данные из БД
         List<ExportStatistics> history = statisticsRepository.findHistoryForMetric(
                 templateId, clientId, groupValue, metricName, filterFieldName, filterFieldValue);
-
-        log.debug("Найдено {} исторических записей", history.size());
 
         if (history.isEmpty()) {
             return createEmptyHistory(groupValue, metricName);
@@ -126,9 +119,6 @@ public class HistoricalStatisticsService {
             String filterFieldValue,
             int limit) {
 
-        log.info("Получение истории всех групп для метрики: templateId={}, metric={}, filter={}={}",
-                templateId, metricName, filterFieldName, filterFieldValue);
-
         // Проверяем существование шаблона и получаем clientId
         ExportTemplate template = templateRepository.findById(templateId)
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден: " + templateId));
@@ -137,7 +127,6 @@ public class HistoricalStatisticsService {
 
         // Получаем список всех групп для шаблона
         List<String> groupValues = statisticsRepository.findDistinctGroupValuesByTemplateId(templateId, clientId);
-        log.debug("Найдено {} групп", groupValues.size());
 
         // Для каждой группы получаем историю
         return groupValues.stream()
@@ -159,8 +148,6 @@ public class HistoricalStatisticsService {
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден: " + templateId));
 
         Long clientId = template.getClient().getId();
-        log.debug("Получение метрик для templateId={}, clientId={}", templateId, clientId);
-
         return statisticsRepository.findDistinctMetricNamesByTemplateId(templateId, clientId);
     }
 
@@ -176,8 +163,6 @@ public class HistoricalStatisticsService {
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден: " + templateId));
 
         Long clientId = template.getClient().getId();
-        log.debug("Получение групп для templateId={}, clientId={}", templateId, clientId);
-
         return statisticsRepository.findDistinctGroupValuesByTemplateId(templateId, clientId);
     }
 

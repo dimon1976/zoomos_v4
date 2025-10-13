@@ -41,9 +41,6 @@ public class ExportStatisticsService {
             String filterFieldName,
             String filterFieldValue) {
 
-        log.info("Расчет статистики для операций: {} с фильтром: {}={}",
-                request.getExportSessionIds(), filterFieldName, filterFieldValue);
-
         // Получаем шаблон
         ExportTemplate template = templateRepository.findByIdWithFieldsAndFilters(request.getTemplateId())
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
@@ -67,11 +64,9 @@ public class ExportStatisticsService {
             // Получаем отфильтрованную статистику
             allStatistics = statisticsRepository.findBySessionIdsAndFilter(
                     sessionIds, filterFieldName, filterFieldValue);
-            log.debug("Получено {} записей отфильтрованной статистики", allStatistics.size());
         } else {
             // Получаем общую статистику (filter = NULL)
             allStatistics = statisticsRepository.findBySessionIdsWithoutFilter(sessionIds);
-            log.debug("Получено {} записей общей статистики", allStatistics.size());
         }
 
         if (allStatistics.isEmpty()) {
@@ -156,7 +151,6 @@ public class ExportStatisticsService {
             StatisticsComparisonDto totalSummary = calculateTotalSummary(
                     statisticsByGroup, sessions, request, operationNamesCache);
             comparisons.add(0, totalSummary);
-            log.debug("Добавлена итоговая строка 'ОБЩЕЕ КОЛИЧЕСТВО' в начало списка");
         }
 
         return comparisons;
@@ -167,22 +161,17 @@ public class ExportStatisticsService {
      */
     public String generateOperationName(ExportSession session, ExportTemplate template) {
         String nameSource = template.getOperationNameSource();
-        log.debug("generateOperationName: sessionId={}, templateId={}, operationNameSource='{}'",
-            session.getId(), template.getId(), nameSource);
 
         if ("TASK_NUMBER".equals(nameSource)) {
             // Извлекаем номер задания из данных операции
             String taskNumber = extractTaskNumberFromSession(session);
-            log.debug("generateOperationName: извлеченный номер задания='{}'", taskNumber);
             return taskNumber != null ? taskNumber : "Экспорт " + session.getId();
         } else if ("FILE_NAME".equals(nameSource)) {
             // Используем имя файла
             String fileName = session.getFileOperation().getFileName();
-            log.debug("generateOperationName: имя файла='{}'", fileName);
             return fileName != null ? fileName.replace(".csv", "").replace(".xlsx", "") : "Экспорт " + session.getId();
         } else {
             // По умолчанию
-            log.debug("generateOperationName: используется значение по умолчанию");
             return "Экспорт " + session.getId();
         }
     }
@@ -193,15 +182,10 @@ public class ExportStatisticsService {
      */
     private String extractTaskNumberFromSession(ExportSession session) {
         try {
-            log.debug("extractTaskNumberFromSession: SessionId={}, SourceOperationIds='{}'",
-                    session.getId(), session.getSourceOperationIds());
-
             // Парсим список операций-источников
             List<Long> sourceOperationIds = parseSourceOperationIds(session.getSourceOperationIds());
-            log.debug("Распарсенные operationIds: {}", sourceOperationIds);
 
             if (sourceOperationIds.isEmpty()) {
-                log.debug("Нет операций-источников для сессии {}", session.getId());
                 return null;
             }
 
@@ -216,20 +200,12 @@ public class ExportStatisticsService {
             String taskNumber = jdbcTemplate.query(sql, rs -> {
                 if (rs.next()) {
                     Object value = rs.getObject("product_additional1");
-                    log.debug("Найдено значение в БД: '{}'", value);
                     return value != null ? value.toString().trim() : null;
                 }
-                log.debug("Нет записей в av_data для операций: {}", sourceOperationIds);
                 return null;
             });
 
-            if (taskNumber != null && !taskNumber.isEmpty()) {
-                log.debug("Найден номер задания '{}' для сессии {}", taskNumber, session.getId());
-                return taskNumber;
-            }
-
-            log.debug("Номер задания не найден в операциях-источниках сессии {}", session.getId());
-            return null;
+            return (taskNumber != null && !taskNumber.isEmpty()) ? taskNumber : null;
         } catch (Exception e) {
             log.error("Ошибка извлечения номера задания из сессии {}", session.getId(), e);
             return null;
@@ -480,9 +456,6 @@ public class ExportStatisticsService {
             StatisticsRequestDto request,
             Map<Long, String> operationNamesCache) {
 
-        log.debug("Вычисление общих итогов для {} групп и {} операций",
-                statisticsByGroup.size(), sessions.size());
-
         // 1. Собираем все статистики по сессиям (из всех групп)
         Map<Long, List<ExportStatistics>> allStatsBySession = new HashMap<>();
         for (List<ExportStatistics> groupStats : statisticsByGroup.values()) {
@@ -530,9 +503,6 @@ public class ExportStatisticsService {
                         // Создаем MetricValue с процентами изменений
                         Map<String, StatisticsComparisonDto.MetricValue> metrics =
                                 calculateMetrics(totalMetrics, previousTotalMetrics, request);
-
-                        log.debug("Итоги для операции {}: метрик={}, totalMetrics={}",
-                                session.getId(), metrics.size(), totalMetrics);
 
                         totalOperations.add(StatisticsComparisonDto.OperationStatistics.builder()
                                 .exportSessionId(session.getId())

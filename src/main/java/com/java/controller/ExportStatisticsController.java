@@ -46,7 +46,6 @@ public class ExportStatisticsController {
      */
     @GetMapping("/client/{clientId}")
     public String showStatisticsSetup(@PathVariable Long clientId, Model model) {
-        log.debug("GET запрос на настройку статистики для клиента ID: {}", clientId);
 
         // Получаем последние экспорты клиента с загруженными данными fileOperation
         Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
@@ -82,8 +81,6 @@ public class ExportStatisticsController {
                                     RedirectAttributes redirectAttributes,
                                     Long clientId,
                                     Model model) {
-        log.debug("POST запрос на анализ статистики: {} с фильтром: {}={}",
-                request, filterField, filterValue);
 
         try {
             // Валидация параметров фильтра
@@ -140,7 +137,6 @@ public class ExportStatisticsController {
     @PostMapping("/api/analyze")
     @ResponseBody
     public List<StatisticsComparisonDto> analyzeStatisticsApi(@RequestBody StatisticsRequestDto request) {
-        log.debug("API запрос на анализ статистики: {}", request);
         return statisticsService.calculateComparison(request);
     }
 
@@ -149,7 +145,6 @@ public class ExportStatisticsController {
      */
     @GetMapping("/settings")
     public String showSettings(Model model) {
-        log.debug("GET запрос на страницу настроек статистики");
 
         Map<String, String> settings = settingsService.getAllSettings();
         model.addAttribute("settings", settings);
@@ -163,7 +158,6 @@ public class ExportStatisticsController {
     @PostMapping("/settings/update")
     public String updateSettings(@RequestParam Map<String, String> params,
                                  RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на обновление настроек статистики: {}", params);
 
         try {
             // Обновляем только разрешенные настройки
@@ -210,7 +204,6 @@ public class ExportStatisticsController {
     @GetMapping("/session/{sessionId}/saved")
     @ResponseBody
     public Map<String, Object> getSavedStatistics(@PathVariable Long sessionId) {
-        log.debug("GET запрос на получение сохранённой статистики для сессии ID: {}", sessionId);
 
         try {
             var statistics = statisticsRepository.findByExportSessionId(sessionId);
@@ -240,7 +233,6 @@ public class ExportStatisticsController {
     @GetMapping("/debug-data/client/{clientId}")
     @ResponseBody
     public Map<String, Object> debugData(@PathVariable Long clientId) {
-        log.debug("Диагностика данных для клиента ID: {}", clientId);
 
         Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
                 clientId,
@@ -284,7 +276,6 @@ public class ExportStatisticsController {
     @PostMapping("/preview")
     @ResponseBody
     public Map<String, Object> previewStatistics(@RequestBody StatisticsRequestDto request) {
-        log.debug("AJAX запрос на предварительный просмотр статистики");
 
         try {
             List<StatisticsComparisonDto> comparison = statisticsService.calculateComparison(request);
@@ -327,9 +318,6 @@ public class ExportStatisticsController {
             @RequestParam Long templateId,
             @RequestParam List<Long> sessionIds) {
 
-        log.debug("GET запрос на получение значений фильтров для шаблона {} и сессий {}",
-                templateId, sessionIds);
-
         try {
             // Получаем шаблон
             var template = templateRepository.findById(templateId)
@@ -351,7 +339,6 @@ public class ExportStatisticsController {
                 result.put(filterField, values);
             }
 
-            log.debug("Найдено {} полей фильтрации с значениями", result.size());
             return result;
 
         } catch (Exception e) {
@@ -373,9 +360,6 @@ public class ExportStatisticsController {
             @RequestParam(required = false) String filterFieldName,
             @RequestParam(required = false) String filterFieldValue,
             @RequestParam(defaultValue = "50") int limit) {
-
-        log.debug("GET запрос на историю метрики: templateId={}, group={}, metric={}, filter={}={}, limit={}",
-                templateId, groupValue, metricName, filterFieldName, filterFieldValue, limit);
 
         try {
             return historicalStatisticsService.getHistoryForMetric(
@@ -399,9 +383,6 @@ public class ExportStatisticsController {
             @RequestParam(required = false) String filterFieldValue,
             @RequestParam(defaultValue = "50") int limit) {
 
-        log.debug("GET запрос на историю всех групп для метрики: templateId={}, metric={}, filter={}={}, limit={}",
-                templateId, metricName, filterFieldName, filterFieldValue, limit);
-
         try {
             return historicalStatisticsService.getHistoryForMetricAllGroups(
                     templateId, metricName, filterFieldName, filterFieldValue, limit);
@@ -418,8 +399,6 @@ public class ExportStatisticsController {
     @GetMapping("/metrics")
     @ResponseBody
     public List<String> getAvailableMetrics(@RequestParam Long templateId) {
-        log.debug("GET запрос на список метрик для шаблона: {}", templateId);
-
         try {
             return historicalStatisticsService.getAvailableMetrics(templateId);
         } catch (Exception e) {
@@ -435,8 +414,6 @@ public class ExportStatisticsController {
     @GetMapping("/groups")
     @ResponseBody
     public List<String> getAvailableGroups(@RequestParam Long templateId) {
-        log.debug("GET запрос на список групп для шаблона: {}", templateId);
-
         try {
             return historicalStatisticsService.getAvailableGroups(templateId);
         } catch (Exception e) {
