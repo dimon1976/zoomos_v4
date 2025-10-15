@@ -445,14 +445,8 @@ public class DataCleanupService {
         List<Object> params = new ArrayList<>();
         Timestamp cutoffTimestamp = Timestamp.valueOf(request.getCutoffDate());
 
-        // Для всех запросов минимум один параметр - cutoff date
+        // Для всех запросов только один параметр - cutoff date
         params.add(cutoffTimestamp);
-
-        // Для av_data без excluded clients используется подзапрос с двумя параметрами
-        if (tableName.equals("av_data") &&
-            (request.getExcludedClientIds() == null || request.getExcludedClientIds().isEmpty())) {
-            params.add(cutoffTimestamp);
-        }
 
         return params;
     }
