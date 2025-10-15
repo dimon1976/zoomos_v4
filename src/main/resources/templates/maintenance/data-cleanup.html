@@ -104,10 +104,11 @@
                                    id="cutoffDate"
                                    name="cutoffDate"
                                    th:value="${defaultDate}"
-                                   th:min="${minDate}"
+                                   th:max="${minDate}"
                                    required>
                             <div class="form-text">
-                                Минимально допустимая дата: <span th:text="${minDate}"></span> (7 дней назад)
+                                Максимально допустимая дата: <span th:text="${minDate}"></span> (7 дней назад).
+                                Данные моложе этой даты защищены от удаления.
                             </div>
                         </div>
 
