@@ -180,7 +180,7 @@ public class DataCleanupService {
         // Удаляем порциями для избежания блокировок
         while (true) {
             String sql = buildDeleteSql("av_data", "created_at", request, batchSize);
-            List<Object> params = buildDeleteParams(request);
+            List<Object> params = buildDeleteParams(request, "av_data");
 
             int deleted = jdbcTemplate.update(sql, params.toArray());
             totalDeleted += deleted;
@@ -214,7 +214,7 @@ public class DataCleanupService {
         }
 
         String sql = buildDeleteSql("import_sessions", "started_at", request, request.getBatchSize());
-        List<Object> params = buildDeleteParams(request);
+        List<Object> params = buildDeleteParams(request, "import_sessions");
 
         return jdbcTemplate.update(sql, params.toArray());
     }
@@ -230,7 +230,7 @@ public class DataCleanupService {
         }
 
         String sql = buildDeleteSql("export_sessions", "started_at", request, request.getBatchSize());
-        List<Object> params = buildDeleteParams(request);
+        List<Object> params = buildDeleteParams(request, "export_sessions");
 
         return jdbcTemplate.update(sql, params.toArray());
     }
@@ -246,7 +246,7 @@ public class DataCleanupService {
         }
 
         String sql = buildDeleteSql("import_errors", "occurred_at", request, request.getBatchSize());
-        List<Object> params = buildDeleteParams(request);
+        List<Object> params = buildDeleteParams(request, "import_errors");
 
         return jdbcTemplate.update(sql, params.toArray());
     }
@@ -334,16 +334,35 @@ public class DataCleanupService {
      * Подсчет записей для удаления
      */
     private long countRecordsToDelete(String tableName, String dateColumn, DataCleanupRequestDto request) {
-        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM ").append(tableName)
-                .append(" WHERE ").append(dateColumn).append(" <= ?");
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM ").append(tableName).append(" t");
 
         List<Object> params = new ArrayList<>();
         params.add(Timestamp.valueOf(request.getCutoffDate()));
 
+        // Для таблиц без прямой связи с client_id используем JOIN через file_operations
         if (request.getExcludedClientIds() != null && !request.getExcludedClientIds().isEmpty()) {
-            sql.append(" AND client_id NOT IN (")
-               .append(request.getExcludedClientIds().stream().map(String::valueOf).collect(Collectors.joining(",")))
-               .append(")");
+            if (tableName.equals("import_sessions") || tableName.equals("export_sessions")) {
+                sql.append(" INNER JOIN file_operations fo ON t.file_operation_id = fo.id");
+                sql.append(" WHERE t.").append(dateColumn).append(" <= ?");
+                sql.append(" AND fo.client_id NOT IN (")
+                   .append(request.getExcludedClientIds().stream().map(String::valueOf).collect(Collectors.joining(",")))
+                   .append(")");
+            } else if (tableName.equals("import_errors")) {
+                sql.append(" INNER JOIN import_sessions isess ON t.import_session_id = isess.id");
+                sql.append(" INNER JOIN file_operations fo ON isess.file_operation_id = fo.id");
+                sql.append(" WHERE t.").append(dateColumn).append(" <= ?");
+                sql.append(" AND fo.client_id NOT IN (")
+                   .append(request.getExcludedClientIds().stream().map(String::valueOf).collect(Collectors.joining(",")))
+                   .append(")");
+            } else {
+                // av_data и file_operations имеют прямую связь с client_id
+                sql.append(" WHERE t.").append(dateColumn).append(" <= ?");
+                sql.append(" AND t.client_id NOT IN (")
+                   .append(request.getExcludedClientIds().stream().map(String::valueOf).collect(Collectors.joining(",")))
+                   .append(")");
+            }
+        } else {
+            sql.append(" WHERE t.").append(dateColumn).append(" <= ?");
         }
 
         Integer count = jdbcTemplate.queryForObject(sql.toString(), Integer.class, params.toArray());
@@ -372,19 +391,48 @@ public class DataCleanupService {
      * Построение SQL для удаления
      */
     private String buildDeleteSql(String tableName, String dateColumn, DataCleanupRequestDto request, int batchSize) {
-        StringBuilder sql = new StringBuilder("DELETE FROM ").append(tableName)
-                .append(" WHERE ").append(dateColumn).append(" <= ?");
+        StringBuilder sql = new StringBuilder("DELETE FROM ").append(tableName);
 
+        // Для таблиц без прямой связи с client_id используем подзапрос с JOIN
         if (request.getExcludedClientIds() != null && !request.getExcludedClientIds().isEmpty()) {
-            sql.append(" AND client_id NOT IN (")
-               .append(request.getExcludedClientIds().stream().map(String::valueOf).collect(Collectors.joining(",")))
-               .append(")");
+            if (tableName.equals("import_sessions")) {
+                sql.append(" WHERE id IN (SELECT t.id FROM import_sessions t")
+                   .append(" INNER JOIN file_operations fo ON t.file_operation_id = fo.id")
+                   .append(" WHERE t.").append(dateColumn).append(" <= ?")
+                   .append(" AND fo.client_id NOT IN (")
+                   .append(request.getExcludedClientIds().stream().map(String::valueOf).collect(Collectors.joining(",")))
+                   .append("))");
+            } else if (tableName.equals("export_sessions")) {
+                sql.append(" WHERE id IN (SELECT t.id FROM export_sessions t")
+                   .append(" INNER JOIN file_operations fo ON t.file_operation_id = fo.id")
+                   .append(" WHERE t.").append(dateColumn).append(" <= ?")
+                   .append(" AND fo.client_id NOT IN (")
+                   .append(request.getExcludedClientIds().stream().map(String::valueOf).collect(Collectors.joining(",")))
+                   .append("))");
+            } else if (tableName.equals("import_errors")) {
+                sql.append(" WHERE id IN (SELECT t.id FROM import_errors t")
+                   .append(" INNER JOIN import_sessions isess ON t.import_session_id = isess.id")
+                   .append(" INNER JOIN file_operations fo ON isess.file_operation_id = fo.id")
+                   .append(" WHERE t.").append(dateColumn).append(" <= ?")
+                   .append(" AND fo.client_id NOT IN (")
+                   .append(request.getExcludedClientIds().stream().map(String::valueOf).collect(Collectors.joining(",")))
+                   .append(") LIMIT ").append(batchSize).append(")");
+            } else {
+                // av_data и file_operations имеют прямую связь с client_id
+                sql.append(" WHERE ").append(dateColumn).append(" <= ?")
+                   .append(" AND client_id NOT IN (")
+                   .append(request.getExcludedClientIds().stream().map(String::valueOf).collect(Collectors.joining(",")))
+                   .append(")");
+            }
+        } else {
+            sql.append(" WHERE ").append(dateColumn).append(" <= ?");
         }
 
-        // Для таблиц с большим количеством записей используем LIMIT
-        if (tableName.equals("av_data") || tableName.equals("import_errors")) {
-            sql.append(" AND id IN (SELECT id FROM ").append(tableName)
-               .append(" WHERE ").append(dateColumn).append(" <= ? LIMIT ").append(batchSize).append(")");
+        // Для av_data с batch deletion добавляем LIMIT через подзапрос
+        if (tableName.equals("av_data") && (request.getExcludedClientIds() == null || request.getExcludedClientIds().isEmpty())) {
+            sql = new StringBuilder("DELETE FROM ").append(tableName)
+                .append(" WHERE id IN (SELECT id FROM ").append(tableName)
+                .append(" WHERE ").append(dateColumn).append(" <= ? LIMIT ").append(batchSize).append(")");
         }
 
         return sql.toString();
@@ -393,9 +441,19 @@ public class DataCleanupService {
     /**
      * Построение параметров для SQL запроса
      */
-    private List<Object> buildDeleteParams(DataCleanupRequestDto request) {
+    private List<Object> buildDeleteParams(DataCleanupRequestDto request, String tableName) {
         List<Object> params = new ArrayList<>();
-        params.add(Timestamp.valueOf(request.getCutoffDate()));
+        Timestamp cutoffTimestamp = Timestamp.valueOf(request.getCutoffDate());
+
+        // Для всех запросов минимум один параметр - cutoff date
+        params.add(cutoffTimestamp);
+
+        // Для av_data без excluded clients используется подзапрос с двумя параметрами
+        if (tableName.equals("av_data") &&
+            (request.getExcludedClientIds() == null || request.getExcludedClientIds().isEmpty())) {
+            params.add(cutoffTimestamp);
+        }
+
         return params;
     }
 
