@@ -2,12 +2,14 @@
 package com.java.controller;
 
 import com.java.dto.StatisticsComparisonDto;
+import com.java.dto.StatisticsHistoryDto;
 import com.java.dto.StatisticsRequestDto;
 import com.java.model.entity.ExportSession;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
 import com.java.service.statistics.ExportStatisticsService;
+import com.java.service.statistics.HistoricalStatisticsService;
 import com.java.service.statistics.StatisticsSettingsService;
 import com.java.util.JsonUtils;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,7 @@ import java.util.Map;
 public class ExportStatisticsController {
 
     private final ExportStatisticsService statisticsService;
+    private final HistoricalStatisticsService historicalStatisticsService;
     private final StatisticsSettingsService settingsService;
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
@@ -43,7 +46,6 @@ public class ExportStatisticsController {
      */
     @GetMapping("/client/{clientId}")
     public String showStatisticsSetup(@PathVariable Long clientId, Model model) {
-        log.debug("GET запрос на настройку статистики для клиента ID: {}", clientId);
 
         // Получаем последние экспорты клиента с загруженными данными fileOperation
         Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
@@ -79,8 +81,6 @@ public class ExportStatisticsController {
                                     RedirectAttributes redirectAttributes,
                                     Long clientId,
                                     Model model) {
-        log.debug("POST запрос на анализ статистики: {} с фильтром: {}={}",
-                request, filterField, filterValue);
 
         try {
             // Валидация параметров фильтра
@@ -137,7 +137,6 @@ public class ExportStatisticsController {
     @PostMapping("/api/analyze")
     @ResponseBody
     public List<StatisticsComparisonDto> analyzeStatisticsApi(@RequestBody StatisticsRequestDto request) {
-        log.debug("API запрос на анализ статистики: {}", request);
         return statisticsService.calculateComparison(request);
     }
 
@@ -146,7 +145,6 @@ public class ExportStatisticsController {
      */
     @GetMapping("/settings")
     public String showSettings(Model model) {
-        log.debug("GET запрос на страницу настроек статистики");
 
         Map<String, String> settings = settingsService.getAllSettings();
         model.addAttribute("settings", settings);
@@ -160,7 +158,6 @@ public class ExportStatisticsController {
     @PostMapping("/settings/update")
     public String updateSettings(@RequestParam Map<String, String> params,
                                  RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на обновление настроек статистики: {}", params);
 
         try {
             // Обновляем только разрешенные настройки
@@ -207,7 +204,6 @@ public class ExportStatisticsController {
     @GetMapping("/session/{sessionId}/saved")
     @ResponseBody
     public Map<String, Object> getSavedStatistics(@PathVariable Long sessionId) {
-        log.debug("GET запрос на получение сохранённой статистики для сессии ID: {}", sessionId);
 
         try {
             var statistics = statisticsRepository.findByExportSessionId(sessionId);
@@ -237,7 +233,6 @@ public class ExportStatisticsController {
     @GetMapping("/debug-data/client/{clientId}")
     @ResponseBody
     public Map<String, Object> debugData(@PathVariable Long clientId) {
-        log.debug("Диагностика данных для клиента ID: {}", clientId);
 
         Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
                 clientId,
@@ -281,7 +276,6 @@ public class ExportStatisticsController {
     @PostMapping("/preview")
     @ResponseBody
     public Map<String, Object> previewStatistics(@RequestBody StatisticsRequestDto request) {
-        log.debug("AJAX запрос на предварительный просмотр статистики");
 
         try {
             List<StatisticsComparisonDto> comparison = statisticsService.calculateComparison(request);
@@ -324,9 +318,6 @@ public class ExportStatisticsController {
             @RequestParam Long templateId,
             @RequestParam List<Long> sessionIds) {
 
-        log.debug("GET запрос на получение значений фильтров для шаблона {} и сессий {}",
-                templateId, sessionIds);
-
         try {
             // Получаем шаблон
             var template = templateRepository.findById(templateId)
@@ -348,12 +339,86 @@ public class ExportStatisticsController {
                 result.put(filterField, values);
             }
 
-            log.debug("Найдено {} полей фильтрации с значениями", result.size());
             return result;
 
         } catch (Exception e) {
             log.error("Ошибка получения значений фильтров", e);
             return Map.of();
+        }
+    }
+
+    /**
+     * API endpoint для получения исторических данных метрики для конкретной группы
+     * GET /statistics/history?templateId=1&groupValue=Group1&metricName=price&limit=50
+     */
+    @GetMapping("/history")
+    @ResponseBody
+    public StatisticsHistoryDto getMetricHistory(
+            @RequestParam Long templateId,
+            @RequestParam String groupValue,
+            @RequestParam String metricName,
+            @RequestParam(required = false) String filterFieldName,
+            @RequestParam(required = false) String filterFieldValue,
+            @RequestParam(defaultValue = "50") int limit) {
+
+        try {
+            return historicalStatisticsService.getHistoryForMetric(
+                    templateId, groupValue, metricName, filterFieldName, filterFieldValue, limit);
+        } catch (Exception e) {
+            log.error("Ошибка получения истории метрики", e);
+            throw new RuntimeException("Ошибка получения истории: " + e.getMessage());
+        }
+    }
+
+    /**
+     * API endpoint для получения истории всех групп по одной метрике
+     * GET /statistics/history/all-groups?templateId=1&metricName=price&limit=50
+     */
+    @GetMapping("/history/all-groups")
+    @ResponseBody
+    public List<StatisticsHistoryDto> getMetricHistoryAllGroups(
+            @RequestParam Long templateId,
+            @RequestParam String metricName,
+            @RequestParam(required = false) String filterFieldName,
+            @RequestParam(required = false) String filterFieldValue,
+            @RequestParam(defaultValue = "50") int limit) {
+
+        try {
+            return historicalStatisticsService.getHistoryForMetricAllGroups(
+                    templateId, metricName, filterFieldName, filterFieldValue, limit);
+        } catch (Exception e) {
+            log.error("Ошибка получения истории всех групп", e);
+            throw new RuntimeException("Ошибка получения истории: " + e.getMessage());
+        }
+    }
+
+    /**
+     * API endpoint для получения списка доступных метрик для шаблона
+     * GET /statistics/metrics?templateId=1
+     */
+    @GetMapping("/metrics")
+    @ResponseBody
+    public List<String> getAvailableMetrics(@RequestParam Long templateId) {
+        try {
+            return historicalStatisticsService.getAvailableMetrics(templateId);
+        } catch (Exception e) {
+            log.error("Ошибка получения списка метрик", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * API endpoint для получения списка доступных групп для шаблона
+     * GET /statistics/groups?templateId=1
+     */
+    @GetMapping("/groups")
+    @ResponseBody
+    public List<String> getAvailableGroups(@RequestParam Long templateId) {
+        try {
+            return historicalStatisticsService.getAvailableGroups(templateId);
+        } catch (Exception e) {
+            log.error("Ошибка получения списка групп", e);
+            return List.of();
         }
     }
 

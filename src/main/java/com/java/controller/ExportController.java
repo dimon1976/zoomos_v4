@@ -49,6 +49,7 @@ public class ExportController {
 
         Client client = new Client();
         client.setId(clientId);
+        // Получаем все импорты (включая ошибочные для визуальной индикации)
         List<FileOperation> recentOperations = fileOperationRepository
                 .findRecentImportOperations(client, PageRequest.of(0, 20));
 

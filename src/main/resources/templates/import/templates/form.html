@@ -33,6 +33,20 @@
             cursor: move;
             color: #6c757d;
         }
+        .required-field::after {
+            content: " *";
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .info-icon {
+            color: #0dcaf0;
+            cursor: help;
+            margin-left: 5px;
+        }
+        .tooltip-inner {
+            max-width: 300px;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
@@ -208,7 +222,13 @@
                             </div>
 
                             <div class="col-md-2">
-                                <label class="form-label">Формат даты</label>
+                                <label class="form-label">
+                                    Формат даты
+                                    <i class="fas fa-info-circle info-icon"
+                                       data-bs-toggle="tooltip"
+                                       data-bs-placement="top"
+                                       title="Форматы дат: dd.MM.yyyy (31.12.2023), yyyy-MM-dd (2023-12-31), dd/MM/yyyy, MM/dd/yyyy. Для времени: HH:mm:ss"></i>
+                                </label>
                                 <input type="text" class="form-control"
                                        th:field="*{fields[__${stat.index}__].dateFormat}"
                                        placeholder="dd.MM.yyyy">
@@ -224,12 +244,24 @@
                                 <div class="form-check form-check-inline">
                                     <input class="form-check-input" type="checkbox"
                                            th:field="*{fields[__${stat.index}__].isRequired}">
-                                    <label class="form-check-label">Обязательное</label>
+                                    <label class="form-check-label">
+                                        Обязательное
+                                        <i class="fas fa-info-circle info-icon"
+                                           data-bs-toggle="tooltip"
+                                           data-bs-placement="top"
+                                           title="При отсутствии значения запись будет пропущена при импорте"></i>
+                                    </label>
                                 </div>
                                 <div class="form-check form-check-inline">
                                     <input class="form-check-input" type="checkbox"
                                            th:field="*{fields[__${stat.index}__].isUnique}">
-                                    <label class="form-check-label">Уникальное</label>
+                                    <label class="form-check-label">
+                                        Уникальное
+                                        <i class="fas fa-info-circle info-icon"
+                                           data-bs-toggle="tooltip"
+                                           data-bs-placement="top"
+                                           title="Дубликаты будут обработаны согласно стратегии обработки дубликатов"></i>
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -311,7 +343,13 @@
                 </div>
 
                 <div class="col-md-2">
-                    <label class="form-label">Формат даты</label>
+                    <label class="form-label">
+                        Формат даты
+                        <i class="fas fa-info-circle info-icon"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
+                           title="Форматы дат: dd.MM.yyyy (31.12.2023), yyyy-MM-dd (2023-12-31), dd/MM/yyyy, MM/dd/yyyy. Для времени: HH:mm:ss"></i>
+                    </label>
                     <input type="text" class="form-control"
                            name="fields[${fieldIndex}].dateFormat"
                            placeholder="dd.MM.yyyy">
@@ -328,13 +366,25 @@
                         <input class="form-check-input" type="checkbox"
                                name="fields[${fieldIndex}].isRequired"
                                value="true">
-                        <label class="form-check-label">Обязательное</label>
+                        <label class="form-check-label">
+                            Обязательное
+                            <i class="fas fa-info-circle info-icon"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="При отсутствии значения запись будет пропущена при импорте"></i>
+                        </label>
                     </div>
                     <div class="form-check form-check-inline">
                         <input class="form-check-input" type="checkbox"
                                name="fields[${fieldIndex}].isUnique"
                                value="true">
-                        <label class="form-check-label">Уникальное</label>
+                        <label class="form-check-label">
+                            Уникальное
+                            <i class="fas fa-info-circle info-icon"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="Дубликаты будут обработаны согласно стратегии обработки дубликатов"></i>
+                        </label>
                     </div>
                 </div>
             </div>
@@ -343,10 +393,20 @@
 
         fieldMappings.insertAdjacentHTML('beforeend', fieldHtml);
         fieldIndex++;
+        // Инициализируем tooltips для новых элементов
+        initializeTooltips();
     }
 
     function removeFieldMapping(button) {
         button.closest('.field-mapping-row').remove();
+    }
+
+    // Инициализация Bootstrap tooltips
+    function initializeTooltips() {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
     }
 
     document.getElementById('entityType').addEventListener('change', function() {
@@ -367,6 +427,8 @@
     });
 
     updateFieldSelects();
+    // Инициализируем tooltips при загрузке страницы
+    initializeTooltips();
 </script>
 </body>
 </html>
