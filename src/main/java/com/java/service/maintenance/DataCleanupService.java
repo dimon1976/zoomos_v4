@@ -227,11 +227,11 @@ public class DataCleanupService {
             if (iterationCount % 5 == 0) {
                 log.info("Прогресс: удалено {} записей за {} итераций ({} записей/сек), последняя итерация: {} мс",
                         totalDeleted, iterationCount, recordsPerSec, iterationTime);
-
-                // Отправляем прогресс через WebSocket
-                sendProgressUpdate(request.getOperationId(), "AV_DATA", totalDeleted,
-                        totalRecordsToDelete, iterationCount, recordsPerSec);
             }
+
+            // ВАЖНО: Отправляем прогресс КАЖДУЮ итерацию для real-time обновления (даже если мало итераций)
+            sendProgressUpdate(request.getOperationId(), "AV_DATA", totalDeleted,
+                    totalRecordsToDelete, iterationCount, recordsPerSec);
 
             if (deleted < batchSize) {
                 log.info("Очистка av_data завершена: удалено {} записей за {} итераций, общее время: {} сек",
@@ -706,105 +706,122 @@ public class DataCleanupService {
 
     /**
      * Отправка начального уведомления о старте очистки
+     * ВАЖНО: Используем separate thread для обхода блокировки @Transactional
      */
     private void sendStartNotification(String operationId, Set<String> entityTypes) {
         if (operationId == null) return;
 
-        try {
-            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
-                    .operationId(operationId)
-                    .entityType(entityTypes != null ? String.join(", ", entityTypes) : "AV_DATA")
-                    .message("Начинаем очистку данных...")
-                    .percentage(0)
-                    .processedRecords(0L)
-                    .totalRecords(0L)
-                    .currentIteration(0)
-                    .recordsPerSecond(0L)
-                    .status("IN_PROGRESS")
-                    .timestamp(LocalDateTime.now())
-                    .build();
+        CompletableFuture.runAsync(() -> {
+            try {
+                DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                        .operationId(operationId)
+                        .entityType(entityTypes != null ? String.join(", ", entityTypes) : "AV_DATA")
+                        .message("Начинаем очистку данных...")
+                        .percentage(0)
+                        .processedRecords(0L)
+                        .totalRecords(0L)
+                        .currentIteration(0)
+                        .recordsPerSecond(0L)
+                        .status("IN_PROGRESS")
+                        .timestamp(LocalDateTime.now())
+                        .build();
 
-            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
-        } catch (Exception e) {
-            log.error("Ошибка отправки стартового уведомления для операции {}", operationId, e);
-        }
+                messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+                log.debug("WebSocket старт отправлен для operationId: {}", operationId);
+            } catch (Exception e) {
+                log.error("Ошибка отправки стартового уведомления для операции {}", operationId, e);
+            }
+        });
     }
 
     /**
      * Отправка прогресса очистки через WebSocket
+     * ВАЖНО: Используем separate thread для обхода блокировки @Transactional
      */
     private void sendProgressUpdate(String operationId, String entityType, long processedRecords,
                                      long totalRecords, int iteration, long recordsPerSec) {
         if (operationId == null) return;
 
-        try {
-            int percentage = totalRecords > 0 ? (int) ((processedRecords * 100L) / totalRecords) : 0;
+        // Отправляем в отдельном потоке, чтобы обойти блокировку транзакции
+        CompletableFuture.runAsync(() -> {
+            try {
+                int percentage = totalRecords > 0 ? (int) ((processedRecords * 100L) / totalRecords) : 0;
 
-            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
-                    .operationId(operationId)
-                    .entityType(entityType)
-                    .message(String.format("Обработано %,d из %,d записей", processedRecords, totalRecords))
-                    .percentage(percentage)
-                    .processedRecords(processedRecords)
-                    .totalRecords(totalRecords)
-                    .currentIteration(iteration)
-                    .recordsPerSecond(recordsPerSec)
-                    .status("IN_PROGRESS")
-                    .timestamp(LocalDateTime.now())
-                    .build();
+                DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                        .operationId(operationId)
+                        .entityType(entityType)
+                        .message(String.format("Обработано %,d из %,d записей", processedRecords, totalRecords))
+                        .percentage(percentage)
+                        .processedRecords(processedRecords)
+                        .totalRecords(totalRecords)
+                        .currentIteration(iteration)
+                        .recordsPerSecond(recordsPerSec)
+                        .status("IN_PROGRESS")
+                        .timestamp(LocalDateTime.now())
+                        .build();
 
-            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
-        } catch (Exception e) {
-            log.error("Ошибка отправки прогресса для операции {}", operationId, e);
-        }
+                messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+                log.debug("WebSocket прогресс отправлен: {}%", percentage);
+            } catch (Exception e) {
+                log.error("Ошибка отправки прогресса для операции {}", operationId, e);
+            }
+        });
     }
 
     /**
      * Отправка уведомления о завершении очистки
+     * ВАЖНО: Используем separate thread для обхода блокировки @Transactional
      */
     private void sendCompletionNotification(String operationId, String entityType,
                                             long totalDeleted, long executionTimeMs) {
         if (operationId == null) return;
 
-        try {
-            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
-                    .operationId(operationId)
-                    .entityType(entityType)
-                    .message(String.format("Очистка завершена: удалено %,d записей за %d сек",
-                            totalDeleted, executionTimeMs / 1000))
-                    .percentage(100)
-                    .processedRecords(totalDeleted)
-                    .totalRecords(totalDeleted)
-                    .recordsPerSecond(executionTimeMs > 0 ? (totalDeleted * 1000L) / executionTimeMs : 0L)
-                    .status("COMPLETED")
-                    .timestamp(LocalDateTime.now())
-                    .build();
+        CompletableFuture.runAsync(() -> {
+            try {
+                DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                        .operationId(operationId)
+                        .entityType(entityType)
+                        .message(String.format("Очистка завершена: удалено %,d записей за %d сек",
+                                totalDeleted, executionTimeMs / 1000))
+                        .percentage(100)
+                        .processedRecords(totalDeleted)
+                        .totalRecords(totalDeleted)
+                        .recordsPerSecond(executionTimeMs > 0 ? (totalDeleted * 1000L) / executionTimeMs : 0L)
+                        .status("COMPLETED")
+                        .timestamp(LocalDateTime.now())
+                        .build();
 
-            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
-        } catch (Exception e) {
-            log.error("Ошибка отправки уведомления о завершении для операции {}", operationId, e);
-        }
+                messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+                log.debug("WebSocket завершение отправлено для operationId: {}", operationId);
+            } catch (Exception e) {
+                log.error("Ошибка отправки уведомления о завершении для операции {}", operationId, e);
+            }
+        });
     }
 
     /**
      * Отправка уведомления об ошибке
+     * ВАЖНО: Используем separate thread для обхода блокировки @Transactional
      */
     private void sendErrorNotification(String operationId, String entityType, String errorMessage) {
         if (operationId == null) return;
 
-        try {
-            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
-                    .operationId(operationId)
-                    .entityType(entityType)
-                    .message("Ошибка при очистке данных")
-                    .status("ERROR")
-                    .errorMessage(errorMessage)
-                    .timestamp(LocalDateTime.now())
-                    .build();
+        CompletableFuture.runAsync(() -> {
+            try {
+                DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                        .operationId(operationId)
+                        .entityType(entityType)
+                        .message("Ошибка при очистке данных")
+                        .status("ERROR")
+                        .errorMessage(errorMessage)
+                        .timestamp(LocalDateTime.now())
+                        .build();
 
-            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
-        } catch (Exception e) {
-            log.error("Ошибка отправки уведомления об ошибке для операции {}", operationId, e);
-        }
+                messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+                log.debug("WebSocket ошибка отправлена для operationId: {}", operationId);
+            } catch (Exception e) {
+                log.error("Ошибка отправки уведомления об ошибке для операции {}", operationId, e);
+            }
+        });
     }
 }

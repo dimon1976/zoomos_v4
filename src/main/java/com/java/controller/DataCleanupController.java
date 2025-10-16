@@ -146,6 +146,10 @@ public class DataCleanupController {
             log.info("Запуск очистки с operationId: {}", operationId);
 
             DataCleanupResultDto result = cleanupService.executeCleanup(request);
+
+            // ВАЖНО: Устанавливаем operationId в результат для WebSocket подключения на фронтенде
+            result.setOperationId(operationId);
+
             return ResponseEntity.ok(result);
 
         } catch (IllegalArgumentException e) {
