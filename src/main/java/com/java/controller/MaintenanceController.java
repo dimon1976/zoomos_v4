@@ -1,9 +1,11 @@
 package com.java.controller;
 
 import com.java.dto.*;
+import com.java.repository.ClientRepository;
 import com.java.service.maintenance.DatabaseMaintenanceService;
 import com.java.service.maintenance.FileManagementService;
 import com.java.service.maintenance.SystemHealthService;
+import com.java.service.maintenance.DataCleanupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,9 +17,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Контроллер для системы обслуживания и мониторинга
@@ -29,9 +33,11 @@ import java.util.Map;
 public class MaintenanceController {
 
     private final FileManagementService fileManagementService;
-    private final DatabaseMaintenanceService databaseMaintenanceService; 
+    private final DatabaseMaintenanceService databaseMaintenanceService;
     private final SystemHealthService systemHealthService;
-    
+    private final ClientRepository clientRepository;
+    private final DataCleanupService dataCleanupService;
+
     @Value("${database.maintenance.cleanup.old-data.days:120}")
     private int databaseCleanupDays;
     
@@ -72,11 +78,23 @@ public class MaintenanceController {
         return "maintenance/files";
     }
     
-    @GetMapping("/database")  
+    @GetMapping("/database")
     public String databasePage(Model model) {
         log.debug("GET request to database maintenance page");
         model.addAttribute("pageTitle", "Обслуживание БД");
         model.addAttribute("databaseCleanupDays", databaseCleanupDays);
+
+        // Данные для новой системы очистки
+        model.addAttribute("clients", clientRepository.findAll());
+
+        // Дата по умолчанию - 30 дней назад
+        java.time.LocalDateTime defaultDate = java.time.LocalDateTime.now().minusDays(30);
+        model.addAttribute("defaultDate", defaultDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm")));
+
+        // Минимально допустимая дата - 7 дней назад
+        java.time.LocalDateTime minDate = java.time.LocalDateTime.now().minusDays(7);
+        model.addAttribute("minDate", minDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm")));
+
         return "maintenance/database";
     }
     
@@ -220,21 +238,6 @@ public class MaintenanceController {
         }
     }
     
-    @PostMapping("/database/cleanup")
-    @ResponseBody
-    public ResponseEntity<DatabaseCleanupResultDto> cleanupDatabase() {
-        log.info("Запуск очистки БД через API");
-        try {
-            DatabaseCleanupResultDto result = databaseMaintenanceService.cleanupOldData();
-            int totalDeleted = result.getDeletedImportSessions() + result.getDeletedExportSessions() + 
-                               result.getDeletedFileOperations() + result.getDeletedOrphanedRecords();
-            log.info("Очистка БД завершена. Удалено записей: {}", totalDeleted);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.error("Ошибка очистки БД: {}", e.getMessage());
-            return createErrorResponse("cleanupDatabase", e);
-        }
-    }
     
     @GetMapping("/database/performance")
     @ResponseBody
@@ -374,7 +377,7 @@ public class MaintenanceController {
     public ResponseEntity<Map<String, Object>> performFullCleanup() {
         log.info("Запуск полной очистки системы через API");
         Map<String, Object> result = new HashMap<>();
-        
+
         try {
             // Очистка файлов
             ArchiveResultDto fileResult = fileManagementService.archiveOldFiles(30);
@@ -383,17 +386,25 @@ public class MaintenanceController {
                 "freedSpaceMb", fileResult.getTotalArchivedSizeBytes() / (1024 * 1024),
                 "status", "success"
             ));
-            
-            // Очистка БД
-            DatabaseCleanupResultDto dbResult = databaseMaintenanceService.cleanupOldData();
-            int totalDeletedRecords = dbResult.getDeletedImportSessions() + dbResult.getDeletedExportSessions() + 
-                                     dbResult.getDeletedFileOperations() + dbResult.getDeletedOrphanedRecords();
+
+            // Очистка БД через новый сервис
+            DataCleanupRequestDto cleanupRequest = DataCleanupRequestDto.builder()
+                    .cutoffDate(LocalDateTime.now().minusDays(databaseCleanupDays))
+                    .entityTypes(Set.of("IMPORT_SESSIONS", "EXPORT_SESSIONS", "FILE_OPERATIONS", "IMPORT_ERRORS"))
+                    .batchSize(1000)
+                    .dryRun(false)
+                    .initiatedBy("API_FULL_CLEANUP")
+                    .build();
+
+            DataCleanupResultDto dbResult = dataCleanupService.executeCleanup(cleanupRequest);
+            long totalDeletedRecords = dbResult.getTotalRecordsDeleted();
+
             result.put("database", Map.of(
                 "deletedRecords", totalDeletedRecords,
                 "freedSpaceMb", dbResult.getFreedSpaceBytes() / (1024 * 1024),
                 "status", "success"
             ));
-            
+
             // Проверка системы после очистки
             SystemHealthDto health = systemHealthService.checkSystemHealth();
             result.put("systemHealth", Map.of(
@@ -401,17 +412,17 @@ public class MaintenanceController {
                 "score", health.getSystemScore(),
                 "recommendation", health.getRecommendation()
             ));
-            
+
             result.put("overall", Map.of(
                 "status", "success",
                 "message", "Полная очистка системы завершена успешно"
             ));
-            
-            log.info("Полная очистка завершена. Архивировано файлов: {}, Удалено записей БД: {}", 
+
+            log.info("Полная очистка завершена. Архивировано файлов: {}, Удалено записей БД: {}",
                     fileResult.getArchivedFiles(), totalDeletedRecords);
-            
+
             return ResponseEntity.ok(result);
-            
+
         } catch (Exception e) {
             log.error("Ошибка полной очистки системы: {}", e.getMessage());
             result.put("overall", Map.of(

@@ -1,19 +1,24 @@
 package com.java.service;
 
+import com.java.dto.DataCleanupRequestDto;
+import com.java.dto.DataCleanupResultDto;
 import com.java.service.maintenance.FileManagementService;
 import com.java.service.maintenance.DatabaseMaintenanceService;
 import com.java.service.maintenance.SystemHealthService;
+import com.java.service.maintenance.DataCleanupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Set;
 
 /**
- * Сервис автоматизации обслуживания системы
+ * Сервис автоматизации обслуживания системы.
  * Выполняет регулярные операции по расписанию
  */
 @Service
@@ -26,7 +31,11 @@ public class MaintenanceSchedulerService {
     private final DatabaseMaintenanceService databaseMaintenanceService;
     private final SystemHealthService systemHealthService;
     private final MaintenanceNotificationService notificationService;
-    
+    private final DataCleanupService dataCleanupService;
+
+    @Value("${database.maintenance.cleanup.old-data.days:30}")
+    private int oldDataCleanupDays;
+
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
     /**
@@ -70,20 +79,28 @@ public class MaintenanceSchedulerService {
     @Scheduled(cron = "${maintenance.scheduler.database-cleanup.cron:0 0 3 * * SUN}")
     public void scheduleDatabaseCleanup() {
         log.info("Запуск плановой очистки БД: {}", LocalDateTime.now().format(FORMATTER));
-        
+
         try {
-            var result = databaseMaintenanceService.cleanupOldData();
-            
+            // Создаем запрос на очистку с параметрами по умолчанию
+            DataCleanupRequestDto request = DataCleanupRequestDto.builder()
+                    .cutoffDate(LocalDateTime.now().minusDays(oldDataCleanupDays))
+                    .entityTypes(Set.of("IMPORT_SESSIONS", "EXPORT_SESSIONS", "FILE_OPERATIONS", "IMPORT_ERRORS"))
+                    .batchSize(1000)
+                    .dryRun(false)
+                    .initiatedBy("SCHEDULER")
+                    .build();
+
+            DataCleanupResultDto result = dataCleanupService.executeCleanup(request);
+
             if (result.isSuccess()) {
-                int totalDeleted = result.getDeletedImportSessions() + result.getDeletedExportSessions() + 
-                                 result.getDeletedFileOperations() + result.getDeletedOrphanedRecords();
-                
-                log.info("Плановая очистка БД завершена: удалено {} записей, освобождено {}", 
+                long totalDeleted = result.getTotalRecordsDeleted();
+
+                log.info("Плановая очистка БД завершена: удалено {} записей, освобождено {}",
                     totalDeleted, result.getFormattedFreedSpace());
-                
+
                 notificationService.sendMaintenanceNotification(
-                    "Очистка базы данных", 
-                    String.format("Успешно удалено %d записей, освобождено %s", 
+                    "Очистка базы данных",
+                    String.format("Успешно удалено %d записей, освобождено %s",
                         totalDeleted, result.getFormattedFreedSpace()),
                     "success"
                 );
@@ -93,7 +110,7 @@ public class MaintenanceSchedulerService {
         } catch (Exception e) {
             log.error("Ошибка плановой очистки БД", e);
             notificationService.sendMaintenanceNotification(
-                "Ошибка очистки БД", 
+                "Ошибка очистки БД",
                 "Ошибка при выполнении плановой очистки БД: " + e.getMessage(),
                 "error"
             );
@@ -204,51 +221,58 @@ public class MaintenanceSchedulerService {
     @Scheduled(cron = "${maintenance.scheduler.full-maintenance.cron:0 0 4 1 * *}")
     public void scheduleFullMaintenance() {
         log.info("Запуск планового полного обслуживания системы: {}", LocalDateTime.now().format(FORMATTER));
-        
+
         try {
             // Архивирование файлов
             var fileResult = fileManagementService.archiveOldFiles(30);
-            
-            // Очистка БД
-            var dbResult = databaseMaintenanceService.cleanupOldData();
-            
+
+            // Очистка БД через новый сервис
+            DataCleanupRequestDto cleanupRequest = DataCleanupRequestDto.builder()
+                    .cutoffDate(LocalDateTime.now().minusDays(oldDataCleanupDays))
+                    .entityTypes(Set.of("IMPORT_SESSIONS", "EXPORT_SESSIONS", "FILE_OPERATIONS", "IMPORT_ERRORS"))
+                    .batchSize(1000)
+                    .dryRun(false)
+                    .initiatedBy("SCHEDULER_FULL_MAINTENANCE")
+                    .build();
+
+            DataCleanupResultDto dbResult = dataCleanupService.executeCleanup(cleanupRequest);
+
             // Проверка системы
             var health = systemHealthService.checkSystemHealth();
-            
+
             StringBuilder report = new StringBuilder();
             report.append("Полное обслуживание системы завершено:\n");
-            
+
             if (fileResult.isSuccess()) {
-                report.append(String.format("• Архивировано файлов: %d (%s)\n", 
+                report.append(String.format("• Архивировано файлов: %d (%s)\n",
                     fileResult.getArchivedFiles(), fileResult.getFormattedArchivedSize()));
             } else {
                 report.append("• Файлы для архивирования не найдены\n");
             }
-            
+
             if (dbResult.isSuccess()) {
-                int totalDeleted = dbResult.getDeletedImportSessions() + dbResult.getDeletedExportSessions() + 
-                                 dbResult.getDeletedFileOperations() + dbResult.getDeletedOrphanedRecords();
-                report.append(String.format("• Очищено БД: %d записей (%s)\n", 
+                long totalDeleted = dbResult.getTotalRecordsDeleted();
+                report.append(String.format("• Очищено БД: %d записей (%s)\n",
                     totalDeleted, dbResult.getFormattedFreedSpace()));
             } else {
                 report.append("• БД: данные для очистки не найдены\n");
             }
-            
-            report.append(String.format("• Состояние системы: %s (%.1f)", 
+
+            report.append(String.format("• Состояние системы: %s (%.1f)",
                 health.getOverallStatus(), health.getSystemScore()));
-            
+
             log.info("Плановое полное обслуживание завершено");
-            
+
             notificationService.sendMaintenanceNotification(
-                "Полное обслуживание системы", 
+                "Полное обслуживание системы",
                 report.toString(),
                 "HEALTHY".equals(health.getOverallStatus()) ? "success" : "warning"
             );
-            
+
         } catch (Exception e) {
             log.error("Ошибка планового полного обслуживания", e);
             notificationService.sendMaintenanceNotification(
-                "Ошибка полного обслуживания", 
+                "Ошибка полного обслуживания",
                 "Ошибка при выполнении полного обслуживания: " + e.getMessage(),
                 "error"
             );
