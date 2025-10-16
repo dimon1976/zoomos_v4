@@ -145,4 +145,24 @@ public class AsyncConfig {
 
         return executor;
     }
+
+    /**
+     * Пул потоков для очистки данных (долгосрочные операции с БД)
+     */
+    @Bean(name = "cleanupTaskExecutor")
+    public Executor cleanupTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(10);
+        executor.setThreadNamePrefix("CleanupExecutor-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(1800); // 30 минут на завершение для очень долгих операций
+        executor.initialize();
+
+        log.info("Инициализирован пул потоков для очистки данных: core=1, max=2, queue=10");
+
+        return executor;
+    }
 }

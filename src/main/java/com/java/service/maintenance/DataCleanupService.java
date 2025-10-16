@@ -9,7 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
@@ -98,12 +100,49 @@ public class DataCleanupService {
     }
 
     /**
-     * Выполняет очистку данных по заданным критериям
+     * Публичный синхронный метод выполнения очистки (для MaintenanceController и Scheduler)
+     * Используется для синхронных вызовов без WebSocket прогресса
      */
-    @Transactional
     public DataCleanupResultDto executeCleanup(DataCleanupRequestDto request) {
-        log.info("Начало очистки данных до даты: {}, типы: {}, operationId: {}",
-                request.getCutoffDate(), request.getEntityTypes(), request.getOperationId());
+        log.info("Начало синхронной очистки данных (публичный метод), operationId: {}",
+                request.getOperationId());
+        return executeCleanupSync(request);
+    }
+
+    /**
+     * Асинхронное выполнение очистки данных с WebSocket прогрессом
+     * Этот метод запускается в отдельном потоке и немедленно возвращает управление
+     */
+    @Async("cleanupTaskExecutor")
+    public void executeCleanupAsync(DataCleanupRequestDto request) {
+        try {
+            log.info("Начало ASYNC очистки данных, operationId: {}", request.getOperationId());
+
+            // Отправляем START сразу (без CompletableFuture)
+            sendStartNotification(request.getOperationId(), request.getEntityTypes());
+
+            // Выполняем синхронную очистку
+            DataCleanupResultDto result = executeCleanupSync(request);
+
+            if (result.isSuccess()) {
+                log.info("Async очистка завершена успешно: {} записей за {} мс",
+                        result.getTotalRecordsDeleted(), result.getExecutionTimeMs());
+            } else {
+                log.error("Async очистка завершена с ошибкой: {}", result.getErrorMessage());
+            }
+        } catch (Exception e) {
+            log.error("Критическая ошибка при async очистке", e);
+            sendErrorNotification(request.getOperationId(), "ERROR", e.getMessage());
+        }
+    }
+
+    /**
+     * Синхронное выполнение очистки данных (внутренний метод)
+     * ВАЖНО: Без @Transactional на уровне метода - транзакции управляются на уровне batch
+     */
+    private DataCleanupResultDto executeCleanupSync(DataCleanupRequestDto request) {
+        log.info("Начало синхронной очистки данных до даты: {}, типы: {}",
+                request.getCutoffDate(), request.getEntityTypes());
 
         validateCutoffDate(request.getCutoffDate());
 
@@ -116,9 +155,6 @@ public class DataCleanupService {
                 .dryRun(request.isDryRun())
                 .operationId(request.getOperationId())
                 .build();
-
-        // Отправляем начальное уведомление через WebSocket
-        sendStartNotification(request.getOperationId(), request.getEntityTypes());
 
         try {
             Set<String> entityTypes = request.getEntityTypes();
@@ -187,6 +223,7 @@ public class DataCleanupService {
 
     /**
      * Очистка av_data (основная таблица с сырыми данными)
+     * БЕЗОПАСНЫЙ МЕТОД: использует временную таблицу и транзакции для каждого batch
      */
     private long cleanupAvData(DataCleanupRequestDto request) {
         log.info("Очистка av_data до даты: {}", request.getCutoffDate());
@@ -195,66 +232,141 @@ public class DataCleanupService {
             return countRecordsToDelete("av_data", "created_at", request);
         }
 
-        // Подсчитываем общее количество записей для удаления
-        long totalRecordsToDelete = countRecordsToDelete("av_data", "created_at", request);
+        // Создаём временную таблицу с ID для удаления
+        String tempTableName = "cleanup_targets_" + UUID.randomUUID().toString().replace("-", "");
 
-        long totalDeleted = 0;
-        // ОПТИМИЗАЦИЯ: для больших объемов используем маленький batch (5000)
-        int batchSize = Math.min(request.getBatchSize(), 5000);
+        try {
+            // Создаём временную таблицу со всеми ID для удаления
+            StringBuilder createTempSql = new StringBuilder("CREATE TEMP TABLE ")
+                .append(tempTableName)
+                .append(" AS SELECT id FROM av_data WHERE created_at <= ?");
 
-        long startTime = System.currentTimeMillis();
-        int iterationCount = 0;
-
-        log.info("Начало пакетной очистки av_data, размер пакета: {}, всего для удаления: {} записей",
-                batchSize, totalRecordsToDelete);
-
-        // Удаляем порциями для избежания блокировок
-        while (true) {
-            iterationCount++;
-            long iterationStart = System.currentTimeMillis();
-
-            String sql = buildDeleteSql("av_data", "created_at", request, batchSize);
-            List<Object> params = buildDeleteParams(request, "av_data");
-
-            int deleted = jdbcTemplate.update(sql, params.toArray());
-            totalDeleted += deleted;
-
-            long iterationTime = System.currentTimeMillis() - iterationStart;
-            long totalTime = System.currentTimeMillis() - startTime;
-            long recordsPerSec = totalTime > 0 ? (totalDeleted * 1000L) / totalTime : 0L;
-
-            // ВАЖНО: логируем прогресс каждые 5 итераций для мониторинга
-            if (iterationCount % 5 == 0) {
-                log.info("Прогресс: удалено {} записей за {} итераций ({} записей/сек), последняя итерация: {} мс",
-                        totalDeleted, iterationCount, recordsPerSec, iterationTime);
+            if (request.getExcludedClientIds() != null && !request.getExcludedClientIds().isEmpty()) {
+                createTempSql.append(" AND client_id NOT IN (")
+                    .append(request.getExcludedClientIds().stream()
+                        .map(String::valueOf)
+                        .collect(Collectors.joining(",")))
+                    .append(")");
             }
 
-            // ВАЖНО: Отправляем прогресс КАЖДУЮ итерацию для real-time обновления (даже если мало итераций)
-            sendProgressUpdate(request.getOperationId(), "AV_DATA", totalDeleted,
-                    totalRecordsToDelete, iterationCount, recordsPerSec);
+            jdbcTemplate.update(createTempSql.toString(), Timestamp.valueOf(request.getCutoffDate()));
 
-            if (deleted < batchSize) {
-                log.info("Очистка av_data завершена: удалено {} записей за {} итераций, общее время: {} сек",
-                        totalDeleted, iterationCount, (totalTime / 1000));
+            long totalRecordsToDelete = countRecordsInTempTable(tempTableName);
+            log.info("Создана временная таблица {} с {} записями для удаления",
+                    tempTableName, totalRecordsToDelete);
 
-                // Отправляем финальное уведомление о завершении
-                sendCompletionNotification(request.getOperationId(), "AV_DATA", totalDeleted, totalTime);
-                break; // Все удалено
+            if (totalRecordsToDelete == 0) {
+                log.info("Нет записей для удаления в av_data");
+                return 0;
             }
 
-            // Небольшая пауза между batch для снижения нагрузки на БД
+            long totalDeleted = 0;
+            int batchSize = Math.min(request.getBatchSize(), 5000);
+            int iterationCount = 0;
+            long startTime = System.currentTimeMillis();
+
+            log.info("Начало БЕЗОПАСНОЙ пакетной очистки av_data, размер пакета: {}", batchSize);
+
+            // Удаляем порциями в отдельных транзакциях
+            while (true) {
+                iterationCount++;
+                long iterationStart = System.currentTimeMillis();
+
+                // ✅ КАЖДЫЙ BATCH В ОТДЕЛЬНОЙ ТРАНЗАКЦИИ С ROLLBACK ПРИ ОШИБКЕ
+                long deleted = cleanupAvDataBatch(tempTableName, batchSize);
+                totalDeleted += deleted;
+
+                long iterationTime = System.currentTimeMillis() - iterationStart;
+                long totalTime = System.currentTimeMillis() - startTime;
+                long recordsPerSec = totalTime > 0 ? (totalDeleted * 1000L) / totalTime : 0L;
+
+                // Логируем прогресс каждые 5 итераций
+                if (iterationCount % 5 == 0) {
+                    log.info("Прогресс: удалено {} из {} записей за {} итераций ({} записей/сек)",
+                            totalDeleted, totalRecordsToDelete, iterationCount, recordsPerSec);
+                }
+
+                // Отправляем прогресс КАЖДУЮ итерацию для real-time обновления
+                sendProgressUpdate(request.getOperationId(), "AV_DATA", totalDeleted,
+                        totalRecordsToDelete, iterationCount, recordsPerSec);
+
+                if (deleted < batchSize) {
+                    log.info("Очистка av_data завершена: удалено {} записей за {} итераций, общее время: {} сек",
+                            totalDeleted, iterationCount, (totalTime / 1000));
+
+                    sendCompletionNotification(request.getOperationId(), "AV_DATA", totalDeleted, totalTime);
+                    break; // Все удалено
+                }
+
+                // Небольшая пауза между batch для снижения нагрузки на БД
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Очистка прервана пользователем после удаления {} записей", totalDeleted);
+                    sendErrorNotification(request.getOperationId(), "AV_DATA",
+                            "Очистка прервана пользователем");
+                    break;
+                }
+            }
+
+            return totalDeleted;
+
+        } catch (Exception e) {
+            log.error("Критическая ошибка при очистке av_data", e);
+            sendErrorNotification(request.getOperationId(), "AV_DATA", e.getMessage());
+            throw e;
+        } finally {
+            // Удаляем временную таблицу
             try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.warn("Очистка прервана пользователем после удаления {} записей", totalDeleted);
-                sendErrorNotification(request.getOperationId(), "AV_DATA",
-                        "Очистка прервана пользователем");
-                break;
+                jdbcTemplate.execute("DROP TABLE IF EXISTS " + tempTableName);
+                log.debug("Временная таблица {} удалена", tempTableName);
+            } catch (Exception e) {
+                log.warn("Не удалось удалить временную таблицу {}", tempTableName, e);
             }
         }
+    }
 
-        return totalDeleted;
+    /**
+     * Безопасная очистка одного batch в отдельной транзакции
+     * Если произойдёт ошибка - транзакция откатится
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    private long cleanupAvDataBatch(String tempTableName, int batchSize) {
+        try {
+            // Удаляем batch из временной таблицы в рамках транзакции
+            String deleteSql = "DELETE FROM av_data WHERE id IN (" +
+                "SELECT id FROM " + tempTableName + " LIMIT " + batchSize + ")";
+
+            int deleted = jdbcTemplate.update(deleteSql);
+
+            if (deleted > 0) {
+                // Удаляем обработанные ID из временной таблицы
+                String cleanupTempSql = "DELETE FROM " + tempTableName +
+                    " WHERE id IN (SELECT id FROM " + tempTableName + " LIMIT " + deleted + ")";
+                jdbcTemplate.update(cleanupTempSql);
+            }
+
+            return deleted;
+
+        } catch (Exception e) {
+            log.error("Ошибка при удалении batch, откатываем транзакцию", e);
+            throw e; // Rollback произойдёт автоматически
+        }
+    }
+
+    /**
+     * Подсчет записей во временной таблице
+     */
+    private long countRecordsInTempTable(String tempTableName) {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM " + tempTableName, Integer.class);
+            return count != null ? count : 0;
+        } catch (Exception e) {
+            log.warn("Не удалось подсчитать записи во временной таблице {}", tempTableName, e);
+            return 0;
+        }
     }
 
     /**
@@ -706,122 +818,113 @@ public class DataCleanupService {
 
     /**
      * Отправка начального уведомления о старте очистки
-     * ВАЖНО: Используем separate thread для обхода блокировки @Transactional
+     * Вызывается из async потока, поэтому не требует дополнительных CompletableFuture
      */
     private void sendStartNotification(String operationId, Set<String> entityTypes) {
         if (operationId == null) return;
 
-        CompletableFuture.runAsync(() -> {
-            try {
-                DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
-                        .operationId(operationId)
-                        .entityType(entityTypes != null ? String.join(", ", entityTypes) : "AV_DATA")
-                        .message("Начинаем очистку данных...")
-                        .percentage(0)
-                        .processedRecords(0L)
-                        .totalRecords(0L)
-                        .currentIteration(0)
-                        .recordsPerSecond(0L)
-                        .status("IN_PROGRESS")
-                        .timestamp(LocalDateTime.now())
-                        .build();
+        try {
+            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                    .operationId(operationId)
+                    .entityType(entityTypes != null ? String.join(", ", entityTypes) : "AV_DATA")
+                    .message("Начинаем очистку данных...")
+                    .percentage(0)
+                    .processedRecords(0L)
+                    .totalRecords(0L)
+                    .currentIteration(0)
+                    .recordsPerSecond(0L)
+                    .status("IN_PROGRESS")
+                    .timestamp(LocalDateTime.now())
+                    .build();
 
-                messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
-                log.debug("WebSocket старт отправлен для operationId: {}", operationId);
-            } catch (Exception e) {
-                log.error("Ошибка отправки стартового уведомления для операции {}", operationId, e);
-            }
-        });
+            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+            log.debug("WebSocket старт отправлен для operationId: {}", operationId);
+        } catch (Exception e) {
+            log.error("Ошибка отправки стартового уведомления для операции {}", operationId, e);
+        }
     }
 
     /**
      * Отправка прогресса очистки через WebSocket
-     * ВАЖНО: Используем separate thread для обхода блокировки @Transactional
+     * Вызывается из async потока, поэтому не требует дополнительных CompletableFuture
      */
     private void sendProgressUpdate(String operationId, String entityType, long processedRecords,
                                      long totalRecords, int iteration, long recordsPerSec) {
         if (operationId == null) return;
 
-        // Отправляем в отдельном потоке, чтобы обойти блокировку транзакции
-        CompletableFuture.runAsync(() -> {
-            try {
-                int percentage = totalRecords > 0 ? (int) ((processedRecords * 100L) / totalRecords) : 0;
+        try {
+            int percentage = totalRecords > 0 ? (int) ((processedRecords * 100L) / totalRecords) : 0;
 
-                DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
-                        .operationId(operationId)
-                        .entityType(entityType)
-                        .message(String.format("Обработано %,d из %,d записей", processedRecords, totalRecords))
-                        .percentage(percentage)
-                        .processedRecords(processedRecords)
-                        .totalRecords(totalRecords)
-                        .currentIteration(iteration)
-                        .recordsPerSecond(recordsPerSec)
-                        .status("IN_PROGRESS")
-                        .timestamp(LocalDateTime.now())
-                        .build();
+            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                    .operationId(operationId)
+                    .entityType(entityType)
+                    .message(String.format("Обработано %,d из %,d записей", processedRecords, totalRecords))
+                    .percentage(percentage)
+                    .processedRecords(processedRecords)
+                    .totalRecords(totalRecords)
+                    .currentIteration(iteration)
+                    .recordsPerSecond(recordsPerSec)
+                    .status("IN_PROGRESS")
+                    .timestamp(LocalDateTime.now())
+                    .build();
 
-                messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
-                log.debug("WebSocket прогресс отправлен: {}%", percentage);
-            } catch (Exception e) {
-                log.error("Ошибка отправки прогресса для операции {}", operationId, e);
-            }
-        });
+            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+            log.debug("WebSocket прогресс отправлен: {}%", percentage);
+        } catch (Exception e) {
+            log.error("Ошибка отправки прогресса для операции {}", operationId, e);
+        }
     }
 
     /**
      * Отправка уведомления о завершении очистки
-     * ВАЖНО: Используем separate thread для обхода блокировки @Transactional
+     * Вызывается из async потока, поэтому не требует дополнительных CompletableFuture
      */
     private void sendCompletionNotification(String operationId, String entityType,
                                             long totalDeleted, long executionTimeMs) {
         if (operationId == null) return;
 
-        CompletableFuture.runAsync(() -> {
-            try {
-                DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
-                        .operationId(operationId)
-                        .entityType(entityType)
-                        .message(String.format("Очистка завершена: удалено %,d записей за %d сек",
-                                totalDeleted, executionTimeMs / 1000))
-                        .percentage(100)
-                        .processedRecords(totalDeleted)
-                        .totalRecords(totalDeleted)
-                        .recordsPerSecond(executionTimeMs > 0 ? (totalDeleted * 1000L) / executionTimeMs : 0L)
-                        .status("COMPLETED")
-                        .timestamp(LocalDateTime.now())
-                        .build();
+        try {
+            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                    .operationId(operationId)
+                    .entityType(entityType)
+                    .message(String.format("Очистка завершена: удалено %,d записей за %d сек",
+                            totalDeleted, executionTimeMs / 1000))
+                    .percentage(100)
+                    .processedRecords(totalDeleted)
+                    .totalRecords(totalDeleted)
+                    .recordsPerSecond(executionTimeMs > 0 ? (totalDeleted * 1000L) / executionTimeMs : 0L)
+                    .status("COMPLETED")
+                    .timestamp(LocalDateTime.now())
+                    .build();
 
-                messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
-                log.debug("WebSocket завершение отправлено для operationId: {}", operationId);
-            } catch (Exception e) {
-                log.error("Ошибка отправки уведомления о завершении для операции {}", operationId, e);
-            }
-        });
+            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+            log.debug("WebSocket завершение отправлено для operationId: {}", operationId);
+        } catch (Exception e) {
+            log.error("Ошибка отправки уведомления о завершении для операции {}", operationId, e);
+        }
     }
 
     /**
      * Отправка уведомления об ошибке
-     * ВАЖНО: Используем separate thread для обхода блокировки @Transactional
+     * Вызывается из async потока, поэтому не требует дополнительных CompletableFuture
      */
     private void sendErrorNotification(String operationId, String entityType, String errorMessage) {
         if (operationId == null) return;
 
-        CompletableFuture.runAsync(() -> {
-            try {
-                DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
-                        .operationId(operationId)
-                        .entityType(entityType)
-                        .message("Ошибка при очистке данных")
-                        .status("ERROR")
-                        .errorMessage(errorMessage)
-                        .timestamp(LocalDateTime.now())
-                        .build();
+        try {
+            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                    .operationId(operationId)
+                    .entityType(entityType)
+                    .message("Ошибка при очистке данных")
+                    .status("ERROR")
+                    .errorMessage(errorMessage)
+                    .timestamp(LocalDateTime.now())
+                    .build();
 
-                messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
-                log.debug("WebSocket ошибка отправлена для operationId: {}", operationId);
-            } catch (Exception e) {
-                log.error("Ошибка отправки уведомления об ошибке для операции {}", operationId, e);
-            }
-        });
+            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+            log.debug("WebSocket ошибка отправлена для operationId: {}", operationId);
+        } catch (Exception e) {
+            log.error("Ошибка отправки уведомления об ошибке для операции {}", operationId, e);
+        }
     }
 }

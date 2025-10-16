@@ -104,7 +104,8 @@ public class DataCleanupController {
     }
 
     /**
-     * Выполнение очистки данных
+     * Выполнение очистки данных (асинхронно)
+     * Контроллер немедленно возвращает operationId для WebSocket подключения
      */
     @PostMapping("/execute")
     @ResponseBody
@@ -115,7 +116,7 @@ public class DataCleanupController {
             @RequestParam(value = "batchSize", defaultValue = "10000") int batchSize,
             @RequestParam(value = "confirmation", required = true) String confirmation) {
 
-        log.info("Запрос на выполнение очистки: дата={}, типы={}, исключения={}",
+        log.info("Запрос на выполнение ASYNC очистки: дата={}, типы={}, исключения={}",
                 cutoffDateStr, entityTypes, excludedClientIds);
 
         // Проверка подтверждения
@@ -130,7 +131,7 @@ public class DataCleanupController {
         try {
             LocalDateTime cutoffDate = LocalDateTime.parse(cutoffDateStr, DATE_TIME_FORMATTER);
 
-            // Генерируем уникальный ID для отслеживания операции через WebSocket
+            // Генерируем уникальный ID ДО запуска async операции
             String operationId = UUID.randomUUID().toString();
 
             DataCleanupRequestDto request = DataCleanupRequestDto.builder()
@@ -143,12 +144,16 @@ public class DataCleanupController {
                     .operationId(operationId)
                     .build();
 
-            log.info("Запуск очистки с operationId: {}", operationId);
+            log.info("Запуск ASYNC очистки с operationId: {}", operationId);
 
-            DataCleanupResultDto result = cleanupService.executeCleanup(request);
+            // ✅ ЗАПУСКАЕМ ASYNC - контроллер НЕ ЖДЁТ завершения
+            cleanupService.executeCleanupAsync(request);
 
-            // ВАЖНО: Устанавливаем operationId в результат для WebSocket подключения на фронтенде
-            result.setOperationId(operationId);
+            // ✅ СРАЗУ ВОЗВРАЩАЕМ operationId для WebSocket подключения
+            DataCleanupResultDto result = DataCleanupResultDto.builder()
+                    .operationId(operationId)
+                    .success(true) // операция ЗАПУЩЕНА (не завершена!)
+                    .build();
 
             return ResponseEntity.ok(result);
 
@@ -159,7 +164,7 @@ public class DataCleanupController {
                     .errorMessage(e.getMessage())
                     .build());
         } catch (Exception e) {
-            log.error("Ошибка при выполнении очистки", e);
+            log.error("Ошибка при запуске очистки", e);
             return ResponseEntity.internalServerError().body(DataCleanupResultDto.builder()
                     .success(false)
                     .errorMessage("Ошибка: " + e.getMessage())

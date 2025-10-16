@@ -35,9 +35,13 @@
       "Bash(git merge:*)",
       "Bash(git checkout:*)",
       "Bash(cat:*)",
+<<<<<<< Updated upstream
       "Bash(net start:*)",
       "Bash(psql:*)",
       "Bash(mvn flyway:*)"
+=======
+      "Bash(del \"e:\\workspace\\zoomos_v4\\src\\main\\resources\\templates\\maintenance\\data-cleanup.html\")"
+>>>>>>> Stashed changes
     ],
     "deny": [],
     "ask": []
