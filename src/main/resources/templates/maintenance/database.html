@@ -212,6 +212,71 @@
             </div>
         </div>
 
+        <!-- Модальное окно прогресса очистки -->
+        <div class="modal fade" id="cleanupProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-broom"></i>
+                            Выполняется очистка данных
+                        </h5>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Прогресс-бар -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span id="progressMessage">Инициализация...</span>
+                                <span id="progressPercentage">0%</span>
+                            </div>
+                            <div class="progress" style="height: 25px;">
+                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                     role="progressbar" style="width: 0%">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Статистика -->
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="border rounded p-2 bg-light">
+                                    <small class="text-muted d-block">Обработано</small>
+                                    <strong id="processedRecords">0</strong>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2 bg-light">
+                                    <small class="text-muted d-block">Скорость</small>
+                                    <strong id="recordsPerSecond">0</strong>
+                                    <small class="text-muted"> зап/сек</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2 bg-light">
+                                    <small class="text-muted d-block">Итерация</small>
+                                    <strong id="currentIteration">0</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Текущий тип данных -->
+                        <div class="mt-3 text-center">
+                            <small class="text-muted">Тип данных:</small>
+                            <strong id="currentEntityType">-</strong>
+                        </div>
+
+                        <!-- Результат (показывается только после завершения) -->
+                        <div id="cleanupResult" class="mt-3 d-none"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" id="closeProgressModal" disabled>
+                            Закрыть
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Другие операции обслуживания -->
         <div class="row mb-4">
 
@@ -513,6 +578,129 @@ if (cleanupExecuteBtn) {
     });
 }
 
+// WebSocket для прогресса очистки
+let cleanupStompClient = null;
+let currentOperationId = null;
+
+function connectCleanupWebSocket(operationId) {
+    currentOperationId = operationId;
+
+    try {
+        const socket = new SockJS('/ws');
+        cleanupStompClient = Stomp.over(socket);
+
+        cleanupStompClient.connect({}, (frame) => {
+            console.log('Подключен к WebSocket очистки, operationId:', operationId);
+
+            // Подписываемся на прогресс конкретной операции
+            cleanupStompClient.subscribe('/topic/cleanup-progress/' + operationId, (message) => {
+                const progress = JSON.parse(message.body);
+                updateCleanupProgress(progress);
+            });
+        }, (error) => {
+            console.error('Ошибка подключения к WebSocket очистки:', error);
+        });
+    } catch (error) {
+        console.error('Ошибка инициализации WebSocket очистки:', error);
+    }
+}
+
+function disconnectCleanupWebSocket() {
+    if (cleanupStompClient && cleanupStompClient.connected) {
+        cleanupStompClient.disconnect();
+        console.log('Отключен от WebSocket очистки');
+    }
+    cleanupStompClient = null;
+    currentOperationId = null;
+}
+
+function updateCleanupProgress(progress) {
+    console.log('Получен прогресс:', progress);
+
+    // Обновляем прогресс-бар
+    const percentage = progress.percentage || 0;
+    document.getElementById('progressBar').style.width = percentage + '%';
+    document.getElementById('progressPercentage').textContent = percentage + '%';
+
+    // Обновляем сообщение
+    document.getElementById('progressMessage').textContent = progress.message || 'Обработка...';
+
+    // Обновляем статистику
+    document.getElementById('processedRecords').textContent = (progress.processedRecords || 0).toLocaleString();
+    document.getElementById('recordsPerSecond').textContent = (progress.recordsPerSecond || 0).toLocaleString();
+    document.getElementById('currentIteration').textContent = progress.currentIteration || 0;
+    document.getElementById('currentEntityType').textContent = progress.entityType || '-';
+
+    // Обрабатываем статус
+    if (progress.status === 'COMPLETED') {
+        // Успешное завершение
+        document.getElementById('progressBar').classList.remove('progress-bar-animated');
+        document.getElementById('progressBar').classList.add('bg-success');
+
+        const resultDiv = document.getElementById('cleanupResult');
+        resultDiv.innerHTML = `
+            <div class="alert alert-success">
+                <h6><i class="fas fa-check-circle"></i> Очистка завершена успешно!</h6>
+                <p class="mb-0">${progress.message}</p>
+            </div>
+        `;
+        resultDiv.classList.remove('d-none');
+
+        document.getElementById('closeProgressModal').disabled = false;
+
+        // Отключаемся от WebSocket
+        disconnectCleanupWebSocket();
+
+        // Обновляем статистику БД
+        setTimeout(() => loadDatabaseStats(), 1000);
+
+    } else if (progress.status === 'ERROR') {
+        // Ошибка
+        document.getElementById('progressBar').classList.remove('progress-bar-animated');
+        document.getElementById('progressBar').classList.add('bg-danger');
+
+        const resultDiv = document.getElementById('cleanupResult');
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-times-circle"></i> Ошибка при очистке</h6>
+                <p class="mb-0">${progress.errorMessage || progress.message}</p>
+            </div>
+        `;
+        resultDiv.classList.remove('d-none');
+
+        document.getElementById('closeProgressModal').disabled = false;
+
+        // Отключаемся от WebSocket
+        disconnectCleanupWebSocket();
+    }
+}
+
+function showCleanupProgressModal() {
+    // Сбрасываем состояние модального окна
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressBar').className = 'progress-bar progress-bar-striped progress-bar-animated';
+    document.getElementById('progressPercentage').textContent = '0%';
+    document.getElementById('progressMessage').textContent = 'Инициализация...';
+    document.getElementById('processedRecords').textContent = '0';
+    document.getElementById('recordsPerSecond').textContent = '0';
+    document.getElementById('currentIteration').textContent = '0';
+    document.getElementById('currentEntityType').textContent = '-';
+    document.getElementById('cleanupResult').innerHTML = '';
+    document.getElementById('cleanupResult').classList.add('d-none');
+    document.getElementById('closeProgressModal').disabled = true;
+
+    // Показываем модальное окно
+    const modal = new bootstrap.Modal(document.getElementById('cleanupProgressModal'));
+    modal.show();
+}
+
+// Закрытие модального окна
+document.getElementById('closeProgressModal').addEventListener('click', function() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('cleanupProgressModal'));
+    modal.hide();
+    disconnectCleanupWebSocket();
+});
+
 // Выполнение очистки с подтверждением
 if (confirmExecuteBtn) {
     confirmExecuteBtn.addEventListener('click', async function() {
@@ -540,25 +728,43 @@ if (confirmExecuteBtn) {
         excludedClients.forEach(id => params.append('excludedClientIds', id));
 
         try {
-            loadingSpinner.classList.remove('d-none');
-            confirmExecuteBtn.disabled = true;
+            // Показываем модальное окно с прогрессом
+            showCleanupProgressModal();
 
+            // Скрываем форму подтверждения
+            confirmationBox.classList.add('d-none');
+
+            // Запускаем очистку
             const response = await fetch('/maintenance/data-cleanup/execute?' + params.toString(), {
                 method: 'POST'
             });
 
             const data = await response.json();
-            loadingSpinner.classList.add('d-none');
 
-            displayCleanupResult(data);
+            // Подключаемся к WebSocket для получения прогресса
+            if (data.operationId) {
+                connectCleanupWebSocket(data.operationId);
+            }
 
-            if (data.success) {
-                loadDatabaseStats(); // Обновляем статистику
+            // Если операция уже завершена (маловероятно для больших объемов)
+            if (data.success !== undefined && !data.operationId) {
+                updateCleanupProgress({
+                    status: data.success ? 'COMPLETED' : 'ERROR',
+                    message: data.success ?
+                        `Удалено ${data.totalRecordsDeleted} записей` :
+                        data.errorMessage,
+                    percentage: 100,
+                    processedRecords: data.totalRecordsDeleted || 0
+                });
             }
 
         } catch (error) {
-            loadingSpinner.classList.add('d-none');
-            alert('Ошибка при выполнении очистки: ' + error.message);
+            console.error('Ошибка при выполнении очистки:', error);
+            updateCleanupProgress({
+                status: 'ERROR',
+                message: 'Ошибка при выполнении очистки: ' + error.message,
+                errorMessage: error.message
+            });
         }
     });
 }

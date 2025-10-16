@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -129,6 +130,9 @@ public class DataCleanupController {
         try {
             LocalDateTime cutoffDate = LocalDateTime.parse(cutoffDateStr, DATE_TIME_FORMATTER);
 
+            // Генерируем уникальный ID для отслеживания операции через WebSocket
+            String operationId = UUID.randomUUID().toString();
+
             DataCleanupRequestDto request = DataCleanupRequestDto.builder()
                     .cutoffDate(cutoffDate)
                     .entityTypes(entityTypes != null && !entityTypes.isEmpty() ? entityTypes : Set.of("AV_DATA"))
@@ -136,7 +140,10 @@ public class DataCleanupController {
                     .batchSize(batchSize)
                     .dryRun(false)
                     .initiatedBy("user")
+                    .operationId(operationId)
                     .build();
+
+            log.info("Запуск очистки с operationId: {}", operationId);
 
             DataCleanupResultDto result = cleanupService.executeCleanup(request);
             return ResponseEntity.ok(result);

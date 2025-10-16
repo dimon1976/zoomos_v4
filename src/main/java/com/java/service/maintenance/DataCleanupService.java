@@ -6,13 +6,16 @@ import com.java.model.entity.DataCleanupSettings;
 import com.java.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +30,16 @@ public class DataCleanupService {
     private final DataCleanupSettingsRepository settingsRepository;
     private final DataCleanupHistoryRepository historyRepository;
     private final ClientRepository clientRepository;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    @Value("${database.cleanup.auto-vacuum.enabled:true}")
+    private boolean autoVacuumEnabled;
+
+    @Value("${database.cleanup.auto-vacuum.threshold-records:1000000}")
+    private long autoVacuumThresholdRecords;
+
+    @Value("${database.cleanup.auto-vacuum.run-async:true}")
+    private boolean autoVacuumAsync;
 
     private static final int MIN_RETENTION_DAYS = 7; // Минимум 7 дней для безопасности
     private static final long BYTES_PER_RECORD_ESTIMATE = 1024; // Примерная оценка размера записи
@@ -89,8 +102,8 @@ public class DataCleanupService {
      */
     @Transactional
     public DataCleanupResultDto executeCleanup(DataCleanupRequestDto request) {
-        log.info("Начало очистки данных до даты: {}, типы: {}",
-                request.getCutoffDate(), request.getEntityTypes());
+        log.info("Начало очистки данных до даты: {}, типы: {}, operationId: {}",
+                request.getCutoffDate(), request.getEntityTypes(), request.getOperationId());
 
         validateCutoffDate(request.getCutoffDate());
 
@@ -101,7 +114,11 @@ public class DataCleanupService {
                 .cutoffDate(request.getCutoffDate())
                 .batchSize(request.getBatchSize())
                 .dryRun(request.isDryRun())
+                .operationId(request.getOperationId())
                 .build();
+
+        // Отправляем начальное уведомление через WebSocket
+        sendStartNotification(request.getOperationId(), request.getEntityTypes());
 
         try {
             Set<String> entityTypes = request.getEntityTypes();
@@ -139,6 +156,11 @@ public class DataCleanupService {
         log.info("Очистка завершена: удалено {} записей за {} мс",
                 result.getTotalRecordsDeleted(), result.getExecutionTimeMs());
 
+        // Автоматический VACUUM после большой очистки
+        if (autoVacuumEnabled && result.isSuccess() && result.getTotalRecordsDeleted() >= autoVacuumThresholdRecords) {
+            performAutoVacuum(result.getTotalRecordsDeleted(), request.getEntityTypes());
+        }
+
         return result;
     }
 
@@ -173,29 +195,61 @@ public class DataCleanupService {
             return countRecordsToDelete("av_data", "created_at", request);
         }
 
+        // Подсчитываем общее количество записей для удаления
+        long totalRecordsToDelete = countRecordsToDelete("av_data", "created_at", request);
+
         long totalDeleted = 0;
-        int batchSize = request.getBatchSize();
-        Set<Long> excludedClients = request.getExcludedClientIds();
+        // ОПТИМИЗАЦИЯ: для больших объемов используем маленький batch (5000)
+        int batchSize = Math.min(request.getBatchSize(), 5000);
+
+        long startTime = System.currentTimeMillis();
+        int iterationCount = 0;
+
+        log.info("Начало пакетной очистки av_data, размер пакета: {}, всего для удаления: {} записей",
+                batchSize, totalRecordsToDelete);
 
         // Удаляем порциями для избежания блокировок
         while (true) {
+            iterationCount++;
+            long iterationStart = System.currentTimeMillis();
+
             String sql = buildDeleteSql("av_data", "created_at", request, batchSize);
             List<Object> params = buildDeleteParams(request, "av_data");
 
             int deleted = jdbcTemplate.update(sql, params.toArray());
             totalDeleted += deleted;
 
-            log.debug("Удалено {} записей из av_data, всего: {}", deleted, totalDeleted);
+            long iterationTime = System.currentTimeMillis() - iterationStart;
+            long totalTime = System.currentTimeMillis() - startTime;
+            long recordsPerSec = totalTime > 0 ? (totalDeleted * 1000L) / totalTime : 0L;
+
+            // ВАЖНО: логируем прогресс каждые 5 итераций для мониторинга
+            if (iterationCount % 5 == 0) {
+                log.info("Прогресс: удалено {} записей за {} итераций ({} записей/сек), последняя итерация: {} мс",
+                        totalDeleted, iterationCount, recordsPerSec, iterationTime);
+
+                // Отправляем прогресс через WebSocket
+                sendProgressUpdate(request.getOperationId(), "AV_DATA", totalDeleted,
+                        totalRecordsToDelete, iterationCount, recordsPerSec);
+            }
 
             if (deleted < batchSize) {
+                log.info("Очистка av_data завершена: удалено {} записей за {} итераций, общее время: {} сек",
+                        totalDeleted, iterationCount, (totalTime / 1000));
+
+                // Отправляем финальное уведомление о завершении
+                sendCompletionNotification(request.getOperationId(), "AV_DATA", totalDeleted, totalTime);
                 break; // Все удалено
             }
 
-            // Небольшая пауза между batch для снижения нагрузки
+            // Небольшая пауза между batch для снижения нагрузки на БД
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                log.warn("Очистка прервана пользователем после удаления {} записей", totalDeleted);
+                sendErrorNotification(request.getOperationId(), "AV_DATA",
+                        "Очистка прервана пользователем");
                 break;
             }
         }
@@ -428,11 +482,12 @@ public class DataCleanupService {
             sql.append(" WHERE ").append(dateColumn).append(" <= ?");
         }
 
-        // Для av_data с batch deletion добавляем LIMIT через подзапрос
+        // Для av_data с batch deletion используем более эффективный метод через CTID
         if (tableName.equals("av_data") && (request.getExcludedClientIds() == null || request.getExcludedClientIds().isEmpty())) {
+            // ОПТИМИЗАЦИЯ: DELETE через CTID быстрее чем через подзапрос с ID
             sql = new StringBuilder("DELETE FROM ").append(tableName)
-                .append(" WHERE id IN (SELECT id FROM ").append(tableName)
-                .append(" WHERE ").append(dateColumn).append(" <= ? LIMIT ").append(batchSize).append(")");
+                .append(" WHERE ctid = ANY(ARRAY(SELECT ctid FROM ").append(tableName)
+                .append(" WHERE ").append(dateColumn).append(" <= ? LIMIT ").append(batchSize).append("))");
         }
 
         return sql.toString();
@@ -560,6 +615,86 @@ public class DataCleanupService {
     }
 
     /**
+     * Выполнение автоматического VACUUM ANALYZE после очистки
+     */
+    private void performAutoVacuum(long deletedRecords, Set<String> entityTypes) {
+        log.info("Запуск автоматического VACUUM ANALYZE после удаления {} записей", deletedRecords);
+
+        if (autoVacuumAsync) {
+            // Асинхронное выполнение VACUUM в отдельном потоке
+            CompletableFuture.runAsync(() -> executeVacuumAnalyze(entityTypes))
+                    .exceptionally(ex -> {
+                        log.error("Ошибка при асинхронном выполнении VACUUM ANALYZE", ex);
+                        return null;
+                    });
+            log.info("VACUUM ANALYZE запущен асинхронно в фоновом режиме");
+        } else {
+            // Синхронное выполнение VACUUM
+            try {
+                executeVacuumAnalyze(entityTypes);
+            } catch (Exception e) {
+                log.error("Ошибка при выполнении VACUUM ANALYZE", e);
+            }
+        }
+    }
+
+    /**
+     * Выполнение VACUUM ANALYZE для таблиц
+     */
+    private void executeVacuumAnalyze(Set<String> entityTypes) {
+        long startTime = System.currentTimeMillis();
+        int vacuumedTables = 0;
+
+        if (entityTypes == null || entityTypes.isEmpty()) {
+            entityTypes = Set.of("AV_DATA");
+        }
+
+        for (String entityType : entityTypes) {
+            String tableName = getTableNameForEntityType(entityType);
+            if (tableName != null) {
+                try {
+                    log.info("Выполнение VACUUM ANALYZE для таблицы: {}", tableName);
+                    long tableStartTime = System.currentTimeMillis();
+
+                    jdbcTemplate.execute("VACUUM ANALYZE " + tableName);
+
+                    long tableTime = System.currentTimeMillis() - tableStartTime;
+                    log.info("VACUUM ANALYZE завершен для {}: {} мс", tableName, tableTime);
+                    vacuumedTables++;
+
+                } catch (Exception e) {
+                    log.warn("Не удалось выполнить VACUUM ANALYZE для {}: {}", tableName, e.getMessage());
+                }
+            }
+        }
+
+        long totalTime = System.currentTimeMillis() - startTime;
+        log.info("Автоматический VACUUM ANALYZE завершен: обработано {} таблиц за {} сек",
+                vacuumedTables, totalTime / 1000);
+    }
+
+    /**
+     * Получение имени таблицы для типа сущности
+     */
+    private String getTableNameForEntityType(String entityType) {
+        switch (entityType.toUpperCase()) {
+            case "AV_DATA":
+                return "av_data";
+            case "IMPORT_SESSIONS":
+                return "import_sessions";
+            case "EXPORT_SESSIONS":
+                return "export_sessions";
+            case "IMPORT_ERRORS":
+                return "import_errors";
+            case "FILE_OPERATIONS":
+                return "file_operations";
+            default:
+                log.warn("Неизвестный тип сущности для VACUUM: {}", entityType);
+                return null;
+        }
+    }
+
+    /**
      * Форматирование размера в байтах
      */
     private String formatBytes(long bytes) {
@@ -567,5 +702,109 @@ public class DataCleanupService {
         if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
         if (bytes < 1024 * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
         return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
+    }
+
+    /**
+     * Отправка начального уведомления о старте очистки
+     */
+    private void sendStartNotification(String operationId, Set<String> entityTypes) {
+        if (operationId == null) return;
+
+        try {
+            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                    .operationId(operationId)
+                    .entityType(entityTypes != null ? String.join(", ", entityTypes) : "AV_DATA")
+                    .message("Начинаем очистку данных...")
+                    .percentage(0)
+                    .processedRecords(0L)
+                    .totalRecords(0L)
+                    .currentIteration(0)
+                    .recordsPerSecond(0L)
+                    .status("IN_PROGRESS")
+                    .timestamp(LocalDateTime.now())
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+        } catch (Exception e) {
+            log.error("Ошибка отправки стартового уведомления для операции {}", operationId, e);
+        }
+    }
+
+    /**
+     * Отправка прогресса очистки через WebSocket
+     */
+    private void sendProgressUpdate(String operationId, String entityType, long processedRecords,
+                                     long totalRecords, int iteration, long recordsPerSec) {
+        if (operationId == null) return;
+
+        try {
+            int percentage = totalRecords > 0 ? (int) ((processedRecords * 100L) / totalRecords) : 0;
+
+            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                    .operationId(operationId)
+                    .entityType(entityType)
+                    .message(String.format("Обработано %,d из %,d записей", processedRecords, totalRecords))
+                    .percentage(percentage)
+                    .processedRecords(processedRecords)
+                    .totalRecords(totalRecords)
+                    .currentIteration(iteration)
+                    .recordsPerSecond(recordsPerSec)
+                    .status("IN_PROGRESS")
+                    .timestamp(LocalDateTime.now())
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+        } catch (Exception e) {
+            log.error("Ошибка отправки прогресса для операции {}", operationId, e);
+        }
+    }
+
+    /**
+     * Отправка уведомления о завершении очистки
+     */
+    private void sendCompletionNotification(String operationId, String entityType,
+                                            long totalDeleted, long executionTimeMs) {
+        if (operationId == null) return;
+
+        try {
+            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                    .operationId(operationId)
+                    .entityType(entityType)
+                    .message(String.format("Очистка завершена: удалено %,d записей за %d сек",
+                            totalDeleted, executionTimeMs / 1000))
+                    .percentage(100)
+                    .processedRecords(totalDeleted)
+                    .totalRecords(totalDeleted)
+                    .recordsPerSecond(executionTimeMs > 0 ? (totalDeleted * 1000L) / executionTimeMs : 0L)
+                    .status("COMPLETED")
+                    .timestamp(LocalDateTime.now())
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+        } catch (Exception e) {
+            log.error("Ошибка отправки уведомления о завершении для операции {}", operationId, e);
+        }
+    }
+
+    /**
+     * Отправка уведомления об ошибке
+     */
+    private void sendErrorNotification(String operationId, String entityType, String errorMessage) {
+        if (operationId == null) return;
+
+        try {
+            DataCleanupProgressDto progress = DataCleanupProgressDto.builder()
+                    .operationId(operationId)
+                    .entityType(entityType)
+                    .message("Ошибка при очистке данных")
+                    .status("ERROR")
+                    .errorMessage(errorMessage)
+                    .timestamp(LocalDateTime.now())
+                    .build();
+
+            messagingTemplate.convertAndSend("/topic/cleanup-progress/" + operationId, progress);
+        } catch (Exception e) {
+            log.error("Ошибка отправки уведомления об ошибке для операции {}", operationId, e);
+        }
     }
 }

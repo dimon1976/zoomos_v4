@@ -34,7 +34,10 @@
       "Bash(git pull:*)",
       "Bash(git merge:*)",
       "Bash(git checkout:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(net start:*)",
+      "Bash(psql:*)",
+      "Bash(mvn flyway:*)"
     ],
     "deny": [],
     "ask": []

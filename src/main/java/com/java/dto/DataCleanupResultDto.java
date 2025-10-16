@@ -82,6 +82,11 @@ public class DataCleanupResultDto {
     private boolean dryRun;
 
     /**
+     * Уникальный идентификатор операции для WebSocket-уведомлений
+     */
+    private String operationId;
+
+    /**
      * Добавляет количество удаленных записей для типа данных
      */
     public void addDeletedRecords(String entityType, long count) {

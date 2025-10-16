@@ -587,11 +587,35 @@ public class DatabaseMaintenanceService {
 
     private LocalDateTime getLastVacuumTime() {
         try {
-            String sql = "SELECT MAX(last_vacuum) FROM pg_stat_user_tables";
+            String sql = """
+                SELECT MAX(GREATEST(
+                    COALESCE(last_vacuum, '1970-01-01'::timestamp),
+                    COALESCE(last_autovacuum, '1970-01-01'::timestamp)
+                ))
+                FROM pg_stat_user_tables
+                WHERE GREATEST(
+                    COALESCE(last_vacuum, '1970-01-01'::timestamp),
+                    COALESCE(last_autovacuum, '1970-01-01'::timestamp)
+                ) > '1970-01-01'::timestamp
+                """;
             Query query = entityManager.createNativeQuery(sql);
-            Timestamp timestamp = (Timestamp) query.getSingleResult();
-            return timestamp != null ? timestamp.toLocalDateTime() : null;
+            Object result = query.getSingleResult();
+
+            if (result == null) {
+                return null;
+            }
+
+            // PostgreSQL может вернуть Timestamp или Instant в зависимости от JDBC драйвера
+            if (result instanceof Timestamp) {
+                return ((Timestamp) result).toLocalDateTime();
+            } else if (result instanceof java.time.Instant) {
+                return LocalDateTime.ofInstant((java.time.Instant) result, java.time.ZoneId.systemDefault());
+            } else {
+                log.warn("Неожиданный тип результата для last_vacuum: {}", result.getClass().getName());
+                return null;
+            }
         } catch (Exception e) {
+            log.warn("Не удалось получить время последнего VACUUM: {}", e.getMessage());
             return null;
         }
     }
@@ -600,9 +624,23 @@ public class DatabaseMaintenanceService {
         try {
             String sql = "SELECT MAX(last_analyze) FROM pg_stat_user_tables";
             Query query = entityManager.createNativeQuery(sql);
-            Timestamp timestamp = (Timestamp) query.getSingleResult();
-            return timestamp != null ? timestamp.toLocalDateTime() : null;
+            Object result = query.getSingleResult();
+
+            if (result == null) {
+                return null;
+            }
+
+            // PostgreSQL может вернуть Timestamp или Instant в зависимости от JDBC драйвера
+            if (result instanceof Timestamp) {
+                return ((Timestamp) result).toLocalDateTime();
+            } else if (result instanceof java.time.Instant) {
+                return LocalDateTime.ofInstant((java.time.Instant) result, java.time.ZoneId.systemDefault());
+            } else {
+                log.warn("Неожиданный тип результата для last_analyze: {}", result.getClass().getName());
+                return null;
+            }
         } catch (Exception e) {
+            log.warn("Не удалось получить время последнего ANALYZE: {}", e.getMessage());
             return null;
         }
     }

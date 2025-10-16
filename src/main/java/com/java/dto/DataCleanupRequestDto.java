@@ -53,4 +53,9 @@ public class DataCleanupRequestDto {
      * Инициатор операции (имя пользователя или "system")
      */
     private String initiatedBy;
+
+    /**
+     * Уникальный идентификатор операции для WebSocket-уведомлений
+     */
+    private String operationId;
 }
