@@ -6,7 +6,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
@@ -40,42 +39,6 @@ public class DatabaseMaintenanceService {
     @Value("${database.maintenance.integrity.check.enabled:true}")
     private boolean integrityCheckEnabled;
 
-    @Transactional
-    public DatabaseCleanupResultDto cleanupOldData() {
-        log.info("Запуск очистки старых данных (старше {} дней)", oldDataCleanupDays);
-
-        DatabaseCleanupResultDto result = new DatabaseCleanupResultDto();
-        result.setCleanupTime(LocalDateTime.now());
-
-        try {
-            LocalDateTime cutoffDate = LocalDateTime.now().minusDays(oldDataCleanupDays);
-
-            int deletedImportSessions = cleanupOldImportSessions(cutoffDate);
-            int deletedExportSessions = cleanupOldExportSessions(cutoffDate);
-            int deletedFileOperations = cleanupOldFileOperations(cutoffDate);
-            int deletedOrphaned = cleanupOrphanedRecords();
-
-            result.setDeletedImportSessions(deletedImportSessions);
-            result.setDeletedExportSessions(deletedExportSessions);
-            result.setDeletedFileOperations(deletedFileOperations);
-            result.setDeletedOrphanedRecords(deletedOrphaned);
-            result.setSuccess(true);
-
-            long freedSpace = calculateFreedSpace(deletedImportSessions, deletedExportSessions, deletedFileOperations);
-            result.setFreedSpaceBytes(freedSpace);
-            result.setFormattedFreedSpace(formatBytes(freedSpace));
-
-            log.info("Очистка завершена: импорт={}, экспорт={}, операции={}, orphaned={}",
-                deletedImportSessions, deletedExportSessions, deletedFileOperations, deletedOrphaned);
-
-        } catch (Exception e) {
-            log.error("Ошибка при очистке старых данных", e);
-            result.setSuccess(false);
-            result.setErrorMessage(e.getMessage());
-        }
-
-        return result;
-    }
 
     public Map<String, Object> performVacuumFull() {
         log.info("Запуск VACUUM FULL для всех таблиц");
@@ -362,62 +325,6 @@ public class DatabaseMaintenanceService {
         return stats;
     }
 
-    private int cleanupOldImportSessions(LocalDateTime cutoffDate) {
-        try {
-            String sql = "DELETE FROM import_sessions WHERE started_at < :cutoffDate";
-            Query query = entityManager.createNativeQuery(sql);
-            query.setParameter("cutoffDate", cutoffDate);
-            return query.executeUpdate();
-        } catch (Exception e) {
-            log.warn("Не удалось удалить старые сессии импорта: {}", e.getMessage());
-            return 0;
-        }
-    }
-
-    private int cleanupOldExportSessions(LocalDateTime cutoffDate) {
-        try {
-            String sql = "DELETE FROM export_sessions WHERE started_at < :cutoffDate";
-            Query query = entityManager.createNativeQuery(sql);
-            query.setParameter("cutoffDate", cutoffDate);
-            return query.executeUpdate();
-        } catch (Exception e) {
-            log.warn("Не удалось удалить старые сессии экспорта: {}", e.getMessage());
-            return 0;
-        }
-    }
-
-    private int cleanupOldFileOperations(LocalDateTime cutoffDate) {
-        try {
-            String sql = "DELETE FROM file_operations WHERE started_at < :cutoffDate AND status IN ('COMPLETED', 'FAILED')";
-            Query query = entityManager.createNativeQuery(sql);
-            query.setParameter("cutoffDate", cutoffDate);
-            return query.executeUpdate();
-        } catch (Exception e) {
-            log.warn("Не удалось удалить старые файловые операции: {}", e.getMessage());
-            return 0;
-        }
-    }
-
-    private int cleanupOrphanedRecords() {
-        int total = 0;
-        
-        try {
-            // Удаление orphaned import_errors
-            String sql1 = "DELETE FROM import_errors WHERE import_session_id NOT IN (SELECT id FROM import_sessions)";
-            Query query1 = entityManager.createNativeQuery(sql1);
-            total += query1.executeUpdate();
-            
-            // Удаление orphaned export_statistics
-            String sql2 = "DELETE FROM export_statistics WHERE export_session_id NOT IN (SELECT id FROM export_sessions)";
-            Query query2 = entityManager.createNativeQuery(sql2);
-            total += query2.executeUpdate();
-            
-        } catch (Exception e) {
-            log.warn("Не удалось удалить orphaned записи: {}", e.getMessage());
-        }
-        
-        return total;
-    }
 
     private List<DataIntegrityIssueDto> checkOrphanedImportSessions() {
         List<DataIntegrityIssueDto> issues = new ArrayList<>();
@@ -700,10 +607,6 @@ public class DatabaseMaintenanceService {
         }
     }
 
-    private long calculateFreedSpace(int importSessions, int exportSessions, int fileOperations) {
-        // Примерная оценка освобожденного места (в байтах)
-        return (long) (importSessions + exportSessions + fileOperations) * 1024; // ~1KB на запись
-    }
 
     private String formatBytes(long bytes) {
         if (bytes < 1024) return bytes + " B";

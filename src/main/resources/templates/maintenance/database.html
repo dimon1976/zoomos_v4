@@ -76,30 +76,144 @@
             </div>
         </div>
 
-        <!-- Операции обслуживания -->
+        <!-- Расширенная очистка данных -->
         <div class="row mb-4">
-            <!-- Очистка БД -->
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-header">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
                         <h5 class="mb-0">
-                            <i class="fas fa-broom text-danger"></i>
-                            Очистка базы данных
+                            <i class="fas fa-broom"></i>
+                            Очистка устаревших данных
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p>Удаление старых данных (сессии импорта/экспорта, завершенные операции старше <span th:text="${databaseCleanupDays}">30</span> дней).</p>
-                        <div class="d-grid gap-2">
-                            <button type="button" class="btn btn-danger" onclick="cleanupDatabase()">
-                                <i class="fas fa-broom"></i> Очистить БД
-                            </button>
+                        <div class="alert alert-warning" role="alert">
+                            <h6><i class="fas fa-exclamation-triangle"></i> Важная информация о безопасности</h6>
+                            <ul class="mb-0 small">
+                                <li><strong>Минимальный срок хранения:</strong> Данные моложе 7 дней не могут быть удалены</li>
+                                <li><strong>Необратимая операция:</strong> Удаленные данные невозможно восстановить</li>
+                                <li><strong>Рекомендация:</strong> Используйте предпросмотр перед выполнением очистки</li>
+                            </ul>
                         </div>
-                        <div id="cleanupResult" class="mt-3 d-none">
-                            <!-- Результат очистки -->
+
+                        <form id="cleanupForm">
+                            <div class="row">
+                                <!-- Левая колонка - параметры -->
+                                <div class="col-md-6">
+                                    <!-- Дата отсечки -->
+                                    <div class="mb-3">
+                                        <label for="cutoffDate" class="form-label">
+                                            <i class="fas fa-calendar"></i> Удалить данные до даты <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="datetime-local" class="form-control" id="cutoffDate" name="cutoffDate"
+                                               th:value="${defaultDate}" th:max="${minDate}" required>
+                                        <div class="form-text small">
+                                            Максимум: <span th:text="${minDate}"></span> (7 дней назад)
+                                        </div>
+                                    </div>
+
+                                    <!-- Типы данных -->
+                                    <div class="mb-3">
+                                        <label class="form-label"><i class="fas fa-database"></i> Типы данных</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="entityTypes" value="AV_DATA" id="typeAvData" checked>
+                                            <label class="form-check-label" for="typeAvData"><strong>AV_DATA</strong> - основная таблица</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="entityTypes" value="IMPORT_SESSIONS" id="typeImportSessions">
+                                            <label class="form-check-label" for="typeImportSessions"><strong>IMPORT_SESSIONS</strong></label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="entityTypes" value="EXPORT_SESSIONS" id="typeExportSessions">
+                                            <label class="form-check-label" for="typeExportSessions"><strong>EXPORT_SESSIONS</strong></label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="entityTypes" value="IMPORT_ERRORS" id="typeImportErrors">
+                                            <label class="form-check-label" for="typeImportErrors"><strong>IMPORT_ERRORS</strong></label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="entityTypes" value="FILE_OPERATIONS" id="typeFileOperations">
+                                            <label class="form-check-label" for="typeFileOperations"><strong>FILE_OPERATIONS</strong></label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Правая колонка -->
+                                <div class="col-md-6">
+                                    <!-- Исключения по клиентам -->
+                                    <div class="mb-3">
+                                        <label for="excludedClients" class="form-label">
+                                            <i class="fas fa-shield-alt"></i> Исключить клиентов
+                                        </label>
+                                        <select class="form-select" id="excludedClients" name="excludedClientIds" multiple size="5">
+                                            <option th:each="client : ${clients}" th:value="${client.id}" th:text="${client.name}"></option>
+                                        </select>
+                                        <div class="form-text small">Удерживайте Ctrl для выбора нескольких</div>
+                                    </div>
+
+                                    <!-- Размер порции -->
+                                    <div class="mb-3">
+                                        <label for="batchSize" class="form-label"><i class="fas fa-layer-group"></i> Размер порции</label>
+                                        <input type="number" class="form-control" id="batchSize" name="batchSize"
+                                               value="10000" min="1000" max="50000" step="1000">
+                                        <div class="form-text small">Рекомендуется 10000</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Кнопки -->
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="d-grid">
+                                        <button type="button" class="btn btn-info" id="previewBtn">
+                                            <i class="fas fa-eye"></i> Предпросмотр
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-grid">
+                                        <button type="button" class="btn btn-danger" id="executeBtn" disabled>
+                                            <i class="fas fa-trash-alt"></i> Выполнить очистку
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                        <!-- Спиннер загрузки -->
+                        <div class="text-center p-3 d-none" id="loadingSpinner">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Загрузка...</span>
+                            </div>
+                            <p class="mt-2 mb-0">Обработка...</p>
+                        </div>
+
+                        <!-- Результаты предпросмотра -->
+                        <div id="previewResults" class="mt-3 d-none">
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-search"></i> Результаты предпросмотра</h6>
+                                <div id="previewContent"></div>
+
+                                <!-- Подтверждение -->
+                                <div class="mt-3 p-3 border border-danger rounded d-none" id="confirmationBox">
+                                    <h6 class="text-danger"><i class="fas fa-exclamation-triangle"></i> Подтверждение</h6>
+                                    <p class="mb-2">Введите <strong>CONFIRM</strong> для подтверждения:</p>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="confirmationInput" placeholder="CONFIRM" maxlength="7">
+                                        <button class="btn btn-danger" type="button" id="confirmExecuteBtn" disabled>
+                                            <i class="fas fa-check"></i> Подтвердить
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Другие операции обслуживания -->
+        <div class="row mb-4">
 
             <!-- Анализ производительности -->
             <div class="col-md-6 mb-4">
@@ -334,66 +448,172 @@ async function loadDatabaseStats() {
     }
 }
 
-// Очистка БД
-async function cleanupDatabase() {
-    const button = event.target;
-    const originalText = button.innerHTML;
-    
-    if (!confirm('Выполнить очистку базы данных? Будут удалены старые данные.')) {
-        return;
-    }
-    
-    button.disabled = true;
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Очистка...';
-    
-    try {
-        const response = await fetch('/maintenance/database/cleanup', { method: 'POST' });
-        const result = await response.json();
-        
-        const resultDiv = document.getElementById('cleanupResult');
-        
-        if (result.success) {
-            const totalDeleted = result.deletedImportSessions + result.deletedExportSessions + 
-                               result.deletedFileOperations + result.deletedOrphanedRecords;
-            
-            resultDiv.className = 'mt-3 alert alert-success';
-            resultDiv.innerHTML = `
-                <h6><i class="fas fa-check-circle"></i> Очистка выполнена</h6>
-                <div class="row">
-                    <div class="col-sm-6">
-                        <p class="mb-1">Сессий импорта: <strong>${result.deletedImportSessions}</strong></p>
-                        <p class="mb-1">Сессий экспорта: <strong>${result.deletedExportSessions}</strong></p>
-                    </div>
-                    <div class="col-sm-6">
-                        <p class="mb-1">Файловых операций: <strong>${result.deletedFileOperations}</strong></p>
-                        <p class="mb-1">Orphaned записей: <strong>${result.deletedOrphanedRecords}</strong></p>
-                    </div>
-                </div>
-                <p class="mb-1">Всего удалено записей: <strong>${totalDeleted}</strong></p>
-                <p class="mb-0">Освобождено места: <strong>${result.formattedFreedSpace}</strong></p>
-                <small class="text-muted">Время выполнения: ${new Date(result.cleanupTime).toLocaleString('ru-RU')}</small>
-            `;
-        } else {
-            resultDiv.className = 'mt-3 alert alert-warning';
-            resultDiv.innerHTML = `
-                <h6><i class="fas fa-exclamation-triangle"></i> Нет данных для очистки</h6>
-                <p class="mb-0">Не найдено старых данных для удаления</p>
-            `;
+// Новая система очистки данных
+const cleanupPreviewBtn = document.getElementById('previewBtn');
+const cleanupExecuteBtn = document.getElementById('executeBtn');
+const confirmExecuteBtn = document.getElementById('confirmExecuteBtn');
+const confirmationInput = document.getElementById('confirmationInput');
+const previewResults = document.getElementById('previewResults');
+const previewContent = document.getElementById('previewContent');
+const confirmationBox = document.getElementById('confirmationBox');
+const loadingSpinner = document.getElementById('loadingSpinner');
+
+// Валидация поля подтверждения
+if (confirmationInput) {
+    confirmationInput.addEventListener('input', function() {
+        confirmExecuteBtn.disabled = this.value !== 'CONFIRM';
+    });
+}
+
+// Предпросмотр очистки
+if (cleanupPreviewBtn) {
+    cleanupPreviewBtn.addEventListener('click', async function() {
+        const formData = new FormData(document.getElementById('cleanupForm'));
+        const params = new URLSearchParams();
+
+        params.append('cutoffDate', formData.get('cutoffDate'));
+        params.append('batchSize', formData.get('batchSize'));
+
+        const entityTypes = formData.getAll('entityTypes');
+        entityTypes.forEach(type => params.append('entityTypes', type));
+
+        const excludedClients = Array.from(document.getElementById('excludedClients').selectedOptions)
+            .map(opt => opt.value);
+        excludedClients.forEach(id => params.append('excludedClientIds', id));
+
+        try {
+            loadingSpinner.classList.remove('d-none');
+            previewResults.classList.add('d-none');
+
+            const response = await fetch('/maintenance/data-cleanup/preview?' + params.toString(), {
+                method: 'POST'
+            });
+
+            const data = await response.json();
+            loadingSpinner.classList.add('d-none');
+
+            displayCleanupPreview(data);
+            previewResults.classList.remove('d-none');
+            cleanupExecuteBtn.disabled = false;
+
+        } catch (error) {
+            loadingSpinner.classList.add('d-none');
+            alert('Ошибка при предпросмотре: ' + error.message);
         }
-        
-        resultDiv.classList.remove('d-none');
-        loadDatabaseStats(); // Обновляем статистику
-        
-    } catch (error) {
-        console.error('Ошибка очистки БД:', error);
-        const resultDiv = document.getElementById('cleanupResult');
-        resultDiv.className = 'mt-3 alert alert-danger';
-        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка очистки</h6><p class="mb-0">' + error.message + '</p>';
-        resultDiv.classList.remove('d-none');
-    } finally {
-        button.disabled = false;
-        button.innerHTML = originalText;
+    });
+}
+
+// Показать форму подтверждения
+if (cleanupExecuteBtn) {
+    cleanupExecuteBtn.addEventListener('click', function() {
+        confirmationBox.classList.remove('d-none');
+        confirmationInput.value = '';
+        confirmationInput.focus();
+        confirmExecuteBtn.disabled = true;
+    });
+}
+
+// Выполнение очистки с подтверждением
+if (confirmExecuteBtn) {
+    confirmExecuteBtn.addEventListener('click', async function() {
+        if (confirmationInput.value !== 'CONFIRM') {
+            alert('Необходимо ввести CONFIRM для подтверждения');
+            return;
+        }
+
+        if (!confirm('Вы уверены? Это действие необратимо!')) {
+            return;
+        }
+
+        const formData = new FormData(document.getElementById('cleanupForm'));
+        const params = new URLSearchParams();
+
+        params.append('cutoffDate', formData.get('cutoffDate'));
+        params.append('batchSize', formData.get('batchSize'));
+        params.append('confirmation', 'CONFIRM');
+
+        const entityTypes = formData.getAll('entityTypes');
+        entityTypes.forEach(type => params.append('entityTypes', type));
+
+        const excludedClients = Array.from(document.getElementById('excludedClients').selectedOptions)
+            .map(opt => opt.value);
+        excludedClients.forEach(id => params.append('excludedClientIds', id));
+
+        try {
+            loadingSpinner.classList.remove('d-none');
+            confirmExecuteBtn.disabled = true;
+
+            const response = await fetch('/maintenance/data-cleanup/execute?' + params.toString(), {
+                method: 'POST'
+            });
+
+            const data = await response.json();
+            loadingSpinner.classList.add('d-none');
+
+            displayCleanupResult(data);
+
+            if (data.success) {
+                loadDatabaseStats(); // Обновляем статистику
+            }
+
+        } catch (error) {
+            loadingSpinner.classList.add('d-none');
+            alert('Ошибка при выполнении очистки: ' + error.message);
+        }
+    });
+}
+
+// Отображение предпросмотра
+function displayCleanupPreview(data) {
+    let html = '<h6>Будет удалено записей:</h6>';
+    html += '<div class="table-responsive"><table class="table table-sm table-bordered">';
+    html += '<thead><tr><th>Тип данных</th><th class="text-end">Количество</th></tr></thead><tbody>';
+
+    let total = 0;
+    for (const [type, count] of Object.entries(data.recordsToDelete || {})) {
+        html += `<tr><td><strong>${type}</strong></td><td class="text-end">${count.toLocaleString()}</td></tr>`;
+        total += count;
     }
+
+    html += `<tr class="table-info"><td><strong>ИТОГО</strong></td><td class="text-end"><strong>${total.toLocaleString()}</strong></td></tr>`;
+    html += '</tbody></table></div>';
+
+    html += `<p><strong>Примерная оценка места:</strong> ${data.formattedEstimatedSpace || '0 B'}</p>`;
+
+    if (data.warnings && data.warnings.length > 0) {
+        html += '<div class="alert alert-warning mt-2"><h6 class="small">Предупреждения:</h6><ul class="mb-0 small">';
+        data.warnings.forEach(warning => html += `<li>${warning}</li>`);
+        html += '</ul></div>';
+    }
+
+    previewContent.innerHTML = html;
+}
+
+// Отображение результата
+function displayCleanupResult(data) {
+    let html = '';
+
+    if (data.success) {
+        html += '<div class="alert alert-success"><h6><i class="fas fa-check-circle"></i> Очистка выполнена!</h6>';
+        html += `<p class="mb-1"><strong>Удалено:</strong> ${data.totalRecordsDeleted.toLocaleString()} записей</p>`;
+        html += `<p class="mb-1"><strong>Освобождено:</strong> ${data.formattedFreedSpace}</p>`;
+        html += `<p class="mb-0"><strong>Время:</strong> ${data.executionTimeMs} мс</p>`;
+
+        if (data.deletedRecordsByType) {
+            html += '<h6 class="mt-2 small">Детализация:</h6><ul class="mb-0 small">';
+            for (const [type, count] of Object.entries(data.deletedRecordsByType)) {
+                html += `<li><strong>${type}:</strong> ${count.toLocaleString()}</li>`;
+            }
+            html += '</ul>';
+        }
+        html += '</div>';
+    } else {
+        html += '<div class="alert alert-danger"><h6><i class="fas fa-times-circle"></i> Ошибка</h6>';
+        html += `<p class="mb-0">${data.errorMessage || 'Неизвестная ошибка'}</p></div>`;
+    }
+
+    previewContent.innerHTML = html;
+    confirmationBox.classList.add('d-none');
 }
 
 // Анализ производительности

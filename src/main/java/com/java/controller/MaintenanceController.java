@@ -1,6 +1,7 @@
 package com.java.controller;
 
 import com.java.dto.*;
+import com.java.repository.ClientRepository;
 import com.java.service.maintenance.DatabaseMaintenanceService;
 import com.java.service.maintenance.FileManagementService;
 import com.java.service.maintenance.SystemHealthService;
@@ -29,8 +30,9 @@ import java.util.Map;
 public class MaintenanceController {
 
     private final FileManagementService fileManagementService;
-    private final DatabaseMaintenanceService databaseMaintenanceService; 
+    private final DatabaseMaintenanceService databaseMaintenanceService;
     private final SystemHealthService systemHealthService;
+    private final ClientRepository clientRepository;
     
     @Value("${database.maintenance.cleanup.old-data.days:120}")
     private int databaseCleanupDays;
@@ -72,11 +74,23 @@ public class MaintenanceController {
         return "maintenance/files";
     }
     
-    @GetMapping("/database")  
+    @GetMapping("/database")
     public String databasePage(Model model) {
         log.debug("GET request to database maintenance page");
         model.addAttribute("pageTitle", "Обслуживание БД");
         model.addAttribute("databaseCleanupDays", databaseCleanupDays);
+
+        // Данные для новой системы очистки
+        model.addAttribute("clients", clientRepository.findAll());
+
+        // Дата по умолчанию - 30 дней назад
+        java.time.LocalDateTime defaultDate = java.time.LocalDateTime.now().minusDays(30);
+        model.addAttribute("defaultDate", defaultDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm")));
+
+        // Минимально допустимая дата - 7 дней назад
+        java.time.LocalDateTime minDate = java.time.LocalDateTime.now().minusDays(7);
+        model.addAttribute("minDate", minDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm")));
+
         return "maintenance/database";
     }
     
@@ -220,21 +234,6 @@ public class MaintenanceController {
         }
     }
     
-    @PostMapping("/database/cleanup")
-    @ResponseBody
-    public ResponseEntity<DatabaseCleanupResultDto> cleanupDatabase() {
-        log.info("Запуск очистки БД через API");
-        try {
-            DatabaseCleanupResultDto result = databaseMaintenanceService.cleanupOldData();
-            int totalDeleted = result.getDeletedImportSessions() + result.getDeletedExportSessions() + 
-                               result.getDeletedFileOperations() + result.getDeletedOrphanedRecords();
-            log.info("Очистка БД завершена. Удалено записей: {}", totalDeleted);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.error("Ошибка очистки БД: {}", e.getMessage());
-            return createErrorResponse("cleanupDatabase", e);
-        }
-    }
     
     @GetMapping("/database/performance")
     @ResponseBody
