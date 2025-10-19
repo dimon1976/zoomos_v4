@@ -1,5 +1,6 @@
 package com.java.service.utils.redirect;
 
+import com.java.constants.ApplicationConstants;
 import com.java.model.utils.PageStatus;
 import com.java.model.utils.RedirectResult;
 import com.microsoft.playwright.*;
@@ -31,7 +32,7 @@ public class PlaywrightStrategy implements RedirectStrategy {
         "rate limit", "temporarily unavailable"
     );
     
-    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    private static final String USER_AGENT = ApplicationConstants.Playwright.DEFAULT_USER_AGENT;
     
     @Override
     public RedirectResult followRedirects(String url, int maxRedirects, int timeoutMs) {
@@ -55,7 +56,10 @@ public class PlaywrightStrategy implements RedirectStrategy {
             
             BrowserContext context = browser.newContext(new Browser.NewContextOptions()
                 .setUserAgent(USER_AGENT)
-                .setViewportSize(1920, 1080));
+                .setViewportSize(
+                    ApplicationConstants.Playwright.DEFAULT_VIEWPORT_WIDTH,
+                    ApplicationConstants.Playwright.DEFAULT_VIEWPORT_HEIGHT
+                ));
                 
             Page page = context.newPage();
             
