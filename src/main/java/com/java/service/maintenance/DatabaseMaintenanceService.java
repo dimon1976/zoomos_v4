@@ -39,6 +39,8 @@ public class DatabaseMaintenanceService {
     @Value("${database.maintenance.integrity.check.enabled:true}")
     private boolean integrityCheckEnabled;
 
+    // Кэшируем результат проверки наличия pg_stat_statements
+    private Boolean pgStatStatementsAvailable = null;
 
     public Map<String, Object> performVacuumFull() {
         log.info("Запуск VACUUM FULL для всех таблиц");
@@ -213,8 +215,40 @@ public class DatabaseMaintenanceService {
         return bloatInfo;
     }
 
+    /**
+     * Проверяет наличие расширения pg_stat_statements в PostgreSQL
+     */
+    private boolean isPgStatStatementsAvailable() {
+        if (pgStatStatementsAvailable != null) {
+            return pgStatStatementsAvailable;
+        }
+
+        try {
+            String sql = "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements')";
+            Query query = entityManager.createNativeQuery(sql);
+            pgStatStatementsAvailable = (Boolean) query.getSingleResult();
+
+            if (!pgStatStatementsAvailable) {
+                log.info("pg_stat_statements не установлен. Используется альтернативный анализ через pg_stat_activity.");
+                log.info("Для расширенной статистики запросов можно установить: CREATE EXTENSION pg_stat_statements;");
+            }
+
+            return pgStatStatementsAvailable;
+        } catch (Exception e) {
+            log.debug("Ошибка проверки pg_stat_statements: {}", e.getMessage());
+            pgStatStatementsAvailable = false;
+            return false;
+        }
+    }
+
     public List<QueryPerformanceDto> analyzeQueryPerformance() {
         log.info("Запуск анализа производительности запросов");
+
+        // Проверяем наличие pg_stat_statements
+        if (!isPgStatStatementsAvailable()) {
+            log.debug("pg_stat_statements недоступен, используем pg_stat_activity");
+            return analyzeActiveQueries();
+        }
 
         try {
             String sql = """
@@ -234,11 +268,12 @@ public class DatabaseMaintenanceService {
             Query query = entityManager.createNativeQuery(sql);
             List<Object[]> results = query.getResultList();
 
+            log.info("Анализ через pg_stat_statements завершен. Найдено {} запросов", results.size());
             return results.stream().map(this::mapToQueryPerformanceDto).collect(Collectors.toList());
 
         } catch (Exception e) {
-            log.warn("Не удалось проанализировать производительность запросов (возможно pg_stat_statements не установлен): {}", e.getMessage());
-            // Fallback: используем анализ активных запросов вместо моковых данных
+            log.info("Ошибка при использовании pg_stat_statements, переключаюсь на pg_stat_activity: {}", e.getMessage());
+            pgStatStatementsAvailable = false; // Обновляем кэш
             return analyzeActiveQueries();
         }
     }
@@ -684,9 +719,9 @@ public class DatabaseMaintenanceService {
             recommendation = String.format(
                 "🔍 МЕДЛЕННЫЕ ЗАПРОСЫ: Большая таблица (%,d записей) сканируется последовательно " +
                 "(%,d seq_scan vs %,d index_scan). При таком объёме это ОЧЕНЬ медленно! " +
-                "📋 ДЕЙСТВИЯ: 1) Найдите частые запросы через pg_stat_statements. " +
+                "📋 ДЕЙСТВИЯ: 1) Проанализируйте медленные запросы через логи или pg_stat_activity. " +
                 "2) Добавьте индексы на поля в WHERE/JOIN/ORDER BY. " +
-                "3) Используйте EXPLAIN ANALYZE для проверки.",
+                "3) Используйте EXPLAIN ANALYZE для проверки эффективности.",
                 liveTuples, seqScan, idxScan
             );
             isSlowQuery = true;
