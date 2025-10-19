@@ -322,10 +322,26 @@
                     </div>
                     <div class="card-body">
                         <p>Анализ активных запросов, выявление медленных операций и оценка состояния таблиц.</p>
-                        <div class="d-grid gap-2" style="max-width: 300px;">
-                            <button type="button" class="btn btn-info" onclick="analyzePerformance()">
-                                <i class="fas fa-chart-line"></i> Анализировать производительность
-                            </button>
+                        <div class="row g-2" style="max-width: 700px;">
+                            <div class="col-md-6">
+                                <button type="button" class="btn btn-info w-100" onclick="analyzePerformance()">
+                                    <i class="fas fa-chart-line"></i> Анализировать производительность
+                                </button>
+                            </div>
+                            <div class="col-md-6">
+                                <button type="button" class="btn btn-outline-info w-100" onclick="refreshStatistics()">
+                                    <i class="fas fa-sync-alt"></i> Обновить статистику PostgreSQL
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Обновить статистику:</strong> Выполнит ANALYZE для обновления данных о мёртвых кортежах после VACUUM
+                            </small>
+                        </div>
+                        <div id="refreshStatisticsResult" class="mt-3 d-none">
+                            <!-- Результат обновления статистики -->
                         </div>
                         <div id="performanceResult" class="mt-4 d-none">
                             <!-- Результат анализа -->
@@ -896,6 +912,52 @@ function displayCleanupResult(data) {
 
     previewContent.innerHTML = html;
     confirmationBox.classList.add('d-none');
+}
+
+// Обновление статистики PostgreSQL (ANALYZE)
+async function refreshStatistics() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обновление...';
+
+    try {
+        const response = await fetch('/maintenance/database/refresh-statistics', { method: 'POST' });
+        const result = await response.json();
+
+        const resultDiv = document.getElementById('refreshStatisticsResult');
+
+        if (result.success) {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Статистика обновлена</h6>
+                <p class="mb-0">Обработано таблиц: <strong>${result.processedTables}/${result.totalTables}</strong></p>
+                <p class="mb-0 mt-2 small text-muted">
+                    <i class="fas fa-lightbulb"></i>
+                    Теперь нажмите "Анализировать производительность" для проверки актуальных данных
+                </p>
+            `;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-danger';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-times-circle"></i> Ошибка обновления статистики</h6>
+                <p class="mb-0">${result.error || 'Неизвестная ошибка'}</p>
+            `;
+        }
+
+        resultDiv.classList.remove('d-none');
+
+    } catch (error) {
+        console.error('Ошибка обновления статистики:', error);
+        const resultDiv = document.getElementById('refreshStatisticsResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
 }
 
 // Анализ производительности

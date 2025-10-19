@@ -622,6 +622,12 @@ public class DatabaseMaintenanceService {
 
     /**
      * Маппинг статистики таблиц из pg_stat_user_tables в QueryPerformanceDto
+     *
+     * Улучшенная логика с учётом размера таблицы и понятными рекомендациями:
+     * - Для маленьких таблиц (< 100 записей) seq_scan это норма
+     * - Для средних таблиц (100-1000) учитывается частота сканирований
+     * - Для больших таблиц (> 1000) seq_scan критичен для производительности
+     * - Мёртвые кортежи анализируются с учётом абсолютного количества и процента
      */
     private QueryPerformanceDto mapTableStatsToPerformanceDto(Object[] row) {
         QueryPerformanceDto dto = new QueryPerformanceDto();
@@ -633,6 +639,7 @@ public class DatabaseMaintenanceService {
         String tableName = (String) row[0];
         long seqScan = ((Number) row[1]).longValue();
         long idxScan = row[3] != null ? ((Number) row[3]).longValue() : 0L;
+        long liveTuples = ((Number) row[6]).longValue();
         long deadTuples = ((Number) row[7]).longValue();
         double deadTuplePercent = ((Number) row[8]).doubleValue();
 
@@ -641,24 +648,96 @@ public class DatabaseMaintenanceService {
         dto.setQueryHash(Integer.toHexString(tableName.hashCode()));
         dto.setQueryType("TABLE_STATS");
         dto.setCallCount((int) (seqScan + idxScan));
-        dto.setRowsReturned(((Number) row[6]).longValue()); // n_live_tup
+        dto.setRowsReturned(liveTuples);
 
-        // Определяем severity на основе статистики
-        if (seqScan > 1000 && idxScan == 0) {
-            dto.setSeverity("CRITICAL");
-            dto.setRecommendation("Таблица сканируется последовательно (" + seqScan + " раз). Требуется добавление индексов!");
-        } else if (deadTuplePercent > 20) {
-            dto.setSeverity("WARNING");
-            dto.setRecommendation("Высокий процент мёртвых кортежей (" + deadTuplePercent + "%). Рекомендуется VACUUM.");
-        } else if (seqScan > 500) {
-            dto.setSeverity("WARNING");
-            dto.setRecommendation("Много последовательных сканирований (" + seqScan + "). Проверьте использование индексов.");
-        } else {
-            dto.setSeverity("INFO");
-            dto.setRecommendation("Статистика таблицы в норме");
+        // Улучшенная логика определения severity с учётом размера таблицы
+        String severity = "INFO";
+        String recommendation;
+        boolean isSlowQuery = false;
+
+        // ПРИОРИТЕТ 1: Критическая проблема с мёртвыми кортежами (bloat)
+        if (deadTuplePercent > 30 && deadTuples > 10000) {
+            severity = "CRITICAL";
+            recommendation = String.format(
+                "⚠️ КРИТИЧЕСКИЙ BLOAT: %.1f%% мёртвых кортежей (%,d шт из %,d). " +
+                "Таблица сильно раздута и замедляет работу БД. " +
+                "📋 ДЕЙСТВИЯ: 1) Выполните VACUUM ANALYZE (кнопка слева). " +
+                "2) Нажмите 'Обновить статистику' для проверки. " +
+                "3) Если bloat > 50%%, рассмотрите VACUUM FULL (блокирует таблицу!).",
+                deadTuplePercent, deadTuples, liveTuples + deadTuples
+            );
+            isSlowQuery = true;
+        }
+        // ПРИОРИТЕТ 2: Высокий процент мёртвых кортежей
+        else if (deadTuplePercent > 20 && deadTuples > 1000) {
+            severity = "WARNING";
+            recommendation = String.format(
+                "⚠️ ВЫСОКИЙ BLOAT: %.1f%% мёртвых кортежей (%,d шт из %,d). " +
+                "Таблица начинает раздуваться и занимает лишнее место. " +
+                "📋 ДЕЙСТВИЯ: Выполните VACUUM ANALYZE для очистки, затем нажмите 'Обновить статистику'.",
+                deadTuplePercent, deadTuples, liveTuples + deadTuples
+            );
+        }
+        // ПРИОРИТЕТ 3: Проблема с индексами для БОЛЬШИХ таблиц
+        else if (liveTuples >= 1000 && seqScan > 500 && (idxScan == 0 || seqScan > idxScan * 10)) {
+            severity = "CRITICAL";
+            recommendation = String.format(
+                "🔍 МЕДЛЕННЫЕ ЗАПРОСЫ: Большая таблица (%,d записей) сканируется последовательно " +
+                "(%,d seq_scan vs %,d index_scan). При таком объёме это ОЧЕНЬ медленно! " +
+                "📋 ДЕЙСТВИЯ: 1) Найдите частые запросы через pg_stat_statements. " +
+                "2) Добавьте индексы на поля в WHERE/JOIN/ORDER BY. " +
+                "3) Используйте EXPLAIN ANALYZE для проверки.",
+                liveTuples, seqScan, idxScan
+            );
+            isSlowQuery = true;
+        }
+        // ПРИОРИТЕТ 4: Средняя таблица с частыми seq_scan
+        else if (liveTuples >= 100 && liveTuples < 1000 && seqScan > 1000 && idxScan < seqScan) {
+            severity = "WARNING";
+            recommendation = String.format(
+                "🔍 ЧАСТЫЕ СКАНИРОВАНИЯ: Таблица (%,d записей) часто сканируется полностью (%,d раз). " +
+                "Для среднего размера это приемлемо, но можно ускорить. " +
+                "📋 РЕКОМЕНДАЦИЯ: Проанализируйте частые запросы с помощью EXPLAIN ANALYZE. " +
+                "Возможно, нужны индексы.",
+                liveTuples, seqScan
+            );
+        }
+        // ПРИОРИТЕТ 5: Маленькая таблица - seq_scan это НОРМА
+        else if (liveTuples < 100 && seqScan > 0) {
+            severity = "INFO";
+            recommendation = String.format(
+                "✅ НОРМА: Маленькая таблица (%,d %s). " +
+                "Последовательное сканирование (%,d раз) - это НОРМАЛЬНО и даже быстрее индексов! " +
+                "PostgreSQL правильно выбирает стратегию. Оптимизация НЕ требуется.",
+                liveTuples, liveTuples == 1 ? "запись" : liveTuples < 5 ? "записи" : "записей", seqScan
+            );
+        }
+        // ПРИОРИТЕТ 6: Умеренные мёртвые кортежи
+        else if (deadTuplePercent > 10 && deadTuples > 100) {
+            severity = "INFO";
+            recommendation = String.format(
+                "ℹ️ НЕБОЛЬШОЙ BLOAT: %.1f%% мёртвых кортежей (%,d шт). " +
+                "Уровень приемлемый, но можно улучшить для экономии места. " +
+                "📋 РЕКОМЕНДАЦИЯ: Настройте autovacuum или периодически запускайте VACUUM вручную.",
+                deadTuplePercent, deadTuples
+            );
+        }
+        // Всё в норме
+        else {
+            severity = "INFO";
+            String scanInfo = seqScan + idxScan > 0 ?
+                String.format(", %,d сканирований (seq: %,d, idx: %,d)", seqScan + idxScan, seqScan, idxScan) :
+                "";
+            recommendation = String.format(
+                "✅ ОПТИМАЛЬНО: Таблица работает отлично (%,d записей, %.1f%% dead tuples%s). " +
+                "Дополнительная оптимизация не требуется.",
+                liveTuples, deadTuplePercent, scanInfo
+            );
         }
 
-        dto.setSlowQuery(seqScan > 1000 && idxScan == 0);
+        dto.setSeverity(severity);
+        dto.setRecommendation(recommendation);
+        dto.setSlowQuery(isSlowQuery);
 
         return dto;
     }
@@ -974,5 +1053,60 @@ public class DatabaseMaintenanceService {
             log.warn("Не удалось получить размер БД через JDBC: {}", e.getMessage());
         }
         return 0;
+    }
+
+    /**
+     * Принудительно обновляет статистику PostgreSQL через ANALYZE
+     * Это заставляет PostgreSQL пересчитать n_live_tup и n_dead_tup для всех таблиц
+     */
+    public Map<String, Object> refreshTableStatistics() {
+        log.info("Запуск принудительного обновления статистики таблиц (ANALYZE)");
+        Map<String, Object> result = new HashMap<>();
+
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+
+            connection.setAutoCommit(true);
+
+            // Получаем список всех таблиц
+            List<String> tables = new ArrayList<>();
+            try (ResultSet tablesRs = statement.executeQuery(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'")) {
+                while (tablesRs.next()) {
+                    tables.add(tablesRs.getString("tablename"));
+                }
+            }
+
+            // ANALYZE для каждой таблицы
+            int processedCount = 0;
+            for (String table : tables) {
+                log.info("ANALYZE для таблицы: {}", table);
+                try {
+                    if (isValidIdentifier(table)) {
+                        String sql = String.format("ANALYZE %s", escapeIdentifier(table));
+                        statement.execute(sql);
+                        processedCount++;
+                    } else {
+                        log.warn("Недопустимое имя таблицы: {}", table);
+                    }
+                } catch (Exception e) {
+                    log.warn("Не удалось выполнить ANALYZE для таблицы {}: {}", table, e.getMessage());
+                }
+            }
+
+            result.put("success", true);
+            result.put("totalTables", tables.size());
+            result.put("processedTables", processedCount);
+            result.put("message", "Статистика обновлена для " + processedCount + " таблиц");
+
+            log.info("ANALYZE завершен. Обработано таблиц: {}/{}", processedCount, tables.size());
+
+        } catch (Exception e) {
+            log.error("Ошибка при обновлении статистики таблиц", e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+        }
+
+        return result;
     }
 }
