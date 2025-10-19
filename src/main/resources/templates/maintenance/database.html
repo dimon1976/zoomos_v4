@@ -29,10 +29,45 @@
         .performance-table th,
         .performance-table td {
             vertical-align: middle;
+            padding: 0.75rem;
+        }
+        .performance-table th {
+            white-space: nowrap;
+            font-weight: 600;
+        }
+        .performance-table td code {
+            font-size: 0.85rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            max-width: 400px;
         }
         .recommendation-text {
             font-style: italic;
             color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .severity-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        .query-details {
+            display: none;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 0.25rem;
+            margin-top: 0.5rem;
+        }
+        .query-details.show {
+            display: block;
+        }
+        .expandable-row {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .expandable-row:hover {
+            background-color: rgba(0, 0, 0, 0.02);
         }
     </style>
 </th:block>
@@ -275,26 +310,40 @@
             </div>
         </div>
 
-        <!-- Другие операции обслуживания -->
+        <!-- Анализ производительности -->
         <div class="row mb-4">
-
-            <!-- Анализ производительности -->
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-header">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
                         <h5 class="mb-0">
-                            <i class="fas fa-tachometer-alt text-info"></i>
-                            Анализ производительности
+                            <i class="fas fa-tachometer-alt"></i>
+                            Анализ производительности запросов
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p>Анализ производительности запросов и выявление медленных операций.</p>
-                        <div class="d-grid gap-2">
-                            <button type="button" class="btn btn-info" onclick="analyzePerformance()">
-                                <i class="fas fa-chart-line"></i> Анализировать
-                            </button>
+                        <p>Анализ активных запросов, выявление медленных операций и оценка состояния таблиц.</p>
+                        <div class="row g-2" style="max-width: 700px;">
+                            <div class="col-md-6">
+                                <button type="button" class="btn btn-info w-100" onclick="analyzePerformance()">
+                                    <i class="fas fa-chart-line"></i> Анализировать производительность
+                                </button>
+                            </div>
+                            <div class="col-md-6">
+                                <button type="button" class="btn btn-outline-info w-100" onclick="refreshStatistics()">
+                                    <i class="fas fa-sync-alt"></i> Обновить статистику PostgreSQL
+                                </button>
+                            </div>
                         </div>
-                        <div id="performanceResult" class="mt-3 d-none">
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Обновить статистику:</strong> Выполнит ANALYZE для обновления данных о мёртвых кортежах после VACUUM
+                            </small>
+                        </div>
+                        <div id="refreshStatisticsResult" class="mt-3 d-none">
+                            <!-- Результат обновления статистики -->
+                        </div>
+                        <div id="performanceResult" class="mt-4 d-none">
                             <!-- Результат анализа -->
                         </div>
                     </div>
@@ -865,6 +914,52 @@ function displayCleanupResult(data) {
     confirmationBox.classList.add('d-none');
 }
 
+// Обновление статистики PostgreSQL (ANALYZE)
+async function refreshStatistics() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обновление...';
+
+    try {
+        const response = await fetch('/maintenance/database/refresh-statistics', { method: 'POST' });
+        const result = await response.json();
+
+        const resultDiv = document.getElementById('refreshStatisticsResult');
+
+        if (result.success) {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-check-circle"></i> Статистика обновлена</h6>
+                <p class="mb-0">Обработано таблиц: <strong>${result.processedTables}/${result.totalTables}</strong></p>
+                <p class="mb-0 mt-2 small text-muted">
+                    <i class="fas fa-lightbulb"></i>
+                    Теперь нажмите "Анализировать производительность" для проверки актуальных данных
+                </p>
+            `;
+        } else {
+            resultDiv.className = 'mt-3 alert alert-danger';
+            resultDiv.innerHTML = `
+                <h6><i class="fas fa-times-circle"></i> Ошибка обновления статистики</h6>
+                <p class="mb-0">${result.error || 'Неизвестная ошибка'}</p>
+            `;
+        }
+
+        resultDiv.classList.remove('d-none');
+
+    } catch (error) {
+        console.error('Ошибка обновления статистики:', error);
+        const resultDiv = document.getElementById('refreshStatisticsResult');
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.innerHTML = '<h6><i class="fas fa-times-circle"></i> Ошибка</h6><p class="mb-0">' + error.message + '</p>';
+        resultDiv.classList.remove('d-none');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
 // Анализ производительности
 async function analyzePerformance() {
     const button = event.target;
@@ -880,48 +975,192 @@ async function analyzePerformance() {
         const resultDiv = document.getElementById('performanceResult');
 
         if (performance.length > 0) {
+            // Группируем по severity
+            const critical = performance.filter(q => q.severity === 'CRITICAL');
+            const warnings = performance.filter(q => q.severity === 'WARNING');
+            const info = performance.filter(q => q.severity === 'INFO' || !q.severity);
+
             let performanceHtml = `
-                <div class="alert alert-info">
-                    <h6><i class="fas fa-chart-line"></i> Анализ производительности запросов</h6>
-                    <p class="mb-0">Найдено запросов для анализа: ${performance.length}</p>
+                <div class="alert alert-info mb-3">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <h6><i class="fas fa-chart-line"></i> Результаты анализа</h6>
+                            <p class="mb-0">Найдено: <strong>${performance.length}</strong> записей</p>
+                        </div>
+                        <div class="col-md-3">
+                            <span class="badge bg-danger severity-badge">CRITICAL</span>
+                            <strong class="ms-2">${critical.length}</strong>
+                        </div>
+                        <div class="col-md-3">
+                            <span class="badge bg-warning severity-badge">WARNING</span>
+                            <strong class="ms-2">${warnings.length}</strong>
+                        </div>
+                        <div class="col-md-3">
+                            <span class="badge bg-info severity-badge">INFO</span>
+                            <strong class="ms-2">${info.length}</strong>
+                        </div>
+                    </div>
                 </div>
-                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                    <table class="table table-sm performance-table">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Запрос</th>
-                                <th>Среднее время</th>
-                                <th>Максимальное время</th>
-                                <th>Количество вызовов</th>
-                                <th>Рекомендация</th>
-                            </tr>
-                        </thead>
-                        <tbody>
             `;
 
-            performance.forEach(query => {
-                const isSlowQuery = query.slowQuery;
-                const rowClass = isSlowQuery ? 'table-warning' : '';
-                const queryText = query.query.length > 60 ? query.query.substring(0, 60) + '...' : query.query;
-
+            // CRITICAL запросы
+            if (critical.length > 0) {
                 performanceHtml += `
-                    <tr class="${rowClass}">
-                        <td><code style="font-size: 0.8rem;">${queryText}</code></td>
-                        <td><strong>${query.avgExecutionTimeMs}мс</strong></td>
-                        <td>${query.maxExecutionTimeMs}мс</td>
-                        <td><span class="badge bg-secondary">${query.callCount}</span></td>
-                        <td class="recommendation-text">${query.recommendation || 'Оптимально'}</td>
-                    </tr>
+                    <div class="mb-3">
+                        <h6 class="text-danger"><i class="fas fa-exclamation-triangle"></i> Критические проблемы</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm performance-table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 5%;">PID</th>
+                                        <th style="width: 10%;">Тип</th>
+                                        <th style="width: 10%;">Статус</th>
+                                        <th style="width: 30%;">Запрос</th>
+                                        <th style="width: 10%;">Длительность</th>
+                                        <th style="width: 35%;">Рекомендация</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                 `;
-            });
 
-            performanceHtml += '</tbody></table></div>';
+                critical.forEach((query, idx) => {
+                    const queryText = query.query && query.query.length > 50 ?
+                        query.query.substring(0, 50) + '...' : (query.query || 'N/A');
+                    const duration = query.queryDurationMs ?
+                        `${(query.queryDurationMs / 1000).toFixed(1)}с` :
+                        (query.avgExecutionTimeMs ? `${query.avgExecutionTimeMs}мс` : 'N/A');
+
+                    performanceHtml += `
+                        <tr class="table-danger expandable-row" onclick="toggleQueryDetails('critical-${idx}')">
+                            <td><small>${query.pid || '-'}</small></td>
+                            <td><span class="badge bg-secondary">${query.queryType || 'N/A'}</span></td>
+                            <td><small>${query.state || '-'}</small></td>
+                            <td><code>${queryText}</code></td>
+                            <td><strong>${duration}</strong></td>
+                            <td class="recommendation-text">${query.recommendation || 'Требуется анализ'}</td>
+                        </tr>
+                        <tr id="critical-${idx}-details" class="d-none">
+                            <td colspan="6">
+                                <div class="query-details">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <p class="mb-1"><strong>Полный запрос:</strong></p>
+                                            <pre class="bg-light p-2" style="font-size: 0.8rem; max-height: 150px; overflow-y: auto;">${query.query || 'N/A'}</pre>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <p class="mb-1"><strong>Детали:</strong></p>
+                                            <ul class="small">
+                                                ${query.userName ? `<li><strong>Пользователь:</strong> ${query.userName}</li>` : ''}
+                                                ${query.database ? `<li><strong>БД:</strong> ${query.database}</li>` : ''}
+                                                ${query.applicationName ? `<li><strong>Приложение:</strong> ${query.applicationName}</li>` : ''}
+                                                ${query.clientAddr ? `<li><strong>IP:</strong> ${query.clientAddr}</li>` : ''}
+                                                ${query.waitEventType ? `<li><strong>Wait Event:</strong> ${query.waitEventType}</li>` : ''}
+                                                ${query.blockedBy ? `<li><strong>Заблокирован PID:</strong> ${query.blockedBy}</li>` : ''}
+                                                ${query.rowsReturned ? `<li><strong>Строк возвращено:</strong> ${query.rowsReturned.toLocaleString()}</li>` : ''}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                performanceHtml += '</tbody></table></div></div>';
+            }
+
+            // WARNING запросы
+            if (warnings.length > 0) {
+                performanceHtml += `
+                    <div class="mb-3">
+                        <h6 class="text-warning"><i class="fas fa-exclamation-circle"></i> Предупреждения</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm performance-table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 5%;">PID</th>
+                                        <th style="width: 10%;">Тип</th>
+                                        <th style="width: 35%;">Запрос/Таблица</th>
+                                        <th style="width: 15%;">Метрика</th>
+                                        <th style="width: 35%;">Рекомендация</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                warnings.forEach((query, idx) => {
+                    const queryText = query.query && query.query.length > 60 ?
+                        query.query.substring(0, 60) + '...' : (query.query || 'N/A');
+                    const metric = query.queryDurationMs ?
+                        `Длительность: ${(query.queryDurationMs / 1000).toFixed(1)}с` :
+                        (query.avgExecutionTimeMs ? `Среднее: ${query.avgExecutionTimeMs}мс` : 'N/A');
+
+                    performanceHtml += `
+                        <tr class="table-warning">
+                            <td><small>${query.pid || '-'}</small></td>
+                            <td><span class="badge bg-secondary">${query.queryType || 'N/A'}</span></td>
+                            <td><code>${queryText}</code></td>
+                            <td><small>${metric}</small></td>
+                            <td class="recommendation-text">${query.recommendation || 'Рекомендуется анализ'}</td>
+                        </tr>
+                    `;
+                });
+
+                performanceHtml += '</tbody></table></div></div>';
+            }
+
+            // INFO запросы (сворачиваемые)
+            if (info.length > 0) {
+                performanceHtml += `
+                    <div class="mb-3">
+                        <h6 class="text-info">
+                            <i class="fas fa-info-circle"></i> Нормальная активность
+                            <button class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation(); toggleInfoSection()">
+                                <i class="fas fa-chevron-down" id="infoToggleIcon"></i> Показать/Скрыть (${info.length})
+                            </button>
+                        </h6>
+                        <div id="infoSection" class="d-none">
+                            <div class="table-responsive">
+                                <table class="table table-sm performance-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>PID</th>
+                                            <th>Тип</th>
+                                            <th>Статус</th>
+                                            <th>Запрос</th>
+                                            <th>Метрика</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                `;
+
+                info.forEach(query => {
+                    const queryText = query.query && query.query.length > 70 ?
+                        query.query.substring(0, 70) + '...' : (query.query || 'N/A');
+                    const metric = query.queryDurationMs ?
+                        `${(query.queryDurationMs / 1000).toFixed(2)}с` :
+                        (query.avgExecutionTimeMs ? `${query.avgExecutionTimeMs}мс` : 'N/A');
+
+                    performanceHtml += `
+                        <tr>
+                            <td><small>${query.pid || '-'}</small></td>
+                            <td><span class="badge bg-secondary">${query.queryType || 'N/A'}</span></td>
+                            <td><small>${query.state || '-'}</small></td>
+                            <td><code>${queryText}</code></td>
+                            <td><small>${metric}</small></td>
+                        </tr>
+                    `;
+                });
+
+                performanceHtml += '</tbody></table></div></div></div>';
+            }
+
             resultDiv.innerHTML = performanceHtml;
         } else {
             resultDiv.className = 'mt-3 alert alert-success';
             resultDiv.innerHTML = `
                 <h6><i class="fas fa-check-circle"></i> Анализ завершен</h6>
-                <p class="mb-0">Проблем с производительностью не обнаружено</p>
+                <p class="mb-0">Проблем с производительностью не обнаружено. Активные запросы отсутствуют.</p>
             `;
         }
 
@@ -936,6 +1175,26 @@ async function analyzePerformance() {
     } finally {
         button.disabled = false;
         button.innerHTML = originalText;
+    }
+}
+
+// Вспомогательные функции для анализа производительности
+function toggleQueryDetails(id) {
+    const detailsRow = document.getElementById(`${id}-details`);
+    if (detailsRow) {
+        detailsRow.classList.toggle('d-none');
+    }
+}
+
+function toggleInfoSection() {
+    const infoSection = document.getElementById('infoSection');
+    const icon = document.getElementById('infoToggleIcon');
+    if (infoSection) {
+        infoSection.classList.toggle('d-none');
+        if (icon) {
+            icon.classList.toggle('fa-chevron-down');
+            icon.classList.toggle('fa-chevron-up');
+        }
     }
 }
 

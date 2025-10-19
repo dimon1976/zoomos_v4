@@ -321,7 +321,25 @@ public class MaintenanceController {
             return createErrorResponse("analyzeBloat", e);
         }
     }
-    
+
+    @PostMapping("/database/refresh-statistics")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> refreshTableStatistics() {
+        log.info("Запуск принудительного обновления статистики таблиц (ANALYZE)");
+        try {
+            Map<String, Object> result = databaseMaintenanceService.refreshTableStatistics();
+            log.info("Обновление статистики завершено. Обработано таблиц: {}/{}",
+                result.get("processedTables"), result.get("totalTables"));
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Ошибка обновления статистики таблиц: {}", e.getMessage());
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
     // === SYSTEM HEALTH ENDPOINTS ===
     
     @GetMapping("/system/health")
