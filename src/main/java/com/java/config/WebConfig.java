@@ -116,9 +116,10 @@ public class WebConfig implements WebMvcConfigurer {
 
     /**
      * Resolver для определения локали из заголовка Accept-Language
+     * Переопределяем стандартный бин LocaleResolver
      */
     @Bean
-    public AcceptHeaderLocaleResolver localeResolver() {
+    public org.springframework.web.servlet.LocaleResolver localeResolver() {
         AcceptHeaderLocaleResolver localeResolver = new AcceptHeaderLocaleResolver();
         localeResolver.setDefaultLocale(new Locale("ru"));
         localeResolver.setSupportedLocales(List.of(new Locale("ru"), new Locale("en")));
