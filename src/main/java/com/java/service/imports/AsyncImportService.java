@@ -9,6 +9,9 @@ import com.java.model.entity.ImportSession;
 import com.java.model.entity.ImportTemplate;
 import com.java.model.enums.ImportStatus;
 import com.java.repository.*;
+import com.java.service.error.DatabaseErrorMessageParser;
+import com.java.service.error.ErrorMessageFormatter;
+import com.java.service.error.ParsedDatabaseError;
 import com.java.service.file.FileAnalyzerService;
 import com.java.service.notification.NotificationService;
 import com.java.util.PathResolver;
@@ -48,6 +51,8 @@ public class AsyncImportService {
     private final MemoryMonitor memoryMonitor;
     private final PathResolver pathResolver;
     private final NotificationService notificationService;
+    private final DatabaseErrorMessageParser errorParser;
+    private final ErrorMessageFormatter errorFormatter;
 
     @Autowired
     @Qualifier("importTaskExecutor")
@@ -97,9 +102,10 @@ public class AsyncImportService {
                 @Override
                 public void afterCommit() {
                     CompletableFuture.runAsync(() -> {
+                        ImportSession managed = null;
                         try {
                             // Загружаем свежую сущность внутри новой транзакции
-                            ImportSession managed = sessionRepository.findById(finalSession.getId())
+                            managed = sessionRepository.findById(finalSession.getId())
                                     .orElseThrow(() -> new RuntimeException("Сессия импорта не найдена"));
 
                             // Сначала анализируем файл и настраиваем метаданные
@@ -110,7 +116,9 @@ public class AsyncImportService {
                             processorService.processImport(managed);
                         } catch (Exception e) {
                             log.error("Ошибка фоновой обработки импорта", e);
-                            handleAsyncImportError(finalSession, e);
+                            // Используем managed сессию если есть (содержит актуальное сообщение об ошибке из памяти)
+                            // Иначе используем finalSession
+                            handleAsyncImportError(managed != null ? managed : finalSession, e);
                         }
                     }, taskExecutor);
                 }
@@ -169,22 +177,54 @@ public class AsyncImportService {
      */
     private void handleAsyncImportError(ImportSession session, Exception e) {
         try {
+            String userFriendlyMessage = null;
+
+            // ПРИОРИТЕТ 1: Если сессия уже содержит сообщение об ошибке (установлено ImportProcessorService),
+            // используем его - оно уже правильно отформатировано
+            if (session.getErrorMessage() != null && !session.getErrorMessage().isEmpty()) {
+                userFriendlyMessage = session.getErrorMessage();
+                log.debug("Используем сообщение из сессии: {}", userFriendlyMessage);
+            }
+            // ПРИОРИТЕТ 2: Проверяем, есть ли ImportException в цепочке причин
+            else {
+                Throwable current = e;
+                while (current != null) {
+                    if (current instanceof com.java.exception.ImportException) {
+                        userFriendlyMessage = current.getMessage();
+                        log.debug("Найдено ImportException в цепочке причин с сообщением: {}", userFriendlyMessage);
+                        break;
+                    }
+                    current = current.getCause();
+                }
+
+                // ПРИОРИТЕТ 3: Если ImportException не найдено, парсим и форматируем ошибку
+                if (userFriendlyMessage == null) {
+                    ParsedDatabaseError parsedError = errorParser.parse(e);
+                    userFriendlyMessage = errorFormatter.formatFullError(parsedError);
+                    log.debug("ImportException не найдено, используем парсинг: {}", userFriendlyMessage);
+                }
+            }
+
+            // Технические детали для логов
+            log.error("Ошибка асинхронного импорта для сессии {}: {}",
+                    session.getId(), userFriendlyMessage, e);
+
             session.setStatus(ImportStatus.FAILED);
             session.setCompletedAt(ZonedDateTime.now());
-            session.setErrorMessage(e.getMessage());
+            session.setErrorMessage(userFriendlyMessage);
             sessionRepository.save(session);
 
             FileOperation fileOperation = session.getFileOperation();
-            fileOperation.markAsFailed(e.getMessage());
+            fileOperation.markAsFailed(userFriendlyMessage);
             fileOperationRepository.save(fileOperation);
 
-            progressService.sendErrorNotification(session, e.getMessage());
-            
+            progressService.sendErrorNotification(session, userFriendlyMessage);
+
             // Отправляем нотификацию об ошибке
             // Перезагружаем операцию с клиентом для нотификации
             FileOperation operationWithClient = fileOperationRepository.findByIdWithClient(fileOperation.getId())
                     .orElse(fileOperation);
-            notificationService.sendImportFailedNotification(session, operationWithClient, e.getMessage());
+            notificationService.sendImportFailedNotification(session, operationWithClient, userFriendlyMessage);
 
         } catch (Exception ex) {
             log.error("Ошибка обработки ошибки импорта", ex);

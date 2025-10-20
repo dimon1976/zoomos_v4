@@ -53,27 +53,26 @@ public class ErrorMessageFormatter {
                 Integer actualLength = error.getActualLength();
                 Integer maxLength = error.getMaxLength();
 
-                // Fallback если не удалось извлечь длины
+                // Если есть оба значения - показываем полное сообщение
+                if (actualLength != null && maxLength != null) {
+                    return messageService.get("import.error.db.value.too.long",
+                            fieldName, actualLength, maxLength);
+                }
+
+                // Если есть только actualLength без maxLength
+                if (actualLength != null && maxLength == null) {
+                    return String.format("Значение слишком длинное для поля \"%s\": %d символов",
+                                    fieldName, actualLength);
+                }
+
+                // Если есть только maxLength без actualLength
                 if (actualLength == null && maxLength != null) {
-                    return messageService.getMessageOrDefault(
-                            "import.error.db.value.too.long.no.actual",
-                            String.format("Значение слишком длинное для поля \"%s\" (максимум %d символов)",
-                                    fieldName, maxLength)
-                    );
+                    return String.format("Значение слишком длинное для поля \"%s\" (максимум %d символов)",
+                                    fieldName, maxLength);
                 }
 
-                if (maxLength == null) {
-                    return messageService.getMessageOrDefault(
-                            "import.error.db.value.too.long.no.limit",
-                            String.format("Значение слишком длинное для поля \"%s\"", fieldName)
-                    );
-                }
-
-                return messageService.getMessageOrDefault(
-                        "import.error.db.value.too.long",
-                        String.format("Значение слишком длинное для поля \"%s\": %d символов (максимум %d)",
-                                fieldName, actualLength, maxLength)
-                );
+                // Если нет ни того, ни другого
+                return String.format("Значение слишком длинное для поля \"%s\"", fieldName);
 
             case UNIQUE_VIOLATION:
                 String uniqueFieldName = translateColumnName(error.getColumnName());
@@ -127,10 +126,8 @@ public class ErrorMessageFormatter {
      */
     public String formatWithRowNumber(Long rowNumber, String errorMessage) {
         if (rowNumber != null) {
-            return messageService.getMessageOrDefault(
-                    "import.error.batch.row",
-                    String.format("Строка %d: %s", rowNumber, errorMessage)
-            );
+            // Используем messageService.get() с параметрами для правильного форматирования
+            return messageService.get("import.error.batch.row", rowNumber, errorMessage);
         }
         return errorMessage;
     }

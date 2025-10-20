@@ -21,6 +21,16 @@ public class DatabaseErrorMessageParser {
     private static final Pattern COLUMN_NAME_PATTERN = Pattern.compile("column \"([^\"]+)\"");
     private static final Pattern CONSTRAINT_NAME_PATTERN = Pattern.compile("constraint \"([^\"]+)\"");
 
+    // Pattern для извлечения имени колонки и значения из SQL statement
+    // Пример: "INSERT INTO av_data (...product_name...) VALUES (...('long value')...)"
+    private static final Pattern BATCH_INSERT_PATTERN = Pattern.compile(
+            "Batch entry \\d+ INSERT INTO av_data \\(([^)]+)\\) VALUES \\((.+)\\) was aborted"
+    );
+
+    // Pattern для извлечения значения из VALUES с учетом escaped кавычек
+    // Ищет значение в формате ('value') с учетом вложенных кавычек
+    private static final Pattern VALUE_IN_QUOTES_PATTERN = Pattern.compile("\\('([^']*(?:''[^']*)*)'\\)");
+
     /**
      * Главный метод - парсит любое исключение.
      * Fail Fast стратегия: возвращает fallback вместо генерации ошибок.
@@ -33,11 +43,83 @@ public class DatabaseErrorMessageParser {
             return parseDataIntegrityViolation((DataIntegrityViolationException) exception);
         }
 
+        // Пробуем найти DataIntegrityViolationException в цепочке вложенных исключений
+        Throwable cause = exception.getCause();
+        while (cause != null) {
+            if (cause instanceof DataIntegrityViolationException) {
+                return parseDataIntegrityViolation((DataIntegrityViolationException) cause);
+            }
+            cause = cause.getCause();
+        }
+
+        // Проверяем сообщение на наличие характерных PostgreSQL ошибок даже без DataIntegrityViolationException
+        String message = extractFullExceptionMessage(exception);
+        if (message != null && (message.contains("значение не умещается в тип character varying") ||
+                message.contains("value too long for type character varying"))) {
+            return parseValueTooLongError(message);
+        }
+
         // Fallback для других типов исключений
         log.debug("Unrecognized exception type: {}", exception.getClass().getSimpleName());
         return ParsedDatabaseError.builder()
                 .type(DatabaseErrorType.UNKNOWN)
                 .originalMessage(exception.getMessage())
+                .build();
+    }
+
+    /**
+     * Извлекает полное сообщение из цепочки исключений
+     */
+    private String extractFullExceptionMessage(Exception exception) {
+        StringBuilder fullMessage = new StringBuilder();
+        Throwable current = exception;
+        while (current != null) {
+            if (current.getMessage() != null) {
+                fullMessage.append(current.getMessage()).append(" ");
+            }
+            current = current.getCause();
+        }
+        return fullMessage.toString();
+    }
+
+    /**
+     * Парсинг ошибки "значение не умещается" из строкового сообщения
+     */
+    private ParsedDatabaseError parseValueTooLongError(String message) {
+        Integer maxLength = extractMaxLength(message);
+        String columnName = extractColumnName(message);
+        Long rowNumber = extractBatchEntryNumber(message);
+
+        // Если columnName не найдено стандартным способом, пробуем извлечь из SQL statement
+        if (columnName == null) {
+            BatchInsertInfo batchInfo = extractBatchInsertInfo(message);
+            if (batchInfo != null) {
+                columnName = batchInfo.getColumnName();
+                Integer actualLength = batchInfo.getValueLength();
+
+                log.debug("Parsed VALUE_TOO_LONG error from nested exception - column: {}, actualLength: {}, maxLength: {}, rowNumber: {}",
+                        columnName, actualLength, maxLength, rowNumber);
+
+                return ParsedDatabaseError.builder()
+                        .type(DatabaseErrorType.VALUE_TOO_LONG)
+                        .columnName(columnName)
+                        .actualLength(actualLength)
+                        .maxLength(maxLength)
+                        .rowNumber(rowNumber)
+                        .originalMessage(message)
+                        .build();
+            }
+        }
+
+        log.debug("Parsed VALUE_TOO_LONG error from nested exception - column: {}, maxLength: {}, rowNumber: {}",
+                columnName, maxLength, rowNumber);
+
+        return ParsedDatabaseError.builder()
+                .type(DatabaseErrorType.VALUE_TOO_LONG)
+                .columnName(columnName)
+                .maxLength(maxLength)
+                .rowNumber(rowNumber)
+                .originalMessage(message)
                 .build();
     }
 
@@ -57,21 +139,7 @@ public class DatabaseErrorMessageParser {
         // Парсим "значение не умещается в тип character varying(255)"
         if (message.contains("значение не умещается в тип character varying") ||
                 message.contains("value too long for type character varying")) {
-
-            Integer maxLength = extractMaxLength(message);
-            String columnName = extractColumnName(message);
-            Long rowNumber = extractBatchEntryNumber(message);
-
-            log.debug("Parsed VALUE_TOO_LONG error - column: {}, maxLength: {}, rowNumber: {}",
-                    columnName, maxLength, rowNumber);
-
-            return ParsedDatabaseError.builder()
-                    .type(DatabaseErrorType.VALUE_TOO_LONG)
-                    .columnName(columnName)
-                    .maxLength(maxLength)
-                    .rowNumber(rowNumber)
-                    .originalMessage(message)
-                    .build();
+            return parseValueTooLongError(message);
         }
 
         // Парсим unique constraint violation
@@ -216,5 +284,149 @@ public class DatabaseErrorMessageParser {
             log.debug("Failed to parse constraint name from message", e);
         }
         return null;
+    }
+
+    /**
+     * Извлекает информацию о колонке и значении из SQL INSERT statement в batch error.
+     * Определяет, какая именно колонка вызвала ошибку "value too long".
+     *
+     * @param message полное сообщение об ошибке с SQL statement
+     * @return информация о проблемной колонке или null
+     */
+    private BatchInsertInfo extractBatchInsertInfo(String message) {
+        try {
+            Matcher matcher = BATCH_INSERT_PATTERN.matcher(message);
+            if (!matcher.find()) {
+                log.debug("Failed to match BATCH_INSERT_PATTERN");
+                return null;
+            }
+
+            String columnsStr = matcher.group(1);
+            String valuesStr = matcher.group(2);
+
+            // Разбиваем колонки
+            String[] columns = columnsStr.split(",\\s*");
+
+            // Разбиваем значения, учитывая что внутри могут быть запятые
+            java.util.List<String> values = extractValues(valuesStr);
+
+            if (columns.length != values.size()) {
+                log.debug("Column count ({}) != value count ({})", columns.length, values.size());
+                return null;
+            }
+
+            // Ищем первое слишком длинное значение
+            for (int i = 0; i < values.size(); i++) {
+                String value = values.get(i);
+                // Проверяем длину (убираем обрамляющие скобки и кавычки)
+                String cleanValue = cleanValue(value);
+                if (cleanValue != null && cleanValue.length() > 255) {
+                    String columnName = columns[i].trim();
+                    log.debug("Found long value in column {}: {} chars", columnName, cleanValue.length());
+                    return new BatchInsertInfo(columnName, cleanValue.length());
+                }
+            }
+
+            log.debug("No value longer than 255 chars found");
+            return null;
+
+        } catch (Exception e) {
+            log.debug("Failed to extract batch insert info", e);
+            return null;
+        }
+    }
+
+    /**
+     * Извлекает значения из VALUES части SQL statement.
+     * Учитывает вложенные кавычки и запятые внутри значений.
+     *
+     * @param valuesStr строка с VALUES
+     * @return список значений
+     */
+    private java.util.List<String> extractValues(String valuesStr) {
+        java.util.List<String> values = new java.util.ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        boolean inQuotes = false;
+
+        for (int i = 0; i < valuesStr.length(); i++) {
+            char c = valuesStr.charAt(i);
+
+            if (c == '\'' && (i == 0 || valuesStr.charAt(i - 1) != '\\')) {
+                inQuotes = !inQuotes;
+            } else if (c == '(' && !inQuotes) {
+                if (depth == 0) {
+                    start = i;
+                }
+                depth++;
+            } else if (c == ')' && !inQuotes) {
+                depth--;
+                if (depth == 0) {
+                    values.add(valuesStr.substring(start, i + 1));
+                }
+            }
+        }
+
+        return values;
+    }
+
+    /**
+     * Очищает значение от обрамляющих скобок, кавычек и type cast.
+     * Пример: "('some text')" -> "some text"
+     * Пример: "('123'::int8)" -> "123"
+     *
+     * @param value строка значения из SQL
+     * @return очищенное значение или null
+     */
+    private String cleanValue(String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+
+        // Убираем внешние скобки
+        String cleaned = value.trim();
+        if (cleaned.startsWith("(") && cleaned.endsWith(")")) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1);
+        }
+
+        // Убираем type cast (например, ::int8, ::numeric)
+        int castIndex = cleaned.indexOf("::");
+        if (castIndex > 0) {
+            cleaned = cleaned.substring(0, castIndex);
+        }
+
+        // Убираем кавычки
+        cleaned = cleaned.trim();
+        if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1);
+        }
+
+        // Если значение NULL
+        if ("NULL".equalsIgnoreCase(cleaned)) {
+            return null;
+        }
+
+        return cleaned;
+    }
+
+    /**
+     * DTO для хранения информации о проблемной колонке в batch insert.
+     */
+    private static class BatchInsertInfo {
+        private final String columnName;
+        private final Integer valueLength;
+
+        public BatchInsertInfo(String columnName, Integer valueLength) {
+            this.columnName = columnName;
+            this.valueLength = valueLength;
+        }
+
+        public String getColumnName() {
+            return columnName;
+        }
+
+        public Integer getValueLength() {
+            return valueLength;
+        }
     }
 }
