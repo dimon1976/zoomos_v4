@@ -66,6 +66,11 @@ public class AvData {
     private String productAdditional3;
     private String productAdditional4;
     private String productAdditional5;
+    private String productAdditional6;
+    private String productAdditional7;
+    private String productAdditional8;
+    private String productAdditional9;
+    private String productAdditional10;
 
     private String region;
 
@@ -93,6 +98,14 @@ public class AvData {
 
     private String competitorAdditional;
     private String competitorAdditional2;
+    private String competitorAdditional3;
+    private String competitorAdditional4;
+    private String competitorAdditional5;
+    private String competitorAdditional6;
+    private String competitorAdditional7;
+    private String competitorAdditional8;
+    private String competitorAdditional9;
+    private String competitorAdditional10;
 
     @Column(length = 1200)
     private String competitorUrl;
@@ -129,6 +142,11 @@ public class AvData {
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 3", "productAdditional3");
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 4", "productAdditional4");
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 5", "productAdditional5");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 6", "productAdditional6");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 7", "productAdditional7");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 8", "productAdditional8");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 9", "productAdditional9");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 10", "productAdditional10");
 
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Город", "region");
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Адрес", "regionAddress");
@@ -145,6 +163,14 @@ public class AvData {
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Наименование товара конкурента", "competitorProductName");
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле конкурента", "competitorAdditional");
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 2 конкурента", "competitorAdditional2");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 3 конкурента", "competitorAdditional3");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 4 конкурента", "competitorAdditional4");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 5 конкурента", "competitorAdditional5");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 6 конкурента", "competitorAdditional6");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 7 конкурента", "competitorAdditional7");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 8 конкурента", "competitorAdditional8");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 9 конкурента", "competitorAdditional9");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 10 конкурента", "competitorAdditional10");
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Ссылка на конкурента", "competitorUrl");
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Скриншот", "competitorWebCacheUrl");
     }
