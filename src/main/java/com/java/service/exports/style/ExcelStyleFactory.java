@@ -14,7 +14,8 @@ public class ExcelStyleFactory {
         return new ExcelStyles(
                 createHeaderStyle(workbook),
                 createDateStyle(workbook),
-                createNumberStyle(workbook)
+                createNumberStyle(workbook),
+                createTextStyle(workbook)
         );
     }
 
@@ -45,6 +46,14 @@ public class ExcelStyleFactory {
         CellStyle style = workbook.createCellStyle();
         CreationHelper createHelper = workbook.getCreationHelper();
         style.setDataFormat(createHelper.createDataFormat().getFormat("#,##0.00"));
+        return style;
+    }
+
+    private CellStyle createTextStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        CreationHelper createHelper = workbook.getCreationHelper();
+        // @ = текстовый формат в Excel
+        style.setDataFormat(createHelper.createDataFormat().getFormat("@"));
         return style;
     }
 }

@@ -713,12 +713,26 @@ public class ImportProcessorService {
                 if (DateUtil.isCellDateFormatted(cell)) {
                     return cell.getDateCellValue().toString();
                 }
-                // Убираем дробную часть для целых чисел
-                double numValue = cell.getNumericCellValue();
-                if (numValue == Math.floor(numValue)) {
-                    return String.valueOf((long) numValue);
+
+                // Используем DataFormatter для получения точного форматированного значения
+                // Это сохранит полные цифры для больших чисел (штрих-коды, ID и т.д.)
+                DataFormatter formatter = new DataFormatter();
+                String formattedValue = formatter.formatCellValue(cell);
+
+                // Если формат общий (General), убираем десятичную точку для целых чисел
+                if (formattedValue.contains(".")) {
+                    try {
+                        double numValue = cell.getNumericCellValue();
+                        if (numValue == Math.floor(numValue) && !Double.isInfinite(numValue)) {
+                            return formattedValue.split("\\.")[0];  // Убираем .0
+                        }
+                    } catch (Exception e) {
+                        // Fallback на форматированное значение
+                        log.debug("Failed to parse numeric value, using formatted: {}", formattedValue);
+                    }
                 }
-                return String.valueOf(numValue);
+
+                return formattedValue;
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:
