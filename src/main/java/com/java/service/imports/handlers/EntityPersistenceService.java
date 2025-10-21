@@ -32,12 +32,25 @@ public class EntityPersistenceService {
             "productCategory1", "productCategory2", "productCategory3",
             "productPrice", "productAnalog", "productAdditional1",
             "productAdditional2", "productAdditional3", "productAdditional4",
-            "productAdditional5", "region", "regionAddress", "competitorName",
+            "productAdditional5", "productAdditional6", "productAdditional7",
+            "productAdditional8", "productAdditional9", "productAdditional10",
+            "region", "regionAddress", "competitorName",
             "competitorPrice", "competitorPromotionalPrice", "competitorTime",
             "competitorDate", "competitorLocalDateTime", "competitorStockStatus",
             "competitorAdditionalPrice", "competitorCommentary",
             "competitorProductName", "competitorAdditional",
-            "competitorAdditional2", "competitorUrl", "competitorWebCacheUrl",
+            "competitorAdditional2", "competitorAdditional3", "competitorAdditional4",
+            "competitorAdditional5", "competitorAdditional6", "competitorAdditional7",
+            "competitorAdditional8", "competitorAdditional9", "competitorAdditional10",
+            "competitorUrl", "competitorWebCacheUrl",
+            // Новые поля конкурентов (V19)
+            "competitorBrand", "competitorCategory1", "competitorCategory2",
+            "competitorCategory3", "competitorCategory4", "competitorProductId",
+            "competitorBar", "competitorOldPrice",
+            // Новые поля региона (V19)
+            "regionCountry",
+            // Системные поля (V19)
+            "zmsId",
             "created_at", "updated_at"
     );
 
@@ -68,13 +81,31 @@ public class EntityPersistenceService {
      */
     private int saveAvData(List<Map<String, Object>> batch, ImportSession session) {
         String sql = "INSERT INTO av_data (data_source, operation_id, client_id, product_id, product_name, product_brand, product_bar, product_description, product_url, product_category1, product_category2, product_category3," +
-                " product_price, product_analog, product_additional1, product_additional2, product_additional3, product_additional4, product_additional5, region, region_Address, competitor_Name, competitor_Price," +
+                " product_price, product_analog, product_additional1, product_additional2, product_additional3, product_additional4, product_additional5, product_additional6, product_additional7, product_additional8, product_additional9, product_additional10," +
+                " region, region_Address, competitor_Name, competitor_Price," +
                 " competitor_Promotional_Price, competitor_time, competitor_date, competitor_local_date_time, competitor_stock_status, competitor_additional_price, competitor_commentary, competitor_product_name," +
-                " competitor_additional, competitor_additional2, competitor_url, competitor_web_cache_url, created_at, updated_at) " +
+                " competitor_additional, competitor_additional2, competitor_additional3, competitor_additional4, competitor_additional5, competitor_additional6, competitor_additional7, competitor_additional8, competitor_additional9, competitor_additional10," +
+                " competitor_url, competitor_web_cache_url," +
+                // Новые поля конкурентов (V19)
+                " competitor_brand, competitor_category1, competitor_category2, competitor_category3, competitor_category4, competitor_product_id, competitor_bar, competitor_old_price," +
+                // Новые поля региона (V19)
+                " region_country," +
+                // Системные поля (V19)
+                " zms_id," +
+                " created_at, updated_at) " +
                 "VALUES (:dataSource, :operationId, :clientId, :productId, :productName, :productBrand, :productBar, :productDescription, :productUrl, :productCategory1, :productCategory2, :productCategory3, :productPrice," +
-                " :productAnalog, :productAdditional1, :productAdditional2, :productAdditional3, :productAdditional4, :productAdditional5, :region, :regionAddress, :competitorName, :competitorPrice, :competitorPromotionalPrice," +
-                " :competitorTime, :competitorDate, :competitorLocalDateTime, :competitorStockStatus, :competitorAdditionalPrice, :competitorCommentary, :competitorProductName, :competitorAdditional, :competitorAdditional2," +
-                " :competitorUrl, :competitorWebCacheUrl, :created_at, :updated_at)";
+                " :productAnalog, :productAdditional1, :productAdditional2, :productAdditional3, :productAdditional4, :productAdditional5, :productAdditional6, :productAdditional7, :productAdditional8, :productAdditional9, :productAdditional10," +
+                " :region, :regionAddress, :competitorName, :competitorPrice, :competitorPromotionalPrice," +
+                " :competitorTime, :competitorDate, :competitorLocalDateTime, :competitorStockStatus, :competitorAdditionalPrice, :competitorCommentary, :competitorProductName," +
+                " :competitorAdditional, :competitorAdditional2, :competitorAdditional3, :competitorAdditional4, :competitorAdditional5, :competitorAdditional6, :competitorAdditional7, :competitorAdditional8, :competitorAdditional9, :competitorAdditional10," +
+                " :competitorUrl, :competitorWebCacheUrl," +
+                // Новые поля конкурентов (V19)
+                " :competitorBrand, :competitorCategory1, :competitorCategory2, :competitorCategory3, :competitorCategory4, :competitorProductId, :competitorBar, :competitorOldPrice," +
+                // Новые поля региона (V19)
+                " :regionCountry," +
+                // Системные поля (V19)
+                " :zmsId," +
+                " :created_at, :updated_at)";
 
         // Добавляем системные поля
         LocalDateTime now = LocalDateTime.now();
