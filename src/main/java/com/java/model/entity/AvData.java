@@ -49,9 +49,11 @@ public class AvData {
 
     private String productBrand;
     private String productBar;
+
+    @Column(columnDefinition = "TEXT")
     private String productDescription;
 
-    @Column(length = 1100)
+    @Column(columnDefinition = "TEXT")
     private String productUrl;
 
     private String productCategory1;
@@ -61,15 +63,25 @@ public class AvData {
     private String productAnalog;
 
     // Дополнительные поля
+    @Column(length = 1000)
     private String productAdditional1;
+    @Column(length = 1000)
     private String productAdditional2;
+    @Column(length = 1000)
     private String productAdditional3;
+    @Column(length = 1000)
     private String productAdditional4;
+    @Column(length = 1000)
     private String productAdditional5;
+    @Column(length = 1000)
     private String productAdditional6;
+    @Column(length = 1000)
     private String productAdditional7;
+    @Column(length = 1000)
     private String productAdditional8;
+    @Column(length = 1000)
     private String productAdditional9;
+    @Column(length = 1000)
     private String productAdditional10;
 
     private String region;
@@ -90,27 +102,37 @@ public class AvData {
     private String competitorStockStatus;
     private Double competitorAdditionalPrice;
 
-    @Column(length = 1000)
+    @Column(columnDefinition = "TEXT")
     private String competitorCommentary;
 
-    @Column(length = 400)
+    @Column(columnDefinition = "TEXT")
     private String competitorProductName;
 
+    @Column(length = 1000)
     private String competitorAdditional;
+    @Column(length = 1000)
     private String competitorAdditional2;
+    @Column(length = 1000)
     private String competitorAdditional3;
+    @Column(length = 1000)
     private String competitorAdditional4;
+    @Column(length = 1000)
     private String competitorAdditional5;
+    @Column(length = 1000)
     private String competitorAdditional6;
+    @Column(length = 1000)
     private String competitorAdditional7;
+    @Column(length = 1000)
     private String competitorAdditional8;
+    @Column(length = 1000)
     private String competitorAdditional9;
+    @Column(length = 1000)
     private String competitorAdditional10;
 
-    @Column(length = 1200)
+    @Column(columnDefinition = "TEXT")
     private String competitorUrl;
 
-    @Column(length = 1200)
+    @Column(columnDefinition = "TEXT")
     private String competitorWebCacheUrl;
 
     // Новые поля конкурентов (V19)
