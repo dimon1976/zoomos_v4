@@ -24,8 +24,9 @@ public class VolumeNormalizer implements NormalizationService {
     private final ObjectMapper objectMapper;
     
     // Паттерн для извлечения числового значения
-    private static final Pattern NUMERIC_PATTERN = Pattern.compile("([0-9]+[.,]?[0-9]*)");
-    
+    private static final Pattern NUMERIC_PATTERN = Pattern.compile("([0-9]*[.,]?[0-9]+)");
+
+
     @Override
     public Object normalize(Object value, NormalizationType normalizationType, String normalizationRule) {
         if (value == null) {
@@ -66,10 +67,10 @@ public class VolumeNormalizer implements NormalizationService {
             return VolumeNormalizationRule.defaultRules();
         }
     }
-    
+
     private String applyVolumeNormalization(String value, VolumeNormalizationRule rules) {
         String result = value;
-        
+
         // 1. Извлекаем числовое значение если нужно
         if (rules.isExtractNumeric()) {
             Matcher matcher = NUMERIC_PATTERN.matcher(result);
@@ -77,33 +78,38 @@ public class VolumeNormalizer implements NormalizationService {
                 result = matcher.group(1);
             }
         }
-        
-        // 2. Убираем единицы измерения
+
+        // 2. Убираем единицы измерения, но не трогаем десятичные точки
         if (rules.getRemoveUnits() != null) {
             for (String unit : rules.getRemoveUnits()) {
+                if (unit.equals(".") || unit.equals(",")) {
+                    // игнорируем знаки пунктуации, которые могут быть частью числа
+                    continue;
+                }
                 result = result.replace(unit, "").trim();
             }
         }
-        
+
         // 3. Заменяем запятую на точку
         if (rules.isReplaceCommaWithDot()) {
             result = result.replace(",", ".");
         }
-        
+
         // 4. Убираем лишние пробелы
         result = result.replaceAll("\\s+", "").trim();
-        
+
         log.debug("Нормализация объема: '{}' → '{}'", value, result);
         return result;
     }
-    
+
+
     /**
      * Правила нормализации объемов
      */
     public static class VolumeNormalizationRule {
         private boolean extractNumeric = true;
         private boolean replaceCommaWithDot = true;
-        private List<String> removeUnits = List.of("л", "л.", "мл", "ml", " ", ".");
+        private List<String> removeUnits = List.of("л", "л.", "мл", "ml", " ");
         
         public static VolumeNormalizationRule defaultRules() {
             return new VolumeNormalizationRule();
