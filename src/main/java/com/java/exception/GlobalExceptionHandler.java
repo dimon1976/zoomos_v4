@@ -238,19 +238,10 @@ public class GlobalExceptionHandler {
 
     /**
      * Обработка ошибок валидации шаблона
+     * ВАЖНО: Этот обработчик УДАЛЕН, чтобы контроллеры могли сами обрабатывать ValidationException
+     * в своих try-catch блоках и сохранять состояние формы.
+     * См. ImportTemplateController.createTemplate() и updateTemplate()
      */
-    @ExceptionHandler(TemplateValidationService.ValidationException.class)
-    public String handleTemplateValidationException(TemplateValidationService.ValidationException ex,
-                                                   RedirectAttributes redirectAttributes,
-                                                   HttpServletRequest request) {
-        logError("Ошибка валидации шаблона", ex);
-        
-        redirectAttributes.addFlashAttribute(ERROR_MESSAGE_ATTR, "Ошибка валидации шаблона");
-        redirectAttributes.addFlashAttribute("validationErrors", ex.getErrors());
-
-        String referer = request.getHeader("Referer");
-        return "redirect:" + (referer != null ? referer : "/import/templates");
-    }
 
     /**
      * Обработка превышения квоты
