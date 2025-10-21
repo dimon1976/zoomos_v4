@@ -113,6 +113,22 @@ public class AvData {
     @Column(length = 1200)
     private String competitorWebCacheUrl;
 
+    // Новые поля конкурентов (V19)
+    private String competitorBrand;
+    private String competitorCategory1;
+    private String competitorCategory2;
+    private String competitorCategory3;
+    private String competitorCategory4;
+    private String competitorProductId;
+    private String competitorBar;
+    private Double competitorOldPrice;
+
+    // Новые поля региона (V19)
+    private String regionCountry;
+
+    // Системные поля (V19)
+    private String zmsId;
+
 
     // =====================================================================================
     // ВНИМАНИЕ! ЭТО НЕ ЗАГОЛОВКИ CSV ФАЙЛОВ!
@@ -173,5 +189,21 @@ public class AvData {
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 10 конкурента", "competitorAdditional10");
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Ссылка на конкурента", "competitorUrl");
         UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Скриншот", "competitorWebCacheUrl");
+
+        // Новые поля конкурентов (V19)
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Бренд конкурента", "competitorBrand");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Категория 1 конкурента", "competitorCategory1");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Категория 2 конкурента", "competitorCategory2");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Категория 3 конкурента", "competitorCategory3");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Категория 4 конкурента", "competitorCategory4");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("ID товара конкурента", "competitorProductId");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Штрих-код конкурента", "competitorBar");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Старая цена конкурента", "competitorOldPrice");
+
+        // Новые поля региона (V19)
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Страна", "regionCountry");
+
+        // Системные поля (V19)
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("ID Zoomos", "zmsId");
     }
 }

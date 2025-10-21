@@ -147,8 +147,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <form th:action="@{/export/templates/{id}/delete(id=${template.id})}" method="post">
-                        <input type="hidden" name="clientId" th:value="${template.clientId}" />
+                    <form th:action="@{/clients/{clientId}/export/templates/{id}/delete(clientId=${template.clientId},id=${template.id})}" method="post">
                         <button type="submit" class="btn btn-danger">Удалить</button>
                     </form>
                 </div>
@@ -195,9 +194,10 @@
             const button = event.relatedTarget;
             const templateId = button.getAttribute('data-template-id');
             const templateName = button.getAttribute('data-template-name');
+            const clientId = [[${template.clientId}]];
 
             document.getElementById('cloneTemplateName').textContent = templateName;
-            document.getElementById('cloneForm').action = '/export/templates/' + templateId + '/clone';
+            document.getElementById('cloneForm').action = '/clients/' + clientId + '/export/templates/' + templateId + '/clone';
             document.getElementById('newName').value = templateName + ' (копия)';
         });
     });

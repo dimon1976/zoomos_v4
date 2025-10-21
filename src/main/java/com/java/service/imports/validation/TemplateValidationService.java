@@ -37,7 +37,10 @@ public class TemplateValidationService {
                 // Новые поля из миграции V18
                 "competitorAdditional3", "competitorAdditional4", "competitorAdditional5", "competitorAdditional6",
                 "competitorAdditional7", "competitorAdditional8", "competitorAdditional9", "competitorAdditional10",
-                "competitorUrl", "competitorWebCacheUrl"
+                "competitorUrl", "competitorWebCacheUrl",
+                // Новые поля из миграции V19
+                "competitorBrand", "competitorCategory1", "competitorCategory2", "competitorCategory3", "competitorCategory4",
+                "competitorProductId", "competitorBar", "competitorOldPrice", "regionCountry", "zmsId"
         ));
 
         // Поля для справочника
