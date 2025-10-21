@@ -64,6 +64,18 @@
 
         <input type="hidden" th:field="*{clientId}">
 
+        <!-- Глобальные ошибки валидации -->
+        <div th:if="${validationErrors != null and !validationErrors.empty}" class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+            <h5 class="alert-heading">
+                <i class="fas fa-exclamation-triangle me-2"></i>Ошибки валидации шаблона
+            </h5>
+            <hr>
+            <ul class="mb-0">
+                <li th:each="err : ${validationErrors}" th:text="${err}">Ошибка</li>
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+
         <!-- Основная информация -->
         <div class="card mb-4">
             <div class="card-header">

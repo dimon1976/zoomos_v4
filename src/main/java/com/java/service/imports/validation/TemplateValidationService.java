@@ -28,10 +28,19 @@ public class TemplateValidationService {
         ENTITY_FIELDS.put(EntityType.AV_DATA, Set.of(
                 "dataSource", "operationId", "clientId", "productId", "productName", "productBrand", "productBar", "productDescription",
                 "productUrl", "productCategory1", "productCategory2", "productCategory3", "productPrice", "productAnalog", "productAdditional1",
-                "productAdditional2", "productAdditional3", "productAdditional4", "productAdditional5", "region", "regionAddress", "competitorName",
+                "productAdditional2", "productAdditional3", "productAdditional4", "productAdditional5",
+                // Новые поля из миграции V18
+                "productAdditional6", "productAdditional7", "productAdditional8", "productAdditional9", "productAdditional10",
+                "region", "regionAddress", "competitorName",
                 "competitorPrice", "competitorPromotionalPrice", "competitorTime", "competitorDate", "competitorLocalDateTime", "competitorStockStatus",
-                "competitorAdditionalPrice", "competitorCommentary", "competitorProductName", "competitorAdditional", "competitorAdditional2", "competitorUrl",
-                "competitorWebCacheUrl"
+                "competitorAdditionalPrice", "competitorCommentary", "competitorProductName", "competitorAdditional", "competitorAdditional2",
+                // Новые поля из миграции V18
+                "competitorAdditional3", "competitorAdditional4", "competitorAdditional5", "competitorAdditional6",
+                "competitorAdditional7", "competitorAdditional8", "competitorAdditional9", "competitorAdditional10",
+                "competitorUrl", "competitorWebCacheUrl",
+                // Новые поля из миграции V19
+                "competitorBrand", "competitorCategory1", "competitorCategory2", "competitorCategory3", "competitorCategory4",
+                "competitorProductId", "competitorBar", "competitorOldPrice", "regionCountry", "zmsId"
         ));
 
         // Поля для справочника

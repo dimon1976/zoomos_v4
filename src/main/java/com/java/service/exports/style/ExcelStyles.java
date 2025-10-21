@@ -10,5 +10,6 @@ public class ExcelStyles {
     private final CellStyle headerStyle;
     private final CellStyle dateStyle;
     private final CellStyle numberStyle;
+    private final CellStyle textStyle;
 
 }

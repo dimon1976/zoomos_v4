@@ -2,10 +2,15 @@ package com.java.service.imports;
 
 import com.java.config.ImportConfig;
 import com.java.config.MemoryMonitor;
+import com.java.exception.ImportException;
 import com.java.model.FileOperation;
 import com.java.model.entity.*;
 import com.java.model.enums.*;
 import com.java.repository.*;
+import com.java.service.error.DatabaseErrorMessageParser;
+import com.java.service.error.DatabaseErrorType;
+import com.java.service.error.ErrorMessageFormatter;
+import com.java.service.error.ParsedDatabaseError;
 import com.java.service.imports.handlers.DataTransformationService;
 import com.java.service.imports.handlers.DuplicateCheckService;
 import com.java.service.imports.handlers.EntityPersistenceService;
@@ -22,6 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
@@ -55,13 +62,22 @@ public class ImportProcessorService {
     private final EntityPersistenceService persistenceService;
     private final ImportProgressService progressService;
     private final NotificationService notificationService;
+    private final DatabaseErrorMessageParser errorParser;
+    private final ErrorMessageFormatter errorFormatter;
 
     private final ImportConfig.ImportSettings importSettings;
     private final MemoryMonitor memoryMonitor;
     private final PathResolver pathResolver;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     // Хранилище для отмены операций
     private final Map<Long, AtomicBoolean> cancellationFlags = new HashMap<>();
+
+    // ThreadLocal для хранения первого сообщения об ошибке в рамках одной сессии импорта
+    // Используется для сохранения правильного сообщения при STOP_ON_ERROR стратегии
+    private final ThreadLocal<String> firstErrorMessage = new ThreadLocal<>();
 
     /**
      * Обрабатывает импорт файла
@@ -75,6 +91,9 @@ public class ImportProcessorService {
 
         session = managedSession;
         log.info("Начало обработки импорта, сессия ID: {}", session.getId());
+
+        // Очищаем ThreadLocal для новой сессии импорта
+        firstErrorMessage.remove();
 
         // Регистрируем флаг отмены
         AtomicBoolean cancelled = new AtomicBoolean(false);
@@ -115,11 +134,14 @@ public class ImportProcessorService {
             }
 
         } catch (Exception e) {
-            log.error("Ошибка обработки импорта", e);
+            log.error("!!! ПОЙМАНО ИСКЛЮЧЕНИЕ В processImport: {}, сообщение: {}",
+                    e.getClass().getSimpleName(), e.getMessage(), e);
             handleImportError(session, e);
         } finally {
             // Удаляем флаг отмены
             cancellationFlags.remove(session.getId());
+            // Очищаем ThreadLocal после завершения обработки
+            firstErrorMessage.remove();
         }
     }
 
@@ -460,11 +482,62 @@ public class ImportProcessorService {
                 }
 
             } catch (Exception e) {
-                log.error("Ошибка сохранения батча из {} записей", transformedBatch.size(), e);
+                // Парсим и форматируем ошибку для пользователя
+                ParsedDatabaseError parsedError = errorParser.parse(e);
+                String userFriendlyMessage = errorFormatter.formatFullError(parsedError);
+
+                // DEBUG: Логируем результат парсинга
+                log.error("PARSED ERROR: type={}, column={}, actualLength={}, maxLength={}, rowNumber={}, userMessage={}",
+                        parsedError.getType(), parsedError.getColumnName(), parsedError.getActualLength(),
+                        parsedError.getMaxLength(), parsedError.getRowNumber(), userFriendlyMessage);
+
+                // Технические детали для логов
+                log.error("Ошибка сохранения батча из {} записей: {}",
+                        transformedBatch.size(), parsedError.getOriginalMessage(), e);
+
+                // Увеличиваем счетчик ошибок
                 session.setErrorRows(session.getErrorRows() + transformedBatch.size());
 
+                // Сохраняем ПЕРВОЕ правильно распарсенное сообщение об ошибке
+                // Игнорируем последующие ошибки "текущая транзакция прервана"
+                if (firstErrorMessage.get() == null &&
+                    parsedError.getType() != DatabaseErrorType.UNKNOWN &&
+                    parsedError.getColumnName() != null) {
+                    firstErrorMessage.set(userFriendlyMessage);
+                    log.error("!!! СОХРАНЕНО ПЕРВОЕ СООБЩЕНИЕ ОБ ОШИБКЕ: {}", userFriendlyMessage);
+                } else {
+                    log.error("!!! НЕ СОХРАНЕНО: firstErrorMessage.get()={}, type={}, column={}",
+                            firstErrorMessage.get(), parsedError.getType(), parsedError.getColumnName());
+                }
+
+                // Проверяем стратегию обработки ошибок ПЕРЕД попыткой записи в БД
                 if (template.getErrorStrategy() == ErrorStrategy.STOP_ON_ERROR) {
-                    throw e;
+                    // При STOP_ON_ERROR бросаем исключение с сохранённым сообщением
+                    // Если есть сохранённое сообщение - используем его, иначе текущее
+                    String errorToThrow = firstErrorMessage.get() != null ?
+                            firstErrorMessage.get() : userFriendlyMessage;
+                    log.error("!!! БРОСАЕМ ImportException С СООБЩЕНИЕМ: {}", errorToThrow);
+                    throw new ImportException(errorToThrow, e);
+                }
+
+                // Только при SKIP_ERROR пытаемся записать детали ошибки
+                if (parsedError.getRowNumber() != null) {
+                    Long startRowNumber = currentRow.get() - batch.size() + 1;
+                    Long actualRowNumber = startRowNumber + parsedError.getRowNumber() - 1;
+                    try {
+                        recordError(
+                                session,
+                                actualRowNumber,
+                                parsedError.getColumnName(),
+                                null, // rawValue
+                                ErrorType.CONSTRAINT_ERROR,
+                                userFriendlyMessage
+                        );
+                    } catch (Exception recordException) {
+                        log.warn("Не удалось записать детали ошибки в БД: {}", recordException.getMessage());
+                        // Очищаем EntityManager от "грязных" объектов после неудачной записи
+                        entityManager.clear();
+                    }
                 }
             }
         }
@@ -476,15 +549,21 @@ public class ImportProcessorService {
                 oldProcessedRows, session.getProcessedRows(), batch.size());
 
         // ПРИНУДИТЕЛЬНО СОХРАНЯЕМ В ТРАНЗАКЦИИ
-        session = sessionRepository.saveAndFlush(session);
-        log.debug("Сессия сохранена в БД с прогрессом {}%", session.getProgressPercentage());
-
-        // Отправляем обновление прогресса
+        // Если транзакция прервана (rollback-only), skip сохранение
         try {
-            progressService.sendProgressUpdate(session);
-            log.debug("WebSocket обновление прогресса отправлено");
+            session = sessionRepository.saveAndFlush(session);
+            log.debug("Сессия сохранена в БД с прогрессом {}%", session.getProgressPercentage());
+
+            // Отправляем обновление прогресса
+            try {
+                progressService.sendProgressUpdate(session);
+                log.debug("WebSocket обновление прогресса отправлено");
+            } catch (Exception e) {
+                log.error("Ошибка отправки WebSocket обновления", e);
+            }
         } catch (Exception e) {
-            log.error("Ошибка отправки WebSocket обновления", e);
+            // Если транзакция прервана, не пытаемся сохранить
+            log.debug("Пропуск сохранения сессии - транзакция прервана");
         }
     }
 
@@ -581,13 +660,20 @@ public class ImportProcessorService {
      * Обрабатывает ошибку импорта
      */
     private void handleImportError(ImportSession session, Exception e) {
+        // Используем сохранённое первое сообщение об ошибке если оно есть
+        // Иначе используем сообщение из исключения
+        String errorMessage = firstErrorMessage.get() != null ?
+                firstErrorMessage.get() : e.getMessage();
+
+        log.error("!!! handleImportError: используем сообщение: {}", errorMessage);
+
         session.setStatus(ImportStatus.FAILED);
         session.setCompletedAt(ZonedDateTime.now());
-        session.setErrorMessage(e.getMessage());
+        session.setErrorMessage(errorMessage);
 
         FileOperation fileOperation = session.getFileOperation();
         fileOperation.setStatus(FileOperation.OperationStatus.FAILED);
-        fileOperation.setErrorMessage(e.getMessage());
+        fileOperation.setErrorMessage(errorMessage);
         fileOperation.setCompletedAt(ZonedDateTime.now());
 
         sessionRepository.save(session);
@@ -627,12 +713,26 @@ public class ImportProcessorService {
                 if (DateUtil.isCellDateFormatted(cell)) {
                     return cell.getDateCellValue().toString();
                 }
-                // Убираем дробную часть для целых чисел
-                double numValue = cell.getNumericCellValue();
-                if (numValue == Math.floor(numValue)) {
-                    return String.valueOf((long) numValue);
+
+                // Используем DataFormatter для получения точного форматированного значения
+                // Это сохранит полные цифры для больших чисел (штрих-коды, ID и т.д.)
+                DataFormatter formatter = new DataFormatter();
+                String formattedValue = formatter.formatCellValue(cell);
+
+                // Если формат общий (General), убираем десятичную точку для целых чисел
+                if (formattedValue.contains(".")) {
+                    try {
+                        double numValue = cell.getNumericCellValue();
+                        if (numValue == Math.floor(numValue) && !Double.isInfinite(numValue)) {
+                            return formattedValue.split("\\.")[0];  // Убираем .0
+                        }
+                    } catch (Exception e) {
+                        // Fallback на форматированное значение
+                        log.debug("Failed to parse numeric value, using formatted: {}", formattedValue);
+                    }
                 }
-                return String.valueOf(numValue);
+
+                return formattedValue;
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:

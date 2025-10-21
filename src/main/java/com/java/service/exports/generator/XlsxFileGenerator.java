@@ -323,7 +323,15 @@ public class XlsxFileGenerator extends AbstractFileGenerator {
                 stringValue = stringValue.substring(0, 32764) + "...";
                 log.warn("Cell value truncated due to Excel limit");
             }
-            cell.setCellValue(stringValue);
+
+            // Если строка содержит только цифры и длиннее 11 символов,
+            // форматируем как текст чтобы Excel не преобразовал в экспоненциальную форму
+            if (stringValue.matches("\\d{12,}")) {
+                cell.setCellValue(stringValue);
+                cell.setCellStyle(styles.getTextStyle());
+            } else {
+                cell.setCellValue(stringValue);
+            }
         }
     }
 

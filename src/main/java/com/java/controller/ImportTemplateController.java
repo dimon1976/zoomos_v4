@@ -5,6 +5,7 @@ import com.java.model.enums.EntityType;
 import com.java.service.EntityFieldService;
 import com.java.service.client.ClientService;
 import com.java.service.imports.ImportTemplateService;
+import com.java.service.imports.validation.TemplateValidationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -84,10 +85,26 @@ public class ImportTemplateController {
 
             return "redirect:/clients/" + clientId + "/import/templates/" + created.getId();
 
+        } catch (TemplateValidationService.ValidationException e) {
+            log.error("Ошибка валидации шаблона", e);
+
+            // Добавляем каждую ошибку отдельно для детального отображения
+            e.getErrors().forEach(error -> bindingResult.reject("validation.error", error));
+
+            // Также добавляем ошибки напрямую в модель для отображения
+            model.addAttribute("validationErrors", e.getErrors());
+
+            populateAvailableFields(model, template);
+            model.addAttribute("template", template);
+            model.addAttribute("clientId", clientId);
+            return "import/templates/form";
+
         } catch (Exception e) {
             log.error("Ошибка создания шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
             populateAvailableFields(model, template);
+            model.addAttribute("template", template);
+            model.addAttribute("clientId", clientId);
             return "import/templates/form";
         }
     }
@@ -165,10 +182,28 @@ public class ImportTemplateController {
 
             return "redirect:/clients/" + clientId + "/import/templates/" + templateId;
 
+        } catch (TemplateValidationService.ValidationException e) {
+            log.error("Ошибка валидации шаблона", e);
+
+            // Добавляем каждую ошибку отдельно для детального отображения
+            e.getErrors().forEach(error -> bindingResult.reject("validation.error", error));
+
+            // Также добавляем ошибки напрямую в модель для отображения
+            model.addAttribute("validationErrors", e.getErrors());
+
+            populateAvailableFields(model, template);
+            model.addAttribute("template", template);
+            model.addAttribute("clientId", clientId);
+            model.addAttribute("templateId", templateId);
+            return "import/templates/form";
+
         } catch (Exception e) {
             log.error("Ошибка обновления шаблона", e);
             bindingResult.reject("global.error", e.getMessage());
             populateAvailableFields(model, template);
+            model.addAttribute("template", template);
+            model.addAttribute("clientId", clientId);
+            model.addAttribute("templateId", templateId);
             return "import/templates/form";
         }
     }
