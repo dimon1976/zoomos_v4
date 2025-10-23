@@ -71,9 +71,16 @@
             display: none !important;
         }
 
-        /* Скрытие метрик */
-        .metric-hidden {
+        /* Скрытие метрик - скрываем только содержимое строк, не сами строки */
+        .metric-hidden > td:not([rowspan]) {
             display: none !important;
+        }
+
+        /* Строка со скрытой метрикой должна занимать 0px высоты */
+        .metric-hidden {
+            height: 0 !important;
+            line-height: 0 !important;
+            padding: 0 !important;
         }
 
         /* Анимация фильтрации */
@@ -700,6 +707,14 @@
     let filterFieldsData = {};
 
     document.addEventListener('DOMContentLoaded', () => {
+        // Очищаем состояние фильтров метрик при загрузке страницы
+        // чтобы все метрики были видны по умолчанию
+        try {
+            localStorage.removeItem('metricFiltersState');
+        } catch (e) {
+            console.warn('Не удалось очистить состояние фильтров метрик:', e);
+        }
+
         // Инициализируем данные в загруженном скрипте
         initializeStatisticsData(statisticsDataFromTemplate, warningThresholdFromTemplate, criticalThresholdFromTemplate);
 
@@ -771,8 +786,9 @@
             container.appendChild(formCheck);
         });
 
-        // Восстанавливаем состояние из localStorage
-        restoreMetricFiltersState();
+        // НЕ восстанавливаем состояние из localStorage, чтобы избежать проблем с отображением
+        // При загрузке страницы все метрики должны быть видны
+        // restoreMetricFiltersState();
     }
 
     /**
@@ -788,9 +804,12 @@
 
     /**
      * Скрывает или показывает все строки с указанной метрикой
+     * Скрывает только ячейки (td), а не всю строку (tr), чтобы ячейки с rowspan оставались на месте
      */
     function toggleMetricVisibility(metricName, isVisible) {
         const rows = document.querySelectorAll(`[data-metric-name="${metricName}"]`);
+
+        // Скрываем/показываем ячейки в строках (кроме ячеек с rowspan)
         rows.forEach(row => {
             if (isVisible) {
                 row.classList.remove('metric-hidden');
@@ -879,6 +898,13 @@
      */
     async function loadFilterFields() {
         try {
+            // Проверяем что есть sessionIds
+            if (!sessionIds || sessionIds.length === 0) {
+                console.warn('Нет выбранных операций для загрузки фильтров');
+                // Панель фильтрации останется пустой - это нормально
+                return;
+            }
+
             // Формируем URL для запроса
             const sessionIdsParam = sessionIds.join(',');
             const url = `/statistics/filter-values?templateId=${templateId}&sessionIds=${sessionIdsParam}`;
@@ -993,6 +1019,9 @@
         // Передаём templateId
         addHiddenField('templateId', templateId);
 
+        // Передаём clientId
+        addHiddenField('clientId', clientId);
+
         // Передаём exportSessionIds (массив)
         if (sessionIds && sessionIds.length > 0) {
             sessionIds.forEach(id => {
@@ -1035,6 +1064,9 @@
 
         // Передаём templateId
         addHiddenField('templateId', templateId);
+
+        // Передаём clientId
+        addHiddenField('clientId', clientId);
 
         // Передаём exportSessionIds (массив)
         if (sessionIds && sessionIds.length > 0) {
