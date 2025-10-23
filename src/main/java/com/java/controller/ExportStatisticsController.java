@@ -1,10 +1,12 @@
 // src/main/java/com/java/controller/ExportStatisticsController.java
 package com.java.controller;
 
+import com.java.dto.Breadcrumb;
 import com.java.dto.StatisticsComparisonDto;
 import com.java.dto.StatisticsHistoryDto;
 import com.java.dto.StatisticsRequestDto;
 import com.java.model.entity.ExportSession;
+import com.java.repository.ClientRepository;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
@@ -22,6 +24,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -40,12 +43,17 @@ public class ExportStatisticsController {
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
     private final ExportStatisticsRepository statisticsRepository;
+    private final ClientRepository clientRepository;
 
     /**
      * Страница выбора операций для анализа статистики
      */
     @GetMapping("/client/{clientId}")
     public String showStatisticsSetup(@PathVariable Long clientId, Model model) {
+
+        // Получаем клиента для breadcrumbs
+        var client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
 
         // Получаем последние экспорты клиента с загруженными данными fileOperation
         Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
@@ -55,13 +63,19 @@ public class ExportStatisticsController {
         );
 
         // Получаем шаблоны клиента с включенной статистикой
-        var client = new com.java.model.Client();
-        client.setId(clientId);
         var templates = templateRepository.findByClientAndIsActiveTrue(client).stream()
                 .filter(template -> Boolean.TRUE.equals(template.getEnableStatistics()))
                 .toList();
 
+        // Создаём breadcrumbs
+        List<Breadcrumb> breadcrumbs = new ArrayList<>();
+        breadcrumbs.add(Breadcrumb.builder().label("Главная").url("/").build());
+        breadcrumbs.add(Breadcrumb.builder().label(client.getName()).url("/clients/" + clientId).build());
+        breadcrumbs.add(Breadcrumb.builder().label("Статистика").url(null).build());
+
+        model.addAttribute("breadcrumbs", breadcrumbs);
         model.addAttribute("clientId", clientId);
+        model.addAttribute("clientName", client.getName());
         model.addAttribute("recentExports", recentExports.getContent());
         model.addAttribute("templates", templates);
         model.addAttribute("maxOperations", settingsService.getMaxOperations());
@@ -78,11 +92,15 @@ public class ExportStatisticsController {
     public String analyzeStatistics(@ModelAttribute StatisticsRequestDto request,
                                     @RequestParam(required = false) String filterField,
                                     @RequestParam(required = false) String filterValue,
+                                    @RequestParam Long clientId,
                                     RedirectAttributes redirectAttributes,
-                                    Long clientId,
                                     Model model) {
 
         try {
+            // Получаем клиента для breadcrumbs
+            var client = clientRepository.findById(clientId)
+                    .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+
             // Валидация параметров фильтра
             if ((filterField != null && filterField.trim().isEmpty()) ||
                 (filterValue != null && filterValue.trim().isEmpty())) {
@@ -102,12 +120,21 @@ public class ExportStatisticsController {
             if (comparison.isEmpty()) {
                 redirectAttributes.addFlashAttribute("warningMessage",
                         "Нет данных для анализа статистики");
-                return "redirect:/statistics/client/" + request.getTemplateId();
+                return "redirect:/statistics/client/" + clientId;
             }
 
+            // Создаём breadcrumbs
+            List<Breadcrumb> breadcrumbs = new ArrayList<>();
+            breadcrumbs.add(Breadcrumb.builder().label("Главная").url("/").build());
+            breadcrumbs.add(Breadcrumb.builder().label(client.getName()).url("/clients/" + clientId).build());
+            breadcrumbs.add(Breadcrumb.builder().label("Статистика").url("/statistics/client/" + clientId).build());
+            breadcrumbs.add(Breadcrumb.builder().label("Результаты анализа").url(null).build());
+
             // Добавляем данные в модель
+            model.addAttribute("breadcrumbs", breadcrumbs);
             model.addAttribute("comparison", comparison);
             model.addAttribute("clientId", clientId);
+            model.addAttribute("clientName", client.getName());
             model.addAttribute("request", request);
             model.addAttribute("filterField", filterField);
             model.addAttribute("filterValue", filterValue);

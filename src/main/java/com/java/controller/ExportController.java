@@ -1,10 +1,12 @@
 package com.java.controller;
 
+import com.java.dto.Breadcrumb;
 import com.java.dto.ExportRequestDto;
 import com.java.dto.ExportSessionDto;
 import com.java.dto.ExportTemplateDto;
 import com.java.model.Client;
 import com.java.model.FileOperation;
+import com.java.repository.ClientRepository;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.service.EntityFieldService;
@@ -39,22 +41,33 @@ public class ExportController {
     private final ExportSessionRepository sessionRepository;
     private final EntityFieldService fieldService;
     private final ControllerUtils controllerUtils;
+    private final ClientRepository clientRepository;
 
     /**
      * Страница запуска экспорта для клиента
      */
     @GetMapping("/client/{clientId}")
     public String showExportPage(@PathVariable Long clientId, Model model) {
+        // Получаем клиента для breadcrumbs
+        var client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+
         List<ExportTemplateDto> templates = templateService.getClientTemplates(clientId);
 
-        Client client = new Client();
-        client.setId(clientId);
         // Получаем все импорты (включая ошибочные для визуальной индикации)
         List<FileOperation> recentOperations = fileOperationRepository
                 .findRecentImportOperations(client, PageRequest.of(0, 20));
 
+        // Создаём breadcrumbs
+        List<Breadcrumb> breadcrumbs = new ArrayList<>();
+        breadcrumbs.add(Breadcrumb.builder().label("Главная").url("/").build());
+        breadcrumbs.add(Breadcrumb.builder().label(client.getName()).url("/clients/" + clientId).build());
+        breadcrumbs.add(Breadcrumb.builder().label("Экспорт").url(null).build());
+
+        model.addAttribute("breadcrumbs", breadcrumbs);
         model.addAttribute("templates", templates);
         model.addAttribute("clientId", clientId);
+        model.addAttribute("clientName", client.getName());
         model.addAttribute("recentOperations", recentOperations);
         model.addAttribute("request", new ExportRequestDto());
         return "export/start";
@@ -124,9 +137,19 @@ public class ExportController {
         sessionRepository.findByFileOperationId(operationId)
                 .ifPresent(session -> model.addAttribute("exportSession", session));
 
+        // Создаём breadcrumbs
+        Long clientId = operation.getClient().getId();
+        String clientName = operation.getClient().getName();
+        List<Breadcrumb> breadcrumbs = new ArrayList<>();
+        breadcrumbs.add(Breadcrumb.builder().label("Главная").url("/").build());
+        breadcrumbs.add(Breadcrumb.builder().label(clientName).url("/clients/" + clientId).build());
+        breadcrumbs.add(Breadcrumb.builder().label("Экспорт").url("/export/client/" + clientId).build());
+        breadcrumbs.add(Breadcrumb.builder().label("Статус #" + operationId).url(null).build());
+
+        model.addAttribute("breadcrumbs", breadcrumbs);
         model.addAttribute("operation", operation);
-        model.addAttribute("clientId", operation.getClient().getId());
-        model.addAttribute("clientName", operation.getClient().getName());
+        model.addAttribute("clientId", clientId);
+        model.addAttribute("clientName", clientName);
         model.addAttribute("operationTypeDisplay", controllerUtils.getOperationTypeDisplay(operation.getOperationType()));
         model.addAttribute("statusDisplay", controllerUtils.getStatusDisplay(operation.getStatus()));
         model.addAttribute("statusClass", controllerUtils.getStatusClass(operation.getStatus()));

@@ -172,7 +172,10 @@
                                 </div>
                             </div>
                             <div class="text-center mt-1">
-                                <small class="text-muted" id="progressDetails">Инициализация...</small>
+                                <small class="text-muted" id="progressDetails">
+                                    <span th:if="${operation.status.name() == 'PENDING'}">Ожидание начала обработки...</span>
+                                    <span th:if="${operation.status.name() == 'PROCESSING'}">Обработка данных...</span>
+                                </small>
                             </div>
                         </div>
 
@@ -430,6 +433,12 @@
             var currentOp = document.getElementById('currentOperation');
             if (currentOp) {
                 currentOp.textContent = progress.currentOperation;
+            }
+
+            // Обновляем детали прогресса
+            var progressDetails = document.getElementById('progressDetails');
+            if (progressDetails) {
+                progressDetails.textContent = progress.currentOperation;
             }
         }
 

@@ -57,14 +57,14 @@ public class NotificationServiceImpl implements NotificationService {
         NotificationDto notification = NotificationDto.builder()
                 .id(UUID.randomUUID().toString())
                 .title("Экспорт завершен успешно")
-                .message(String.format("Экспорт данных для клиента '%s' завершен", 
+                .message(String.format("Экспорт данных для клиента '%s' завершен",
                         operation.getClient().getName()))
                 .type(NotificationDto.NotificationType.SUCCESS)
                 .timestamp(ZonedDateTime.now())
                 .operationId(operation.getId())
                 .clientName(operation.getClient().getName())
                 .fileName(operation.getResultFilePath() != null ? operation.getResultFilePath().substring(operation.getResultFilePath().lastIndexOf('/') + 1) : operation.getFileName())
-                .actionUrl("/export/status/" + session.getId())
+                .actionUrl("/export/download/" + session.getId())
                 .actionText("Скачать файл")
                 .autoHideSeconds(60)
                 .build();
