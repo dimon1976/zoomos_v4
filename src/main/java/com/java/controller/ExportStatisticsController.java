@@ -12,6 +12,7 @@ import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
 import com.java.service.statistics.ExportStatisticsService;
 import com.java.service.statistics.HistoricalStatisticsService;
+import com.java.service.statistics.StatisticsExcelExportService;
 import com.java.service.statistics.StatisticsSettingsService;
 import com.java.util.JsonUtils;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class ExportStatisticsController {
     private final ExportStatisticsService statisticsService;
     private final HistoricalStatisticsService historicalStatisticsService;
     private final StatisticsSettingsService settingsService;
+    private final StatisticsExcelExportService excelExportService;
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
     private final ExportStatisticsRepository statisticsRepository;
@@ -460,6 +462,54 @@ public class ExportStatisticsController {
         } catch (Exception e) {
             log.error("Ошибка получения списка групп", e);
             return List.of();
+        }
+    }
+
+    /**
+     * Экспорт статистики в Excel
+     * POST /statistics/export/excel
+     */
+    @PostMapping("/export/excel")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> exportToExcel(
+            @ModelAttribute StatisticsRequestDto request,
+            @RequestParam(required = false) String filterField,
+            @RequestParam(required = false) String filterValue,
+            @RequestParam Long clientId) {
+
+        try {
+            // Получаем клиента
+            var client = clientRepository.findById(clientId)
+                    .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+
+            // Вычисляем статистику с учетом фильтра
+            List<StatisticsComparisonDto> comparison = statisticsService.calculateComparison(
+                    request, filterField, filterValue);
+
+            if (comparison.isEmpty()) {
+                return org.springframework.http.ResponseEntity.badRequest().build();
+            }
+
+            // Генерируем Excel файл
+            java.nio.file.Path excelFile = excelExportService.generateExcel(comparison, client.getName());
+
+            // Формируем имя файла для скачивания
+            String fileName = String.format("statistics_%s_%s.xlsx",
+                    client.getName().replaceAll("[^a-zA-Z0-9а-яА-Я]", "_"),
+                    java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")));
+
+            // Подготавливаем файл для скачивания
+            org.springframework.core.io.Resource resource = new org.springframework.core.io.FileSystemResource(excelFile.toFile());
+
+            return org.springframework.http.ResponseEntity.ok()
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + fileName + "\"")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
+                    .body(resource);
+
+        } catch (Exception e) {
+            log.error("Ошибка экспорта статистики в Excel", e);
+            return org.springframework.http.ResponseEntity.status(
+                    org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 

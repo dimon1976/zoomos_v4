@@ -694,6 +694,7 @@
     const sessionIds = /*[[${request.exportSessionIds}]]*/ [];
     const activeFilterField = /*[[${filterField}]]*/ null;
     const activeFilterValue = /*[[${filterValue}]]*/ null;
+    const clientId = /*[[${clientId}]]*/ null;
 
     // Глобальные переменные для хранения данных фильтров
     let filterFieldsData = {};
@@ -1064,6 +1065,59 @@
             indicatorText.textContent = `${activeFilterField} = "${activeFilterValue}"`;
             indicator.style.display = 'block';
         }
+    }
+
+    /**
+     * Экспорт статистики в Excel
+     */
+    function exportToExcel() {
+        // Создаём форму для POST-запроса
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/statistics/export/excel';
+
+        // Вспомогательная функция для добавления скрытых полей
+        const addHiddenField = (name, value) => {
+            if (value !== null && value !== undefined) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            }
+        };
+
+        // Передаём templateId
+        addHiddenField('templateId', templateId);
+
+        // Передаём clientId
+        addHiddenField('clientId', clientId);
+
+        // Передаём exportSessionIds (массив)
+        if (sessionIds && sessionIds.length > 0) {
+            sessionIds.forEach(id => {
+                addHiddenField('exportSessionIds', id);
+            });
+        }
+
+        // Передаём пороги предупреждений
+        addHiddenField('warningPercentage', warningThresholdFromTemplate);
+        addHiddenField('criticalPercentage', criticalThresholdFromTemplate);
+
+        // Передаём параметры фильтра (если есть)
+        if (activeFilterField && activeFilterValue) {
+            addHiddenField('filterField', activeFilterField);
+            addHiddenField('filterValue', activeFilterValue);
+        }
+
+        // Отправляем форму
+        document.body.appendChild(form);
+        form.submit();
+
+        // Опционально: удаляем форму после отправки
+        setTimeout(() => {
+            document.body.removeChild(form);
+        }, 100);
     }
 
     /**
