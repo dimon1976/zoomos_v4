@@ -102,6 +102,45 @@
             </div>
         </div>
 
+        <!-- Фильтр по шаблону -->
+        <div class="card mb-4" th:unless="${#lists.isEmpty(templates)}">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-filter me-2"></i>Фильтр по шаблону экспорта
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-end">
+                    <div class="col-md-6">
+                        <label for="templateFilter" class="form-label">Отображать только экспорты для выбранного шаблона</label>
+                        <select id="templateFilter" class="form-select">
+                            <option value="">Все шаблоны</option>
+                            <option th:each="template : ${templates}"
+                                    th:value="${template.id}"
+                                    th:text="${template.name}"
+                                    th:selected="${template.id == selectedTemplateId}">
+                                Шаблон
+                            </option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <button type="button" class="btn btn-primary" onclick="applyTemplateFilter()">
+                            <i class="fas fa-filter me-1"></i>Применить фильтр
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetTemplateFilter()"
+                                th:if="${selectedTemplateId != null}">
+                            <i class="fas fa-times me-1"></i>Сбросить
+                        </button>
+                    </div>
+                </div>
+                <div th:if="${selectedTemplateId != null}" class="alert alert-info mt-3 mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Отображаются только экспорты для шаблона:
+                    <strong th:text="${#lists.toList(templates).stream().filter(t -> t.id == selectedTemplateId).findFirst().orElse(null)?.name ?: 'Неизвестен'}">Название</strong>
+                </div>
+            </div>
+        </div>
+
         <!-- Выбор операций экспорта -->
         <div class="card mb-4">
             <div class="card-header">
@@ -446,6 +485,18 @@
         }
 
         section.style.display = 'block';
+    }
+
+    function applyTemplateFilter() {
+        const templateId = document.getElementById('templateFilter').value;
+        const clientId = [[${clientId}]];
+        const url = `/statistics/client/${clientId}` + (templateId ? `?templateId=${templateId}` : '');
+        window.location.href = url;
+    }
+
+    function resetTemplateFilter() {
+        const clientId = [[${clientId}]];
+        window.location.href = `/statistics/client/${clientId}`;
     }
 </script>
 </body>

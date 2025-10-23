@@ -49,18 +49,31 @@ public class ExportStatisticsController {
      * Страница выбора операций для анализа статистики
      */
     @GetMapping("/client/{clientId}")
-    public String showStatisticsSetup(@PathVariable Long clientId, Model model) {
+    public String showStatisticsSetup(@PathVariable Long clientId,
+                                      @RequestParam(required = false) Long templateId,
+                                      Model model) {
 
         // Получаем клиента для breadcrumbs
         var client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
 
-        // Получаем последние экспорты клиента с загруженными данными fileOperation
-        Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
-                clientId,
-                PageRequest.of(0, settingsService.getMaxOperations(),
-                        Sort.by(Sort.Direction.DESC, "startedAt"))
-        );
+        // Получаем последние экспорты клиента (с фильтрацией по шаблону если указан)
+        Page<ExportSession> recentExports;
+        if (templateId != null) {
+            var template = templateRepository.findById(templateId)
+                    .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
+            recentExports = sessionRepository.findByTemplateWithTemplate(
+                    template,
+                    PageRequest.of(0, settingsService.getMaxOperations(),
+                            Sort.by(Sort.Direction.DESC, "startedAt"))
+            );
+        } else {
+            recentExports = sessionRepository.findByClientIdWithTemplate(
+                    clientId,
+                    PageRequest.of(0, settingsService.getMaxOperations(),
+                            Sort.by(Sort.Direction.DESC, "startedAt"))
+            );
+        }
 
         // Получаем шаблоны клиента с включенной статистикой
         var templates = templateRepository.findByClientAndIsActiveTrue(client).stream()
@@ -76,6 +89,7 @@ public class ExportStatisticsController {
         model.addAttribute("breadcrumbs", breadcrumbs);
         model.addAttribute("clientId", clientId);
         model.addAttribute("clientName", client.getName());
+        model.addAttribute("selectedTemplateId", templateId);
         model.addAttribute("recentExports", recentExports.getContent());
         model.addAttribute("templates", templates);
         model.addAttribute("maxOperations", settingsService.getMaxOperations());
