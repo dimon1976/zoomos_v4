@@ -714,25 +714,20 @@ public class ImportProcessorService {
                     return cell.getDateCellValue().toString();
                 }
 
-                // Используем DataFormatter для получения точного форматированного значения
-                // Это сохранит полные цифры для больших чисел (штрих-коды, ID и т.д.)
-                DataFormatter formatter = new DataFormatter();
-                String formattedValue = formatter.formatCellValue(cell);
+                // Получаем числовое значение
+                double numValue = cell.getNumericCellValue();
 
-                // Если формат общий (General), убираем десятичную точку для целых чисел
-                if (formattedValue.contains(".")) {
-                    try {
-                        double numValue = cell.getNumericCellValue();
-                        if (numValue == Math.floor(numValue) && !Double.isInfinite(numValue)) {
-                            return formattedValue.split("\\.")[0];  // Убираем .0
-                        }
-                    } catch (Exception e) {
-                        // Fallback на форматированное значение
-                        log.debug("Failed to parse numeric value, using formatted: {}", formattedValue);
-                    }
+                // Для целых чисел конвертируем через DecimalFormat для сохранения всех цифр
+                // Это важно для больших чисел (штрих-коды, ID) которые Excel показывает в экспоненциальной форме
+                if (numValue == Math.floor(numValue) && !Double.isInfinite(numValue)) {
+                    // Используем DecimalFormat с pattern "0" для целых чисел без группировки
+                    java.text.DecimalFormat df = new java.text.DecimalFormat("0");
+                    df.setMaximumFractionDigits(0);
+                    return df.format(numValue);
                 }
 
-                return formattedValue;
+                // Для дробных чисел возвращаем как есть
+                return String.valueOf(numValue);
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:
