@@ -460,8 +460,8 @@
         </div>
     </div>
 
-    <!-- Панель фильтров по полям (показывается если есть поля фильтрации в шаблоне) -->
-    <div th:unless="${#lists.isEmpty(comparison)}" id="fieldFilterPanel" class="filter-controls mb-3" style="display: none;">
+    <!-- Панель фильтров по полям -->
+    <div th:unless="${#lists.isEmpty(comparison)}" id="fieldFilterPanel" class="filter-controls mb-3">
         <h6 class="mb-3"><i class="fas fa-filter me-2"></i>Фильтрация по полям данных</h6>
         <div class="row align-items-end">
             <div class="col-md-4">
@@ -889,13 +889,12 @@
 
             filterFieldsData = await response.json();
 
-            // Если есть поля фильтрации - показываем панель
-            if (Object.keys(filterFieldsData).length > 0) {
-                document.getElementById('fieldFilterPanel').style.display = 'block';
+            // Заполняем select полей фильтрации
+            const filterFieldSelect = document.getElementById('filterFieldSelect');
+            filterFieldSelect.innerHTML = '<option value="">Выберите поле...</option>';
 
-                // Заполняем select полей фильтрации
-                const filterFieldSelect = document.getElementById('filterFieldSelect');
-                filterFieldSelect.innerHTML = '<option value="">Выберите поле...</option>';
+            // Если есть поля фильтрации - заполняем селекты
+            if (Object.keys(filterFieldsData).length > 0) {
 
                 for (const [fieldName, values] of Object.entries(filterFieldsData)) {
                     const option = document.createElement('option');
