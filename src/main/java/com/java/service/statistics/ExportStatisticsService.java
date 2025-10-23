@@ -59,11 +59,15 @@ public class ExportStatisticsService {
         // Получаем статистику с учётом фильтра
         List<Long> sessionIds = sessions.stream().map(ExportSession::getId).toList();
         List<ExportStatistics> allStatistics;
+        List<ExportStatistics> totalStatistics = null; // общие данные без фильтра (для расчета %)
 
         if (filterFieldName != null && filterFieldValue != null) {
             // Получаем отфильтрованную статистику
             allStatistics = statisticsRepository.findBySessionIdsAndFilter(
                     sessionIds, filterFieldName, filterFieldValue);
+
+            // ВАЖНО: также загружаем общие данные для расчета процентов
+            totalStatistics = statisticsRepository.findBySessionIdsWithoutFilter(sessionIds);
         } else {
             // Получаем общую статистику (filter = NULL)
             allStatistics = statisticsRepository.findBySessionIdsWithoutFilter(sessionIds);
@@ -78,15 +82,26 @@ public class ExportStatisticsService {
         Map<String, List<ExportStatistics>> statisticsByGroup = allStatistics.stream()
                 .collect(Collectors.groupingBy(ExportStatistics::getGroupFieldValue));
 
+        // Группируем общие данные (если есть фильтр)
+        Map<String, List<ExportStatistics>> totalStatisticsByGroup = null;
+        if (totalStatistics != null && !totalStatistics.isEmpty()) {
+            totalStatisticsByGroup = totalStatistics.stream()
+                    .collect(Collectors.groupingBy(ExportStatistics::getGroupFieldValue));
+        }
+
         // Создаем сравнительную статистику
-        return createComparison(statisticsByGroup, sessions, request, template);
+        return createComparison(statisticsByGroup, totalStatisticsByGroup, sessions, request, template);
     }
 
     /**
      * Создает сравнительную статистику
+     *
+     * @param statisticsByGroup отфильтрованные данные (или общие, если фильтра нет)
+     * @param totalStatisticsByGroup общие данные без фильтра (для расчета % от общего, может быть null)
      */
     private List<StatisticsComparisonDto> createComparison(
             Map<String, List<ExportStatistics>> statisticsByGroup,
+            Map<String, List<ExportStatistics>> totalStatisticsByGroup,
             List<ExportSession> sessions,
             StatisticsRequestDto request,
             ExportTemplate template) {
@@ -107,8 +122,20 @@ public class ExportStatisticsService {
             Map<Long, List<ExportStatistics>> statsBySession = groupStatistics.stream()
                     .collect(Collectors.groupingBy(stat -> stat.getExportSession().getId()));
 
+            // Получаем общие данные для этой группы (если есть фильтр)
+            Map<Long, List<ExportStatistics>> totalStatsBySession = null;
+            if (totalStatisticsByGroup != null) {
+                List<ExportStatistics> totalGroupStats = totalStatisticsByGroup.get(groupValue);
+                if (totalGroupStats != null) {
+                    totalStatsBySession = totalGroupStats.stream()
+                            .collect(Collectors.groupingBy(stat -> stat.getExportSession().getId()));
+                }
+            }
+
             // Создаем статистику по операциям (сортируем по дате)
             List<StatisticsComparisonDto.OperationStatistics> operationStats = new ArrayList<>();
+
+            final Map<Long, List<ExportStatistics>> finalTotalStatsBySession = totalStatsBySession;
 
             sessions.stream()
                     .sorted((s1, s2) -> s2.getStartedAt().compareTo(s1.getStartedAt())) // новые первыми
@@ -120,8 +147,12 @@ public class ExportStatisticsService {
                             List<ExportStatistics> previousStats = previousSession != null ?
                                     statsBySession.get(previousSession.getId()) : null;
 
+                            // Получаем общие данные для текущей сессии (для расчета %)
+                            List<ExportStatistics> totalSessionStats = finalTotalStatsBySession != null ?
+                                    finalTotalStatsBySession.get(session.getId()) : null;
+
                             Map<String, StatisticsComparisonDto.MetricValue> metrics =
-                                    calculateMetrics(sessionStats, previousStats, request);
+                                    calculateMetrics(sessionStats, previousStats, totalSessionStats, request);
 
                             // Вычисляем статистику изменений дат
                             StatisticsComparisonDto.DateModificationStats dateModStats =
@@ -149,7 +180,7 @@ public class ExportStatisticsService {
         // Добавляем итоговую строку "ОБЩЕЕ КОЛИЧЕСТВО" в начало списка
         if (!comparisons.isEmpty()) {
             StatisticsComparisonDto totalSummary = calculateTotalSummary(
-                    statisticsByGroup, sessions, request, operationNamesCache);
+                    statisticsByGroup, totalStatisticsByGroup, sessions, request, operationNamesCache);
             comparisons.add(0, totalSummary);
         }
 
@@ -231,10 +262,15 @@ public class ExportStatisticsService {
 
     /**
      * Вычисляет метрики с отклонениями
+     *
+     * @param currentStats текущие данные (отфильтрованные или общие)
+     * @param previousStats предыдущие данные для сравнения
+     * @param totalStats общие данные без фильтра (для расчета % от общего)
      */
     private Map<String, StatisticsComparisonDto.MetricValue> calculateMetrics(
             List<ExportStatistics> currentStats,
             List<ExportStatistics> previousStats,
+            List<ExportStatistics> totalStats,
             StatisticsRequestDto request) {
 
         Map<String, StatisticsComparisonDto.MetricValue> metrics = new HashMap<>();
@@ -254,14 +290,23 @@ public class ExportStatisticsService {
                         (v1, v2) -> v1
                 )) : Collections.emptyMap();
 
+        // Создаем карту для общих значений (если есть фильтр)
+        Map<String, Long> totalValues = totalStats != null ?
+                totalStats.stream().collect(Collectors.toMap(
+                        ExportStatistics::getCountFieldName,
+                        ExportStatistics::getCountValue,
+                        (v1, v2) -> v1
+                )) : Collections.emptyMap();
+
         // Для каждого поля вычисляем метрику
         for (Map.Entry<String, Long> entry : currentValues.entrySet()) {
             String fieldName = entry.getKey();
             Long currentValue = entry.getValue();
             Long previousValue = previousValues.get(fieldName);
+            Long totalValue = totalValues.getOrDefault(fieldName, null);
 
             StatisticsComparisonDto.MetricValue metric = calculateMetricValue(
-                    currentValue, previousValue,
+                    currentValue, previousValue, totalValue,
                     request.getWarningPercentage(), request.getCriticalPercentage());
 
             metrics.put(fieldName, metric);
@@ -272,14 +317,26 @@ public class ExportStatisticsService {
 
     /**
      * Вычисляет значение метрики с отклонением
+     *
+     * @param totalValue общее значение без фильтра (для расчета % от общего, может быть null)
      */
     private StatisticsComparisonDto.MetricValue calculateMetricValue(
-            Long currentValue, Long previousValue, Integer warningPercentage, Integer criticalPercentage) {
+            Long currentValue, Long previousValue, Long totalValue,
+            Integer warningPercentage, Integer criticalPercentage) {
 
         StatisticsComparisonDto.MetricValue.MetricValueBuilder metricBuilder =
                 StatisticsComparisonDto.MetricValue.builder()
                         .currentValue(currentValue)
-                        .previousValue(previousValue);
+                        .previousValue(previousValue)
+                        .totalValue(totalValue);
+
+        // Вычисляем процент от общего (если есть totalValue)
+        if (totalValue != null && totalValue > 0) {
+            double percentageOfTotal = (currentValue.doubleValue() / totalValue.doubleValue()) * 100.0;
+            metricBuilder.percentageOfTotal(percentageOfTotal);
+        } else {
+            metricBuilder.percentageOfTotal(null);
+        }
 
         // Если нет предыдущего значения - не можем рассчитать изменение
         if (previousValue == null) {
@@ -427,6 +484,7 @@ public class ExportStatisticsService {
     private Map<String, StatisticsComparisonDto.MetricValue> calculateMetrics(
             Map<String, Long> currentTotals,
             Map<String, Long> previousTotals,
+            Map<String, Long> totalTotals,
             StatisticsRequestDto request) {
 
         Map<String, StatisticsComparisonDto.MetricValue> metrics = new HashMap<>();
@@ -436,9 +494,10 @@ public class ExportStatisticsService {
             String fieldName = entry.getKey();
             Long currentValue = entry.getValue();
             Long previousValue = previousTotals.get(fieldName);
+            Long totalValue = totalTotals != null ? totalTotals.get(fieldName) : null;
 
             StatisticsComparisonDto.MetricValue metric = calculateMetricValue(
-                    currentValue, previousValue,
+                    currentValue, previousValue, totalValue,
                     request.getWarningPercentage(), request.getCriticalPercentage());
 
             metrics.put(fieldName, metric);
@@ -452,6 +511,7 @@ public class ExportStatisticsService {
      */
     private StatisticsComparisonDto calculateTotalSummary(
             Map<String, List<ExportStatistics>> statisticsByGroup,
+            Map<String, List<ExportStatistics>> totalStatisticsByGroup,
             List<ExportSession> sessions,
             StatisticsRequestDto request,
             Map<Long, String> operationNamesCache) {
@@ -466,8 +526,23 @@ public class ExportStatisticsService {
             }
         }
 
+        // Собираем общие статистики (если есть фильтр)
+        Map<Long, List<ExportStatistics>> totalStatsBySession = null;
+        if (totalStatisticsByGroup != null) {
+            totalStatsBySession = new HashMap<>();
+            for (List<ExportStatistics> groupStats : totalStatisticsByGroup.values()) {
+                for (ExportStatistics stat : groupStats) {
+                    totalStatsBySession
+                        .computeIfAbsent(stat.getExportSession().getId(), k -> new ArrayList<>())
+                        .add(stat);
+                }
+            }
+        }
+
         // 2. Создаем итоговые операции
         List<StatisticsComparisonDto.OperationStatistics> totalOperations = new ArrayList<>();
+
+        final Map<Long, List<ExportStatistics>> finalTotalStatsBySession = totalStatsBySession;
 
         sessions.stream()
                 .sorted((s1, s2) -> s2.getStartedAt().compareTo(s1.getStartedAt())) // новые первыми
@@ -500,9 +575,23 @@ public class ExportStatisticsService {
                             }
                         }
 
+                        // Вычисляем общие метрики для расчета процентов (если есть фильтр)
+                        Map<String, Long> totalTotalMetrics = null;
+                        if (finalTotalStatsBySession != null) {
+                            List<ExportStatistics> totalSessionStats = finalTotalStatsBySession.get(session.getId());
+                            if (totalSessionStats != null && !totalSessionStats.isEmpty()) {
+                                totalTotalMetrics = totalSessionStats.stream()
+                                        .filter(stat -> !"DATE_MODIFICATIONS".equals(stat.getCountFieldName()))
+                                        .collect(Collectors.groupingBy(
+                                                ExportStatistics::getCountFieldName,
+                                                Collectors.summingLong(ExportStatistics::getCountValue)
+                                        ));
+                            }
+                        }
+
                         // Создаем MetricValue с процентами изменений
                         Map<String, StatisticsComparisonDto.MetricValue> metrics =
-                                calculateMetrics(totalMetrics, previousTotalMetrics, request);
+                                calculateMetrics(totalMetrics, previousTotalMetrics, totalTotalMetrics, request);
 
                         totalOperations.add(StatisticsComparisonDto.OperationStatistics.builder()
                                 .exportSessionId(session.getId())

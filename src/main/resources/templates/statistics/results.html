@@ -71,6 +71,11 @@
             display: none !important;
         }
 
+        /* Скрытие метрик */
+        .metric-hidden {
+            display: none !important;
+        }
+
         /* Анимация фильтрации */
         .statistics-table tbody tr {
             transition: opacity 0.3s ease-in-out;
@@ -78,6 +83,16 @@
 
         .statistics-table tbody tr.filtering {
             opacity: 0.5;
+        }
+
+        /* Стили для панели фильтрации метрик */
+        #metricCheckboxes .form-check {
+            min-width: 200px;
+        }
+
+        #metricCheckboxes .form-check-label {
+            cursor: pointer;
+            user-select: none;
         }
 
         /* ===== Таблица статистики ===== */
@@ -426,6 +441,25 @@
         </div>
     </div>
 
+    <!-- Панель фильтрации метрик -->
+    <div th:unless="${#lists.isEmpty(comparison)}" class="filter-controls mb-3" id="metricFilterPanel">
+        <h6 class="mb-3">
+            <i class="fas fa-filter me-2"></i>Фильтр метрик
+            <small class="text-muted">(скрыть/показать метрики во всех группах)</small>
+        </h6>
+        <div id="metricCheckboxes" class="d-flex flex-wrap gap-3">
+            <!-- Чекбоксы будут добавлены динамически через JavaScript -->
+        </div>
+        <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllMetrics()">
+                <i class="fas fa-check-square me-1"></i>Выбрать все
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllMetrics()">
+                <i class="fas fa-square me-1"></i>Снять все
+            </button>
+        </div>
+    </div>
+
     <!-- Панель фильтров по полям (показывается если есть поля фильтрации в шаблоне) -->
     <div th:unless="${#lists.isEmpty(comparison)}" id="fieldFilterPanel" class="filter-controls mb-3" style="display: none;">
         <h6 class="mb-3"><i class="fas fa-filter me-2"></i>Фильтрация по полям данных</h6>
@@ -490,7 +524,8 @@
             <th:block th:if="${!#lists.isEmpty(comparison) and comparison[0].groupFieldValue == 'ОБЩЕЕ КОЛИЧЕСТВО'}">
                 <th:block th:with="totalGroup=${comparison[0]}, metricsMap=${totalGroup.operations[0].metrics}">
                     <tr th:each="metric, iterStat : ${metricsMap}"
-                        th:class="${iterStat.first ? 'total-summary-row group-start' : 'total-summary-row'}">
+                        th:class="${iterStat.first ? 'total-summary-row group-start' : 'total-summary-row'}"
+                        th:attr="data-metric-name=${metric.key}">
 
                         <td th:if="${iterStat.first}"
                             th:rowspan="${metricsMap.size()}"
@@ -517,6 +552,14 @@
                                                  th:text="${metricValue != null ? metricValue.currentValue : '-'}">-
                                             </div>
 
+                                            <!-- Показываем процент от общего (если есть фильтр) -->
+                                            <div th:if="${metricValue != null and metricValue.percentageOfTotal != null}"
+                                                 class="metric-percentage text-muted small">
+                                                <span th:text="${'(' + #numbers.formatDecimal(metricValue.percentageOfTotal, 1, 1) + '% от ' + metricValue.totalValue + ')'}">
+                                                    (65% от 1923)
+                                                </span>
+                                            </div>
+
                                             <div th:if="${metricValue != null and metricValue.previousValue != null}"
                                                  class="metric-change">
                                                 <span th:attr="data-change=${metricValue.changePercentage}"
@@ -541,7 +584,8 @@
                 <th:block th:if="${group.groupFieldValue != 'ОБЩЕЕ КОЛИЧЕСТВО' and !#lists.isEmpty(group.operations)}">
                     <th:block th:with="metricsMap=${group.operations[0].metrics}">
                         <!-- Итерируемся по метрикам -->
-                        <tr th:each="metric, iterStat : ${metricsMap}">
+                        <tr th:each="metric, iterStat : ${metricsMap}"
+                            th:attr="data-metric-name=${metric.key}">
                             <!-- Ячейка группы в первой строке (rowspan = кол-во метрик) -->
                             <td th:if="${iterStat.first}"
                                 th:rowspan="${metricsMap.size()}"
@@ -576,6 +620,14 @@
 
                                                 <div class="metric-value"
                                                      th:text="${metricValue != null ? metricValue.currentValue : '-'}">-
+                                                </div>
+
+                                                <!-- Показываем процент от общего (если есть фильтр) -->
+                                                <div th:if="${metricValue != null and metricValue.percentageOfTotal != null}"
+                                                     class="metric-percentage text-muted small">
+                                                    <span th:text="${'(' + #numbers.formatDecimal(metricValue.percentageOfTotal, 1, 1) + '% от ' + metricValue.totalValue + ')'}">
+                                                        (65% от 1923)
+                                                    </span>
                                                 </div>
 
                                                 <div th:if="${metricValue != null and metricValue.previousValue != null}"
@@ -662,7 +714,164 @@
         if (templateId && statisticsDataFromTemplate && statisticsDataFromTemplate.length > 0) {
             initializeHistoricalCharts();
         }
+
+        // Инициализируем фильтры метрик
+        initMetricFilters();
     });
+
+    /**
+     * Инициализирует фильтры метрик
+     */
+    function initMetricFilters() {
+        // Собираем уникальные имена метрик из таблицы
+        const metricRows = document.querySelectorAll('[data-metric-name]');
+        const uniqueMetrics = new Set();
+
+        metricRows.forEach(row => {
+            const metricName = row.getAttribute('data-metric-name');
+            if (metricName) {
+                uniqueMetrics.add(metricName);
+            }
+        });
+
+        if (uniqueMetrics.size === 0) {
+            // Нет метрик - скрываем панель
+            document.getElementById('metricFilterPanel').style.display = 'none';
+            return;
+        }
+
+        // Создаем чекбоксы для каждой метрики
+        const container = document.getElementById('metricCheckboxes');
+        container.innerHTML = '';
+
+        const sortedMetrics = Array.from(uniqueMetrics).sort();
+
+        sortedMetrics.forEach(metricName => {
+            const checkboxId = `metric-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+            const formCheck = document.createElement('div');
+            formCheck.className = 'form-check';
+
+            const checkbox = document.createElement('input');
+            checkbox.className = 'form-check-input';
+            checkbox.type = 'checkbox';
+            checkbox.id = checkboxId;
+            checkbox.checked = true;
+            checkbox.setAttribute('data-metric-name', metricName);
+            checkbox.addEventListener('change', () => onMetricCheckboxChange(metricName));
+
+            const label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.htmlFor = checkboxId;
+            label.textContent = metricName;
+
+            formCheck.appendChild(checkbox);
+            formCheck.appendChild(label);
+            container.appendChild(formCheck);
+        });
+
+        // Восстанавливаем состояние из localStorage
+        restoreMetricFiltersState();
+    }
+
+    /**
+     * Обработчик изменения состояния чекбокса метрики
+     */
+    function onMetricCheckboxChange(metricName) {
+        const checkbox = document.querySelector(`input[data-metric-name="${metricName}"]`);
+        if (checkbox) {
+            toggleMetricVisibility(metricName, checkbox.checked);
+            saveMetricFiltersState();
+        }
+    }
+
+    /**
+     * Скрывает или показывает все строки с указанной метрикой
+     */
+    function toggleMetricVisibility(metricName, isVisible) {
+        const rows = document.querySelectorAll(`[data-metric-name="${metricName}"]`);
+        rows.forEach(row => {
+            if (isVisible) {
+                row.classList.remove('metric-hidden');
+            } else {
+                row.classList.add('metric-hidden');
+            }
+        });
+    }
+
+    /**
+     * Выбирает все метрики
+     */
+    function selectAllMetrics() {
+        const checkboxes = document.querySelectorAll('#metricCheckboxes input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            if (!checkbox.checked) {
+                checkbox.checked = true;
+                const metricName = checkbox.getAttribute('data-metric-name');
+                toggleMetricVisibility(metricName, true);
+            }
+        });
+        saveMetricFiltersState();
+    }
+
+    /**
+     * Снимает выбор со всех метрик
+     */
+    function deselectAllMetrics() {
+        const checkboxes = document.querySelectorAll('#metricCheckboxes input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            if (checkbox.checked) {
+                checkbox.checked = false;
+                const metricName = checkbox.getAttribute('data-metric-name');
+                toggleMetricVisibility(metricName, false);
+            }
+        });
+        saveMetricFiltersState();
+    }
+
+    /**
+     * Сохраняет состояние фильтров метрик в localStorage
+     */
+    function saveMetricFiltersState() {
+        const state = {};
+        const checkboxes = document.querySelectorAll('#metricCheckboxes input[type="checkbox"]');
+
+        checkboxes.forEach(checkbox => {
+            const metricName = checkbox.getAttribute('data-metric-name');
+            state[metricName] = checkbox.checked;
+        });
+
+        try {
+            localStorage.setItem('metricFiltersState', JSON.stringify(state));
+        } catch (e) {
+            console.warn('Не удалось сохранить состояние фильтров метрик:', e);
+        }
+    }
+
+    /**
+     * Восстанавливает состояние фильтров метрик из localStorage
+     */
+    function restoreMetricFiltersState() {
+        try {
+            const savedState = localStorage.getItem('metricFiltersState');
+            if (!savedState) {
+                return;
+            }
+
+            const state = JSON.parse(savedState);
+            const checkboxes = document.querySelectorAll('#metricCheckboxes input[type="checkbox"]');
+
+            checkboxes.forEach(checkbox => {
+                const metricName = checkbox.getAttribute('data-metric-name');
+                if (metricName in state) {
+                    checkbox.checked = state[metricName];
+                    toggleMetricVisibility(metricName, state[metricName]);
+                }
+            });
+        } catch (e) {
+            console.warn('Не удалось восстановить состояние фильтров метрик:', e);
+        }
+    }
 
     /**
      * Загружает доступные поля фильтрации и их значения с сервера
