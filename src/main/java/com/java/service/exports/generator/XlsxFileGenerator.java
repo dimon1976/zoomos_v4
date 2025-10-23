@@ -306,8 +306,14 @@ public class XlsxFileGenerator extends AbstractFileGenerator {
         if (value == null) {
             cell.setBlank();
         } else if (value instanceof Number) {
-            cell.setCellValue(((Number) value).doubleValue());
-            cell.setCellStyle(styles.getNumberStyle());
+            double numValue = ((Number) value).doubleValue();
+            // Для цен: если значение = 0, оставляем пустую ячейку
+            if (numValue == 0.0) {
+                cell.setBlank();
+            } else {
+                cell.setCellValue(numValue);
+                cell.setCellStyle(styles.getNumberStyle());
+            }
         } else if (value instanceof Date) {
             cell.setCellValue((Date) value);
             cell.setCellStyle(styles.getDateStyle());

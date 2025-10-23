@@ -710,7 +710,26 @@ public class ImportProcessorService {
             case STRING:
                 return cell.getStringCellValue();
             case NUMERIC:
+                // ВАЖНО: Для полей Additional* не применяем автопреобразование дат
+                // Пользователь хочет сохранять строковое представление даты как есть
+                // Проверяем через DataFormatter - если Excel отображает как строку, не конвертируем
                 if (DateUtil.isCellDateFormatted(cell)) {
+                    // Используем DataFormatter чтобы получить то, что отображает Excel
+                    org.apache.poi.ss.usermodel.DataFormatter formatter =
+                            new org.apache.poi.ss.usermodel.DataFormatter();
+                    String formattedValue = formatter.formatCellValue(cell);
+
+                    // Если форматированное значение выглядит как дата в формате Excel (содержит точки/слеши)
+                    // и не содержит время в длинном формате (Mon Oct...), возвращаем как строку
+                    if (formattedValue.matches(".*\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}.*") &&
+                        !formattedValue.contains("Mon") && !formattedValue.contains("Tue") &&
+                        !formattedValue.contains("Wed") && !formattedValue.contains("Thu") &&
+                        !formattedValue.contains("Fri") && !formattedValue.contains("Sat") &&
+                        !formattedValue.contains("Sun")) {
+                        return formattedValue;
+                    }
+
+                    // Иначе возвращаем как Date (для полей competitorLocalDateTime)
                     return cell.getDateCellValue().toString();
                 }
 
