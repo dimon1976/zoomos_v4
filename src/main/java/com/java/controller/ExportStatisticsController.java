@@ -78,9 +78,11 @@ public class ExportStatisticsController {
         }
 
         // Фильтруем только операции с включенной статистикой в шаблоне
+        // При выборе конкретного шаблона показываем только его операции
         List<ExportSession> filteredExports = recentExports.getContent().stream()
                 .filter(session -> session.getTemplate() != null &&
-                        Boolean.TRUE.equals(session.getTemplate().getEnableStatistics()))
+                        Boolean.TRUE.equals(session.getTemplate().getEnableStatistics()) &&
+                        (templateId == null || session.getTemplate().getId().equals(templateId)))
                 .toList();
 
         // Получаем шаблоны клиента с включенной статистикой
