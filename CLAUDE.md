@@ -637,6 +637,67 @@ private void setCellValue(Cell cell, Object value, ExcelStyles styles) {
 
 **Коммит**: `663c090`
 
+## Statistics Operations Filtering
+
+**Recently Completed** (as of 2025-10-24):
+
+### Template-Based Operation Filtering
+
+Система фильтрации операций экспорта по выбранному шаблону на странице анализа статистики. При выборе шаблона показываются только операции, выполненные с этим шаблоном.
+
+**Architecture**:
+
+**Controller Layer** ([ExportStatisticsController.java:53-98](src/main/java/com/java/controller/ExportStatisticsController.java#L53-L98)):
+- Метод `showStatisticsSetup()` загружает все операции клиента с включённой статистикой
+- Фильтрация по конкретному шаблону происходит на клиентской стороне (JavaScript)
+- Упрощена логика загрузки - убрана избыточная серверная фильтрация
+
+**Frontend Layer** ([setup.html:106-184](src/main/resources/templates/statistics/setup.html#L106-L184)):
+- Блок операций скрыт по умолчанию (`display: none`)
+- Добавлены информационные сообщения:
+  - `#noTemplateMessage` - "Сначала выберите шаблон экспорта"
+  - `#noOperationsMessage` - "Нет операций экспорта для выбранного шаблона"
+  - `#operationsList` - контейнер со списком операций
+
+**JavaScript Integration** ([setup.html:274-368](src/main/resources/templates/statistics/setup.html#L274-L368)):
+```javascript
+// Обработчик выбора шаблона через radio buttons
+templateRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+        const templateId = this.getAttribute('data-template-id');
+        filterExportsByTemplate(templateId);
+    });
+});
+
+// Фильтрация операций по templateId
+function filterExportsByTemplate(templateId) {
+    // Показывает/скрывает операции по data-template-id
+    // Управляет видимостью блока операций
+    // Обновляет состояние "Выбрать все"
+}
+```
+
+**Key Features**:
+- ✅ **Client-side filtering** - быстрая работа без перезагрузки страницы
+- ✅ **Smart visibility** - блок операций появляется только при выборе шаблона
+- ✅ **Informative messages** - понятные подсказки для пользователя
+- ✅ **Select all handling** - чекбокс "Выбрать все" работает только с видимыми операциями
+- ✅ **Visual feedback** - визуальное выделение выбранного шаблона
+
+**Implementation Details**:
+1. Radio button получает класс `.template-radio` и атрибут `data-template-id`
+2. При выборе срабатывает событие `change` → вызов `filterExportsByTemplate()`
+3. Функция фильтрует `.export-card` по атрибуту `data-template-id`
+4. Видимые операции показываются, остальные скрываются
+5. Снимается выбор со скрытых операций
+6. Обновляется состояние чекбокса "Выбрать все"
+
+**Data Attributes**:
+- Шаблоны: `data-template-id` на input radio
+- Операции: `data-template-id` и `data-export-id` на div.export-card
+
+**Коммит**: `a2d8f1d` - feat: фильтрация операций экспорта по выбранному шаблону статистики
+
 ## Code References
 
 When referencing specific functions or pieces of code include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.
