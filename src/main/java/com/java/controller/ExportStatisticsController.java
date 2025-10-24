@@ -59,35 +59,23 @@ public class ExportStatisticsController {
         var client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
 
-        // Получаем последние экспорты клиента (с фильтрацией по шаблону если указан)
-        Page<ExportSession> recentExports;
-        if (templateId != null) {
-            var template = templateRepository.findById(templateId)
-                    .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
-            recentExports = sessionRepository.findByTemplateWithTemplate(
-                    template,
-                    PageRequest.of(0, settingsService.getMaxOperations(),
-                            Sort.by(Sort.Direction.DESC, "startedAt"))
-            );
-        } else {
-            recentExports = sessionRepository.findByClientIdWithTemplate(
-                    clientId,
-                    PageRequest.of(0, settingsService.getMaxOperations(),
-                            Sort.by(Sort.Direction.DESC, "startedAt"))
-            );
-        }
-
-        // Фильтруем только операции с включенной статистикой в шаблоне
-        // При выборе конкретного шаблона показываем только его операции
-        List<ExportSession> filteredExports = recentExports.getContent().stream()
-                .filter(session -> session.getTemplate() != null &&
-                        Boolean.TRUE.equals(session.getTemplate().getEnableStatistics()) &&
-                        (templateId == null || session.getTemplate().getId().equals(templateId)))
-                .toList();
-
         // Получаем шаблоны клиента с включенной статистикой
         var templates = templateRepository.findByClientAndIsActiveTrue(client).stream()
                 .filter(template -> Boolean.TRUE.equals(template.getEnableStatistics()))
+                .toList();
+
+        // Загружаем все операции экспорта клиента с включенной статистикой в шаблоне
+        // Фильтрация по конкретному шаблону будет происходить на клиентской стороне (JavaScript)
+        Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
+                clientId,
+                PageRequest.of(0, settingsService.getMaxOperations(),
+                        Sort.by(Sort.Direction.DESC, "fileOperation.startedAt"))
+        );
+
+        // Фильтруем только операции с включенной статистикой в шаблоне
+        List<ExportSession> filteredExports = recentExports.getContent().stream()
+                .filter(session -> session.getTemplate() != null &&
+                        Boolean.TRUE.equals(session.getTemplate().getEnableStatistics()))
                 .toList();
 
         // Создаём breadcrumbs

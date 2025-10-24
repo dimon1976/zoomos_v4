@@ -71,13 +71,13 @@
 
                 <div th:unless="${#lists.isEmpty(templates)}" class="row">
                     <div th:each="template : ${templates}" class="col-md-6 mb-3">
-                        <div class="card template-card"
-                             onclick="selectTemplate(this, [[${template.id}]])">
+                        <div class="card template-card">
                             <div class="card-body">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio"
+                                    <input class="form-check-input template-radio" type="radio"
                                            name="templateId" th:value="${template.id}"
                                            th:id="${'template' + template.id}"
+                                           th:attr="data-template-id=${template.id}"
                                            required>
                                     <label class="form-check-label w-100"
                                            th:for="${'template' + template.id}">
@@ -103,7 +103,7 @@
         </div>
 
         <!-- Выбор операций экспорта -->
-        <div class="card mb-4">
+        <div class="card mb-4" id="operationsCard" style="display: none;">
             <div class="card-header">
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0">
@@ -118,14 +118,30 @@
                 </div>
             </div>
             <div class="card-body">
-                <div th:if="${#lists.isEmpty(recentExports)}" class="text-center py-3">
+                <!-- Сообщение когда шаблон не выбран -->
+                <div id="noTemplateMessage" class="text-center py-3">
+                    <div class="text-muted">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Сначала выберите шаблон экспорта
+                    </div>
+                </div>
+
+                <!-- Сообщение когда нет операций -->
+                <div id="noOperationsMessage" class="text-center py-3" style="display: none;">
+                    <div class="text-muted">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Нет операций экспорта для выбранного шаблона
+                    </div>
+                </div>
+
+                <div th:if="${#lists.isEmpty(recentExports)}" class="text-center py-3" style="display: none;">
                     <div class="text-muted">
                         <i class="fas fa-info-circle me-2"></i>
                         Нет операций экспорта для анализа
                     </div>
                 </div>
 
-                <div th:unless="${#lists.isEmpty(recentExports)}" class="row">
+                <div id="operationsList" th:unless="${#lists.isEmpty(recentExports)}" class="row">
                     <div th:each="export : ${recentExports}" class="col-md-6 col-lg-4 mb-3">
                         <div class="card export-card h-100"
                              th:attr="data-export-id=${export.id}, data-template-id=${export.template.id}"
@@ -258,14 +274,40 @@
     document.addEventListener('DOMContentLoaded', function() {
         const selectAllCheckbox = document.getElementById('selectAllOperations');
         const operationCheckboxes = document.querySelectorAll('.operation-checkbox');
+        const templateRadios = document.querySelectorAll('.template-radio');
 
-        // Обработчик "Выбрать все"
-        selectAllCheckbox.addEventListener('change', function() {
-            operationCheckboxes.forEach(cb => {
-                cb.checked = this.checked;
-                updateCardSelection(cb);
+        // Обработчики для выбора шаблона
+        templateRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                const templateId = this.getAttribute('data-template-id');
+
+                // Визуальное выделение выбранной карточки
+                document.querySelectorAll('.template-card').forEach(c => {
+                    c.classList.remove('selected');
+                });
+                const card = this.closest('.template-card');
+                if (card) card.classList.add('selected');
+
+                // Фильтрация операций
+                filterExportsByTemplate(templateId);
             });
         });
+
+        // Обработчик "Выбрать все"
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                // Фильтруем только видимые чекбоксы
+                const visibleCheckboxes = Array.from(operationCheckboxes).filter(cb => {
+                    const card = cb.closest('.export-card');
+                    return card && card.parentElement.style.display !== 'none';
+                });
+
+                visibleCheckboxes.forEach(cb => {
+                    cb.checked = this.checked;
+                    updateCardSelection(cb);
+                });
+            });
+        }
 
         // Обработчики для индивидуальных чекбоксов
         operationCheckboxes.forEach(cb => {
@@ -274,22 +316,24 @@
                 updateSelectAllState();
             });
         });
+
+        // Скрываем блок операций и настроек если шаблон не выбран
+        hideOperationsAndSettings();
     });
 
-    function selectTemplate(card, templateId) {
-        document.querySelectorAll('.template-card').forEach(c => {
-            c.classList.remove('selected');
-        });
-        card.classList.add('selected');
-        document.getElementById('template' + templateId).checked = true;
-
-        // Автоматическая фильтрация операций экспорта по выбранному шаблону
-        filterExportsByTemplate(templateId);
-    }
-
     function filterExportsByTemplate(templateId) {
+        const operationsCard = document.getElementById('operationsCard');
+        const noTemplateMessage = document.getElementById('noTemplateMessage');
+        const noOperationsMessage = document.getElementById('noOperationsMessage');
+        const operationsList = document.getElementById('operationsList');
         const exportCards = document.querySelectorAll('.export-card');
         let visibleCount = 0;
+
+        // Всегда показываем блок операций
+        operationsCard.style.display = 'block';
+
+        // Скрываем сообщение "выберите шаблон"
+        if (noTemplateMessage) noTemplateMessage.style.display = 'none';
 
         exportCards.forEach(card => {
             const cardTemplateId = card.getAttribute('data-template-id');
@@ -307,6 +351,15 @@
                 }
             }
         });
+
+        // Показываем/скрываем сообщения и список
+        if (visibleCount > 0) {
+            if (operationsList) operationsList.style.display = 'flex';
+            if (noOperationsMessage) noOperationsMessage.style.display = 'none';
+        } else {
+            if (operationsList) operationsList.style.display = 'none';
+            if (noOperationsMessage) noOperationsMessage.style.display = 'block';
+        }
 
         updateSelectAllState();
 
@@ -366,18 +419,41 @@
     }
 
     function updateSelectAllState() {
-        const operationCheckboxes = document.querySelectorAll('.operation-checkbox');
-        const checkedCount = document.querySelectorAll('.operation-checkbox:checked').length;
         const selectAllCheckbox = document.getElementById('selectAllOperations');
+        if (!selectAllCheckbox) return;
 
-        if (checkedCount === 0) {
+        // Считаем только видимые чекбоксы
+        const visibleCheckboxes = Array.from(document.querySelectorAll('.operation-checkbox')).filter(cb => {
+            const card = cb.closest('.export-card');
+            return card && card.parentElement.style.display !== 'none';
+        });
+
+        const checkedCount = visibleCheckboxes.filter(cb => cb.checked).length;
+        const totalVisible = visibleCheckboxes.length;
+
+        if (totalVisible === 0) {
             selectAllCheckbox.indeterminate = false;
             selectAllCheckbox.checked = false;
-        } else if (checkedCount === operationCheckboxes.length) {
-            selectAllCheckbox.indeterminate = false;
-            selectAllCheckbox.checked = true;
+            selectAllCheckbox.disabled = true;
         } else {
-            selectAllCheckbox.indeterminate = true;
+            selectAllCheckbox.disabled = false;
+            if (checkedCount === 0) {
+                selectAllCheckbox.indeterminate = false;
+                selectAllCheckbox.checked = false;
+            } else if (checkedCount === totalVisible) {
+                selectAllCheckbox.indeterminate = false;
+                selectAllCheckbox.checked = true;
+            } else {
+                selectAllCheckbox.indeterminate = true;
+            }
+        }
+    }
+
+    function hideOperationsAndSettings() {
+        // Скрываем блок операций при загрузке страницы
+        const operationsCard = document.getElementById('operationsCard');
+        if (operationsCard) {
+            operationsCard.style.display = 'none';
         }
     }
 
