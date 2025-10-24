@@ -77,6 +77,12 @@ public class ExportStatisticsController {
             );
         }
 
+        // Фильтруем только операции с включенной статистикой в шаблоне
+        List<ExportSession> filteredExports = recentExports.getContent().stream()
+                .filter(session -> session.getTemplate() != null &&
+                        Boolean.TRUE.equals(session.getTemplate().getEnableStatistics()))
+                .toList();
+
         // Получаем шаблоны клиента с включенной статистикой
         var templates = templateRepository.findByClientAndIsActiveTrue(client).stream()
                 .filter(template -> Boolean.TRUE.equals(template.getEnableStatistics()))
@@ -92,7 +98,7 @@ public class ExportStatisticsController {
         model.addAttribute("clientId", clientId);
         model.addAttribute("clientName", client.getName());
         model.addAttribute("selectedTemplateId", templateId);
-        model.addAttribute("recentExports", recentExports.getContent());
+        model.addAttribute("recentExports", filteredExports);
         model.addAttribute("templates", templates);
         model.addAttribute("maxOperations", settingsService.getMaxOperations());
         model.addAttribute("warningPercentage", settingsService.getWarningPercentage());
