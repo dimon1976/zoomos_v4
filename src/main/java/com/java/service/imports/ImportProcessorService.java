@@ -717,19 +717,24 @@ public class ImportProcessorService {
                     // Извлекаем Date объект из ячейки
                     Date dateValue = cell.getDateCellValue();
 
-                    // Проверяем, есть ли время (не 00:00:00)
+                    // Умное определение формата на основе данных
                     Calendar cal = Calendar.getInstance();
                     cal.setTime(dateValue);
-                    boolean hasTime = cal.get(Calendar.HOUR_OF_DAY) != 0 ||
-                                      cal.get(Calendar.MINUTE) != 0 ||
-                                      cal.get(Calendar.SECOND) != 0;
+                    int hours = cal.get(Calendar.HOUR_OF_DAY);
+                    int minutes = cal.get(Calendar.MINUTE);
+                    int seconds = cal.get(Calendar.SECOND);
 
-                    // Форматируем в русском формате dd.MM.yyyy или dd.MM.yyyy HH:mm:ss
+                    // Выбираем формат в зависимости от точности данных
                     SimpleDateFormat sdf;
-                    if (hasTime) {
-                        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
-                    } else {
+                    if (hours == 0 && minutes == 0 && seconds == 0) {
+                        // Только дата (00:00:00)
                         sdf = new SimpleDateFormat("dd.MM.yyyy");
+                    } else if (seconds == 0) {
+                        // Дата + время без секунд (HH:mm:00)
+                        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm");
+                    } else {
+                        // Дата + время с секундами (HH:mm:ss)
+                        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
                     }
 
                     return sdf.format(dateValue);
