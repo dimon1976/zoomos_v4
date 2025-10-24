@@ -37,6 +37,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -710,27 +711,28 @@ public class ImportProcessorService {
             case STRING:
                 return cell.getStringCellValue();
             case NUMERIC:
-                // ВАЖНО: Для полей Additional* не применяем автопреобразование дат
-                // Пользователь хочет сохранять строковое представление даты как есть
-                // Проверяем через DataFormatter - если Excel отображает как строку, не конвертируем
+                // ВАЖНО: Для STRING полей не применяем никакую обработку дат
+                // Сохраняем значение точно так, как оно записано в Excel (русский формат)
                 if (DateUtil.isCellDateFormatted(cell)) {
-                    // Используем DataFormatter чтобы получить то, что отображает Excel
-                    org.apache.poi.ss.usermodel.DataFormatter formatter =
-                            new org.apache.poi.ss.usermodel.DataFormatter();
-                    String formattedValue = formatter.formatCellValue(cell);
+                    // Извлекаем Date объект из ячейки
+                    Date dateValue = cell.getDateCellValue();
 
-                    // Если форматированное значение выглядит как дата в формате Excel (содержит точки/слеши)
-                    // и не содержит время в длинном формате (Mon Oct...), возвращаем как строку
-                    if (formattedValue.matches(".*\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}.*") &&
-                        !formattedValue.contains("Mon") && !formattedValue.contains("Tue") &&
-                        !formattedValue.contains("Wed") && !formattedValue.contains("Thu") &&
-                        !formattedValue.contains("Fri") && !formattedValue.contains("Sat") &&
-                        !formattedValue.contains("Sun")) {
-                        return formattedValue;
+                    // Проверяем, есть ли время (не 00:00:00)
+                    Calendar cal = Calendar.getInstance();
+                    cal.setTime(dateValue);
+                    boolean hasTime = cal.get(Calendar.HOUR_OF_DAY) != 0 ||
+                                      cal.get(Calendar.MINUTE) != 0 ||
+                                      cal.get(Calendar.SECOND) != 0;
+
+                    // Форматируем в русском формате dd.MM.yyyy или dd.MM.yyyy HH:mm:ss
+                    SimpleDateFormat sdf;
+                    if (hasTime) {
+                        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
+                    } else {
+                        sdf = new SimpleDateFormat("dd.MM.yyyy");
                     }
 
-                    // Иначе возвращаем как Date (для полей competitorLocalDateTime)
-                    return cell.getDateCellValue().toString();
+                    return sdf.format(dateValue);
                 }
 
                 // Получаем числовое значение
