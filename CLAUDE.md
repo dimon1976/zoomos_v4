@@ -544,6 +544,99 @@ resetFilter() - Submits form without filter parameters
 ✅ Множественные операции корректно сравниваются
 ✅ Данные в БД соответствуют формуле расчёта
 
+## Import Date Handling (CRITICAL)
+
+**Recently Updated** (as of 2025-10-24):
+
+### Smart Date Format Detection for STRING Fields
+
+Система автоматически определяет формат даты/времени при импорте Excel файлов для сохранения в STRING поля (productAdditional*, competitorAdditional*, competitorTime, competitorDate).
+
+**Проблема**: `DataFormatter` от Apache POI применяет US локаль и преобразует русский формат `'20.10.2025 6:32:00'` в американский `'10/20/25 6:32'`.
+
+**Решение** ([ImportProcessorService.java:716-741](src/main/java/com/java/service/imports/ImportProcessorService.java#L716-L741)):
+
+```java
+if (DateUtil.isCellDateFormatted(cell)) {
+    Date dateValue = cell.getDateCellValue();
+
+    // Умное определение формата на основе данных
+    Calendar cal = Calendar.getInstance();
+    cal.setTime(dateValue);
+    int hours = cal.get(Calendar.HOUR_OF_DAY);
+    int minutes = cal.get(Calendar.MINUTE);
+    int seconds = cal.get(Calendar.SECOND);
+
+    // Выбираем формат в зависимости от точности данных
+    SimpleDateFormat sdf;
+    if (hours == 0 && minutes == 0 && seconds == 0) {
+        sdf = new SimpleDateFormat("dd.MM.yyyy");          // Только дата
+    } else if (seconds == 0) {
+        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm");    // Без секунд
+    } else {
+        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss"); // С секундами
+    }
+
+    return sdf.format(dateValue);
+}
+```
+
+**Автоматическая адаптация формата**:
+
+| Excel значение | Date объект | Результат в БД |
+|----------------|-------------|----------------|
+| `20.10.2025` | 00:00:00 | `20.10.2025` |
+| `20.10.2025 06:32` | 06:32:00 | `20.10.2025 06:32` |
+| `20.10.2025 06:32:45` | 06:32:45 | `20.10.2025 06:32:45` |
+| `20.10.2025  6:32:00` | 06:32:00 | `20.10.2025 06:32` (унификация) |
+
+**Преимущества**:
+- ✅ Компактное хранение - не добавляет лишние `:00` для секунд
+- ✅ Работает с разными файлами одновременно (с секундами и без)
+- ✅ Всегда русский формат `dd.MM.yyyy`
+- ✅ Без потери точности данных
+
+**ВАЖНО**:
+- Для полей типа **STRING** - применяется умное форматирование
+- Для полей типа **LocalDateTime** или **Date** - используется стандартная обработка POI
+- Не применяется никакая обработка для обычных текстовых строк
+
+**Коммиты**:
+- `8b45813` - Исправление конвертации дат в русский формат
+- `869c50c` - Умное определение формата даты/времени
+
+### Empty Cells for Zero Prices in Export
+
+**Recently Updated** (as of 2025-10-23):
+
+При экспорте данных в Excel нулевые цены (0.0) теперь отображаются как **пустые ячейки** вместо "0.00".
+
+**Решение** ([XlsxFileGenerator.java:305-316](src/main/java/com/java/service/exports/generator/XlsxFileGenerator.java#L305-L316)):
+
+```java
+private void setCellValue(Cell cell, Object value, ExcelStyles styles) {
+    if (value == null) {
+        cell.setBlank();
+    } else if (value instanceof Number) {
+        double numValue = ((Number) value).doubleValue();
+        if (numValue == 0.0) {
+            cell.setBlank();  // Пустая ячейка для нулевых цен
+        } else {
+            cell.setCellValue(numValue);
+            cell.setCellStyle(styles.getNumberStyle());
+        }
+    }
+    // ... остальные типы данных
+}
+```
+
+**Преимущества**:
+- ✅ Улучшенная читаемость экспортируемых файлов
+- ✅ Легче визуально отличить отсутствующие цены от реальных нулевых значений
+- ✅ Упрощает анализ данных в Excel
+
+**Коммит**: `663c090`
+
 ## Code References
 
 When referencing specific functions or pieces of code include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.
