@@ -423,6 +423,23 @@ async function loadAllGroupsCharts(containerSelector, templateId, metricName, fi
             return;
         }
 
+        // Очищаем метрику от спецсимволов для использования в ID
+        const safeMetricName = metricName.replace(/[^a-zA-Z0-9]/g, '-');
+
+        console.log(`Loading charts for metric: ${metricName} (safe: ${safeMetricName}), groups: ${allGroupsData.length}`);
+        console.log('First group data sample:', allGroupsData[0]);
+
+        // Уничтожаем все существующие графики в контейнере перед созданием новых
+        const canvases = container.querySelectorAll('canvas');
+        canvases.forEach(canvas => {
+            const chartId = canvas.id;
+            if (chartInstances[chartId]) {
+                console.log(`Destroying existing chart: ${chartId}`);
+                chartInstances[chartId].destroy();
+                delete chartInstances[chartId];
+            }
+        });
+
         // Очищаем контейнер
         container.innerHTML = '';
 
@@ -434,18 +451,22 @@ async function loadAllGroupsCharts(containerSelector, templateId, metricName, fi
 
             const chartCard = document.createElement('div');
             chartCard.className = 'card shadow-sm';
+
+            // Используем безопасное имя метрики для ID
+            const canvasId = `chart-${safeMetricName}-${index}`;
             chartCard.innerHTML = `
                 <div class="card-body" style="height: 400px;">
-                    <canvas id="chart-${metricName}-${index}"></canvas>
+                    <canvas id="${canvasId}"></canvas>
                 </div>
             `;
 
             chartWrapper.appendChild(chartCard);
             container.appendChild(chartWrapper);
 
-            // Создаем график
-            const canvasId = `chart-${metricName}-${index}`;
-            createTrendChart(canvasId, historyData);
+            // Создаем график с небольшой задержкой для корректной инициализации canvas
+            setTimeout(() => {
+                createTrendChart(canvasId, historyData);
+            }, 10);
         });
 
     } catch (error) {

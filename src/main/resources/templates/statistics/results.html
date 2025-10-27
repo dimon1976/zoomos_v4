@@ -1199,6 +1199,7 @@
                             id="${metricId}-tab"
                             data-bs-toggle="tab"
                             data-bs-target="#${metricId}"
+                            data-metric-name="${metricName}"
                             type="button"
                             role="tab"
                             aria-controls="${metricId}"
@@ -1223,18 +1224,27 @@
 
                 // Загружаем графики при переключении на вкладку
                 const tabButton = tab.querySelector('.nav-link');
-                tabButton.addEventListener('shown.bs.tab', async () => {
-                    const chartsContainer = document.getElementById(`${metricId}-charts`);
-                    // Проверяем, не загружены ли уже графики
-                    if (chartsContainer.children.length === 0) {
-                        await loadMetricCharts(metricName, `#${metricId}-charts`);
+                const currentMetricId = metricId; // Сохраняем метрику ID для замыкания
+
+                tabButton.addEventListener('shown.bs.tab', async (event) => {
+                    const currentMetricName = event.target.getAttribute('data-metric-name');
+                    const chartsContainer = document.getElementById(`${currentMetricId}-charts`);
+
+                    console.log(`Tab switched to: ${currentMetricName}, metricId: ${currentMetricId}, has children: ${chartsContainer ? chartsContainer.children.length : 0}`);
+
+                    // Всегда загружаем графики при переключении (они будут перезаписаны если уже есть)
+                    if (chartsContainer) {
+                        await loadMetricCharts(currentMetricName, `#${currentMetricId}-charts`);
                     }
                 });
 
                 // Загружаем графики для первой вкладки сразу
                 if (isFirst) {
+                    const firstMetricName = metricName; // Используем переменную из текущей итерации
+                    const firstMetricId = metricId; // Сохраняем ID для замыкания
                     setTimeout(() => {
-                        loadMetricCharts(metricName, `#${metricId}-charts`);
+                        console.log(`Loading first tab: ${firstMetricName}, metricId: ${firstMetricId}`);
+                        loadMetricCharts(firstMetricName, `#${firstMetricId}-charts`);
                     }, 100);
                 }
             });
