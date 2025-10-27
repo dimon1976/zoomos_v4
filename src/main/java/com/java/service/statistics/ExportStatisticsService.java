@@ -374,9 +374,9 @@ public class ExportStatisticsService {
 
         // Определяем тип изменения
         StatisticsComparisonDto.ChangeType changeType;
-        if (changePercentage > 1) {
+        if (changePercentage > 0.01) {
             changeType = StatisticsComparisonDto.ChangeType.UP;
-        } else if (changePercentage < -1) {
+        } else if (changePercentage < -0.01) {
             changeType = StatisticsComparisonDto.ChangeType.DOWN;
         } else {
             changeType = StatisticsComparisonDto.ChangeType.STABLE;
