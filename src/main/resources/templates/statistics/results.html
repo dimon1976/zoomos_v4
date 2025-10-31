@@ -1200,21 +1200,17 @@
                 metricSection.className = 'mb-4';
                 metricSection.innerHTML = `
                     <div class="card shadow-sm">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0 d-flex justify-content-between align-items-center">
-                                <span class="d-flex align-items-center">
-                                    <i class="fas fa-chart-line me-2"></i>
-                                    <span>${metricName}</span>
+                        <div class="card-header bg-primary text-white" style="cursor: pointer;">
+                            <h5 class="mb-0 d-flex justify-content-between align-items-center"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#${collapseId}"
+                                aria-expanded="true"
+                                aria-controls="${collapseId}"
+                                style="user-select: text;">
+                                <span>
+                                    <i class="fas fa-chart-line me-2"></i>${metricName}
                                 </span>
-                                <button class="btn btn-link text-white p-0 border-0"
-                                        type="button"
-                                        data-bs-toggle="collapse"
-                                        data-bs-target="#${collapseId}"
-                                        aria-expanded="true"
-                                        aria-controls="${collapseId}"
-                                        style="cursor: pointer; text-decoration: none;">
-                                    <i class="fas fa-chevron-up collapse-icon fs-5"></i>
-                                </button>
+                                <i class="fas fa-chevron-up collapse-icon"></i>
                             </h5>
                         </div>
                         <div id="${collapseId}" class="collapse show">
