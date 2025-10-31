@@ -449,7 +449,7 @@ async function loadAllGroupsCharts(containerSelector, templateId, metricName, fi
             // Добавляем HTML-заголовок с названием сайта конкурента (можно выделить и скопировать)
             chartCard.innerHTML = `
                 <div class="card-header bg-light border-bottom">
-                    <h6 class="mb-0 text-primary fw-bold">${historyData.groupValue}</h6>
+                    <h6 class="mb-0 text-primary fw-bold text-center">${historyData.groupValue}</h6>
                 </div>
                 <div class="card-body" style="height: 380px;">
                     <canvas id="${canvasId}"></canvas>
