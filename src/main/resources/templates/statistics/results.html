@@ -1200,13 +1200,16 @@
                 metricSection.className = 'mb-4';
                 metricSection.innerHTML = `
                     <div class="card shadow-sm">
-                        <div class="card-header bg-primary text-white" style="cursor: pointer;">
+                        <div class="card-header bg-primary text-white"
+                             style="cursor: pointer; transition: none !important; outline: none !important; border: none !important; box-shadow: none !important;"
+                             onmouseover="this.style.transform='none'; this.style.outline='none'; this.style.boxShadow='none';"
+                             onfocus="this.style.outline='none'; this.style.boxShadow='none';">
                             <h5 class="mb-0 d-flex justify-content-between align-items-center"
                                 data-bs-toggle="collapse"
                                 data-bs-target="#${collapseId}"
                                 aria-expanded="true"
                                 aria-controls="${collapseId}"
-                                style="user-select: text; outline: none !important; border: none !important; box-shadow: none !important;">
+                                style="user-select: text; outline: none !important; border: none !important; box-shadow: none !important; transition: none !important;">
                                 <span>
                                     <i class="fas fa-chart-line me-2"></i>${metricName}
                                 </span>
