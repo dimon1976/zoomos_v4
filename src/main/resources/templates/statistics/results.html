@@ -1173,80 +1173,85 @@
 
             console.log('Найдено метрик:', metrics.length, metrics);
 
-            // Создаем вкладки для каждой метрики
-            const metricTabs = document.getElementById('metricTabs');
+            // Получаем контейнер для метрик (теперь без вкладок)
             const metricTabsContent = document.getElementById('metricTabsContent');
+            const metricTabs = document.getElementById('metricTabs');
 
-            if (!metricTabs || !metricTabsContent) {
-                console.error('Контейнеры для вкладок не найдены');
+            if (!metricTabsContent) {
+                console.error('Контейнер для метрик не найден');
                 return;
             }
 
-            // Очищаем контейнеры
-            metricTabs.innerHTML = '';
+            // Скрываем navigation tabs полностью
+            if (metricTabs) {
+                metricTabs.style.display = 'none';
+            }
+
+            // Очищаем контейнер
             metricTabsContent.innerHTML = '';
 
-            // Создаем вкладку для каждой метрики
+            // Создаем секцию для каждой метрики (БЕЗ вкладок - все видимо сразу)
             metrics.forEach((metricName, index) => {
-                const isFirst = index === 0;
                 const metricId = `metric-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                const collapseId = `collapse-${metricId}`;
 
-                // Создаем таб
-                const tab = document.createElement('li');
-                tab.className = 'nav-item';
-                tab.innerHTML = `
-                    <button class="nav-link ${isFirst ? 'active' : ''}"
-                            id="${metricId}-tab"
-                            data-bs-toggle="tab"
-                            data-bs-target="#${metricId}"
-                            data-metric-name="${metricName}"
-                            type="button"
-                            role="tab"
-                            aria-controls="${metricId}"
-                            aria-selected="${isFirst}">
-                        ${metricName}
-                    </button>
-                `;
-                metricTabs.appendChild(tab);
-
-                // Создаем контент вкладки
-                const tabPane = document.createElement('div');
-                tabPane.className = `tab-pane fade ${isFirst ? 'show active' : ''}`;
-                tabPane.id = metricId;
-                tabPane.setAttribute('role', 'tabpanel');
-                tabPane.setAttribute('aria-labelledby', `${metricId}-tab`);
-                tabPane.innerHTML = `
-                    <div class="row" id="${metricId}-charts">
-                        <!-- Графики будут загружены здесь -->
+                // Создаем секцию с заголовком для каждой метрики (с возможностью сворачивания)
+                const metricSection = document.createElement('div');
+                metricSection.className = 'mb-4';
+                metricSection.innerHTML = `
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                <span class="d-flex align-items-center">
+                                    <i class="fas fa-chart-line me-2"></i>
+                                    <span>${metricName}</span>
+                                </span>
+                                <button class="btn btn-link text-white p-0 border-0"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#${collapseId}"
+                                        aria-expanded="true"
+                                        aria-controls="${collapseId}"
+                                        style="cursor: pointer; text-decoration: none;">
+                                    <i class="fas fa-chevron-up collapse-icon fs-5"></i>
+                                </button>
+                            </h5>
+                        </div>
+                        <div id="${collapseId}" class="collapse show">
+                            <div class="card-body">
+                                <div class="row" id="${metricId}-charts">
+                                    <div class="col-12 text-center py-5">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Загрузка графиков...</span>
+                                        </div>
+                                        <p class="text-muted mt-2">Загрузка исторических данных...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 `;
-                metricTabsContent.appendChild(tabPane);
+                metricTabsContent.appendChild(metricSection);
 
-                // Загружаем графики при переключении на вкладку
-                const tabButton = tab.querySelector('.nav-link');
-                const currentMetricId = metricId; // Сохраняем метрику ID для замыкания
+                // Добавляем обработчик для поворота иконки при сворачивании/разворачивании
+                const collapseElement = document.getElementById(collapseId);
+                const collapseIcon = metricSection.querySelector('.collapse-icon');
 
-                tabButton.addEventListener('shown.bs.tab', async (event) => {
-                    const currentMetricName = event.target.getAttribute('data-metric-name');
-                    const chartsContainer = document.getElementById(`${currentMetricId}-charts`);
-
-                    console.log(`Tab switched to: ${currentMetricName}, metricId: ${currentMetricId}, has children: ${chartsContainer ? chartsContainer.children.length : 0}`);
-
-                    // Всегда загружаем графики при переключении (они будут перезаписаны если уже есть)
-                    if (chartsContainer) {
-                        await loadMetricCharts(currentMetricName, `#${currentMetricId}-charts`);
-                    }
+                collapseElement.addEventListener('shown.bs.collapse', () => {
+                    collapseIcon.classList.remove('fa-chevron-down');
+                    collapseIcon.classList.add('fa-chevron-up');
                 });
 
-                // Загружаем графики для первой вкладки сразу
-                if (isFirst) {
-                    const firstMetricName = metricName; // Используем переменную из текущей итерации
-                    const firstMetricId = metricId; // Сохраняем ID для замыкания
-                    setTimeout(() => {
-                        console.log(`Loading first tab: ${firstMetricName}, metricId: ${firstMetricId}`);
-                        loadMetricCharts(firstMetricName, `#${firstMetricId}-charts`);
-                    }, 100);
-                }
+                collapseElement.addEventListener('hidden.bs.collapse', () => {
+                    collapseIcon.classList.remove('fa-chevron-up');
+                    collapseIcon.classList.add('fa-chevron-down');
+                });
+
+                // Загружаем графики для этой метрики с задержкой (чтобы не все сразу)
+                setTimeout(() => {
+                    console.log(`Loading charts for: ${metricName}`);
+                    loadMetricCharts(metricName, `#${metricId}-charts`);
+                }, 500 + (index * 300)); // Загружаем с интервалом 300ms между метриками
             });
 
         } catch (error) {

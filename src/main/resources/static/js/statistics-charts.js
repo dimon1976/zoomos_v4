@@ -91,22 +91,14 @@ function createTrendChart(canvasId, historyData) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false, // Отключаем анимацию для предотвращения проблем со скрытыми вкладками
             interaction: {
                 mode: 'index',
                 intersect: false,
             },
             plugins: {
                 title: {
-                    display: true,
-                    text: historyData.groupValue,
-                    font: {
-                        size: 16,
-                        weight: 'bold'
-                    },
-                    padding: {
-                        top: 10,
-                        bottom: 5
-                    }
+                    display: false  // Заголовок теперь в HTML (можно выделить и скопировать)
                 },
                 subtitle: {
                     display: true,
@@ -117,7 +109,8 @@ function createTrendChart(canvasId, historyData) {
                     },
                     color: trendColor.text,
                     padding: {
-                        bottom: 15
+                        top: 5,
+                        bottom: 10
                     }
                 },
                 legend: {
@@ -429,18 +422,16 @@ async function loadAllGroupsCharts(containerSelector, templateId, metricName, fi
         console.log(`Loading charts for metric: ${metricName} (safe: ${safeMetricName}), groups: ${allGroupsData.length}`);
         console.log('First group data sample:', allGroupsData[0]);
 
-        // Уничтожаем все существующие графики в контейнере перед созданием новых
-        const canvases = container.querySelectorAll('canvas');
-        canvases.forEach(canvas => {
-            const chartId = canvas.id;
-            if (chartInstances[chartId]) {
+        // Уничтожаем только графики текущей метрики (если они уже были созданы)
+        Object.keys(chartInstances).forEach(chartId => {
+            if (chartInstances[chartId] && chartId.startsWith(`chart-${safeMetricName}-`)) {
                 console.log(`Destroying existing chart: ${chartId}`);
                 chartInstances[chartId].destroy();
                 delete chartInstances[chartId];
             }
         });
 
-        // Очищаем контейнер
+        // Очищаем контейнер (графики для этой метрики будут созданы заново)
         container.innerHTML = '';
 
         // Создаем графики для каждой группы
@@ -454,20 +445,45 @@ async function loadAllGroupsCharts(containerSelector, templateId, metricName, fi
 
             // Используем безопасное имя метрики для ID
             const canvasId = `chart-${safeMetricName}-${index}`;
+
+            // Добавляем HTML-заголовок с названием сайта конкурента (можно выделить и скопировать)
             chartCard.innerHTML = `
-                <div class="card-body" style="height: 400px;">
+                <div class="card-header bg-light border-bottom">
+                    <h6 class="mb-0 text-primary fw-bold">${historyData.groupValue}</h6>
+                </div>
+                <div class="card-body" style="height: 380px;">
                     <canvas id="${canvasId}"></canvas>
                 </div>
             `;
 
             chartWrapper.appendChild(chartCard);
             container.appendChild(chartWrapper);
-
-            // Создаем график с небольшой задержкой для корректной инициализации canvas
-            setTimeout(() => {
-                createTrendChart(canvasId, historyData);
-            }, 10);
         });
+
+        // Создаем графики после добавления всех canvas в DOM
+        // Увеличенная задержка чтобы вкладка успела стать видимой и canvas отрендериться
+        setTimeout(() => {
+            allGroupsData.forEach((historyData, index) => {
+                const canvasId = `chart-${safeMetricName}-${index}`;
+                const canvas = document.getElementById(canvasId);
+
+                if (canvas) {
+                    // Проверяем, что canvas имеет ненулевую ширину (вкладка видима)
+                    const canvasWidth = canvas.offsetWidth;
+                    console.log(`Creating chart: ${canvasId} for ${historyData.metricName}, canvas width: ${canvasWidth}px`);
+
+                    if (canvasWidth > 0) {
+                        createTrendChart(canvasId, historyData);
+                    } else {
+                        console.warn(`Canvas ${canvasId} has zero width - tab might be hidden`);
+                        // Все равно создаем график, он будет обновлен позже через resize
+                        createTrendChart(canvasId, historyData);
+                    }
+                } else {
+                    console.error(`Canvas element not found: ${canvasId}`);
+                }
+            });
+        }, 200);
 
     } catch (error) {
         console.error('Ошибка загрузки графиков для всех групп:', error);
