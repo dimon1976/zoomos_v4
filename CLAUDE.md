@@ -544,6 +544,106 @@ resetFilter() - Submits form without filter parameters
 ✅ Множественные операции корректно сравниваются
 ✅ Данные в БД соответствуют формуле расчёта
 
+### Excel Export with Trends Sheet
+
+**Recently Completed** (as of 2025-11-19):
+
+#### Purpose
+Enhanced Excel export for statistics with dedicated "Trends" sheet showing metric changes across operations using visual symbols (↑↓=) and percentage changes.
+
+#### Architecture
+
+**Two-Sheet Excel Structure**:
+1. **"Статистика"** - Main comparison table with detailed metrics
+2. **"Тренды"** - Simplified trends view with change indicators
+
+**Trends Sheet Format** (StatisticsExcelExportService.java:318-406):
+```
+Группа    | Метрика           | Операция #1  | Операция #2  | ...
+----------|-------------------|--------------|--------------|-----
+ОБЩЕЕ     | PRICE             | ↑ (+5.2%)   | ↓ (-2.1%)   | ...
+Группа А  | DATE_MODIFICATIONS| ↓ (-4.0%)   | ↑ (+2.5%)   | ...
+```
+
+**Key Methods**:
+- `writeTrendsSheet()` - Creates trends sheet with headers and data (lines 318-406)
+- `formatTrendCell()` - Formats cell as "↑ (+5.2%)" or "↓ (-2.1%)" (lines 420-453)
+- `determineTrendCellStyle()` - Applies color coding (green/red/gray) (lines 462-484)
+- `extractMetricsByName()` - Organizes metrics by name across operations (lines 492-521)
+
+**Visual Indicators**:
+- ↑ (U+2191) + green background - Growth (WARNING/CRITICAL levels)
+- ↓ (U+2193) + red/orange background - Decline (WARNING/CRITICAL levels)
+- = (U+003D) + gray background - Stable (no significant change)
+- "-" - No previous value for comparison (first operation)
+
+#### Features
+
+**Automatic Filtering**:
+- Trends sheet automatically reflects active filters from results page
+- Uses same data source as main statistics table
+- Filter parameters passed through existing `exportToExcel()` function
+- No UI changes required - works seamlessly with current implementation
+
+**Styling Integration**:
+- Reuses existing `ExcelStyles` from main sheet
+- Color scheme matches main statistics table:
+  - Light green (#d1e7dd) - Growth warning
+  - Lime (#badbcc) - Growth critical
+  - Light orange (#fff3cd) - Decline warning
+  - Coral (#f8d7da) - Decline critical
+
+**Sheet Configuration**:
+- Freeze panes: First 2 rows (headers) and first 2 columns (Group + Metric)
+- Auto-sized columns with 15% padding
+- Fixed width for Group (30 chars) and Metric (25 chars) columns
+
+#### Implementation Details
+
+**Export Flow**:
+1. User clicks "Экспорт в Excel" button (results.html:305, 687)
+2. JavaScript sends POST to `/statistics/export/excel` with filters (results.html:1105-1153)
+3. Controller calls `StatisticsExcelExportService.generateExcel()` (ExportStatisticsController.java:468-510)
+4. Service creates two sheets:
+   - Sheet 1: Statistics (existing functionality)
+   - Sheet 2: Trends (new functionality)
+5. Browser downloads file with both sheets
+
+**Data Source**:
+- Same `StatisticsComparisonDto` used for both sheets
+- Trends extracted from `MetricValue.changeType` and `MetricValue.changePercentage`
+- No additional database queries required
+
+#### Usage
+
+**Existing Workflow**:
+1. Navigate to http://localhost:8081/statistics/setup
+2. Select template and operations
+3. Click "Анализировать"
+4. (Optional) Apply filter on results page
+5. Click "Экспорт в Excel" - file now contains TWO sheets
+
+**Files Modified**:
+- `StatisticsExcelExportService.java` - Added trends sheet generation
+  - Modified `generateExcel()` to create two sheets (lines 45-67)
+  - Added 5 new private methods for trends functionality
+
+**No Breaking Changes**:
+- Main statistics sheet unchanged
+- Existing export API unchanged
+- UI buttons and JavaScript unchanged
+- Filter functionality works automatically
+
+#### Testing Checklist
+
+✅ Компиляция успешна (mvn clean compile)
+✅ Приложение запускается без ошибок
+✅ Метод `writeTrendsSheet()` реализован с JavaDoc
+✅ Вспомогательные методы добавлены
+✅ Интеграция в `generateExcel()` завершена
+⏳ Ручное тестирование экспорта без фильтра
+⏳ Ручное тестирование экспорта с фильтром
+
 ## Import Date Handling (CRITICAL)
 
 **Recently Updated** (as of 2025-10-24):

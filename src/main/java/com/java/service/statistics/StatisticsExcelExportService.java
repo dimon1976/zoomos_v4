@@ -14,8 +14,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Сервис для экспорта статистики в Excel формат
@@ -47,22 +46,24 @@ public class StatisticsExcelExportService {
              FileOutputStream fos = new FileOutputStream(tempFile.toFile())) {
 
             workbook.setCompressTempFiles(true);
-            Sheet sheet = workbook.createSheet("Статистика");
 
             // Создаём стили
             ExcelStyles styles = createStyles(workbook);
 
-            // Записываем данные
-            writeStatisticsData(sheet, comparison, styles);
+            // Лист 1: Основная таблица статистики
+            Sheet statisticsSheet = workbook.createSheet("Статистика");
+            writeStatisticsData(statisticsSheet, comparison, styles);
+            autoSizeColumns(statisticsSheet, comparison);
 
-            // Настраиваем ширину колонок
-            autoSizeColumns(sheet, comparison);
+            // Лист 2: Тренды
+            Sheet trendsSheet = workbook.createSheet("Тренды");
+            writeTrendsSheet(trendsSheet, comparison, styles);
 
             // Сохраняем файл
             workbook.write(fos);
             workbook.dispose();
 
-            log.info("Statistics Excel export completed. Path: {}", tempFile);
+            log.info("Statistics Excel export completed with trends. Path: {}", tempFile);
             return tempFile;
 
         } catch (IOException e) {
@@ -305,6 +306,233 @@ public class StatisticsExcelExportService {
                 sheet.setColumnWidth(col, (int)(currentWidth * 1.1));
             }
         }
+    }
+
+    /**
+     * Записывает лист "Тренды" с информацией об изменениях метрик
+     *
+     * @param sheet      лист Excel для записи
+     * @param comparison данные сравнения статистики
+     * @param styles     стили Excel
+     */
+    private void writeTrendsSheet(Sheet sheet, List<StatisticsComparisonDto> comparison, ExcelStyles styles) {
+        int rowIndex = 0;
+
+        if (comparison.isEmpty()) {
+            return;
+        }
+
+        // 1. ЗАГОЛОВКИ
+        // Строка 1: Группа | Метрика | Операция #1 | Операция #2 | ...
+        Row headerRow1 = sheet.createRow(rowIndex++);
+
+        // Фиксированные колонки
+        createCell(headerRow1, 0, "Группа", styles.headerStyle);
+        createCell(headerRow1, 1, "Метрика", styles.headerStyle);
+
+        // Колонки операций
+        List<StatisticsComparisonDto.OperationStatistics> operations = comparison.get(0).getOperations();
+        for (int i = 0; i < operations.size(); i++) {
+            String operationLabel = "Операция " + (i + 1);
+            createCell(headerRow1, 2 + i, operationLabel, styles.headerStyle);
+        }
+
+        // Строка 2: (пусто) | (пусто) | Имя операции | Имя операции | ...
+        Row headerRow2 = sheet.createRow(rowIndex++);
+        createCell(headerRow2, 0, "", styles.headerStyle);
+        createCell(headerRow2, 1, "", styles.headerStyle);
+
+        for (int i = 0; i < operations.size(); i++) {
+            String operationName = operations.get(i).getOperationName();
+            createCell(headerRow2, 2 + i, operationName != null ? operationName : "", styles.headerSubStyle);
+        }
+
+        // Объединяем ячейки для фиксированных колонок
+        sheet.addMergedRegion(new CellRangeAddress(0, 1, 0, 0));
+        sheet.addMergedRegion(new CellRangeAddress(0, 1, 1, 1));
+
+        // 2. ДАННЫЕ ТРЕНДОВ
+        for (StatisticsComparisonDto group : comparison) {
+            String groupValue = group.getGroupFieldValue();
+            boolean isTotalSummary = "ОБЩЕЕ КОЛИЧЕСТВО".equals(groupValue);
+
+            // Получаем все метрики для группы
+            Map<String, List<StatisticsComparisonDto.MetricValue>> metricsByName = extractMetricsByName(group);
+
+            for (Map.Entry<String, List<StatisticsComparisonDto.MetricValue>> entry : metricsByName.entrySet()) {
+                String metricName = entry.getKey();
+                List<StatisticsComparisonDto.MetricValue> metricValues = entry.getValue();
+
+                Row dataRow = sheet.createRow(rowIndex++);
+
+                // Колонка "Группа"
+                createCell(dataRow, 0, groupValue,
+                        isTotalSummary ? styles.totalGroupStyle : styles.groupStyle);
+
+                // Колонка "Метрика"
+                createCell(dataRow, 1, metricName,
+                        isTotalSummary ? styles.totalMetricStyle : styles.metricStyle);
+
+                // Колонки с трендами для каждой операции
+                for (int i = 0; i < metricValues.size(); i++) {
+                    StatisticsComparisonDto.MetricValue metricValue = metricValues.get(i);
+                    String trendText = formatTrendCell(metricValue);
+                    CellStyle trendStyle = determineTrendCellStyle(metricValue, styles);
+
+                    createCell(dataRow, 2 + i, trendText, trendStyle);
+                }
+            }
+        }
+
+        // 3. НАСТРОЙКИ ЛИСТА
+        // Закрепить первые 2 строки (заголовки)
+        sheet.createFreezePane(0, 2);
+
+        // Закрепить первые 2 колонки (Группа + Метрика)
+        sheet.createFreezePane(2, 2);
+
+        // Автоматическая ширина колонок
+        for (int i = 0; i < 2 + operations.size(); i++) {
+            if (i == 0) {
+                sheet.setColumnWidth(i, 30 * 256); // ~30 символов для группы
+            } else if (i == 1) {
+                sheet.setColumnWidth(i, 25 * 256); // ~25 символов для метрики
+            } else {
+                sheet.autoSizeColumn(i);
+                int currentWidth = sheet.getColumnWidth(i);
+                sheet.setColumnWidth(i, (int)(currentWidth * 1.15)); // Добавляем 15% запаса
+            }
+        }
+    }
+
+    /**
+     * Форматирует ячейку тренда: символ + процент
+     *
+     * Примеры:
+     * - "↑ (+5.2%)"  для роста на 5.2%
+     * - "↓ (-2.1%)"  для падения на 2.1%
+     * - "= (0%)"     для стабильного значения
+     * - "-"          для первой операции (нет предыдущего значения)
+     *
+     * @param metricValue значение метрики
+     * @return отформатированный текст тренда
+     */
+    private String formatTrendCell(StatisticsComparisonDto.MetricValue metricValue) {
+        if (metricValue.getPreviousValue() == null) {
+            return "-"; // Нет предыдущего значения для сравнения
+        }
+
+        StatisticsComparisonDto.ChangeType changeType = metricValue.getChangeType();
+        Double changePercentage = metricValue.getChangePercentage();
+
+        if (changePercentage == null || changeType == StatisticsComparisonDto.ChangeType.STABLE) {
+            return "= (0%)";
+        }
+
+        String symbol;
+        String sign;
+
+        switch (changeType) {
+            case UP:
+                symbol = "↑";
+                sign = "+";
+                break;
+            case DOWN:
+                symbol = "↓";
+                sign = "";  // Минус уже в числе
+                break;
+            case STABLE:
+            default:
+                return "= (0%)";
+        }
+
+        // Форматируем процент с 1 знаком после запятой
+        String formattedPercentage = String.format("%.1f", Math.abs(changePercentage));
+
+        return String.format("%s (%s%s%%)", symbol, sign, formattedPercentage);
+    }
+
+    /**
+     * Определяет стиль ячейки тренда на основе типа изменения и уровня предупреждения
+     *
+     * @param metricValue значение метрики с информацией о тренде
+     * @param styles      стили Excel
+     * @return стиль ячейки
+     */
+    private CellStyle determineTrendCellStyle(StatisticsComparisonDto.MetricValue metricValue, ExcelStyles styles) {
+        if (metricValue.getPreviousValue() == null) {
+            return styles.normalStyle; // Нет данных для сравнения
+        }
+
+        StatisticsComparisonDto.ChangeType changeType = metricValue.getChangeType();
+        StatisticsComparisonDto.AlertLevel alertLevel = metricValue.getAlertLevel();
+
+        if (changeType == StatisticsComparisonDto.ChangeType.STABLE) {
+            return styles.normalStyle; // Обычный стиль для стабильных
+        }
+
+        // Определяем стиль на основе направления и уровня предупреждения
+        if (changeType == StatisticsComparisonDto.ChangeType.UP) {
+            return (alertLevel == StatisticsComparisonDto.AlertLevel.CRITICAL)
+                    ? styles.increaseCriticalStyle   // Яркий зеленый (критический рост)
+                    : styles.increaseWarningStyle;    // Светло-зеленый (предупреждение о росте)
+        } else { // DOWN
+            return (alertLevel == StatisticsComparisonDto.AlertLevel.CRITICAL)
+                    ? styles.decreaseCriticalStyle    // Яркий красный (критическое падение)
+                    : styles.decreaseWarningStyle;     // Светло-оранжевый (предупреждение о падении)
+        }
+    }
+
+    /**
+     * Извлекает метрики из группы, организованные по названию метрики
+     *
+     * @param group группа статистики
+     * @return Map: название метрики -> список значений по операциям
+     */
+    private Map<String, List<StatisticsComparisonDto.MetricValue>> extractMetricsByName(StatisticsComparisonDto group) {
+        Map<String, List<StatisticsComparisonDto.MetricValue>> result = new LinkedHashMap<>();
+
+        List<StatisticsComparisonDto.OperationStatistics> operations = group.getOperations();
+
+        // Собираем все уникальные имена метрик
+        Set<String> allMetricNames = new LinkedHashSet<>();
+        for (StatisticsComparisonDto.OperationStatistics operation : operations) {
+            if (operation.getMetrics() != null) {
+                allMetricNames.addAll(operation.getMetrics().keySet());
+            }
+        }
+
+        // Для каждой метрики собираем значения по всем операциям
+        for (String metricName : allMetricNames) {
+            List<StatisticsComparisonDto.MetricValue> metricValues = new ArrayList<>();
+
+            for (StatisticsComparisonDto.OperationStatistics operation : operations) {
+                StatisticsComparisonDto.MetricValue metricValue = null;
+                if (operation.getMetrics() != null) {
+                    metricValue = operation.getMetrics().get(metricName);
+                }
+                metricValues.add(metricValue != null ? metricValue : createEmptyMetricValue());
+            }
+
+            result.put(metricName, metricValues);
+        }
+
+        return result;
+    }
+
+    /**
+     * Создаёт пустое значение метрики (для случаев когда метрика отсутствует)
+     *
+     * @return пустое значение метрики
+     */
+    private StatisticsComparisonDto.MetricValue createEmptyMetricValue() {
+        StatisticsComparisonDto.MetricValue empty = new StatisticsComparisonDto.MetricValue();
+        empty.setCurrentValue(0L);
+        empty.setPreviousValue(null);
+        empty.setChangePercentage(0.0);
+        empty.setChangeType(StatisticsComparisonDto.ChangeType.STABLE);
+        empty.setAlertLevel(StatisticsComparisonDto.AlertLevel.NORMAL);
+        return empty;
     }
 
     /**
