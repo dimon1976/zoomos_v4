@@ -391,16 +391,15 @@ public class StatisticsExcelExportService {
         // Закрепить первые 2 колонки (Группа + Метрика)
         sheet.createFreezePane(2, 2);
 
-        // Автоматическая ширина колонок
+        // Устанавливаем ширину колонок
         for (int i = 0; i < 2 + operations.size(); i++) {
             if (i == 0) {
                 sheet.setColumnWidth(i, 30 * 256); // ~30 символов для группы
             } else if (i == 1) {
                 sheet.setColumnWidth(i, 25 * 256); // ~25 символов для метрики
             } else {
-                sheet.autoSizeColumn(i);
-                int currentWidth = sheet.getColumnWidth(i);
-                sheet.setColumnWidth(i, (int)(currentWidth * 1.15)); // Добавляем 15% запаса
+                // Фиксированная ширина для колонок трендов (15 символов для "↑ (+100.0%)")
+                sheet.setColumnWidth(i, 15 * 256);
             }
         }
     }
