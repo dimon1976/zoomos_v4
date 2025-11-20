@@ -352,7 +352,11 @@ public class StatisticsExcelExportService {
         // 2. ДАННЫЕ ТРЕНДОВ
         for (StatisticsComparisonDto group : comparison) {
             String groupValue = group.getGroupFieldValue();
-            boolean isTotalSummary = "ОБЩЕЕ КОЛИЧЕСТВО".equals(groupValue);
+
+            // Пропускаем итоговые строки "ОБЩЕЕ КОЛИЧЕСТВО"
+            if ("ОБЩЕЕ КОЛИЧЕСТВО".equals(groupValue)) {
+                continue;
+            }
 
             // Получаем все уникальные метрики для группы
             Map<String, List<StatisticsComparisonDto.MetricValue>> metricsByName = extractMetricsByName(group);
@@ -361,12 +365,10 @@ public class StatisticsExcelExportService {
                 Row dataRow = sheet.createRow(rowIndex++);
 
                 // Колонка "Группа"
-                createCell(dataRow, 0, groupValue,
-                        isTotalSummary ? styles.totalGroupStyle : styles.groupStyle);
+                createCell(dataRow, 0, groupValue, styles.groupStyle);
 
                 // Колонка "Метрика"
-                createCell(dataRow, 1, metricName,
-                        isTotalSummary ? styles.totalMetricStyle : styles.metricStyle);
+                createCell(dataRow, 1, metricName, styles.metricStyle);
 
                 // Получаем исторические данные с анализом тренда
                 try {
