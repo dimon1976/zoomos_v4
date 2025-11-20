@@ -398,6 +398,11 @@ public class StatisticsExcelExportService {
         // Закрепить первую строку (заголовок) и первые 2 колонки (Группа + Метрика)
         sheet.createFreezePane(2, 1);
 
+        // Добавляем автофильтр для всех колонок
+        if (rowIndex > 1) { // Есть данные кроме заголовка
+            sheet.setAutoFilter(new CellRangeAddress(0, rowIndex - 1, 0, 3));
+        }
+
         // Устанавливаем ширину колонок
         sheet.setColumnWidth(0, 30 * 256); // Группа
         sheet.setColumnWidth(1, 25 * 256); // Метрика
