@@ -281,7 +281,7 @@ public class StatisticsExcelExportService {
     }
 
     /**
-     * Автоматически подбирает ширину колонок
+     * Устанавливает ширину колонок
      */
     private void autoSizeColumns(Sheet sheet, List<StatisticsComparisonDto> comparison) {
         if (comparison.isEmpty()) {
@@ -293,17 +293,14 @@ public class StatisticsExcelExportService {
         int totalColumns = 2 + operationsCount;
 
         for (int col = 0; col < totalColumns; col++) {
-            // Для первых двух колонок устанавливаем фиксированную ширину
             if (col == 0) {
-                sheet.setColumnWidth(col, 30 * 256); // ~30 символов
+                sheet.setColumnWidth(col, 30 * 256); // ~30 символов для группы
             } else if (col == 1) {
-                sheet.setColumnWidth(col, 25 * 256); // ~25 символов
+                sheet.setColumnWidth(col, 25 * 256); // ~25 символов для метрики
             } else {
-                // Для остальных - автоматическая подстройка
-                sheet.autoSizeColumn(col);
-                // Добавляем небольшой запас
-                int currentWidth = sheet.getColumnWidth(col);
-                sheet.setColumnWidth(col, (int)(currentWidth * 1.1));
+                // Фиксированная ширина для колонок операций (20 символов)
+                // Достаточно для "12345\n(50.0% от 10000)\n↑ 25.5%"
+                sheet.setColumnWidth(col, 20 * 256);
             }
         }
     }
@@ -322,29 +319,45 @@ public class StatisticsExcelExportService {
             return;
         }
 
+        List<StatisticsComparisonDto.OperationStatistics> operations = comparison.get(0).getOperations();
+        int operationsCount = operations.size();
+
         // 1. ЗАГОЛОВКИ
-        // Строка 1: Группа | Метрика | Операция #1 | Операция #2 | ...
+        // Строка 1: Группа | Метрика | Операция #1 [Описание] | Операция #1 [%] | Операция #2 [Описание] | Операция #2 [%] | ...
         Row headerRow1 = sheet.createRow(rowIndex++);
 
         // Фиксированные колонки
         createCell(headerRow1, 0, "Группа", styles.headerStyle);
         createCell(headerRow1, 1, "Метрика", styles.headerStyle);
 
-        // Колонки операций
-        List<StatisticsComparisonDto.OperationStatistics> operations = comparison.get(0).getOperations();
-        for (int i = 0; i < operations.size(); i++) {
+        // Колонки операций (по 2 колонки на операцию: описание + процент)
+        int col = 2;
+        for (int i = 0; i < operationsCount; i++) {
             String operationLabel = "Операция " + (i + 1);
-            createCell(headerRow1, 2 + i, operationLabel, styles.headerStyle);
+
+            // Объединяем 2 колонки для заголовка операции
+            createCell(headerRow1, col, operationLabel, styles.headerStyle);
+            createCell(headerRow1, col + 1, "", styles.headerStyle);
+            sheet.addMergedRegion(new CellRangeAddress(rowIndex - 1, rowIndex - 1, col, col + 1));
+
+            col += 2;
         }
 
-        // Строка 2: (пусто) | (пусто) | Имя операции | Имя операции | ...
+        // Строка 2: (пусто) | (пусто) | "Описание" | "%" | "Описание" | "%" | ...
         Row headerRow2 = sheet.createRow(rowIndex++);
         createCell(headerRow2, 0, "", styles.headerStyle);
         createCell(headerRow2, 1, "", styles.headerStyle);
 
-        for (int i = 0; i < operations.size(); i++) {
+        col = 2;
+        for (int i = 0; i < operationsCount; i++) {
             String operationName = operations.get(i).getOperationName();
-            createCell(headerRow2, 2 + i, operationName != null ? operationName : "", styles.headerSubStyle);
+            String shortName = operationName != null && operationName.length() > 15
+                ? operationName.substring(0, 15) + "..."
+                : (operationName != null ? operationName : "");
+
+            createCell(headerRow2, col, shortName, styles.headerSubStyle);
+            createCell(headerRow2, col + 1, "%", styles.headerSubStyle);
+            col += 2;
         }
 
         // Объединяем ячейки для фиксированных колонок
@@ -373,82 +386,116 @@ public class StatisticsExcelExportService {
                 createCell(dataRow, 1, metricName,
                         isTotalSummary ? styles.totalMetricStyle : styles.metricStyle);
 
-                // Колонки с трендами для каждой операции
+                // Колонки с трендами для каждой операции (описание + процент)
+                col = 2;
                 for (int i = 0; i < metricValues.size(); i++) {
                     StatisticsComparisonDto.MetricValue metricValue = metricValues.get(i);
-                    String trendText = formatTrendCell(metricValue);
                     CellStyle trendStyle = determineTrendCellStyle(metricValue, styles);
 
-                    createCell(dataRow, 2 + i, trendText, trendStyle);
+                    // Колонка с описанием тренда
+                    String description = generateTrendDescription(metricValue);
+                    createCell(dataRow, col, description, trendStyle);
+
+                    // Колонка с процентом
+                    String percentage = formatTrendPercentage(metricValue);
+                    createCell(dataRow, col + 1, percentage, trendStyle);
+
+                    col += 2;
                 }
             }
         }
 
         // 3. НАСТРОЙКИ ЛИСТА
-        // Закрепить первые 2 строки (заголовки)
-        sheet.createFreezePane(0, 2);
-
-        // Закрепить первые 2 колонки (Группа + Метрика)
+        // Закрепить первые 2 строки (заголовки) и первые 2 колонки (Группа + Метрика)
         sheet.createFreezePane(2, 2);
 
         // Устанавливаем ширину колонок
-        for (int i = 0; i < 2 + operations.size(); i++) {
-            if (i == 0) {
-                sheet.setColumnWidth(i, 30 * 256); // ~30 символов для группы
-            } else if (i == 1) {
-                sheet.setColumnWidth(i, 25 * 256); // ~25 символов для метрики
-            } else {
-                // Фиксированная ширина для колонок трендов (15 символов для "↑ (+100.0%)")
-                sheet.setColumnWidth(i, 15 * 256);
-            }
+        sheet.setColumnWidth(0, 30 * 256); // Группа
+        sheet.setColumnWidth(1, 25 * 256); // Метрика
+
+        col = 2;
+        for (int i = 0; i < operationsCount; i++) {
+            sheet.setColumnWidth(col, 35 * 256);     // Описание тренда (шире)
+            sheet.setColumnWidth(col + 1, 10 * 256); // Процент (уже)
+            col += 2;
         }
     }
 
     /**
-     * Форматирует ячейку тренда: символ + процент
+     * Генерирует текстовое описание тренда на основе изменения метрики
      *
      * Примеры:
-     * - "↑ (+5.2%)"  для роста на 5.2%
-     * - "↓ (-2.1%)"  для падения на 2.1%
-     * - "= (0%)"     для стабильного значения
-     * - "-"          для первой операции (нет предыдущего значения)
+     * - "Существенный сильный рост" для критического роста >10%
+     * - "Умеренный спад" для предупреждающего снижения 5-10%
+     * - "Стабильные показатели" для изменений в пределах ±5%
+     * - "Нет данных" для первой операции
      *
      * @param metricValue значение метрики
-     * @return отформатированный текст тренда
+     * @return текстовое описание тренда
      */
-    private String formatTrendCell(StatisticsComparisonDto.MetricValue metricValue) {
+    private String generateTrendDescription(StatisticsComparisonDto.MetricValue metricValue) {
         if (metricValue.getPreviousValue() == null) {
-            return "-"; // Нет предыдущего значения для сравнения
+            return "Нет данных"; // Нет предыдущего значения для сравнения
         }
 
         StatisticsComparisonDto.ChangeType changeType = metricValue.getChangeType();
         Double changePercentage = metricValue.getChangePercentage();
+        StatisticsComparisonDto.AlertLevel alertLevel = metricValue.getAlertLevel();
 
         if (changePercentage == null || changeType == StatisticsComparisonDto.ChangeType.STABLE) {
-            return "= (0%)";
+            return "Стабильные показатели";
         }
 
-        String symbol;
-        String sign;
+        // Определяем интенсивность изменения на основе alertLevel
+        String intensity = switch (alertLevel) {
+            case CRITICAL -> "Существенный";
+            case WARNING -> "Умеренный";
+            default -> "";
+        };
 
-        switch (changeType) {
-            case UP:
-                symbol = "↑";
-                sign = "+";
-                break;
-            case DOWN:
-                symbol = "↓";
-                sign = "";  // Минус уже в числе
-                break;
-            case STABLE:
-            default:
-                return "= (0%)";
+        // Определяем направление и величину изменения
+        double absChange = Math.abs(changePercentage);
+        String direction;
+
+        if (changeType == StatisticsComparisonDto.ChangeType.UP) {
+            direction = absChange > 10.0 ? "сильный рост" : "рост";
+        } else { // DOWN
+            direction = absChange > 10.0 ? "сильный спад" : "спад";
         }
 
-        // Форматируем процент с 1 знаком после запятой
-        String formattedPercentage = String.format("%.1f", Math.abs(changePercentage));
+        // Формируем итоговое описание
+        if (intensity.isEmpty()) {
+            // Для NORMAL просто возвращаем направление с большой буквы
+            return direction.substring(0, 1).toUpperCase() + direction.substring(1);
+        } else {
+            return intensity + " " + direction;
+        }
+    }
 
-        return String.format("%s (%s%s%%)", symbol, sign, formattedPercentage);
+    /**
+     * Форматирует процент изменения для отображения в отдельной колонке
+     *
+     * Примеры:
+     * - "53.8" для спада на 53.8%
+     * - "15.2" для роста на 15.2%
+     * - "0.0" для стабильных значений
+     * - "-" для первой операции (нет данных)
+     *
+     * @param metricValue значение метрики
+     * @return отформатированный процент
+     */
+    private String formatTrendPercentage(StatisticsComparisonDto.MetricValue metricValue) {
+        if (metricValue.getPreviousValue() == null) {
+            return "-"; // Нет предыдущего значения
+        }
+
+        Double changePercentage = metricValue.getChangePercentage();
+        if (changePercentage == null) {
+            return "0.0";
+        }
+
+        // Возвращаем абсолютное значение процента с 1 знаком после запятой
+        return String.format("%.1f", Math.abs(changePercentage));
     }
 
     /**
