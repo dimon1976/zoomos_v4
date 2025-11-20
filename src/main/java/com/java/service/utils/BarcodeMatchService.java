@@ -10,6 +10,8 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
+import java.io.FileInputStream;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -31,11 +33,10 @@ public class BarcodeMatchService {
      * Обработка сопоставления штрихкодов
      */
     public byte[] processBarcodeMatching(FileMetadata metadata, BarcodeMatchDto dto) throws IOException {
-        
-        // Извлекаем данные из JSON полей FileMetadata
-        List<List<String>> data = parseSampleData(metadata.getSampleData());
-        List<String> headers = parseHeaders(metadata.getColumnHeaders());
-        
+
+        // Читаем ВЕСЬ файл из tempFilePath, а не только sampleData
+        List<List<String>> data = readFullFile(metadata);
+
         if (data.isEmpty()) {
             throw new IllegalArgumentException("Файл не содержит данных для обработки");
         }
@@ -43,8 +44,12 @@ public class BarcodeMatchService {
         // Валидация колонок
         validateColumns(data, dto);
 
+        log.info("Processing barcode matching: total rows = {}, lookup index will be built", data.size());
+
         // Обработка данных
         List<BarcodeMatchResult> results = processData(data, dto);
+
+        log.info("Barcode matching completed: {} matches found", results.size());
 
         // Генерация результирующего файла
         if ("csv".equalsIgnoreCase(dto.getOutputFormat())) {
@@ -52,6 +57,95 @@ public class BarcodeMatchService {
         } else {
             return generateExcelFile(results);
         }
+    }
+
+    /**
+     * Чтение всего файла из tempFilePath
+     */
+    private List<List<String>> readFullFile(FileMetadata metadata) throws IOException {
+        String tempFilePath = metadata.getTempFilePath();
+        String fileFormat = metadata.getFileFormat();
+
+        if (tempFilePath == null || tempFilePath.isEmpty()) {
+            throw new IllegalArgumentException("Временный файл не найден");
+        }
+
+        java.nio.file.Path path = java.nio.file.Paths.get(tempFilePath);
+        if (!java.nio.file.Files.exists(path)) {
+            throw new IllegalArgumentException("Файл не существует: " + tempFilePath);
+        }
+
+        if ("XLSX".equalsIgnoreCase(fileFormat) || "XLS".equalsIgnoreCase(fileFormat)) {
+            return readExcelFile(path);
+        } else if ("CSV".equalsIgnoreCase(fileFormat)) {
+            return readCsvFile(path, metadata);
+        } else {
+            throw new IllegalArgumentException("Неподдерживаемый формат файла: " + fileFormat);
+        }
+    }
+
+    /**
+     * Чтение Excel файла
+     */
+    private List<List<String>> readExcelFile(java.nio.file.Path path) throws IOException {
+        List<List<String>> data = new ArrayList<>();
+
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(path.toFile());
+             Workbook workbook = WorkbookFactory.create(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            DataFormatter formatter = new DataFormatter();
+            boolean isFirstRow = true;
+
+            for (Row row : sheet) {
+                // Пропускаем первую строку если это заголовок
+                if (isFirstRow) {
+                    isFirstRow = false;
+                    continue;
+                }
+
+                List<String> rowData = new ArrayList<>();
+                for (int i = 0; i < row.getLastCellNum(); i++) {
+                    Cell cell = row.getCell(i);
+                    String value = (cell == null) ? "" : formatter.formatCellValue(cell);
+                    rowData.add(value);
+                }
+                data.add(rowData);
+            }
+        }
+
+        log.debug("Read {} rows from Excel file: {}", data.size(), path.getFileName());
+        return data;
+    }
+
+    /**
+     * Чтение CSV файла
+     */
+    private List<List<String>> readCsvFile(java.nio.file.Path path, FileMetadata metadata) throws IOException {
+        List<List<String>> data = new ArrayList<>();
+        String encoding = metadata.getDetectedEncoding() != null ? metadata.getDetectedEncoding() : "UTF-8";
+        String delimiter = metadata.getDetectedDelimiter() != null ? metadata.getDetectedDelimiter() : ";";
+
+        try (java.io.BufferedReader reader = java.nio.file.Files.newBufferedReader(path,
+                java.nio.charset.Charset.forName(encoding))) {
+
+            String line;
+            boolean isFirstRow = true;
+
+            while ((line = reader.readLine()) != null) {
+                // Пропускаем первую строку если это заголовок
+                if (isFirstRow) {
+                    isFirstRow = false;
+                    continue;
+                }
+
+                String[] values = line.split(delimiter);
+                data.add(Arrays.asList(values));
+            }
+        }
+
+        log.debug("Read {} rows from CSV file: {}", data.size(), path.getFileName());
+        return data;
     }
 
     /**
