@@ -44,6 +44,7 @@
         .preview-table td {
             max-width: 200px;
             word-break: break-word;
+            color: #212529;
         }
         .column-highlight {
             background-color: #fff3cd !important;
@@ -269,9 +270,9 @@
                                         </thead>
                                         <tbody>
                                             <tr th:each="row, rowStat : ${fileMetadata.sampleData}" th:if="${rowStat.index < 10}">
-                                                <td th:each="cell, cellStat : ${row}"
-                                                    th:id="'cell-' + ${rowStat.index} + '-' + ${cellStat.index}"
-                                                    th:text="${cell}">
+                                                <td th:each="header, iterStat : ${fileMetadata.columnHeaders}"
+                                                    th:id="'cell-' + ${rowStat.index} + '-' + ${iterStat.index}"
+                                                    th:text="${row['column_' + iterStat.index]}">
                                                     Cell content
                                                 </td>
                                             </tr>

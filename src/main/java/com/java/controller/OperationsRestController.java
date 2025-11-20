@@ -130,6 +130,18 @@ public class OperationsRestController {
      * Преобразование Entity в DTO
      */
     private FileOperationDto toDto(FileOperation operation) {
+        // Получаем имя шаблона в зависимости от типа операции
+        String templateName = null;
+        if (operation.getOperationType() == FileOperation.OperationType.IMPORT) {
+            templateName = importSessionRepository.findByFileOperationId(operation.getId())
+                    .map(session -> session.getTemplate().getName())
+                    .orElse(null);
+        } else if (operation.getOperationType() == FileOperation.OperationType.EXPORT) {
+            templateName = exportSessionRepository.findByFileOperationId(operation.getId())
+                    .map(session -> session.getTemplate().getName())
+                    .orElse(null);
+        }
+
         return FileOperationDto.builder()
                 .id(operation.getId())
                 .operationType(operation.getOperationType().name())
@@ -143,6 +155,7 @@ public class OperationsRestController {
                 .startedAt(operation.getStartedAt())
                 .completedAt(operation.getCompletedAt())
                 .errorMessage(operation.getErrorMessage())
+                .templateName(templateName)
                 .build();
     }
 
@@ -164,6 +177,7 @@ public class OperationsRestController {
         private java.time.ZonedDateTime startedAt;
         private java.time.ZonedDateTime completedAt;
         private String errorMessage;
+        private String templateName;
     }
 
     /**

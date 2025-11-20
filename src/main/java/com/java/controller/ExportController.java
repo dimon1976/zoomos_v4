@@ -135,7 +135,10 @@ public class ExportController {
         }
 
         sessionRepository.findByFileOperationId(operationId)
-                .ifPresent(session -> model.addAttribute("exportSession", session));
+                .ifPresent(session -> {
+                    model.addAttribute("exportSession", session);
+                    model.addAttribute("templateName", session.getTemplate().getName());
+                });
 
         // Создаём breadcrumbs
         Long clientId = operation.getClient().getId();

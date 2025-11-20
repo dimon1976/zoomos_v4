@@ -253,7 +253,10 @@ public class ImportController {
 
         // Находим сессию импорта
         sessionRepository.findByFileOperationId(operationId)
-                .ifPresent(session -> model.addAttribute("importSession", session));
+                .ifPresent(session -> {
+                    model.addAttribute("importSession", session);
+                    model.addAttribute("templateName", session.getTemplate().getName());
+                });
 
         model.addAttribute("operation", operation);
         model.addAttribute("clientId", operation.getClient().getId());

@@ -94,6 +94,9 @@
                             <a th:href="@{/clients/{id}(id=${clientId})}"
                                th:text="${clientName}">Клиент</a>
                         </p>
+                        <p class="mb-1" th:if="${templateName}"><strong>Шаблон:</strong>
+                            <span class="badge bg-secondary" th:text="${templateName}">Название шаблона</span>
+                        </p>
                         <p class="mb-0"><strong>Время:</strong>
                             <span th:text="${formattedStartedAt}">01.01.2025 10:00:00</span>
                             <span th:if="${formattedCompletedAt}" th:text="'- ' + ${formattedCompletedAt}"></span>
