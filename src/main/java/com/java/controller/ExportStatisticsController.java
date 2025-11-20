@@ -485,8 +485,9 @@ public class ExportStatisticsController {
                 return org.springframework.http.ResponseEntity.badRequest().build();
             }
 
-            // Генерируем Excel файл
-            java.nio.file.Path excelFile = excelExportService.generateExcel(comparison, client.getName());
+            // Генерируем Excel файл с трендами
+            java.nio.file.Path excelFile = excelExportService.generateExcel(
+                    comparison, client.getName(), request.getTemplateId(), filterField, filterValue);
 
             // Формируем имя файла для скачивания
             String fileName = String.format("statistics_%s_%s.xlsx",

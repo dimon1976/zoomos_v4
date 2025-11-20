@@ -1,6 +1,7 @@
 package com.java.service.statistics;
 
 import com.java.dto.StatisticsComparisonDto;
+import com.java.dto.StatisticsHistoryDto;
 import com.java.util.PathResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,19 +26,32 @@ import java.util.*;
 public class StatisticsExcelExportService {
 
     private final PathResolver pathResolver;
+    private final HistoricalStatisticsService historicalStatisticsService;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     /**
-     * Генерирует Excel файл со статистикой сравнения
+     * Генерирует Excel файл со статистикой сравнения и общими трендами
+     *
+     * @param comparison данные сравнения статистики
+     * @param clientName название клиента
+     * @param templateId ID шаблона экспорта (для получения исторических данных)
+     * @param filterFieldName название поля фильтрации (может быть null)
+     * @param filterFieldValue значение фильтра (может быть null)
+     * @return путь к сгенерированному файлу
      */
-    public Path generateExcel(List<StatisticsComparisonDto> comparison, String clientName) throws IOException {
+    public Path generateExcel(List<StatisticsComparisonDto> comparison,
+                              String clientName,
+                              Long templateId,
+                              String filterFieldName,
+                              String filterFieldValue) throws IOException {
 
         if (comparison == null || comparison.isEmpty()) {
             throw new IllegalArgumentException("Нет данных для экспорта");
         }
 
-        log.info("Starting statistics Excel export. Client: {}, Groups: {}", clientName, comparison.size());
+        log.info("Starting statistics Excel export. Client: {}, Groups: {}, TemplateId: {}",
+                clientName, comparison.size(), templateId);
 
         // Создаём временный файл
         Path tempFile = pathResolver.createTempFile("statistics_export_", ".xlsx");
@@ -55,9 +69,9 @@ public class StatisticsExcelExportService {
             writeStatisticsData(statisticsSheet, comparison, styles);
             autoSizeColumns(statisticsSheet, comparison);
 
-            // Лист 2: Тренды
+            // Лист 2: Тренды (общие по всем операциям)
             Sheet trendsSheet = workbook.createSheet("Тренды");
-            writeTrendsSheet(trendsSheet, comparison, styles);
+            writeTrendsSheet(trendsSheet, comparison, templateId, filterFieldName, filterFieldValue, styles);
 
             // Сохраняем файл
             workbook.write(fos);
@@ -306,76 +320,44 @@ public class StatisticsExcelExportService {
     }
 
     /**
-     * Записывает лист "Тренды" с информацией об изменениях метрик
+     * Записывает лист "Тренды" с общей информацией о трендах для каждой группы/метрики
+     * Использует анализ всех исторических данных через HistoricalStatisticsService
      *
-     * @param sheet      лист Excel для записи
+     * @param sheet лист Excel для записи
      * @param comparison данные сравнения статистики
-     * @param styles     стили Excel
+     * @param templateId ID шаблона (для получения исторических данных)
+     * @param filterFieldName название поля фильтрации (может быть null)
+     * @param filterFieldValue значение фильтра (может быть null)
+     * @param styles стили Excel
      */
-    private void writeTrendsSheet(Sheet sheet, List<StatisticsComparisonDto> comparison, ExcelStyles styles) {
+    private void writeTrendsSheet(Sheet sheet,
+                                  List<StatisticsComparisonDto> comparison,
+                                  Long templateId,
+                                  String filterFieldName,
+                                  String filterFieldValue,
+                                  ExcelStyles styles) {
         int rowIndex = 0;
 
         if (comparison.isEmpty()) {
             return;
         }
 
-        List<StatisticsComparisonDto.OperationStatistics> operations = comparison.get(0).getOperations();
-        int operationsCount = operations.size();
-
         // 1. ЗАГОЛОВКИ
-        // Строка 1: Группа | Метрика | Операция #1 [Описание] | Операция #1 [%] | Операция #2 [Описание] | Операция #2 [%] | ...
-        Row headerRow1 = sheet.createRow(rowIndex++);
-
-        // Фиксированные колонки
-        createCell(headerRow1, 0, "Группа", styles.headerStyle);
-        createCell(headerRow1, 1, "Метрика", styles.headerStyle);
-
-        // Колонки операций (по 2 колонки на операцию: описание + процент)
-        int col = 2;
-        for (int i = 0; i < operationsCount; i++) {
-            String operationLabel = "Операция " + (i + 1);
-
-            // Объединяем 2 колонки для заголовка операции
-            createCell(headerRow1, col, operationLabel, styles.headerStyle);
-            createCell(headerRow1, col + 1, "", styles.headerStyle);
-            sheet.addMergedRegion(new CellRangeAddress(rowIndex - 1, rowIndex - 1, col, col + 1));
-
-            col += 2;
-        }
-
-        // Строка 2: (пусто) | (пусто) | "Описание" | "%" | "Описание" | "%" | ...
-        Row headerRow2 = sheet.createRow(rowIndex++);
-        createCell(headerRow2, 0, "", styles.headerStyle);
-        createCell(headerRow2, 1, "", styles.headerStyle);
-
-        col = 2;
-        for (int i = 0; i < operationsCount; i++) {
-            String operationName = operations.get(i).getOperationName();
-            String shortName = operationName != null && operationName.length() > 15
-                ? operationName.substring(0, 15) + "..."
-                : (operationName != null ? operationName : "");
-
-            createCell(headerRow2, col, shortName, styles.headerSubStyle);
-            createCell(headerRow2, col + 1, "%", styles.headerSubStyle);
-            col += 2;
-        }
-
-        // Объединяем ячейки для фиксированных колонок
-        sheet.addMergedRegion(new CellRangeAddress(0, 1, 0, 0));
-        sheet.addMergedRegion(new CellRangeAddress(0, 1, 1, 1));
+        Row headerRow = sheet.createRow(rowIndex++);
+        createCell(headerRow, 0, "Группа", styles.headerStyle);
+        createCell(headerRow, 1, "Метрика", styles.headerStyle);
+        createCell(headerRow, 2, "Тренд", styles.headerStyle);
+        createCell(headerRow, 3, "%", styles.headerStyle);
 
         // 2. ДАННЫЕ ТРЕНДОВ
         for (StatisticsComparisonDto group : comparison) {
             String groupValue = group.getGroupFieldValue();
             boolean isTotalSummary = "ОБЩЕЕ КОЛИЧЕСТВО".equals(groupValue);
 
-            // Получаем все метрики для группы
+            // Получаем все уникальные метрики для группы
             Map<String, List<StatisticsComparisonDto.MetricValue>> metricsByName = extractMetricsByName(group);
 
-            for (Map.Entry<String, List<StatisticsComparisonDto.MetricValue>> entry : metricsByName.entrySet()) {
-                String metricName = entry.getKey();
-                List<StatisticsComparisonDto.MetricValue> metricValues = entry.getValue();
-
+            for (String metricName : metricsByName.keySet()) {
                 Row dataRow = sheet.createRow(rowIndex++);
 
                 // Колонка "Группа"
@@ -386,147 +368,77 @@ public class StatisticsExcelExportService {
                 createCell(dataRow, 1, metricName,
                         isTotalSummary ? styles.totalMetricStyle : styles.metricStyle);
 
-                // Колонки с трендами для каждой операции (описание + процент)
-                col = 2;
-                for (int i = 0; i < metricValues.size(); i++) {
-                    StatisticsComparisonDto.MetricValue metricValue = metricValues.get(i);
-                    CellStyle trendStyle = determineTrendCellStyle(metricValue, styles);
+                // Получаем исторические данные с анализом тренда
+                try {
+                    StatisticsHistoryDto history = historicalStatisticsService.getHistoryForMetric(
+                            templateId, groupValue, metricName, filterFieldName, filterFieldValue, 0);
 
-                    // Колонка с описанием тренда
-                    String description = generateTrendDescription(metricValue);
-                    createCell(dataRow, col, description, trendStyle);
+                    StatisticsHistoryDto.TrendInfo trendInfo = history.getTrendInfo();
+                    CellStyle trendStyle = determineTrendStyle(trendInfo, styles);
 
-                    // Колонка с процентом
-                    String percentage = formatTrendPercentage(metricValue);
-                    createCell(dataRow, col + 1, percentage, trendStyle);
+                    // Колонка "Тренд" (описание)
+                    String trendDescription = trendInfo != null ? trendInfo.getDescription() : "Нет данных";
+                    createCell(dataRow, 2, trendDescription, trendStyle);
 
-                    col += 2;
+                    // Колонка "%" (процент изменения)
+                    String changePercentage = formatHistoricalTrendPercentage(trendInfo);
+                    createCell(dataRow, 3, changePercentage, trendStyle);
+
+                } catch (Exception e) {
+                    log.warn("Не удалось получить тренд для группы={}, метрика={}: {}",
+                            groupValue, metricName, e.getMessage());
+
+                    createCell(dataRow, 2, "Недостаточно данных", styles.normalStyle);
+                    createCell(dataRow, 3, "-", styles.normalStyle);
                 }
             }
         }
 
         // 3. НАСТРОЙКИ ЛИСТА
-        // Закрепить первые 2 строки (заголовки) и первые 2 колонки (Группа + Метрика)
-        sheet.createFreezePane(2, 2);
+        // Закрепить первую строку (заголовок) и первые 2 колонки (Группа + Метрика)
+        sheet.createFreezePane(2, 1);
 
         // Устанавливаем ширину колонок
         sheet.setColumnWidth(0, 30 * 256); // Группа
         sheet.setColumnWidth(1, 25 * 256); // Метрика
-
-        col = 2;
-        for (int i = 0; i < operationsCount; i++) {
-            sheet.setColumnWidth(col, 35 * 256);     // Описание тренда (шире)
-            sheet.setColumnWidth(col + 1, 10 * 256); // Процент (уже)
-            col += 2;
-        }
+        sheet.setColumnWidth(2, 40 * 256); // Тренд (описание)
+        sheet.setColumnWidth(3, 10 * 256); // %
     }
 
     /**
-     * Генерирует текстовое описание тренда на основе изменения метрики
+     * Форматирует процент изменения из исторического анализа тренда
      *
-     * Примеры:
-     * - "Существенный сильный рост" для критического роста >10%
-     * - "Умеренный спад" для предупреждающего снижения 5-10%
-     * - "Стабильные показатели" для изменений в пределах ±5%
-     * - "Нет данных" для первой операции
-     *
-     * @param metricValue значение метрики
-     * @return текстовое описание тренда
+     * @param trendInfo информация о тренде из HistoricalStatisticsService
+     * @return отформатированный процент (например "53.8" или "-")
      */
-    private String generateTrendDescription(StatisticsComparisonDto.MetricValue metricValue) {
-        if (metricValue.getPreviousValue() == null) {
-            return "Нет данных"; // Нет предыдущего значения для сравнения
+    private String formatHistoricalTrendPercentage(StatisticsHistoryDto.TrendInfo trendInfo) {
+        if (trendInfo == null || trendInfo.getChangePercentage() == null) {
+            return "-";
         }
 
-        StatisticsComparisonDto.ChangeType changeType = metricValue.getChangeType();
-        Double changePercentage = metricValue.getChangePercentage();
-        StatisticsComparisonDto.AlertLevel alertLevel = metricValue.getAlertLevel();
-
-        if (changePercentage == null || changeType == StatisticsComparisonDto.ChangeType.STABLE) {
-            return "Стабильные показатели";
-        }
-
-        // Определяем интенсивность изменения на основе alertLevel
-        String intensity = switch (alertLevel) {
-            case CRITICAL -> "Существенный";
-            case WARNING -> "Умеренный";
-            default -> "";
-        };
-
-        // Определяем направление и величину изменения
-        double absChange = Math.abs(changePercentage);
-        String direction;
-
-        if (changeType == StatisticsComparisonDto.ChangeType.UP) {
-            direction = absChange > 10.0 ? "сильный рост" : "рост";
-        } else { // DOWN
-            direction = absChange > 10.0 ? "сильный спад" : "спад";
-        }
-
-        // Формируем итоговое описание
-        if (intensity.isEmpty()) {
-            // Для NORMAL просто возвращаем направление с большой буквы
-            return direction.substring(0, 1).toUpperCase() + direction.substring(1);
-        } else {
-            return intensity + " " + direction;
-        }
-    }
-
-    /**
-     * Форматирует процент изменения для отображения в отдельной колонке
-     *
-     * Примеры:
-     * - "53.8" для спада на 53.8%
-     * - "15.2" для роста на 15.2%
-     * - "0.0" для стабильных значений
-     * - "-" для первой операции (нет данных)
-     *
-     * @param metricValue значение метрики
-     * @return отформатированный процент
-     */
-    private String formatTrendPercentage(StatisticsComparisonDto.MetricValue metricValue) {
-        if (metricValue.getPreviousValue() == null) {
-            return "-"; // Нет предыдущего значения
-        }
-
-        Double changePercentage = metricValue.getChangePercentage();
-        if (changePercentage == null) {
-            return "0.0";
-        }
-
-        // Возвращаем абсолютное значение процента с 1 знаком после запятой
+        double changePercentage = trendInfo.getChangePercentage();
         return String.format("%.1f", Math.abs(changePercentage));
     }
 
     /**
-     * Определяет стиль ячейки тренда на основе типа изменения и уровня предупреждения
+     * Определяет стиль ячейки тренда на основе направления тренда
      *
-     * @param metricValue значение метрики с информацией о тренде
-     * @param styles      стили Excel
+     * @param trendInfo информация о тренде
+     * @param styles стили Excel
      * @return стиль ячейки
      */
-    private CellStyle determineTrendCellStyle(StatisticsComparisonDto.MetricValue metricValue, ExcelStyles styles) {
-        if (metricValue.getPreviousValue() == null) {
-            return styles.normalStyle; // Нет данных для сравнения
+    private CellStyle determineTrendStyle(StatisticsHistoryDto.TrendInfo trendInfo, ExcelStyles styles) {
+        if (trendInfo == null || trendInfo.getDirection() == null) {
+            return styles.normalStyle;
         }
 
-        StatisticsComparisonDto.ChangeType changeType = metricValue.getChangeType();
-        StatisticsComparisonDto.AlertLevel alertLevel = metricValue.getAlertLevel();
-
-        if (changeType == StatisticsComparisonDto.ChangeType.STABLE) {
-            return styles.normalStyle; // Обычный стиль для стабильных
-        }
-
-        // Определяем стиль на основе направления и уровня предупреждения
-        if (changeType == StatisticsComparisonDto.ChangeType.UP) {
-            return (alertLevel == StatisticsComparisonDto.AlertLevel.CRITICAL)
-                    ? styles.increaseCriticalStyle   // Яркий зеленый (критический рост)
-                    : styles.increaseWarningStyle;    // Светло-зеленый (предупреждение о росте)
-        } else { // DOWN
-            return (alertLevel == StatisticsComparisonDto.AlertLevel.CRITICAL)
-                    ? styles.decreaseCriticalStyle    // Яркий красный (критическое падение)
-                    : styles.decreaseWarningStyle;     // Светло-оранжевый (предупреждение о падении)
-        }
+        return switch (trendInfo.getDirection()) {
+            case STRONG_GROWTH -> styles.increaseCriticalStyle;  // Сильный рост - яркий зелёный
+            case GROWTH -> styles.increaseWarningStyle;          // Рост - светло-зелёный
+            case STABLE -> styles.normalStyle;                   // Стабильность - обычный
+            case DECLINE -> styles.decreaseWarningStyle;         // Спад - светло-оранжевый
+            case STRONG_DECLINE -> styles.decreaseCriticalStyle; // Сильный спад - яркий красный
+        };
     }
 
     /**
