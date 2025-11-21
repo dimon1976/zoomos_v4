@@ -134,7 +134,7 @@ public class ExportController {
             return "redirect:/clients";
         }
 
-        sessionRepository.findByFileOperationId(operationId)
+        sessionRepository.findByFileOperationIdWithTemplate(operationId)
                 .ifPresent(session -> {
                     model.addAttribute("exportSession", session);
                     model.addAttribute("templateName", session.getTemplate().getName());

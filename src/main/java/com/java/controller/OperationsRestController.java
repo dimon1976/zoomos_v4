@@ -133,11 +133,11 @@ public class OperationsRestController {
         // Получаем имя шаблона в зависимости от типа операции
         String templateName = null;
         if (operation.getOperationType() == FileOperation.OperationType.IMPORT) {
-            templateName = importSessionRepository.findByFileOperationId(operation.getId())
+            templateName = importSessionRepository.findByFileOperationIdWithTemplate(operation.getId())
                     .map(session -> session.getTemplate().getName())
                     .orElse(null);
         } else if (operation.getOperationType() == FileOperation.OperationType.EXPORT) {
-            templateName = exportSessionRepository.findByFileOperationId(operation.getId())
+            templateName = exportSessionRepository.findByFileOperationIdWithTemplate(operation.getId())
                     .map(session -> session.getTemplate().getName())
                     .orElse(null);
         }
