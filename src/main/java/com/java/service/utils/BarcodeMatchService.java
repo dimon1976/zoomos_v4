@@ -107,7 +107,21 @@ public class BarcodeMatchService {
                 List<String> rowData = new ArrayList<>();
                 for (int i = 0; i < row.getLastCellNum(); i++) {
                     Cell cell = row.getCell(i);
-                    String value = (cell == null) ? "" : formatter.formatCellValue(cell);
+                    String value = "";
+                    if (cell != null) {
+                        switch (cell.getCellType()) {
+                            case STRING:
+                                value = cell.getStringCellValue();
+                                break;
+                            case NUMERIC:
+                                // Читаем как целое число для штрихкодов
+                                value = String.valueOf((long) cell.getNumericCellValue());
+                                break;
+                            default:
+                                // Fallback на DataFormatter для других типов
+                                value = formatter.formatCellValue(cell);
+                        }
+                    }
                     rowData.add(value);
                 }
                 data.add(rowData);
@@ -214,14 +228,25 @@ public class BarcodeMatchService {
      */
     private List<BarcodeMatchResult> processData(List<List<String>> data, BarcodeMatchDto dto) {
         List<BarcodeMatchResult> results = new ArrayList<>();
-        
+
         // Создаем индекс справочных данных: штрихкод -> URL
         Map<String, String> lookupIndex = buildLookupIndex(data, dto);
-        
+
+        int totalSourceRows = 0;
+        int totalSourceBarcodesProcessed = 0;
+        int totalSourceBarcodesValid = 0;
+        int totalSourceBarcodesInvalid = 0;
+        int totalMatches = 0;
+        int totalNotFound = 0;
+
         // Обрабатываем каждую строку с исходными данными
         for (List<String> row : data) {
-            if (row.size() <= Math.max(Math.max(dto.getSourceIdColumn(), dto.getSourceBarcodesColumn()), 
-                                      Math.max(dto.getLookupBarcodesColumn(), dto.getLookupUrlColumn()))) {
+            totalSourceRows++;
+
+            // Для source данных проверяем только наличие колонок A и B (не требуем C и D)
+            if (row.size() <= Math.max(dto.getSourceIdColumn(), dto.getSourceBarcodesColumn())) {
+                log.debug("Source row {} skipped: insufficient columns for source (has {}, needs > {})",
+                    totalSourceRows, row.size(), Math.max(dto.getSourceIdColumn(), dto.getSourceBarcodesColumn()));
                 continue;
             }
 
@@ -229,28 +254,55 @@ public class BarcodeMatchService {
             String sourceBarcodesStr = getColumnValue(row, dto.getSourceBarcodesColumn());
 
             if (isEmpty(sourceId) || isEmpty(sourceBarcodesStr)) {
+                log.debug("Source row {} skipped: empty ID or barcodes", totalSourceRows);
                 continue;
             }
 
             // Парсинг исходных штрихкодов
             List<String> sourceBarcodes = parseBarcodes(sourceBarcodesStr);
-            
+            log.debug("Source row {} (ID={}): parsed {} barcodes from '{}'",
+                totalSourceRows, sourceId, sourceBarcodes.size(), sourceBarcodesStr);
+
             for (String sourceBarcode : sourceBarcodes) {
+                totalSourceBarcodesProcessed++;
+                String trimmed = sourceBarcode.trim();
+
                 if (isValidBarcode(sourceBarcode)) {
+                    totalSourceBarcodesValid++;
                     String trimmedBarcode = sourceBarcode.trim();
-                    
+
                     // Ищем совпадение в справочном индексе
                     String matchedUrl = lookupIndex.get(trimmedBarcode);
                     if (matchedUrl != null) {
+                        totalMatches++;
                         results.add(new BarcodeMatchResult(sourceId, trimmedBarcode, matchedUrl));
+                        if (totalMatches <= 5) {
+                            log.info("Match found: ID='{}', barcode='{}' -> URL='{}'", sourceId, trimmedBarcode, matchedUrl);
+                        }
                     } else {
-                        log.debug("No match found for barcode: {} from ID: {}", trimmedBarcode, sourceId);
+                        totalNotFound++;
+                        if (totalNotFound <= 10) {
+                            log.warn("No match found for barcode: '{}' from ID: '{}'", trimmedBarcode, sourceId);
+                        }
                     }
                 } else {
-                    log.debug("Invalid barcode skipped: {} for ID: {}", sourceBarcode, sourceId);
+                    totalSourceBarcodesInvalid++;
+                    if (totalSourceBarcodesInvalid <= 10) {
+                        log.warn("Invalid source barcode skipped: '{}' (length={}) for ID: '{}'",
+                            sourceBarcode, sourceBarcode.trim().length(), sourceId);
+                    }
                 }
             }
         }
+
+        log.info("===== SOURCE PROCESSING SUMMARY =====");
+        log.info("Total source rows processed: {}", totalSourceRows);
+        log.info("Total source barcodes processed: {}", totalSourceBarcodesProcessed);
+        log.info("Total source barcodes valid: {}", totalSourceBarcodesValid);
+        log.info("Total source barcodes invalid: {}", totalSourceBarcodesInvalid);
+        log.info("Total matches found: {}", totalMatches);
+        log.info("Total not found: {}", totalNotFound);
+        log.info("=====================================");
 
         return results;
     }
@@ -260,30 +312,59 @@ public class BarcodeMatchService {
      */
     private Map<String, String> buildLookupIndex(List<List<String>> data, BarcodeMatchDto dto) {
         Map<String, String> index = new HashMap<>();
-        
+        int totalRows = 0;
+        int totalBarcodesProcessed = 0;
+        int totalBarcodesAdded = 0;
+        int totalBarcodesRejected = 0;
+
         for (List<String> row : data) {
+            totalRows++;
+
             if (row.size() <= Math.max(dto.getLookupBarcodesColumn(), dto.getLookupUrlColumn())) {
+                log.debug("Row {} skipped: insufficient columns (has {}, needs > {})",
+                    totalRows, row.size(), Math.max(dto.getLookupBarcodesColumn(), dto.getLookupUrlColumn()));
                 continue;
             }
-            
+
             String lookupBarcodesStr = getColumnValue(row, dto.getLookupBarcodesColumn());
             String lookupUrl = getColumnValue(row, dto.getLookupUrlColumn());
-            
+
             if (isEmpty(lookupBarcodesStr) || isEmpty(lookupUrl)) {
+                log.debug("Row {} skipped: empty barcode or URL", totalRows);
                 continue;
             }
-            
+
             // Парсинг справочных штрихкодов
             List<String> lookupBarcodes = parseBarcodes(lookupBarcodesStr);
-            
+            log.debug("Row {}: parsed {} barcodes from '{}'", totalRows, lookupBarcodes.size(), lookupBarcodesStr);
+
             for (String barcode : lookupBarcodes) {
+                totalBarcodesProcessed++;
+
                 if (isValidBarcode(barcode)) {
                     index.put(barcode.trim(), lookupUrl);
+                    totalBarcodesAdded++;
+                    if (totalBarcodesAdded <= 5) {
+                        log.info("Sample lookup barcode added: '{}' -> '{}'", barcode.trim(), lookupUrl);
+                    }
+                } else {
+                    totalBarcodesRejected++;
+                    if (totalBarcodesRejected <= 10) {
+                        log.warn("Lookup barcode rejected: '{}' (length={}, valid={})",
+                            barcode, barcode.trim().length(), barcode.trim().matches("\\d+"));
+                    }
                 }
             }
         }
-        
-        log.debug("Built lookup index with {} barcode entries", index.size());
+
+        log.info("===== LOOKUP INDEX BUILD SUMMARY =====");
+        log.info("Total rows processed: {}", totalRows);
+        log.info("Total barcodes processed: {}", totalBarcodesProcessed);
+        log.info("Total barcodes added to index: {}", totalBarcodesAdded);
+        log.info("Total barcodes rejected: {}", totalBarcodesRejected);
+        log.info("Final index size: {}", index.size());
+        log.info("======================================");
+
         return index;
     }
 

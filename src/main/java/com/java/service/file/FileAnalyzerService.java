@@ -191,13 +191,20 @@ public class FileAnalyzerService {
                 if (headerRow != null) {
                     metadata.setHasHeader(true);
 
-                    // Читаем заголовки
+                    // Читаем заголовки (используем getLastCellNum для учета ВСЕХ колонок, включая пустые)
+                    int totalColumns = headerRow.getLastCellNum(); // Количество колонок включая пустые
                     List<String> headers = new ArrayList<>();
-                    int totalColumns = 0;
-                    for (Cell cell : headerRow) {
-                        headers.add(getCellValueAsString(cell));
-                        totalColumns = Math.max(totalColumns, cell.getColumnIndex() + 1);
+
+                    for (int colIndex = 0; colIndex < totalColumns; colIndex++) {
+                        Cell cell = headerRow.getCell(colIndex);
+                        String headerValue = (cell != null) ? getCellValueAsString(cell) : "";
+                        // Если заголовок пустой, используем имя колонки (A, B, C, ...)
+                        if (headerValue == null || headerValue.trim().isEmpty()) {
+                            headerValue = getColumnLetter(colIndex);
+                        }
+                        headers.add(headerValue);
                     }
+
                     metadata.setTotalColumns(totalColumns);
                     metadata.setColumnHeaders(convertToJson(headers));
 
@@ -521,6 +528,22 @@ public class FileAnalyzerService {
             default:
                 return "";
         }
+    }
+
+    /**
+     * Преобразует индекс колонки в букву Excel (0->A, 1->B, ..., 25->Z, 26->AA, ...)
+     */
+    private String getColumnLetter(int columnIndex) {
+        StringBuilder columnName = new StringBuilder();
+        int num = columnIndex;
+
+        while (num >= 0) {
+            int remainder = num % 26;
+            columnName.insert(0, (char) ('A' + remainder));
+            num = (num / 26) - 1;
+        }
+
+        return columnName.toString();
     }
 
     /**
