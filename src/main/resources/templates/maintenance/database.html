@@ -188,10 +188,18 @@
 
                                     <!-- Размер порции -->
                                     <div class="mb-3">
-                                        <label for="batchSize" class="form-label"><i class="fas fa-layer-group"></i> Размер порции</label>
+                                        <label for="batchSize" class="form-label">
+                                            <i class="fas fa-layer-group"></i> Размер порции
+                                            <i class="fas fa-info-circle text-info ms-1"
+                                               data-bs-toggle="tooltip"
+                                               data-bs-placement="top"
+                                               title="Количество записей, удаляемых за одну транзакцию. Меньше значение = безопаснее (можно откатить), но медленнее. Больше значение = быстрее, но при ошибке потеряется больше прогресса."></i>
+                                        </label>
                                         <input type="number" class="form-control" id="batchSize" name="batchSize"
                                                value="10000" min="1000" max="50000" step="1000">
-                                        <div class="form-text small">Рекомендуется 10000</div>
+                                        <div class="form-text small">
+                                            От 1000 до 50000 записей. Рекомендуется 10000 для баланса между скоростью и безопасностью.
+                                        </div>
                                     </div>
                                 </div>
                             </div>

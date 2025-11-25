@@ -71,6 +71,18 @@
             display: none !important;
         }
 
+        /* Скрытие метрик - скрываем только содержимое строк, не сами строки */
+        .metric-hidden > td:not([rowspan]) {
+            display: none !important;
+        }
+
+        /* Строка со скрытой метрикой должна занимать 0px высоты */
+        .metric-hidden {
+            height: 0 !important;
+            line-height: 0 !important;
+            padding: 0 !important;
+        }
+
         /* Анимация фильтрации */
         .statistics-table tbody tr {
             transition: opacity 0.3s ease-in-out;
@@ -78,6 +90,16 @@
 
         .statistics-table tbody tr.filtering {
             opacity: 0.5;
+        }
+
+        /* Стили для панели фильтрации метрик */
+        #metricCheckboxes .form-check {
+            min-width: 200px;
+        }
+
+        #metricCheckboxes .form-check-label {
+            cursor: pointer;
+            user-select: none;
         }
 
         /* ===== Таблица статистики ===== */
@@ -426,8 +448,27 @@
         </div>
     </div>
 
-    <!-- Панель фильтров по полям (показывается если есть поля фильтрации в шаблоне) -->
-    <div th:unless="${#lists.isEmpty(comparison)}" id="fieldFilterPanel" class="filter-controls mb-3" style="display: none;">
+    <!-- Панель фильтрации метрик -->
+    <div th:unless="${#lists.isEmpty(comparison)}" class="filter-controls mb-3" id="metricFilterPanel">
+        <h6 class="mb-3">
+            <i class="fas fa-filter me-2"></i>Фильтр метрик
+            <small class="text-muted">(скрыть/показать метрики во всех группах)</small>
+        </h6>
+        <div id="metricCheckboxes" class="d-flex flex-wrap gap-3">
+            <!-- Чекбоксы будут добавлены динамически через JavaScript -->
+        </div>
+        <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllMetrics()">
+                <i class="fas fa-check-square me-1"></i>Выбрать все
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllMetrics()">
+                <i class="fas fa-square me-1"></i>Снять все
+            </button>
+        </div>
+    </div>
+
+    <!-- Панель фильтров по полям -->
+    <div th:unless="${#lists.isEmpty(comparison)}" id="fieldFilterPanel" class="filter-controls mb-3">
         <h6 class="mb-3"><i class="fas fa-filter me-2"></i>Фильтрация по полям данных</h6>
         <div class="row align-items-end">
             <div class="col-md-4">
@@ -490,7 +531,8 @@
             <th:block th:if="${!#lists.isEmpty(comparison) and comparison[0].groupFieldValue == 'ОБЩЕЕ КОЛИЧЕСТВО'}">
                 <th:block th:with="totalGroup=${comparison[0]}, metricsMap=${totalGroup.operations[0].metrics}">
                     <tr th:each="metric, iterStat : ${metricsMap}"
-                        th:class="${iterStat.first ? 'total-summary-row group-start' : 'total-summary-row'}">
+                        th:class="${iterStat.first ? 'total-summary-row group-start' : 'total-summary-row'}"
+                        th:attr="data-metric-name=${metric.key}">
 
                         <td th:if="${iterStat.first}"
                             th:rowspan="${metricsMap.size()}"
@@ -517,6 +559,14 @@
                                                  th:text="${metricValue != null ? metricValue.currentValue : '-'}">-
                                             </div>
 
+                                            <!-- Показываем процент от общего (если есть фильтр) -->
+                                            <div th:if="${metricValue != null and metricValue.percentageOfTotal != null}"
+                                                 class="metric-percentage text-muted small">
+                                                <span th:text="${'(' + #numbers.formatDecimal(metricValue.percentageOfTotal, 1, 1) + '% от ' + metricValue.totalValue + ')'}">
+                                                    (65% от 1923)
+                                                </span>
+                                            </div>
+
                                             <div th:if="${metricValue != null and metricValue.previousValue != null}"
                                                  class="metric-change">
                                                 <span th:attr="data-change=${metricValue.changePercentage}"
@@ -541,7 +591,8 @@
                 <th:block th:if="${group.groupFieldValue != 'ОБЩЕЕ КОЛИЧЕСТВО' and !#lists.isEmpty(group.operations)}">
                     <th:block th:with="metricsMap=${group.operations[0].metrics}">
                         <!-- Итерируемся по метрикам -->
-                        <tr th:each="metric, iterStat : ${metricsMap}">
+                        <tr th:each="metric, iterStat : ${metricsMap}"
+                            th:attr="data-metric-name=${metric.key}">
                             <!-- Ячейка группы в первой строке (rowspan = кол-во метрик) -->
                             <td th:if="${iterStat.first}"
                                 th:rowspan="${metricsMap.size()}"
@@ -576,6 +627,14 @@
 
                                                 <div class="metric-value"
                                                      th:text="${metricValue != null ? metricValue.currentValue : '-'}">-
+                                                </div>
+
+                                                <!-- Показываем процент от общего (если есть фильтр) -->
+                                                <div th:if="${metricValue != null and metricValue.percentageOfTotal != null}"
+                                                     class="metric-percentage text-muted small">
+                                                    <span th:text="${'(' + #numbers.formatDecimal(metricValue.percentageOfTotal, 1, 1) + '% от ' + metricValue.totalValue + ')'}">
+                                                        (65% от 1923)
+                                                    </span>
                                                 </div>
 
                                                 <div th:if="${metricValue != null and metricValue.previousValue != null}"
@@ -642,11 +701,20 @@
     const sessionIds = /*[[${request.exportSessionIds}]]*/ [];
     const activeFilterField = /*[[${filterField}]]*/ null;
     const activeFilterValue = /*[[${filterValue}]]*/ null;
+    const clientId = /*[[${clientId}]]*/ null;
 
     // Глобальные переменные для хранения данных фильтров
     let filterFieldsData = {};
 
     document.addEventListener('DOMContentLoaded', () => {
+        // Очищаем состояние фильтров метрик при загрузке страницы
+        // чтобы все метрики были видны по умолчанию
+        try {
+            localStorage.removeItem('metricFiltersState');
+        } catch (e) {
+            console.warn('Не удалось очистить состояние фильтров метрик:', e);
+        }
+
         // Инициализируем данные в загруженном скрипте
         initializeStatisticsData(statisticsDataFromTemplate, warningThresholdFromTemplate, criticalThresholdFromTemplate);
 
@@ -662,13 +730,181 @@
         if (templateId && statisticsDataFromTemplate && statisticsDataFromTemplate.length > 0) {
             initializeHistoricalCharts();
         }
+
+        // Инициализируем фильтры метрик
+        initMetricFilters();
     });
+
+    /**
+     * Инициализирует фильтры метрик
+     */
+    function initMetricFilters() {
+        // Собираем уникальные имена метрик из таблицы
+        const metricRows = document.querySelectorAll('[data-metric-name]');
+        const uniqueMetrics = new Set();
+
+        metricRows.forEach(row => {
+            const metricName = row.getAttribute('data-metric-name');
+            if (metricName) {
+                uniqueMetrics.add(metricName);
+            }
+        });
+
+        if (uniqueMetrics.size === 0) {
+            // Нет метрик - скрываем панель
+            document.getElementById('metricFilterPanel').style.display = 'none';
+            return;
+        }
+
+        // Создаем чекбоксы для каждой метрики
+        const container = document.getElementById('metricCheckboxes');
+        container.innerHTML = '';
+
+        const sortedMetrics = Array.from(uniqueMetrics).sort();
+
+        sortedMetrics.forEach(metricName => {
+            const checkboxId = `metric-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+            const formCheck = document.createElement('div');
+            formCheck.className = 'form-check';
+
+            const checkbox = document.createElement('input');
+            checkbox.className = 'form-check-input';
+            checkbox.type = 'checkbox';
+            checkbox.id = checkboxId;
+            checkbox.checked = true;
+            checkbox.setAttribute('data-metric-name', metricName);
+            checkbox.addEventListener('change', () => onMetricCheckboxChange(metricName));
+
+            const label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.htmlFor = checkboxId;
+            label.textContent = metricName;
+
+            formCheck.appendChild(checkbox);
+            formCheck.appendChild(label);
+            container.appendChild(formCheck);
+        });
+
+        // НЕ восстанавливаем состояние из localStorage, чтобы избежать проблем с отображением
+        // При загрузке страницы все метрики должны быть видны
+        // restoreMetricFiltersState();
+    }
+
+    /**
+     * Обработчик изменения состояния чекбокса метрики
+     */
+    function onMetricCheckboxChange(metricName) {
+        const checkbox = document.querySelector(`input[data-metric-name="${metricName}"]`);
+        if (checkbox) {
+            toggleMetricVisibility(metricName, checkbox.checked);
+            saveMetricFiltersState();
+        }
+    }
+
+    /**
+     * Скрывает или показывает все строки с указанной метрикой
+     * Скрывает только ячейки (td), а не всю строку (tr), чтобы ячейки с rowspan оставались на месте
+     */
+    function toggleMetricVisibility(metricName, isVisible) {
+        const rows = document.querySelectorAll(`[data-metric-name="${metricName}"]`);
+
+        // Скрываем/показываем ячейки в строках (кроме ячеек с rowspan)
+        rows.forEach(row => {
+            if (isVisible) {
+                row.classList.remove('metric-hidden');
+            } else {
+                row.classList.add('metric-hidden');
+            }
+        });
+    }
+
+    /**
+     * Выбирает все метрики
+     */
+    function selectAllMetrics() {
+        const checkboxes = document.querySelectorAll('#metricCheckboxes input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            if (!checkbox.checked) {
+                checkbox.checked = true;
+                const metricName = checkbox.getAttribute('data-metric-name');
+                toggleMetricVisibility(metricName, true);
+            }
+        });
+        saveMetricFiltersState();
+    }
+
+    /**
+     * Снимает выбор со всех метрик
+     */
+    function deselectAllMetrics() {
+        const checkboxes = document.querySelectorAll('#metricCheckboxes input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            if (checkbox.checked) {
+                checkbox.checked = false;
+                const metricName = checkbox.getAttribute('data-metric-name');
+                toggleMetricVisibility(metricName, false);
+            }
+        });
+        saveMetricFiltersState();
+    }
+
+    /**
+     * Сохраняет состояние фильтров метрик в localStorage
+     */
+    function saveMetricFiltersState() {
+        const state = {};
+        const checkboxes = document.querySelectorAll('#metricCheckboxes input[type="checkbox"]');
+
+        checkboxes.forEach(checkbox => {
+            const metricName = checkbox.getAttribute('data-metric-name');
+            state[metricName] = checkbox.checked;
+        });
+
+        try {
+            localStorage.setItem('metricFiltersState', JSON.stringify(state));
+        } catch (e) {
+            console.warn('Не удалось сохранить состояние фильтров метрик:', e);
+        }
+    }
+
+    /**
+     * Восстанавливает состояние фильтров метрик из localStorage
+     */
+    function restoreMetricFiltersState() {
+        try {
+            const savedState = localStorage.getItem('metricFiltersState');
+            if (!savedState) {
+                return;
+            }
+
+            const state = JSON.parse(savedState);
+            const checkboxes = document.querySelectorAll('#metricCheckboxes input[type="checkbox"]');
+
+            checkboxes.forEach(checkbox => {
+                const metricName = checkbox.getAttribute('data-metric-name');
+                if (metricName in state) {
+                    checkbox.checked = state[metricName];
+                    toggleMetricVisibility(metricName, state[metricName]);
+                }
+            });
+        } catch (e) {
+            console.warn('Не удалось восстановить состояние фильтров метрик:', e);
+        }
+    }
 
     /**
      * Загружает доступные поля фильтрации и их значения с сервера
      */
     async function loadFilterFields() {
         try {
+            // Проверяем что есть sessionIds
+            if (!sessionIds || sessionIds.length === 0) {
+                console.warn('Нет выбранных операций для загрузки фильтров');
+                // Панель фильтрации останется пустой - это нормально
+                return;
+            }
+
             // Формируем URL для запроса
             const sessionIdsParam = sessionIds.join(',');
             const url = `/statistics/filter-values?templateId=${templateId}&sessionIds=${sessionIdsParam}`;
@@ -680,13 +916,12 @@
 
             filterFieldsData = await response.json();
 
-            // Если есть поля фильтрации - показываем панель
-            if (Object.keys(filterFieldsData).length > 0) {
-                document.getElementById('fieldFilterPanel').style.display = 'block';
+            // Заполняем select полей фильтрации
+            const filterFieldSelect = document.getElementById('filterFieldSelect');
+            filterFieldSelect.innerHTML = '<option value="">Выберите поле...</option>';
 
-                // Заполняем select полей фильтрации
-                const filterFieldSelect = document.getElementById('filterFieldSelect');
-                filterFieldSelect.innerHTML = '<option value="">Выберите поле...</option>';
+            // Если есть поля фильтрации - заполняем селекты
+            if (Object.keys(filterFieldsData).length > 0) {
 
                 for (const [fieldName, values] of Object.entries(filterFieldsData)) {
                     const option = document.createElement('option');
@@ -784,6 +1019,9 @@
         // Передаём templateId
         addHiddenField('templateId', templateId);
 
+        // Передаём clientId
+        addHiddenField('clientId', clientId);
+
         // Передаём exportSessionIds (массив)
         if (sessionIds && sessionIds.length > 0) {
             sessionIds.forEach(id => {
@@ -827,6 +1065,9 @@
         // Передаём templateId
         addHiddenField('templateId', templateId);
 
+        // Передаём clientId
+        addHiddenField('clientId', clientId);
+
         // Передаём exportSessionIds (массив)
         if (sessionIds && sessionIds.length > 0) {
             sessionIds.forEach(id => {
@@ -859,6 +1100,59 @@
     }
 
     /**
+     * Экспорт статистики в Excel
+     */
+    function exportToExcel() {
+        // Создаём форму для POST-запроса
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/statistics/export/excel';
+
+        // Вспомогательная функция для добавления скрытых полей
+        const addHiddenField = (name, value) => {
+            if (value !== null && value !== undefined) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            }
+        };
+
+        // Передаём templateId
+        addHiddenField('templateId', templateId);
+
+        // Передаём clientId
+        addHiddenField('clientId', clientId);
+
+        // Передаём exportSessionIds (массив)
+        if (sessionIds && sessionIds.length > 0) {
+            sessionIds.forEach(id => {
+                addHiddenField('exportSessionIds', id);
+            });
+        }
+
+        // Передаём пороги предупреждений
+        addHiddenField('warningPercentage', warningThresholdFromTemplate);
+        addHiddenField('criticalPercentage', criticalThresholdFromTemplate);
+
+        // Передаём параметры фильтра (если есть)
+        if (activeFilterField && activeFilterValue) {
+            addHiddenField('filterField', activeFilterField);
+            addHiddenField('filterValue', activeFilterValue);
+        }
+
+        // Отправляем форму
+        document.body.appendChild(form);
+        form.submit();
+
+        // Опционально: удаляем форму после отправки
+        setTimeout(() => {
+            document.body.removeChild(form);
+        }, 100);
+    }
+
+    /**
      * Инициализирует исторические графики трендов
      */
     async function initializeHistoricalCharts() {
@@ -879,70 +1173,84 @@
 
             console.log('Найдено метрик:', metrics.length, metrics);
 
-            // Создаем вкладки для каждой метрики
-            const metricTabs = document.getElementById('metricTabs');
+            // Получаем контейнер для метрик (теперь без вкладок)
             const metricTabsContent = document.getElementById('metricTabsContent');
+            const metricTabs = document.getElementById('metricTabs');
 
-            if (!metricTabs || !metricTabsContent) {
-                console.error('Контейнеры для вкладок не найдены');
+            if (!metricTabsContent) {
+                console.error('Контейнер для метрик не найден');
                 return;
             }
 
-            // Очищаем контейнеры
-            metricTabs.innerHTML = '';
+            // Скрываем navigation tabs полностью
+            if (metricTabs) {
+                metricTabs.style.display = 'none';
+            }
+
+            // Очищаем контейнер
             metricTabsContent.innerHTML = '';
 
-            // Создаем вкладку для каждой метрики
+            // Создаем секцию для каждой метрики (БЕЗ вкладок - все видимо сразу)
             metrics.forEach((metricName, index) => {
-                const isFirst = index === 0;
                 const metricId = `metric-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                const collapseId = `collapse-${metricId}`;
 
-                // Создаем таб
-                const tab = document.createElement('li');
-                tab.className = 'nav-item';
-                tab.innerHTML = `
-                    <button class="nav-link ${isFirst ? 'active' : ''}"
-                            id="${metricId}-tab"
-                            data-bs-toggle="tab"
-                            data-bs-target="#${metricId}"
-                            type="button"
-                            role="tab"
-                            aria-controls="${metricId}"
-                            aria-selected="${isFirst}">
-                        ${metricName}
-                    </button>
-                `;
-                metricTabs.appendChild(tab);
-
-                // Создаем контент вкладки
-                const tabPane = document.createElement('div');
-                tabPane.className = `tab-pane fade ${isFirst ? 'show active' : ''}`;
-                tabPane.id = metricId;
-                tabPane.setAttribute('role', 'tabpanel');
-                tabPane.setAttribute('aria-labelledby', `${metricId}-tab`);
-                tabPane.innerHTML = `
-                    <div class="row" id="${metricId}-charts">
-                        <!-- Графики будут загружены здесь -->
+                // Создаем секцию с заголовком для каждой метрики (с возможностью сворачивания)
+                const metricSection = document.createElement('div');
+                metricSection.className = 'mb-4';
+                metricSection.innerHTML = `
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-primary text-white"
+                             style="cursor: pointer; transition: none !important; outline: none !important; border: none !important; box-shadow: none !important;"
+                             onmouseover="this.style.transform='none'; this.style.outline='none'; this.style.boxShadow='none';"
+                             onfocus="this.style.outline='none'; this.style.boxShadow='none';">
+                            <h5 class="mb-0 d-flex justify-content-between align-items-center"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#${collapseId}"
+                                aria-expanded="true"
+                                aria-controls="${collapseId}"
+                                style="user-select: text; outline: none !important; border: none !important; box-shadow: none !important; transition: none !important;">
+                                <span>
+                                    <i class="fas fa-chart-line me-2"></i>${metricName}
+                                </span>
+                                <i class="fas fa-chevron-up collapse-icon"></i>
+                            </h5>
+                        </div>
+                        <div id="${collapseId}" class="collapse show">
+                            <div class="card-body">
+                                <div class="row" id="${metricId}-charts">
+                                    <div class="col-12 text-center py-5">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Загрузка графиков...</span>
+                                        </div>
+                                        <p class="text-muted mt-2">Загрузка исторических данных...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 `;
-                metricTabsContent.appendChild(tabPane);
+                metricTabsContent.appendChild(metricSection);
 
-                // Загружаем графики при переключении на вкладку
-                const tabButton = tab.querySelector('.nav-link');
-                tabButton.addEventListener('shown.bs.tab', async () => {
-                    const chartsContainer = document.getElementById(`${metricId}-charts`);
-                    // Проверяем, не загружены ли уже графики
-                    if (chartsContainer.children.length === 0) {
-                        await loadMetricCharts(metricName, `#${metricId}-charts`);
-                    }
+                // Добавляем обработчик для поворота иконки при сворачивании/разворачивании
+                const collapseElement = document.getElementById(collapseId);
+                const collapseIcon = metricSection.querySelector('.collapse-icon');
+
+                collapseElement.addEventListener('shown.bs.collapse', () => {
+                    collapseIcon.classList.remove('fa-chevron-down');
+                    collapseIcon.classList.add('fa-chevron-up');
                 });
 
-                // Загружаем графики для первой вкладки сразу
-                if (isFirst) {
-                    setTimeout(() => {
-                        loadMetricCharts(metricName, `#${metricId}-charts`);
-                    }, 100);
-                }
+                collapseElement.addEventListener('hidden.bs.collapse', () => {
+                    collapseIcon.classList.remove('fa-chevron-up');
+                    collapseIcon.classList.add('fa-chevron-down');
+                });
+
+                // Загружаем графики для этой метрики с задержкой (чтобы не все сразу)
+                setTimeout(() => {
+                    console.log(`Loading charts for: ${metricName}`);
+                    loadMetricCharts(metricName, `#${metricId}-charts`);
+                }, 500 + (index * 300)); // Загружаем с интервалом 300ms между метриками
             });
 
         } catch (error) {

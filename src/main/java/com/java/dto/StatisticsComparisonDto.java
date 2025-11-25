@@ -40,6 +40,8 @@ public class StatisticsComparisonDto {
         private Double changePercentage; // процент изменения
         private ChangeType changeType; // UP, DOWN, STABLE
         private AlertLevel alertLevel; // NORMAL, WARNING, CRITICAL
+        private Double percentageOfTotal; // процент от общего количества в группе (только при фильтрации)
+        private Long totalValue; // общее количество в группе (без фильтра, только при фильтрации)
     }
 
     public enum ChangeType {

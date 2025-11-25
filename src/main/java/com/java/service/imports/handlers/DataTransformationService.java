@@ -307,23 +307,46 @@ public class DataTransformationService {
     }
 
     /**
-     * Трансформация в дату и время
+     * Трансформация в дату и время с гибким парсингом форматов
      */
     private LocalDateTime transformDateTime(String value, ImportTemplateField field) throws Exception {
         log.trace("transformDateTime: входное значение='{}', формат='{}'", value, field.getDateFormat());
 
-        if (field.getDateFormat() == null || field.getDateFormat().isEmpty()) {
-            throw new ValidationException("Формат даты/времени не указан");
+        // Список форматов для попытки парсинга (в порядке приоритета)
+        String[] formats = {
+            field.getDateFormat(),           // Формат из шаблона (если указан)
+            "dd.MM.yyyy HH:mm:ss",          // С секундами
+            "dd.MM.yyyy HH:mm",             // Без секунд
+            "dd.MM.yyyy"                     // Только дата
+        };
+
+        // Пробуем парсить с каждым форматом
+        for (String format : formats) {
+            if (format == null || format.isEmpty()) {
+                continue;
+            }
+
+            try {
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(format);
+                LocalDateTime result;
+
+                // Для формата только с датой парсим как LocalDate и добавляем время 00:00:00
+                if ("dd.MM.yyyy".equals(format)) {
+                    LocalDate date = LocalDate.parse(value, formatter);
+                    result = date.atStartOfDay();
+                } else {
+                    result = LocalDateTime.parse(value, formatter);
+                }
+
+                log.trace("transformDateTime: успешно распарсено форматом '{}', результат={}", format, result);
+                return result;
+            } catch (Exception e) {
+                log.trace("transformDateTime: формат '{}' не подошёл, пробуем следующий", format);
+            }
         }
 
-        try {
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern(field.getDateFormat());
-            LocalDateTime result = LocalDateTime.parse(value, formatter);
-            log.trace("transformDateTime: результат={}", result);
-            return result;
-        } catch (Exception e) {
-            throw new ValidationException("Некорректный формат даты/времени: " + value);
-        }
+        throw new ValidationException("Некорректный формат даты/времени: " + value +
+                " (ожидается один из: dd.MM.yyyy HH:mm:ss, dd.MM.yyyy HH:mm, dd.MM.yyyy)");
     }
 
     /**

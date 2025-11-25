@@ -144,11 +144,16 @@ public class TrendAnalysisService {
         String changeText = String.format("%.1f%%", Math.abs(changePercentage));
 
         return switch (direction) {
-            case STRONG_GROWTH -> confidenceText + " сильный рост на " + changeText;
+            // Для сильных изменений (>10%) - не добавляем префикс уверенности,
+            // чтобы избежать противоречий типа "Слабый сильный рост"
+            case STRONG_GROWTH -> "Сильный рост на " + changeText;
+            case STRONG_DECLINE -> "Сильный спад на " + changeText;
+
+            // Для умеренных изменений (5-10%) - добавляем оценку уверенности
             case GROWTH -> confidenceText + " рост на " + changeText;
-            case STABLE -> "Стабильные показатели (изменение в пределах ±5%)";
             case DECLINE -> confidenceText + " спад на " + changeText;
-            case STRONG_DECLINE -> confidenceText + " сильный спад на " + changeText;
+
+            case STABLE -> "Стабильные показатели (изменение в пределах ±5%)";
         };
     }
 

@@ -322,6 +322,9 @@
                 <td>
                     <i class="fas fa-${getOperationIcon(op.operationType)} me-1 text-muted"></i>
                     ${getOperationTypeDisplay(op.operationType)}
+                    ${op.templateName ?
+                        `<span class="badge bg-secondary ms-2">${op.templateName}</span>` :
+                        ''}
                 </td>
                 <td class="text-truncate" style="max-width: 200px;" title="${op.fileName}">
                     <i class="fas fa-file me-1 text-muted"></i>

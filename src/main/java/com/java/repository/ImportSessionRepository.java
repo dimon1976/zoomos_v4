@@ -20,9 +20,17 @@ public interface ImportSessionRepository extends JpaRepository<ImportSession, Lo
     // Найти сессию по операции файла
     Optional<ImportSession> findByFileOperationId(Long fileOperationId);
 
+    // Найти сессию по операции файла с загруженным шаблоном
+    @Query("SELECT is FROM ImportSession is LEFT JOIN FETCH is.template WHERE is.fileOperation.id = :fileOperationId")
+    Optional<ImportSession> findByFileOperationIdWithTemplate(@Param("fileOperationId") Long fileOperationId);
+
+    // Batch-загрузка сессий с шаблонами по списку ID операций (оптимизация N+1)
+    @Query("SELECT is FROM ImportSession is LEFT JOIN FETCH is.template LEFT JOIN FETCH is.fileOperation WHERE is.fileOperation.id IN :operationIds")
+    List<ImportSession> findByFileOperationIdInWithTemplate(@Param("operationIds") List<Long> operationIds);
+
     // Найти активные сессии (в процессе)
     @Query("SELECT s FROM ImportSession s WHERE s.status IN :statuses")
-    List<ImportSession> findActiveSessionss(@Param("statuses") List<ImportStatus> statuses);
+    List<ImportSession> findActiveSessions(@Param("statuses") List<ImportStatus> statuses);
 
     // Найти сессии по шаблону
     Page<ImportSession> findByTemplate(ImportTemplate template, Pageable pageable);

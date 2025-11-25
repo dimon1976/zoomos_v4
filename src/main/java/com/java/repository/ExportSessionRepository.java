@@ -68,4 +68,8 @@ public interface ExportSessionRepository extends JpaRepository<ExportSession, Lo
 
     @Query("SELECT es FROM ExportSession es LEFT JOIN FETCH es.template LEFT JOIN FETCH es.fileOperation WHERE es.fileOperation.id = :fileOperationId")
     Optional<ExportSession> findByFileOperationIdWithTemplate(@Param("fileOperationId") Long fileOperationId);
+
+    // Batch-загрузка сессий с шаблонами по списку ID операций (оптимизация N+1)
+    @Query("SELECT es FROM ExportSession es LEFT JOIN FETCH es.template LEFT JOIN FETCH es.fileOperation WHERE es.fileOperation.id IN :operationIds")
+    List<ExportSession> findByFileOperationIdInWithTemplate(@Param("operationIds") List<Long> operationIds);
 }

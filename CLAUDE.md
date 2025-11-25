@@ -544,6 +544,260 @@ resetFilter() - Submits form without filter parameters
 ✅ Множественные операции корректно сравниваются
 ✅ Данные в БД соответствуют формуле расчёта
 
+### Excel Export with Trends Sheet
+
+**Recently Completed** (as of 2025-11-19):
+
+#### Purpose
+Enhanced Excel export for statistics with dedicated "Trends" sheet showing metric changes across operations using visual symbols (↑↓=) and percentage changes.
+
+#### Architecture
+
+**Two-Sheet Excel Structure**:
+1. **"Статистика"** - Main comparison table with detailed metrics
+2. **"Тренды"** - Simplified trends view with change indicators
+
+**Trends Sheet Format** (StatisticsExcelExportService.java:318-406):
+```
+Группа    | Метрика           | Операция #1  | Операция #2  | ...
+----------|-------------------|--------------|--------------|-----
+ОБЩЕЕ     | PRICE             | ↑ (+5.2%)   | ↓ (-2.1%)   | ...
+Группа А  | DATE_MODIFICATIONS| ↓ (-4.0%)   | ↑ (+2.5%)   | ...
+```
+
+**Key Methods**:
+- `writeTrendsSheet()` - Creates trends sheet with headers and data (lines 318-406)
+- `formatTrendCell()` - Formats cell as "↑ (+5.2%)" or "↓ (-2.1%)" (lines 420-453)
+- `determineTrendCellStyle()` - Applies color coding (green/red/gray) (lines 462-484)
+- `extractMetricsByName()` - Organizes metrics by name across operations (lines 492-521)
+
+**Visual Indicators**:
+- ↑ (U+2191) + green background - Growth (WARNING/CRITICAL levels)
+- ↓ (U+2193) + red/orange background - Decline (WARNING/CRITICAL levels)
+- = (U+003D) + gray background - Stable (no significant change)
+- "-" - No previous value for comparison (first operation)
+
+#### Features
+
+**Automatic Filtering**:
+- Trends sheet automatically reflects active filters from results page
+- Uses same data source as main statistics table
+- Filter parameters passed through existing `exportToExcel()` function
+- No UI changes required - works seamlessly with current implementation
+
+**Styling Integration**:
+- Reuses existing `ExcelStyles` from main sheet
+- Color scheme matches main statistics table:
+  - Light green (#d1e7dd) - Growth warning
+  - Lime (#badbcc) - Growth critical
+  - Light orange (#fff3cd) - Decline warning
+  - Coral (#f8d7da) - Decline critical
+
+**Sheet Configuration**:
+- Freeze panes: First 2 rows (headers) and first 2 columns (Group + Metric)
+- Auto-sized columns with 15% padding
+- Fixed width for Group (30 chars) and Metric (25 chars) columns
+
+#### Implementation Details
+
+**Export Flow**:
+1. User clicks "Экспорт в Excel" button (results.html:305, 687)
+2. JavaScript sends POST to `/statistics/export/excel` with filters (results.html:1105-1153)
+3. Controller calls `StatisticsExcelExportService.generateExcel()` (ExportStatisticsController.java:468-510)
+4. Service creates two sheets:
+   - Sheet 1: Statistics (existing functionality)
+   - Sheet 2: Trends (new functionality)
+5. Browser downloads file with both sheets
+
+**Data Source**:
+- Same `StatisticsComparisonDto` used for both sheets
+- Trends extracted from `MetricValue.changeType` and `MetricValue.changePercentage`
+- No additional database queries required
+
+#### Usage
+
+**Existing Workflow**:
+1. Navigate to http://localhost:8081/statistics/setup
+2. Select template and operations
+3. Click "Анализировать"
+4. (Optional) Apply filter on results page
+5. Click "Экспорт в Excel" - file now contains TWO sheets
+
+**Files Modified**:
+- `StatisticsExcelExportService.java` - Added trends sheet generation
+  - Modified `generateExcel()` to create two sheets (lines 45-67)
+  - Added 5 new private methods for trends functionality
+
+**No Breaking Changes**:
+- Main statistics sheet unchanged
+- Existing export API unchanged
+- UI buttons and JavaScript unchanged
+- Filter functionality works automatically
+
+#### Testing Checklist
+
+✅ Компиляция успешна (mvn clean compile)
+✅ Приложение запускается без ошибок
+✅ Метод `writeTrendsSheet()` реализован с JavaDoc
+✅ Вспомогательные методы добавлены
+✅ Интеграция в `generateExcel()` завершена
+⏳ Ручное тестирование экспорта без фильтра
+⏳ Ручное тестирование экспорта с фильтром
+
+## Import Date Handling (CRITICAL)
+
+**Recently Updated** (as of 2025-10-24):
+
+### Smart Date Format Detection for STRING Fields
+
+Система автоматически определяет формат даты/времени при импорте Excel файлов для сохранения в STRING поля (productAdditional*, competitorAdditional*, competitorTime, competitorDate).
+
+**Проблема**: `DataFormatter` от Apache POI применяет US локаль и преобразует русский формат `'20.10.2025 6:32:00'` в американский `'10/20/25 6:32'`.
+
+**Решение** ([ImportProcessorService.java:716-741](src/main/java/com/java/service/imports/ImportProcessorService.java#L716-L741)):
+
+```java
+if (DateUtil.isCellDateFormatted(cell)) {
+    Date dateValue = cell.getDateCellValue();
+
+    // Умное определение формата на основе данных
+    Calendar cal = Calendar.getInstance();
+    cal.setTime(dateValue);
+    int hours = cal.get(Calendar.HOUR_OF_DAY);
+    int minutes = cal.get(Calendar.MINUTE);
+    int seconds = cal.get(Calendar.SECOND);
+
+    // Выбираем формат в зависимости от точности данных
+    SimpleDateFormat sdf;
+    if (hours == 0 && minutes == 0 && seconds == 0) {
+        sdf = new SimpleDateFormat("dd.MM.yyyy");          // Только дата
+    } else if (seconds == 0) {
+        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm");    // Без секунд
+    } else {
+        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss"); // С секундами
+    }
+
+    return sdf.format(dateValue);
+}
+```
+
+**Автоматическая адаптация формата**:
+
+| Excel значение | Date объект | Результат в БД |
+|----------------|-------------|----------------|
+| `20.10.2025` | 00:00:00 | `20.10.2025` |
+| `20.10.2025 06:32` | 06:32:00 | `20.10.2025 06:32` |
+| `20.10.2025 06:32:45` | 06:32:45 | `20.10.2025 06:32:45` |
+| `20.10.2025  6:32:00` | 06:32:00 | `20.10.2025 06:32` (унификация) |
+
+**Преимущества**:
+- ✅ Компактное хранение - не добавляет лишние `:00` для секунд
+- ✅ Работает с разными файлами одновременно (с секундами и без)
+- ✅ Всегда русский формат `dd.MM.yyyy`
+- ✅ Без потери точности данных
+
+**ВАЖНО**:
+- Для полей типа **STRING** - применяется умное форматирование
+- Для полей типа **LocalDateTime** или **Date** - используется стандартная обработка POI
+- Не применяется никакая обработка для обычных текстовых строк
+
+**Коммиты**:
+- `8b45813` - Исправление конвертации дат в русский формат
+- `869c50c` - Умное определение формата даты/времени
+
+### Empty Cells for Zero Prices in Export
+
+**Recently Updated** (as of 2025-10-23):
+
+При экспорте данных в Excel нулевые цены (0.0) теперь отображаются как **пустые ячейки** вместо "0.00".
+
+**Решение** ([XlsxFileGenerator.java:305-316](src/main/java/com/java/service/exports/generator/XlsxFileGenerator.java#L305-L316)):
+
+```java
+private void setCellValue(Cell cell, Object value, ExcelStyles styles) {
+    if (value == null) {
+        cell.setBlank();
+    } else if (value instanceof Number) {
+        double numValue = ((Number) value).doubleValue();
+        if (numValue == 0.0) {
+            cell.setBlank();  // Пустая ячейка для нулевых цен
+        } else {
+            cell.setCellValue(numValue);
+            cell.setCellStyle(styles.getNumberStyle());
+        }
+    }
+    // ... остальные типы данных
+}
+```
+
+**Преимущества**:
+- ✅ Улучшенная читаемость экспортируемых файлов
+- ✅ Легче визуально отличить отсутствующие цены от реальных нулевых значений
+- ✅ Упрощает анализ данных в Excel
+
+**Коммит**: `663c090`
+
+## Statistics Operations Filtering
+
+**Recently Completed** (as of 2025-10-24):
+
+### Template-Based Operation Filtering
+
+Система фильтрации операций экспорта по выбранному шаблону на странице анализа статистики. При выборе шаблона показываются только операции, выполненные с этим шаблоном.
+
+**Architecture**:
+
+**Controller Layer** ([ExportStatisticsController.java:53-98](src/main/java/com/java/controller/ExportStatisticsController.java#L53-L98)):
+- Метод `showStatisticsSetup()` загружает все операции клиента с включённой статистикой
+- Фильтрация по конкретному шаблону происходит на клиентской стороне (JavaScript)
+- Упрощена логика загрузки - убрана избыточная серверная фильтрация
+
+**Frontend Layer** ([setup.html:106-184](src/main/resources/templates/statistics/setup.html#L106-L184)):
+- Блок операций скрыт по умолчанию (`display: none`)
+- Добавлены информационные сообщения:
+  - `#noTemplateMessage` - "Сначала выберите шаблон экспорта"
+  - `#noOperationsMessage` - "Нет операций экспорта для выбранного шаблона"
+  - `#operationsList` - контейнер со списком операций
+
+**JavaScript Integration** ([setup.html:274-368](src/main/resources/templates/statistics/setup.html#L274-L368)):
+```javascript
+// Обработчик выбора шаблона через radio buttons
+templateRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+        const templateId = this.getAttribute('data-template-id');
+        filterExportsByTemplate(templateId);
+    });
+});
+
+// Фильтрация операций по templateId
+function filterExportsByTemplate(templateId) {
+    // Показывает/скрывает операции по data-template-id
+    // Управляет видимостью блока операций
+    // Обновляет состояние "Выбрать все"
+}
+```
+
+**Key Features**:
+- ✅ **Client-side filtering** - быстрая работа без перезагрузки страницы
+- ✅ **Smart visibility** - блок операций появляется только при выборе шаблона
+- ✅ **Informative messages** - понятные подсказки для пользователя
+- ✅ **Select all handling** - чекбокс "Выбрать все" работает только с видимыми операциями
+- ✅ **Visual feedback** - визуальное выделение выбранного шаблона
+
+**Implementation Details**:
+1. Radio button получает класс `.template-radio` и атрибут `data-template-id`
+2. При выборе срабатывает событие `change` → вызов `filterExportsByTemplate()`
+3. Функция фильтрует `.export-card` по атрибуту `data-template-id`
+4. Видимые операции показываются, остальные скрываются
+5. Снимается выбор со скрытых операций
+6. Обновляется состояние чекбокса "Выбрать все"
+
+**Data Attributes**:
+- Шаблоны: `data-template-id` на input radio
+- Операции: `data-template-id` и `data-export-id` на div.export-card
+
+**Коммит**: `a2d8f1d` - feat: фильтрация операций экспорта по выбранному шаблону статистики
+
 ## Code References
 
 When referencing specific functions or pieces of code include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.

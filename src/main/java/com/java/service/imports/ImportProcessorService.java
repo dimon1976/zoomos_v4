@@ -37,6 +37,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -710,29 +711,49 @@ public class ImportProcessorService {
             case STRING:
                 return cell.getStringCellValue();
             case NUMERIC:
+                // ВАЖНО: Для STRING полей не применяем никакую обработку дат
+                // Сохраняем значение точно так, как оно записано в Excel (русский формат)
                 if (DateUtil.isCellDateFormatted(cell)) {
-                    return cell.getDateCellValue().toString();
-                }
+                    // Извлекаем Date объект из ячейки
+                    Date dateValue = cell.getDateCellValue();
 
-                // Используем DataFormatter для получения точного форматированного значения
-                // Это сохранит полные цифры для больших чисел (штрих-коды, ID и т.д.)
-                DataFormatter formatter = new DataFormatter();
-                String formattedValue = formatter.formatCellValue(cell);
+                    // Умное определение формата на основе данных
+                    Calendar cal = Calendar.getInstance();
+                    cal.setTime(dateValue);
+                    int hours = cal.get(Calendar.HOUR_OF_DAY);
+                    int minutes = cal.get(Calendar.MINUTE);
+                    int seconds = cal.get(Calendar.SECOND);
 
-                // Если формат общий (General), убираем десятичную точку для целых чисел
-                if (formattedValue.contains(".")) {
-                    try {
-                        double numValue = cell.getNumericCellValue();
-                        if (numValue == Math.floor(numValue) && !Double.isInfinite(numValue)) {
-                            return formattedValue.split("\\.")[0];  // Убираем .0
-                        }
-                    } catch (Exception e) {
-                        // Fallback на форматированное значение
-                        log.debug("Failed to parse numeric value, using formatted: {}", formattedValue);
+                    // Выбираем формат в зависимости от точности данных
+                    SimpleDateFormat sdf;
+                    if (hours == 0 && minutes == 0 && seconds == 0) {
+                        // Только дата (00:00:00)
+                        sdf = new SimpleDateFormat("dd.MM.yyyy");
+                    } else if (seconds == 0) {
+                        // Дата + время без секунд (HH:mm:00)
+                        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm");
+                    } else {
+                        // Дата + время с секундами (HH:mm:ss)
+                        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
                     }
+
+                    return sdf.format(dateValue);
                 }
 
-                return formattedValue;
+                // Получаем числовое значение
+                double numValue = cell.getNumericCellValue();
+
+                // Для целых чисел конвертируем через DecimalFormat для сохранения всех цифр
+                // Это важно для больших чисел (штрих-коды, ID) которые Excel показывает в экспоненциальной форме
+                if (numValue == Math.floor(numValue) && !Double.isInfinite(numValue)) {
+                    // Используем DecimalFormat с pattern "0" для целых чисел без группировки
+                    java.text.DecimalFormat df = new java.text.DecimalFormat("0");
+                    df.setMaximumFractionDigits(0);
+                    return df.format(numValue);
+                }
+
+                // Для дробных чисел возвращаем как есть
+                return String.valueOf(numValue);
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:

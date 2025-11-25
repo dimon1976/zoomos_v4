@@ -21,7 +21,9 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -81,9 +83,8 @@ public class OperationsRestController {
         operationsList.forEach(op ->
                 log.debug("\tID: {} Статус: {} Прогресс: {}", op.getId(), op.getStatus(), op.getProcessingProgress()));
 
-        List<FileOperationDto> operations = operationsList.stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+        // Batch-конвертация операций в DTO (оптимизация N+1 запросов)
+        List<FileOperationDto> operations = toDtoList(operationsList);
 
         return FileOperationPageDto.builder()
                 .operations(operations)
@@ -127,9 +128,72 @@ public class OperationsRestController {
     }
 
     /**
-     * Преобразование Entity в DTO
+     * Batch-конвертация списка операций в DTO (оптимизация N+1 запросов)
+     */
+    private List<FileOperationDto> toDtoList(List<FileOperation> operations) {
+        if (operations.isEmpty()) {
+            return List.of();
+        }
+
+        // Разделяем операции на import и export
+        List<Long> importOperationIds = operations.stream()
+                .filter(op -> op.getOperationType() == FileOperation.OperationType.IMPORT)
+                .map(FileOperation::getId)
+                .collect(Collectors.toList());
+
+        List<Long> exportOperationIds = operations.stream()
+                .filter(op -> op.getOperationType() == FileOperation.OperationType.EXPORT)
+                .map(FileOperation::getId)
+                .collect(Collectors.toList());
+
+        // Batch-загрузка сессий с шаблонами (2 запроса вместо N)
+        Map<Long, String> templateNameByOperationId = new HashMap<>();
+
+        if (!importOperationIds.isEmpty()) {
+            importSessionRepository.findByFileOperationIdInWithTemplate(importOperationIds)
+                    .forEach(session -> templateNameByOperationId.put(
+                            session.getFileOperation().getId(),
+                            session.getTemplate().getName()
+                    ));
+        }
+
+        if (!exportOperationIds.isEmpty()) {
+            exportSessionRepository.findByFileOperationIdInWithTemplate(exportOperationIds)
+                    .forEach(session -> templateNameByOperationId.put(
+                            session.getFileOperation().getId(),
+                            session.getTemplate().getName()
+                    ));
+        }
+
+        // Конвертируем операции в DTO используя загруженные данные
+        return operations.stream()
+                .map(operation -> toDto(operation, templateNameByOperationId.get(operation.getId())))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Преобразование Entity в DTO (для единичного случая)
      */
     private FileOperationDto toDto(FileOperation operation) {
+        // Получаем имя шаблона в зависимости от типа операции
+        String templateName = null;
+        if (operation.getOperationType() == FileOperation.OperationType.IMPORT) {
+            templateName = importSessionRepository.findByFileOperationIdWithTemplate(operation.getId())
+                    .map(session -> session.getTemplate().getName())
+                    .orElse(null);
+        } else if (operation.getOperationType() == FileOperation.OperationType.EXPORT) {
+            templateName = exportSessionRepository.findByFileOperationIdWithTemplate(operation.getId())
+                    .map(session -> session.getTemplate().getName())
+                    .orElse(null);
+        }
+
+        return toDto(operation, templateName);
+    }
+
+    /**
+     * Преобразование Entity в DTO с заданным именем шаблона
+     */
+    private FileOperationDto toDto(FileOperation operation, String templateName) {
         return FileOperationDto.builder()
                 .id(operation.getId())
                 .operationType(operation.getOperationType().name())
@@ -143,6 +207,7 @@ public class OperationsRestController {
                 .startedAt(operation.getStartedAt())
                 .completedAt(operation.getCompletedAt())
                 .errorMessage(operation.getErrorMessage())
+                .templateName(templateName)
                 .build();
     }
 
@@ -164,6 +229,7 @@ public class OperationsRestController {
         private java.time.ZonedDateTime startedAt;
         private java.time.ZonedDateTime completedAt;
         private String errorMessage;
+        private String templateName;
     }
 
     /**
