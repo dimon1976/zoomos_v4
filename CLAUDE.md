@@ -13,6 +13,35 @@ Zoomos v4 is a Spring Boot 3.2.12 file processing application with client-based 
 - **Build System**: Maven with Spring Boot parent
 - **Development**: Spring DevTools, Lombok, Flyway migrations
 
+## Quick Start (5 минут)
+
+### Запуск приложения
+```bash
+# Быстрый старт с минимальным логированием (рекомендуется)
+mvn spring-boot:run -Dspring-boot.run.profiles=silent
+```
+
+### Доступ к приложению
+- **Главная страница**: http://localhost:8081
+- **Утилиты**: http://localhost:8081/utils
+- **Система обслуживания**: http://localhost:8081/maintenance
+- **Анализ статистики**: http://localhost:8081/statistics/setup
+
+### Основные разделы
+1. **Import/Export** (главная страница) - Импорт и экспорт файлов для клиентов
+2. **Utilities** (`/utils`) - HTTP Redirect Finder, Data Merger, Barcode Match, URL Cleaner
+3. **Maintenance** (`/maintenance`) - Файловые операции, очистка БД, мониторинг системы
+4. **Statistics** (`/statistics/setup`) - Анализ и сравнение операций экспорта
+
+### Быстрая проверка работоспособности
+```bash
+# Проверка подключения к БД
+psql -d zoomos_v4 -c "SELECT COUNT(*) FROM clients;"
+
+# Просмотр статуса миграций
+mvn flyway:info
+```
+
 ## Development Commands
 
 ### Build and Run
@@ -50,9 +79,34 @@ mvn flyway:info
 ## Application Profiles
 
 - **silent** (recommended): Minimal logging, fast startup, clean output
-- **dev**: Moderate logging with DevTools enabled  
+- **dev**: Moderate logging with DevTools enabled
 - **verbose**: Maximum debugging with SQL logging and TRACE level
 - **prod**: Production optimized with file logging
+
+## Recent Changes & Features
+
+### 2025-11
+- **Excel Export with Trends Sheet** - Двухлистовый Excel экспорт со страницей трендов (↑↓= индикаторы)
+
+### 2025-10
+- **Template-Based Operations Filtering** - Фильтрация операций экспорта по выбранному шаблону
+- **Smart Date Format Detection** - Автоматическое определение формата дат для STRING полей (dd.MM.yyyy)
+- **Empty Cells for Zero Prices** - Пустые ячейки вместо "0.00" при экспорте
+- **Auto-VACUUM after Cleanup** - Автоматическая оптимизация PostgreSQL после массовых удалений
+- **Async Data Cleanup with WebSocket** - Асинхронная очистка БД с прогрессом в реальном времени
+- **Multi-Dimensional Statistics** - Фильтрация статистики по произвольным полям (stock status, category, etc.)
+
+### 2025-09
+- **Data Merger Utility** - Слияние данных из двух файлов с настраиваемым маппингом колонок
+- **HTTP Redirect Utility Enhancements** - Двухрежимная обработка (sync/async) с WebSocket уведомлениями
+
+### Key Features
+- **Anti-Bot Bypass** - Трёхуровневая стратегия (Curl → Playwright → HttpClient) для обработки защищённых сайтов
+- **WebSocket Real-time Updates** - Прогресс операций, уведомления, восстановление состояния через sessionStorage
+- **Thread Pool Architecture** - 6 специализированных executor'ов для разных задач
+- **Flyway Migrations** - Версионирование схемы БД с автоматической миграцией
+
+Детальное описание каждой фичи см. в соответствующих разделах ниже.
 
 ## Architecture Overview
 
@@ -237,18 +291,14 @@ Real-time updates for:
 
 ## Database Maintenance & Auto-VACUUM
 
-**Recently Completed** (as of 2025-10-16):
-
 ### Auto-VACUUM after Data Cleanup
 
 Система автоматического выполнения `VACUUM ANALYZE` после массового удаления данных для оптимизации производительности PostgreSQL.
 
 **Configuration** ([application.properties:45-48](src/main/resources/application.properties#L45-L48)):
-```properties
-database.cleanup.auto-vacuum.enabled=true                    # Enable/disable auto-vacuum
-database.cleanup.auto-vacuum.threshold-records=1000000       # Trigger threshold (1M records)
-database.cleanup.auto-vacuum.run-async=true                  # Asynchronous execution
-```
+- `database.cleanup.auto-vacuum.enabled=true` - Включение/выключение
+- `database.cleanup.auto-vacuum.threshold-records=1000000` - Триггер при удалении ≥ 1M записей
+- `database.cleanup.auto-vacuum.run-async=true` - Асинхронное выполнение
 
 **Integration** ([DataCleanupService.java:154-157](src/main/java/com/java/service/maintenance/DataCleanupService.java#L154-L157)):
 - Automatically triggers VACUUM ANALYZE after deleting ≥ 1M records
@@ -275,19 +325,11 @@ database.cleanup.auto-vacuum.run-async=true                  # Asynchronous exec
 
 ### Asynchronous Data Cleanup with WebSocket Progress
 
-**Recently Completed** (as of 2025-10-16):
-
 Система асинхронной очистки устаревших данных с отображением прогресса в реальном времени через WebSocket и возможностью восстановления состояния при возврате на страницу.
 
 **Architecture** ([AsyncConfig.java:152-167](src/main/java/com/java/config/AsyncConfig.java#L152-L167)):
-```java
-@Bean(name = "cleanupTaskExecutor")
-public Executor cleanupTaskExecutor() {
-    executor.setCorePoolSize(1);
-    executor.setMaxPoolSize(2);
-    executor.setAwaitTerminationSeconds(1800); // 30 minutes timeout
-}
-```
+- Thread pool: `cleanupTaskExecutor` (1-2 потока, 30 мин timeout)
+- Выделенный executor для долгих операций очистки БД
 
 **Key Components**:
 
@@ -303,11 +345,9 @@ public Executor cleanupTaskExecutor() {
    - Прямая отправка WebSocket сообщений (без CompletableFuture)
 
 3. **Controller Behavior** ([DataCleanupController.java:110-173](src/main/java/com/java/controller/DataCleanupController.java#L110-L173)):
-   ```java
-   String operationId = UUID.randomUUID().toString();
-   cleanupService.executeCleanupAsync(request);  // Non-blocking call
-   return ResponseEntity.ok(...operationId...);   // Immediate return
-   ```
+   - Генерирует `operationId` и немедленно возвращает клиенту
+   - Запускает async обработку через `executeCleanupAsync()` (non-blocking)
+   - Клиент подключается к WebSocket для получения прогресса
 
 4. **UI Progress Display** ([database.html:211-272](src/main/resources/templates/maintenance/database.html#L211-L272)):
    - Прогресс отображается **на странице**, не в модальном окне
@@ -316,22 +356,10 @@ public Executor cleanupTaskExecutor() {
    - WebSocket подписка на `/topic/cleanup-progress/{operationId}`
 
 5. **State Persistence** ([database.html:586-637](src/main/resources/templates/maintenance/database.html#L586-L637)):
-   ```javascript
-   // Сохранение operationId в sessionStorage при запуске
-   sessionStorage.setItem('cleanupOperationId', operationId);
-
-   // Восстановление при загрузке страницы
-   function checkForActiveCleanup() {
-       const savedOperationId = sessionStorage.getItem('cleanupOperationId');
-       if (savedOperationId) {
-           showCleanupProgress();
-           connectCleanupWebSocket(savedOperationId);
-       }
-   }
-
-   // Очистка при завершении
-   sessionStorage.removeItem('cleanupOperationId');
-   ```
+   - Сохранение `operationId` в `sessionStorage` при запуске операции
+   - Автоматическое восстановление прогресса при возврате на страницу
+   - Очистка состояния при завершении операции
+   - Состояние живёт только в рамках текущей сессии браузера
 
 **Key Features**:
 - ✅ **Асинхронное выполнение** - пользователь может работать в других вкладках
@@ -359,40 +387,6 @@ public Executor cleanupTaskExecutor() {
 - Очищает мёртвые кортежи и обновляет статистику таблиц
 - Работает асинхронно, не блокирует пользователя
 
-## Current State Notes
-
-**Recently Completed Data Merger Utility Development** (as of 2025-09-22):
-- **Complete Implementation**: Data Merger utility with dual-file processing capability
-- **Enhanced File Processing**: Merges source products with link data using configurable column mapping
-- **Strategy Integration**: Uses existing FileAnalyzerService and FileGeneratorService architecture
-- **User Interface**: Bootstrap-based form with dynamic column mapping and progress tracking
-- **Error Handling**: Comprehensive validation and user-friendly error messages
-- **Testing**: Real-world testing with sample data files and various formats
-
-**Previously Completed HTTP Redirect Utility Enhancements** (as of 2025-09-07):
-- **Async Processing**: Complete dual-mode architecture - background processing for large files and quick sync mode for small files
-- **Enhanced UI**: Two processing modes with clear explanations and user guidance
-- **Strategy Pattern**: Fully tested three-tier system (CurlStrategy → PlaywrightStrategy → HttpClientStrategy)
-- **Real-world Testing**: Successfully handles complex sites like Yandex Market with JavaScript redirects
-- **Parameter Documentation**: Detailed tooltips explaining timeout and delay settings
-- **Export Integration**: Full integration with FileGeneratorService for consistent CSV/Excel export
-- **WebSocket Notifications**: Real-time progress tracking and completion alerts
-
-**Proven Capabilities**:
-- **Anti-Bot Bypass**: Successfully processes e-commerce sites with complex protection (Yandex Market, Goldapple)
-- **JavaScript Redirects**: Playwright strategy handles JS-based redirects that curl cannot detect  
-- **Large File Processing**: Async mode allows processing thousands of URLs while working on other tasks
-- **Encoding Handling**: Properly handles UTF-8 files with international characters
-- **Production Ready**: Comprehensive error handling, progress tracking, and user feedback
-
-**Architecture Insights**:
-- Uses dedicated `redirectTaskExecutor` thread pool (1-3 threads) for HTTP operations
-- Manual redirect following instead of curl -L to avoid User-Agent detection
-- Preserves initial redirect HTTP codes (301/302) rather than final status (200)
-- Configurable delay between requests (0-5 seconds) to prevent rate limiting
-- Intelligent strategy escalation based on response analysis
-- Seamless integration with existing async/WebSocket notification system
-
 ## Data Merger Utility
 
 ### Purpose
@@ -413,8 +407,6 @@ Utility for merging product data from two sources: source products with analogs 
 - **Error Handling**: Comprehensive validation with user-friendly error messages
 
 ## Export Statistics with Multi-Dimensional Filtering
-
-**Recently Completed** (as of 2025-10-04):
 
 ### Purpose
 Advanced statistics system for analyzing export operations with multi-dimensional filtering capabilities. Allows tracking and comparing export metrics across multiple operations, with ability to filter statistics by arbitrary field values (e.g., stock status, category, brand).
@@ -470,19 +462,10 @@ Advanced statistics system for analyzing export operations with multi-dimensiona
 
 ### Implementation Details
 
-**JavaScript Integration**:
-```javascript
-// Loads available filter fields and values via API
-loadFilterFields() - Fetches /statistics/filter-values?templateId=X&sessionIds=1,2,3
-
-// Dynamic UI updates
-onFilterFieldChange() - Populates value dropdown when field selected
-onFilterValueChange() - Enables "Apply" button when value selected
-
-// Form submission (POST)
-applyFilter() - Submits form with templateId, sessionIds, filterField, filterValue
-resetFilter() - Submits form without filter parameters
-```
+**JavaScript Integration** ([results.html:630-840](src/main/resources/templates/statistics/results.html#L630-L840)):
+- `loadFilterFields()` - Загружает доступные поля и значения фильтров через API
+- `onFilterFieldChange()` - Обновляет dropdown значений при выборе поля
+- `applyFilter()` / `resetFilter()` - POST запросы с/без параметров фильтрации
 
 **Data Flow**:
 1. Export execution → `ExportStatisticsWriterService` saves multi-dimensional statistics
@@ -499,20 +482,9 @@ resetFilter() - Submits form without filter parameters
 - Client-side caching of filter data in JavaScript
 
 ### Usage Example
-
-**Template Configuration**:
-```json
-{
-  "statisticsGroupField": "product_additional4",
-  "statisticsCountFields": ["competitor_price", "competitorPromotionalPrice"],
-  "statisticsFilterFields": ["competitorStockStatus"]
-}
-```
-
-**Result**:
-- General statistics: Shows totals for all products
-- Filtered by "В наличии": Shows metrics only for products in stock
-- Filtered by "Нет в наличии": Shows metrics only for out-of-stock products
+Template конфигурация с `statisticsFilterFields: ["competitorStockStatus"]` создаёт:
+- Общую статистику для всех продуктов
+- Фильтрованную статистику по каждому уникальному значению (например, "В наличии", "Нет в наличии")
 
 ### Key Components
 
@@ -531,22 +503,10 @@ resetFilter() - Submits form without filter parameters
 **Views**:
 - `statistics/results.html` - Interactive comparison table with filter panel (lines 387-421, 630-840)
 
-### Testing Checklist
-
-✅ Шаблон с фильтрацией создаётся корректно
-✅ Экспорт сохраняет многомерную статистику в БД
-✅ API `/statistics/filter-values` возвращает корректные данные
-✅ Панель фильтров показывается только при наличии `statisticsFilterFields`
-✅ Динамическая загрузка значений работает
-✅ Применение фильтра перезагружает с корректными данными
-✅ Индикатор активного фильтра отображается
-✅ Сброс фильтра возвращает к общей статистике
-✅ Множественные операции корректно сравниваются
-✅ Данные в БД соответствуют формуле расчёта
+### Testing Status
+✅ Полностью протестировано - шаблоны, экспорт, фильтрация, API, UI работают корректно
 
 ### Excel Export with Trends Sheet
-
-**Recently Completed** (as of 2025-11-19):
 
 #### Purpose
 Enhanced Excel export for statistics with dedicated "Trends" sheet showing metric changes across operations using visual symbols (↑↓=) and percentage changes.
@@ -634,19 +594,11 @@ Enhanced Excel export for statistics with dedicated "Trends" sheet showing metri
 - UI buttons and JavaScript unchanged
 - Filter functionality works automatically
 
-#### Testing Checklist
-
-✅ Компиляция успешна (mvn clean compile)
-✅ Приложение запускается без ошибок
-✅ Метод `writeTrendsSheet()` реализован с JavaDoc
-✅ Вспомогательные методы добавлены
-✅ Интеграция в `generateExcel()` завершена
-⏳ Ручное тестирование экспорта без фильтра
-⏳ Ручное тестирование экспорта с фильтром
+#### Testing
+- ✅ Базовая интеграция завершена
+- ⏳ Ручное тестирование (с фильтром и без)
 
 ## Import Date Handling (CRITICAL)
-
-**Recently Updated** (as of 2025-10-24):
 
 ### Smart Date Format Detection for STRING Fields
 
@@ -655,31 +607,9 @@ Enhanced Excel export for statistics with dedicated "Trends" sheet showing metri
 **Проблема**: `DataFormatter` от Apache POI применяет US локаль и преобразует русский формат `'20.10.2025 6:32:00'` в американский `'10/20/25 6:32'`.
 
 **Решение** ([ImportProcessorService.java:716-741](src/main/java/com/java/service/imports/ImportProcessorService.java#L716-L741)):
-
-```java
-if (DateUtil.isCellDateFormatted(cell)) {
-    Date dateValue = cell.getDateCellValue();
-
-    // Умное определение формата на основе данных
-    Calendar cal = Calendar.getInstance();
-    cal.setTime(dateValue);
-    int hours = cal.get(Calendar.HOUR_OF_DAY);
-    int minutes = cal.get(Calendar.MINUTE);
-    int seconds = cal.get(Calendar.SECOND);
-
-    // Выбираем формат в зависимости от точности данных
-    SimpleDateFormat sdf;
-    if (hours == 0 && minutes == 0 && seconds == 0) {
-        sdf = new SimpleDateFormat("dd.MM.yyyy");          // Только дата
-    } else if (seconds == 0) {
-        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm");    // Без секунд
-    } else {
-        sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss"); // С секундами
-    }
-
-    return sdf.format(dateValue);
-}
-```
+- Определяет формат на основе точности данных (есть ли часы/минуты/секунды)
+- Выбирает один из трёх форматов: `dd.MM.yyyy`, `dd.MM.yyyy HH:mm`, или `dd.MM.yyyy HH:mm:ss`
+- Компактное хранение - не добавляет лишние `:00` если секунды отсутствуют
 
 **Автоматическая адаптация формата**:
 
@@ -707,39 +637,14 @@ if (DateUtil.isCellDateFormatted(cell)) {
 
 ### Empty Cells for Zero Prices in Export
 
-**Recently Updated** (as of 2025-10-23):
+При экспорте данных в Excel нулевые цены (0.0) отображаются как **пустые ячейки** вместо "0.00".
 
-При экспорте данных в Excel нулевые цены (0.0) теперь отображаются как **пустые ячейки** вместо "0.00".
-
-**Решение** ([XlsxFileGenerator.java:305-316](src/main/java/com/java/service/exports/generator/XlsxFileGenerator.java#L305-L316)):
-
-```java
-private void setCellValue(Cell cell, Object value, ExcelStyles styles) {
-    if (value == null) {
-        cell.setBlank();
-    } else if (value instanceof Number) {
-        double numValue = ((Number) value).doubleValue();
-        if (numValue == 0.0) {
-            cell.setBlank();  // Пустая ячейка для нулевых цен
-        } else {
-            cell.setCellValue(numValue);
-            cell.setCellStyle(styles.getNumberStyle());
-        }
-    }
-    // ... остальные типы данных
-}
-```
-
-**Преимущества**:
-- ✅ Улучшенная читаемость экспортируемых файлов
-- ✅ Легче визуально отличить отсутствующие цены от реальных нулевых значений
-- ✅ Упрощает анализ данных в Excel
-
-**Коммит**: `663c090`
+**Реализация** ([XlsxFileGenerator.java:305-316](src/main/java/com/java/service/exports/generator/XlsxFileGenerator.java#L305-L316)):
+- Проверка `numValue == 0.0` → `cell.setBlank()`
+- Улучшенная читаемость экспортируемых файлов
+- Легче отличить отсутствующие цены от реальных нулевых значений
 
 ## Statistics Operations Filtering
-
-**Recently Completed** (as of 2025-10-24):
 
 ### Template-Based Operation Filtering
 
@@ -760,22 +665,9 @@ private void setCellValue(Cell cell, Object value, ExcelStyles styles) {
   - `#operationsList` - контейнер со списком операций
 
 **JavaScript Integration** ([setup.html:274-368](src/main/resources/templates/statistics/setup.html#L274-L368)):
-```javascript
-// Обработчик выбора шаблона через radio buttons
-templateRadios.forEach(radio => {
-    radio.addEventListener('change', function() {
-        const templateId = this.getAttribute('data-template-id');
-        filterExportsByTemplate(templateId);
-    });
-});
-
-// Фильтрация операций по templateId
-function filterExportsByTemplate(templateId) {
-    // Показывает/скрывает операции по data-template-id
-    // Управляет видимостью блока операций
-    // Обновляет состояние "Выбрать все"
-}
-```
+- Обработчик события `change` на radio buttons шаблонов
+- Функция `filterExportsByTemplate(templateId)` показывает/скрывает операции по `data-template-id`
+- Автоматическое обновление состояния чекбокса "Выбрать все"
 
 **Key Features**:
 - ✅ **Client-side filtering** - быстрая работа без перезагрузки страницы
@@ -802,11 +694,6 @@ function filterExportsByTemplate(templateId) {
 
 When referencing specific functions or pieces of code include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.
 
-# important-instruction-reminders
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
