@@ -9,6 +9,7 @@ import com.java.repository.ExportSessionRepository;
 import com.java.repository.FileOperationRepository;
 import com.java.service.exports.strategies.ExportStrategy;
 import com.java.service.exports.strategies.ExportStrategyFactory;
+import com.java.util.WeekNumberUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -258,6 +259,14 @@ public class ExportProcessorService {
 
     /**
      * Генерирует имя файла по кастомному шаблону
+     *
+     * Поддерживаемые плейсхолдеры:
+     * - {client} - имя клиента (санитизированное)
+     * - {date} - текущая дата в формате yyyy-MM-dd
+     * - {time} - текущее время в формате HH-mm-ss
+     * - {week} - номер недели в году (W01-W53, ISO 8601)
+     * - {type} - тип экспорта (если указан)
+     * - {task} - номер задания (если найден)
      */
     private String generateCustomFileName(ExportTemplate template, ExportRequestDto request) {
         String template_str = template.getFilenameTemplate();
@@ -271,6 +280,9 @@ public class ExportProcessorService {
 
         template_str = template_str.replace("{time}",
                 ZonedDateTime.now().format(DateTimeFormatter.ofPattern("HH-mm-ss")));
+
+        template_str = template_str.replace("{week}",
+                WeekNumberUtils.getCurrentWeekNumber());
 
         if (template.getExportTypeLabel() != null) {
             template_str = template_str.replace("{type}",
