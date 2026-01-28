@@ -183,6 +183,70 @@ Processes CSV/Excel files containing URLs to resolve final URLs after HTTP redir
 
 **Asynchronous Architecture**: Fully integrated with existing async system using dedicated `redirectTaskExecutor` thread pool and WebSocket notifications via `/topic/redirect-progress/{operationId}`.
 
+### Proxy Configuration for Geo-Blocking Bypass
+
+**Purpose**: Обход IP-based и региональных блокировок через proxy серверы.
+
+**Configuration** ([application.properties](src/main/resources/application.properties)):
+```properties
+# Proxy для обхода региональных блокировок
+redirect.proxy.enabled=false
+redirect.proxy.server=host:port
+redirect.proxy.username=your_username
+redirect.proxy.password=your_password
+redirect.proxy.type=HTTP  # HTTP или SOCKS5
+
+# Rotating proxies для избежания rate limiting
+redirect.proxy.rotating.enabled=false
+redirect.proxy.rotating.pool-size=5
+redirect.proxy.rotating.pool-file=data/config/proxy-list.txt
+```
+
+**Key Components**:
+
+- `ProxyConfig` - Spring Boot конфигурация с @ConfigurationProperties для proxy настроек
+- `ProxyPoolManager` - Управление пулом proxy с round-robin ротацией
+- `PlaywrightStrategy` - Интеграция proxy в headless браузер через BrowserType.LaunchOptions
+- UI checkbox "Использовать прокси" на странице [redirect-finder-configure.html](src/main/resources/templates/utils/redirect-finder-configure.html)
+
+**Rotating Proxies Setup**:
+
+1. Создайте файл `data/config/proxy-list.txt` со списком proxy серверов
+2. Формат: `host:port:username:password` (один на строку)
+3. Пример из [proxy-example.txt](data/config/proxy-example.txt):
+
+   ```text
+   # Residential proxies (рекомендуется для обхода geo-blocking)
+   rp1.brightdata.com:22225:customer-user1:password1
+   rp2.brightdata.com:22225:customer-user2:password2
+
+   # Datacenter proxies (быстрее, но легче детектируются)
+   dc1.proxyrack.net:10000:user:pass
+   dc2.proxyrack.net:10001:user:pass
+   ```
+
+4. Включите `redirect.proxy.rotating.enabled=true` в application.properties
+5. Система автоматически ротирует IP для каждого URL
+
+**Recommended Proxy Providers**:
+
+- **Residential proxies**: Bright Data, Oxylabs, SmartProxy (лучше для geo-blocking)
+- **Datacenter proxies**: ProxyRack, Storm Proxies (быстрее, дешевле, но легче блокируются)
+
+**Usage**:
+
+- Proxy используется только в PlaywrightStrategy (когда CurlStrategy не справляется)
+- Чекбокс "Использовать прокси" доступен в UI для включения/выключения
+- Опциональная функция - backward compatible, не влияет на существующую логику
+
+**Implementation Details**:
+
+- Static proxy: используется один и тот же proxy из `redirect.proxy.server`
+- Rotating proxy: round-robin выборка из пула через AtomicInteger
+- Thread-safe: `CopyOnWriteArrayList` для хранения пула proxy
+- Поддержка аутентификации: username/password для платных proxy
+- Поддержка HTTP и SOCKS5 proxy
+
 ## Configuration System
 
 ### Key Application Properties

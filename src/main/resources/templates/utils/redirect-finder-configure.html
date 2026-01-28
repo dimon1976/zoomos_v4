@@ -250,6 +250,22 @@
                                                 </div>
                                             </div>
                                             <div class="col-md-6">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" th:field="*{useProxy}" id="useProxy">
+                                                    <label class="form-check-label" for="useProxy">
+                                                        <i class="fas fa-shield-alt text-success"></i>
+                                                        Использовать прокси
+                                                    </label>
+                                                    <div class="form-text">
+                                                        Обход региональных блокировок через proxy сервер
+                                                        <span class="text-info" data-bs-toggle="tooltip"
+                                                              title="Требует настройки redirect.proxy.* в application.properties">
+                                                            <i class="fas fa-info-circle"></i>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
                                                 <label class="form-label">Формат результата</label>
                                                 <select class="form-select" th:field="*{outputFormat}">
                                                     <option value="csv" selected>CSV файл</option>
