@@ -81,4 +81,19 @@ public class ExportSession {
         if (totalRows == null || totalRows == 0) return 0;
         return (int) ((exportedRows * 100.0) / totalRows);
     }
+
+    /**
+     * Извлекает TASK-номер из имени файла экспорта
+     * @return TASK-номер или null если не найден
+     */
+    @Transient
+    public String getTaskNumber() {
+        if (fileOperation == null || fileOperation.getFileName() == null) {
+            return null;
+        }
+        String fileName = fileOperation.getFileName();
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(TASK-\\d+)");
+        java.util.regex.Matcher matcher = pattern.matcher(fileName);
+        return matcher.find() ? matcher.group(1) : null;
+    }
 }

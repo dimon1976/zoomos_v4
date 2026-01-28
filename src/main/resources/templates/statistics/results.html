@@ -513,7 +513,7 @@
                 <th th:each="operation : ${comparison[0].operations}"
                     class="operation-header">
                     <div>
-                        <div th:text="'Операция #' + ${operation.operationId}">Операция #1</div>
+                        <div th:text="'Операция #' + ${operation.exportSessionId}">Операция #1</div>
                         <small th:text="${#temporals.format(operation.exportDate, 'dd.MM HH:mm', T(java.time.ZoneId).systemDefault())}">
                             01.01 10:00
                         </small>
