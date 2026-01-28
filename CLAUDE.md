@@ -85,6 +85,10 @@ mvn flyway:info
 
 ## Recent Changes & Features
 
+### 2026-01
+
+- **Statistics Display Fix** - Исправлено дублирование номеров операций и TASK-номеров на странице статистики
+
 ### 2025-11
 - **Excel Export with Trends Sheet** - Двухлистовый Excel экспорт со страницей трендов (↑↓= индикаторы)
 
@@ -689,6 +693,54 @@ Enhanced Excel export for statistics with dedicated "Trends" sheet showing metri
 - Операции: `data-template-id` и `data-export-id` на div.export-card
 
 **Коммит**: `a2d8f1d` - feat: фильтрация операций экспорта по выбранному шаблону статистики
+
+### Statistics Display - Unique Operation and TASK Numbers
+
+Исправлено дублирование номеров операций и TASK-номеров на страницах setup и results статистики.
+
+**Проблема:**
+
+- Номера операций дублировались из-за использования `fileOperation.id` (не уникален для разных сессий)
+- TASK-номера дублировались из-за извлечения из общих sourceOperationIds вместо конкретной операции
+
+**Решение:**
+
+**1. Уникальные номера операций** ([results.html:516](src/main/resources/templates/statistics/results.html#L516), [setup.html:157](src/main/resources/templates/statistics/setup.html#L157)):
+
+- Заменено `fileOperation.id` → `export.id` (exportSessionId)
+- Гарантирует уникальность между setup и results страницами
+- Совместимо со всеми клиентами
+
+**2. Правильные TASK-номера** ([ExportStatisticsService.java:214-250](src/main/java/com/java/service/statistics/ExportStatisticsService.java#L214-L250)):
+
+- Метод `extractTaskNumberFromSession()` использует ту же логику что `ExportProcessorService`
+- Извлекает из **первой операции** sourceOperationIds → `av_data.product_additional1`
+- Не зависит от формата имени файла экспорта
+- Каждая операция экспорта получает свой TASK-номер
+
+**3. Вспомогательный метод** ([ExportSession.java:90-98](src/main/java/com/java/model/entity/ExportSession.java#L90-L98)):
+
+- Добавлен `@Transient` метод `getTaskNumber()` для удобного отображения на setup.html
+- Извлекает TASK из имени файла через regex (для обратной совместимости)
+
+**Key Features:**
+
+- ✅ Консистентные номера между setup и results страницами
+- ✅ Независимость от формата имени файла
+- ✅ Использование того же источника данных что при экспорте
+- ✅ Обратная совместимость для клиентов без TASK-номеров
+
+**Пример отображения:**
+
+```text
+Setup page:
+  Операция #123          Операция #456
+  TASK-00008125         TASK-00007969
+
+Results page:
+  Операция #123   | Операция #456   ← exportSessionId (уникальны)
+  TASK-00008125   | TASK-00007969   ← Разные TASK-номера
+```
 
 ## Code References
 

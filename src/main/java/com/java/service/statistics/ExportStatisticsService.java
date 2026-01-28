@@ -209,32 +209,39 @@ public class ExportStatisticsService {
 
     /**
      * Извлекает номер задания из операций-источников сессии экспорта
-     * Использует ту же логику что и в ExportProcessorService
+     * Использует ТУ ЖЕ логику что и ExportProcessorService.extractTaskNumber()
+     * Берет ПЕРВУЮ операцию из sourceOperationIds и извлекает из нее product_additional1
      */
     private String extractTaskNumberFromSession(ExportSession session) {
         try {
-            // Парсим список операций-источников
+            // Парсим список операций-источников (те же operationIds что были при экспорте)
             List<Long> sourceOperationIds = parseSourceOperationIds(session.getSourceOperationIds());
 
             if (sourceOperationIds.isEmpty()) {
+                log.debug("Отсутствуют sourceOperationIds для сессии {}", session.getId());
                 return null;
             }
 
-            // Оптимизация: один запрос вместо N запросов (исправление N+1 Query)
+            // Берем ПЕРВУЮ операцию-источник (как в ExportProcessorService.extractTaskNumber)
+            Long firstOperationId = sourceOperationIds.get(0);
+
             String sql = "SELECT product_additional1 FROM av_data " +
-                        "WHERE operation_id IN (" + sourceOperationIds.stream()
-                            .map(String::valueOf)
-                            .collect(Collectors.joining(",")) + ") " +
+                        "WHERE operation_id = ? " +
                         "AND product_additional1 IS NOT NULL AND product_additional1 != '' " +
                         "LIMIT 1";
 
-            String taskNumber = jdbcTemplate.query(sql, rs -> {
-                if (rs.next()) {
-                    Object value = rs.getObject("product_additional1");
-                    return value != null ? value.toString().trim() : null;
-                }
-                return null;
-            });
+            String taskNumber = jdbcTemplate.query(sql,
+                ps -> ps.setLong(1, firstOperationId),
+                rs -> {
+                    if (rs.next()) {
+                        Object value = rs.getObject("product_additional1");
+                        return value != null ? value.toString().trim() : null;
+                    }
+                    return null;
+                });
+
+            log.debug("TASK-номер для сессии {} (operationId={}): {}",
+                     session.getId(), firstOperationId, taskNumber);
 
             return (taskNumber != null && !taskNumber.isEmpty()) ? taskNumber : null;
         } catch (Exception e) {
