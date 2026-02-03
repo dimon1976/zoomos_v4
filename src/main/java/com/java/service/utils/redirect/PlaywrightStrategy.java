@@ -1,5 +1,6 @@
 package com.java.service.utils.redirect;
 
+import com.java.config.ProxyConfig;
 import com.java.constants.ApplicationConstants;
 import com.java.model.utils.PageStatus;
 import com.java.model.utils.RedirectResult;
@@ -14,15 +15,23 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Стратегия обработки редиректов через Playwright
  * Используется для обхода антиботных систем когда CurlStrategy заблокирован
+ * Поддерживает proxy для обхода региональных блокировок
  */
 @Component
 @Slf4j
 public class PlaywrightStrategy implements RedirectStrategy {
-    
+
     private final UrlSecurityValidator urlSecurityValidator;
-    
-    public PlaywrightStrategy(UrlSecurityValidator urlSecurityValidator) {
+    private final ProxyConfig proxyConfig;
+    private final ProxyPoolManager proxyPoolManager;
+
+    public PlaywrightStrategy(
+            UrlSecurityValidator urlSecurityValidator,
+            ProxyConfig proxyConfig,
+            ProxyPoolManager proxyPoolManager) {
         this.urlSecurityValidator = urlSecurityValidator;
+        this.proxyConfig = proxyConfig;
+        this.proxyPoolManager = proxyPoolManager;
     }
     
     private static final Set<String> BLOCK_KEYWORDS = Set.of(
@@ -50,10 +59,19 @@ public class PlaywrightStrategy implements RedirectStrategy {
         }
         
         try (Playwright playwright = Playwright.create()) {
-            Browser browser = playwright.chromium().launch(
-                new BrowserType.LaunchOptions().setHeadless(true)
-            );
-            
+            // Настройка launch options с поддержкой proxy
+            BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
+                .setHeadless(true);
+
+            // Добавить proxy если включен
+            ProxyPoolManager.ProxyServer proxyServer = getProxyForUrl(url);
+            if (proxyServer != null) {
+                launchOptions.setProxy(proxyServer.getHost() + ":" + proxyServer.getPort());
+                log.debug("Используется proxy: {}:{}", proxyServer.getHost(), proxyServer.getPort());
+            }
+
+            Browser browser = playwright.chromium().launch(launchOptions);
+
             BrowserContext context = browser.newContext(new Browser.NewContextOptions()
                 .setUserAgent(USER_AGENT)
                 .setViewportSize(
@@ -423,10 +441,57 @@ public class PlaywrightStrategy implements RedirectStrategy {
         return "";
     }
     
+    /**
+     * Получить proxy сервер для URL
+     * Поддерживает как статический proxy, так и ротацию из пула
+     */
+    private ProxyPoolManager.ProxyServer getProxyForUrl(String url) {
+        if (!proxyConfig.isEnabled()) {
+            return null;
+        }
+
+        // Rotating proxies - выбираем из пула
+        if (proxyConfig.getRotating().isEnabled()) {
+            return proxyPoolManager.getNextProxy();
+        }
+
+        // Статический proxy из конфига
+        return createStaticProxy();
+    }
+
+    /**
+     * Создать статический proxy из конфигурации
+     */
+    private ProxyPoolManager.ProxyServer createStaticProxy() {
+        String server = proxyConfig.getServer();
+        if (server == null || server.trim().isEmpty()) {
+            log.warn("Proxy включен, но адрес сервера не указан");
+            return null;
+        }
+
+        String[] parts = server.split(":");
+        if (parts.length < 2) {
+            log.warn("Некорректный формат proxy сервера: {}. Ожидается host:port", server);
+            return null;
+        }
+
+        try {
+            String host = parts[0].trim();
+            int port = Integer.parseInt(parts[1].trim());
+            String username = proxyConfig.getUsername();
+            String password = proxyConfig.getPassword();
+
+            return new ProxyPoolManager.ProxyServer(host, port, username, password);
+        } catch (NumberFormatException e) {
+            log.warn("Некорректный порт в proxy сервере: {}", server);
+            return null;
+        }
+    }
+
     private RedirectResult buildErrorResult(String originalUrl, long startTime, String errorMessage) {
         long endTime = System.currentTimeMillis();
         log.error("Ошибка обработки URL {}: {}", originalUrl, errorMessage);
-        
+
         return RedirectResult.builder()
                 .originalUrl(originalUrl)
                 .finalUrl(originalUrl)

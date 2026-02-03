@@ -85,6 +85,10 @@ mvn flyway:info
 
 ## Recent Changes & Features
 
+### 2026-01
+
+- **Statistics Display Fix** - Исправлено дублирование номеров операций и TASK-номеров на странице статистики
+
 ### 2025-11
 - **Excel Export with Trends Sheet** - Двухлистовый Excel экспорт со страницей трендов (↑↓= индикаторы)
 
@@ -178,6 +182,70 @@ Processes CSV/Excel files containing URLs to resolve final URLs after HTTP redir
 - **Asynchronous**: Background processing with WebSocket notifications, allows multitasking
 
 **Asynchronous Architecture**: Fully integrated with existing async system using dedicated `redirectTaskExecutor` thread pool and WebSocket notifications via `/topic/redirect-progress/{operationId}`.
+
+### Proxy Configuration for Geo-Blocking Bypass
+
+**Purpose**: Обход IP-based и региональных блокировок через proxy серверы.
+
+**Configuration** ([application.properties](src/main/resources/application.properties)):
+```properties
+# Proxy для обхода региональных блокировок
+redirect.proxy.enabled=false
+redirect.proxy.server=host:port
+redirect.proxy.username=your_username
+redirect.proxy.password=your_password
+redirect.proxy.type=HTTP  # HTTP или SOCKS5
+
+# Rotating proxies для избежания rate limiting
+redirect.proxy.rotating.enabled=false
+redirect.proxy.rotating.pool-size=5
+redirect.proxy.rotating.pool-file=data/config/proxy-list.txt
+```
+
+**Key Components**:
+
+- `ProxyConfig` - Spring Boot конфигурация с @ConfigurationProperties для proxy настроек
+- `ProxyPoolManager` - Управление пулом proxy с round-robin ротацией
+- `PlaywrightStrategy` - Интеграция proxy в headless браузер через BrowserType.LaunchOptions
+- UI checkbox "Использовать прокси" на странице [redirect-finder-configure.html](src/main/resources/templates/utils/redirect-finder-configure.html)
+
+**Rotating Proxies Setup**:
+
+1. Создайте файл `data/config/proxy-list.txt` со списком proxy серверов
+2. Формат: `host:port:username:password` (один на строку)
+3. Пример из [proxy-example.txt](data/config/proxy-example.txt):
+
+   ```text
+   # Residential proxies (рекомендуется для обхода geo-blocking)
+   rp1.brightdata.com:22225:customer-user1:password1
+   rp2.brightdata.com:22225:customer-user2:password2
+
+   # Datacenter proxies (быстрее, но легче детектируются)
+   dc1.proxyrack.net:10000:user:pass
+   dc2.proxyrack.net:10001:user:pass
+   ```
+
+4. Включите `redirect.proxy.rotating.enabled=true` в application.properties
+5. Система автоматически ротирует IP для каждого URL
+
+**Recommended Proxy Providers**:
+
+- **Residential proxies**: Bright Data, Oxylabs, SmartProxy (лучше для geo-blocking)
+- **Datacenter proxies**: ProxyRack, Storm Proxies (быстрее, дешевле, но легче блокируются)
+
+**Usage**:
+
+- Proxy используется только в PlaywrightStrategy (когда CurlStrategy не справляется)
+- Чекбокс "Использовать прокси" доступен в UI для включения/выключения
+- Опциональная функция - backward compatible, не влияет на существующую логику
+
+**Implementation Details**:
+
+- Static proxy: используется один и тот же proxy из `redirect.proxy.server`
+- Rotating proxy: round-robin выборка из пула через AtomicInteger
+- Thread-safe: `CopyOnWriteArrayList` для хранения пула proxy
+- Поддержка аутентификации: username/password для платных proxy
+- Поддержка HTTP и SOCKS5 proxy
 
 ## Configuration System
 
@@ -689,6 +757,54 @@ Enhanced Excel export for statistics with dedicated "Trends" sheet showing metri
 - Операции: `data-template-id` и `data-export-id` на div.export-card
 
 **Коммит**: `a2d8f1d` - feat: фильтрация операций экспорта по выбранному шаблону статистики
+
+### Statistics Display - Unique Operation and TASK Numbers
+
+Исправлено дублирование номеров операций и TASK-номеров на страницах setup и results статистики.
+
+**Проблема:**
+
+- Номера операций дублировались из-за использования `fileOperation.id` (не уникален для разных сессий)
+- TASK-номера дублировались из-за извлечения из общих sourceOperationIds вместо конкретной операции
+
+**Решение:**
+
+**1. Уникальные номера операций** ([results.html:516](src/main/resources/templates/statistics/results.html#L516), [setup.html:157](src/main/resources/templates/statistics/setup.html#L157)):
+
+- Заменено `fileOperation.id` → `export.id` (exportSessionId)
+- Гарантирует уникальность между setup и results страницами
+- Совместимо со всеми клиентами
+
+**2. Правильные TASK-номера** ([ExportStatisticsService.java:214-250](src/main/java/com/java/service/statistics/ExportStatisticsService.java#L214-L250)):
+
+- Метод `extractTaskNumberFromSession()` использует ту же логику что `ExportProcessorService`
+- Извлекает из **первой операции** sourceOperationIds → `av_data.product_additional1`
+- Не зависит от формата имени файла экспорта
+- Каждая операция экспорта получает свой TASK-номер
+
+**3. Вспомогательный метод** ([ExportSession.java:90-98](src/main/java/com/java/model/entity/ExportSession.java#L90-L98)):
+
+- Добавлен `@Transient` метод `getTaskNumber()` для удобного отображения на setup.html
+- Извлекает TASK из имени файла через regex (для обратной совместимости)
+
+**Key Features:**
+
+- ✅ Консистентные номера между setup и results страницами
+- ✅ Независимость от формата имени файла
+- ✅ Использование того же источника данных что при экспорте
+- ✅ Обратная совместимость для клиентов без TASK-номеров
+
+**Пример отображения:**
+
+```text
+Setup page:
+  Операция #123          Операция #456
+  TASK-00008125         TASK-00007969
+
+Results page:
+  Операция #123   | Операция #456   ← exportSessionId (уникальны)
+  TASK-00008125   | TASK-00007969   ← Разные TASK-номера
+```
 
 ## Code References
 

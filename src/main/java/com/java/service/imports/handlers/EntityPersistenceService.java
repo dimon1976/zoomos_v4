@@ -5,6 +5,7 @@ import com.java.model.enums.DataSourceType;
 import com.java.model.enums.EntityType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
@@ -15,6 +16,8 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Сервис для сохранения импортированных данных в БД
@@ -25,6 +28,13 @@ import java.util.Map;
 public class EntityPersistenceService {
 
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
+
+    // Трекинг сессий для однократной очистки AV_HANDBOOK
+    private final Set<Long> clearedSessionsForHandbook = ConcurrentHashMap.newKeySet();
+
+    // Блокировка для синхронизации доступа к av_handbook
+    private final Object avHandbookLock = new Object();
 
     private static final List<String> AV_DATA_PARAMS = List.of(
             "dataSource", "operationId", "clientId", "productId", "productName",
@@ -143,6 +153,14 @@ public class EntityPersistenceService {
      * Сохраняет клиентов
      */
     private int saveAvHandbook(List<Map<String, Object>> batch, ImportSession session) {
+        // ПОЛНАЯ ЗАМЕНА: очищаем всю таблицу перед первым батчем
+        synchronized (avHandbookLock) {
+            if (!clearedSessionsForHandbook.contains(session.getId())) {
+                clearAvHandbookTable(session);
+                clearedSessionsForHandbook.add(session.getId());
+            }
+        }
+
         String sql = "INSERT INTO av_handbook (handbook_retail_network_code, handbook_retail_network, handbook_physical_address, handbook_price_zone_code, handbook_web_site, " +
                 "handbook_region_code, handbook_region_name, created_at, updated_at) " +
                 "VALUES (:handbookRetailNetworkCode, :handbookRetailNetwork, :handbookPhysicalAddress, :handbookPriceZoneCode, :handbookWebSite, " +
@@ -166,11 +184,42 @@ public class EntityPersistenceService {
     }
 
     /**
+     * Полная очистка таблицы av_handbook перед импортом.
+     *
+     * Используется DELETE вместо TRUNCATE для сохранения транзакционности:
+     * - Работает внутри @Transactional
+     * - Откат возможен при ошибках
+     * - Безопасно с FK constraints (ON DELETE SET NULL)
+     *
+     * @param session текущая сессия импорта (для логирования)
+     * @throws RuntimeException если очистка не удалась
+     */
+    private void clearAvHandbookTable(ImportSession session) {
+        log.info("ЗАМЕНА ДАННЫХ: Начало очистки таблицы av_handbook (session={})", session.getId());
+
+        try {
+            String deleteSql = "DELETE FROM av_handbook";
+            int deletedCount = jdbcTemplate.update(deleteSql);
+
+            log.info("ЗАМЕНА ДАННЫХ: Удалено {} записей из av_handbook (session={})",
+                    deletedCount, session.getId());
+
+        } catch (Exception e) {
+            log.error("ЗАМЕНА ДАННЫХ: Ошибка при очистке av_handbook (session={})",
+                    session.getId(), e);
+            throw new RuntimeException("Не удалось очистить таблицу av_handbook: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Откатывает импорт (удаляет импортированные записи)
      */
     @Transactional
     public void rollbackImport(ImportSession session) {
         log.warn("Откат импорта для сессии: {}", session.getId());
+
+        // Очищаем флаг очистки при откате
+        clearedSessionsForHandbook.remove(session.getId());
 
         // Это упрощенная версия
         // В реальности нужно отслеживать ID импортированных записей

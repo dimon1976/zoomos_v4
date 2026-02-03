@@ -2,6 +2,8 @@ package com.java.controller;
 
 import com.java.dto.ClientDto;
 import com.java.service.client.ClientService;
+import com.java.service.exports.ExportTemplateService;
+import com.java.service.imports.ImportTemplateService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -39,6 +41,8 @@ public class BreadcrumbAdvice {
     }
 
     private final ClientService clientService;
+    private final ExportTemplateService exportTemplateService;
+    private final ImportTemplateService importTemplateService;
     
     // Паттерны для идентификации различных типов страниц
     private static final Pattern CLIENT_PATH_PATTERN = Pattern.compile("^/clients/(\\d+)(?:/(.+))?$");
@@ -186,8 +190,20 @@ public class BreadcrumbAdvice {
     }
     
     private String getTemplateName(Long templateId, String type) {
-        // TODO: Можно добавить сервис для получения имен шаблонов
-        // Пока возвращаем базовое имя
+        try {
+            if ("export".equals(type)) {
+                return exportTemplateService.getTemplate(templateId)
+                        .map(template -> template.getName())
+                        .orElse("Шаблон #" + templateId);
+            } else if ("import".equals(type)) {
+                return importTemplateService.getTemplate(templateId)
+                        .map(template -> template.getName())
+                        .orElse("Шаблон #" + templateId);
+            }
+        } catch (Exception e) {
+            // В случае ошибки возвращаем базовое имя
+            return "Шаблон #" + templateId;
+        }
         return "Шаблон #" + templateId;
     }
 

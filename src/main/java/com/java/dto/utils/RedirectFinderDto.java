@@ -34,15 +34,22 @@ public class RedirectFinderDto {
     private Integer delayMs = 0;
     
     private Boolean usePlaywright = false;
-    
+
+    /**
+     * Использовать proxy для обхода региональных блокировок
+     * Требует настройки redirect.proxy.* в application.properties
+     */
+    private Boolean useProxy = false;
+
     private String outputFormat = "csv";
-    
+
     // Конструктор с умолчаниями для удобства
     public RedirectFinderDto() {
         this.maxRedirects = 5;
         this.timeoutMs = 10000;
         this.delayMs = 0;
         this.usePlaywright = false;
+        this.useProxy = false;
         this.outputFormat = "csv";
     }
 }
