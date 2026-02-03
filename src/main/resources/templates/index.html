@@ -5,27 +5,36 @@
         ~{::section},
         ~{::script},
         ~{::style},
-        'Дашборд',
+        '',
         ~{::.page-actions}
       )}">
 <head>
     <title>Дашборд - Обработка файлов</title>
     <style>
-        .stats-card {
-            transition: transform 0.2s ease;
-        }
-        .stats-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .filter-panel {
-            background-color: #f8f9fa;
+        /* Компактные карточки */
+        .card {
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
         }
+
+        /* Вертикальный разделитель для статистики */
+        .vr {
+            display: inline-block;
+            align-self: stretch;
+            width: 1px;
+            min-height: 1em;
+            background-color: currentColor;
+            opacity: 0.25;
+        }
+
+        /* Компактная таблица */
         .operations-table {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+        }
+        .operations-table th,
+        .operations-table td {
+            padding: 0.5rem;
+            vertical-align: middle;
         }
         .status-badge {
             font-size: 0.8rem;
@@ -74,148 +83,136 @@
 </div>
 
 <section>
-    <!-- Компактная статистика -->
-    <div class="row mb-3" id="statsCards">
-        <!-- Блок клиенты и операции -->
-        <div class="col-md-9">
-            <div class="card">
-                <div class="card-body py-2">
-                    <div class="d-flex align-items-center mb-2">
-                        <i class="fas fa-users text-info me-2"></i>
-                        <span class="text-muted small">Всего клиентов: <strong id="totalClients" th:text="${dashboardStats.totalClients}">0</strong></span>
-                    </div>
-                    <div class="row g-2 text-center">
-                        <div class="col-3">
-                            <div class="h5 mb-0 text-primary" id="totalOperations">
-                                <span th:text="${dashboardStats.totalOperations}">0</span>
-                            </div>
-                            <small class="text-muted">Всего операций</small>
-                        </div>
-                        <div class="col-3">
-                            <div class="h5 mb-0 text-success" id="completedOperations">
-                                <span th:text="${dashboardStats.completedOperations}">0</span>
-                            </div>
-                            <small class="text-muted">Завершено</small>
-                        </div>
-                        <div class="col-3">
-                            <div class="h5 mb-0 text-warning" id="activeOperations">
-                                <span th:text="${dashboardStats.activeOperations}">0</span>
-                            </div>
-                            <small class="text-muted">В процессе</small>
-                        </div>
-                        <div class="col-3">
-                            <div class="h5 mb-0 text-danger" id="failedOperations">
-                                <span th:text="${dashboardStats.failedOperations}">0</span>
-                            </div>
-                            <small class="text-muted">Ошибки</small>
-                        </div>
-                    </div>
+    <!-- Сверхкомпактная статистика в одну строку -->
+    <div class="card mb-3" id="statsCards">
+        <div class="card-body py-2 px-3">
+            <div class="row g-3 align-items-center small">
+                <!-- Операции -->
+                <div class="col-auto">
+                    <i class="fas fa-chart-line text-muted me-1"></i>
+                    <span class="text-muted">Операции:</span>
+                    <strong class="text-primary mx-1" id="totalOperations" th:text="${dashboardStats.totalOperations}">0</strong>
+                    <span class="text-success mx-1"><span id="completedOperations" th:text="${dashboardStats.completedOperations}">0</span>✓</span>
+                    <span class="text-warning mx-1"><span id="activeOperations" th:text="${dashboardStats.activeOperations}">0</span>⚙</span>
+                    <span class="text-danger mx-1"><span id="failedOperations" th:text="${dashboardStats.failedOperations}">0</span>✗</span>
+                </div>
+
+                <!-- Разделитель -->
+                <div class="col-auto">
+                    <div class="vr" style="height: 24px;"></div>
+                </div>
+
+                <!-- Клиенты -->
+                <div class="col-auto">
+                    <i class="fas fa-users text-muted me-1"></i>
+                    <span class="text-muted">Клиенты:</span>
+                    <strong id="totalClients" th:text="${dashboardStats.totalClients}">0</strong>
+                </div>
+
+                <!-- Разделитель -->
+                <div class="col-auto">
+                    <div class="vr" style="height: 24px;"></div>
+                </div>
+
+                <!-- Дисковое пространство -->
+                <div class="col-auto">
+                    <i class="fas fa-hdd text-muted me-1"></i>
+                    <span class="text-muted">Диск:</span>
+                    <strong id="totalSize" th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</strong>
+                    <span class="text-muted small ms-2">
+                        (<i class="fas fa-folder text-warning"></i> <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0</span>
+                        / <i class="fas fa-download text-info"></i> <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0</span>
+                        / <i class="fas fa-upload text-success"></i> <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0</span>)
+                    </span>
+                </div>
+
+                <!-- Системная информация (collapse) -->
+                <div class="col-auto ms-auto" th:if="${dashboardStats.systemInfo}">
+                    <button class="btn btn-sm btn-link text-muted p-0" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#systemInfoCollapse" title="Системная информация">
+                        <i class="fas fa-server"></i>
+                    </button>
                 </div>
             </div>
-        </div>
 
-        <!-- Блок дискового пространства -->
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body py-2 text-center">
-                    <h6 class="text-muted mb-2 small">ДИСКОВОЕ ПРОСТРАНСТВО</h6>
-                    <div class="h5 mb-1" id="totalSize">
-                        <span th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</span>
+            <!-- Скрываемая системная информация -->
+            <div class="collapse mt-2 pt-2 border-top" id="systemInfoCollapse" th:if="${dashboardStats.systemInfo}">
+                <div class="row g-2 small text-muted">
+                    <div class="col-auto">
+                        <strong>Java:</strong> <span th:text="${dashboardStats.systemInfo.javaVersion}">17</span>
                     </div>
-                    <small class="text-muted d-block">
-                        <i class="fas fa-folder text-warning"></i> <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0</span>
-                        <i class="fas fa-download text-info ms-1"></i> <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0</span>
-                        <i class="fas fa-upload text-success ms-1"></i> <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0</span>
-                    </small>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Системная информация -->
-    <div class="card mb-4" th:if="${dashboardStats.systemInfo}">
-        <div class="card-header system-info">
-            <h6 class="card-title mb-0 text-white">
-                <i class="fas fa-server me-2"></i>Системная информация
-            </h6>
-        </div>
-        <div class="card-body">
-            <div class="row" id="systemInfo">
-                <div class="col-md-4">
-                    <small class="text-muted">Java:</small>
-                    <div th:text="${dashboardStats.systemInfo.javaVersion}">Java 17</div>
-                </div>
-                <div class="col-md-4">
-                    <small class="text-muted">Память:</small>
-                    <div>
+                    <div class="col-auto">
+                        <strong>Память:</strong>
                         <span th:text="${dashboardStats.systemInfo.usedMemoryMb}">512</span> /
                         <span th:text="${dashboardStats.systemInfo.totalMemoryMb}">1024</span> МБ
                     </div>
-                </div>
-                <div class="col-md-4">
-                    <small class="text-muted">Время работы:</small>
-                    <div id="uptimeDisplay" th:text="${dashboardStats.systemInfo.uptimeMinutes} + ' мин'">120 мин</div>
+                    <div class="col-auto">
+                        <strong>Uptime:</strong>
+                        <span id="uptimeDisplay" th:text="${dashboardStats.systemInfo.uptimeMinutes} + ' мин'">120 мин</span>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Панель фильтров -->
-    <div class="filter-panel">
-        <form id="filterForm" class="row g-3">
-            <div class="col-md-3">
-                <label for="clientFilter" class="form-label">Клиент</label>
-                <select class="form-select" id="clientFilter" name="clientId">
-                    <option value="">Все клиенты</option>
-                    <option th:each="client : ${clients}"
-                            th:value="${client.id}"
-                            th:text="${client.name}">Клиент</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label for="operationTypeFilter" class="form-label">Тип операции</label>
-                <select class="form-select" id="operationTypeFilter" name="operationType">
-                    <option value="">Все типы</option>
-                    <option th:each="type : ${operationTypes}"
-                            th:value="${type}"
-                            th:text="${type == T(com.java.model.FileOperation$OperationType).IMPORT ? 'Импорт' :
-                                     type == T(com.java.model.FileOperation$OperationType).EXPORT ? 'Экспорт' :
-                                     'Обработка'}">Тип</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label for="statusFilter" class="form-label">Статус</label>
-                <select class="form-select" id="statusFilter" name="status">
-                    <option value="">Все статусы</option>
-                    <option th:each="status : ${operationStatuses}"
-                            th:value="${status}"
-                            th:text="${status == T(com.java.model.FileOperation$OperationStatus).PENDING ? 'Ожидание' :
-                                     status == T(com.java.model.FileOperation$OperationStatus).PROCESSING ? 'В процессе' :
-                                     status == T(com.java.model.FileOperation$OperationStatus).COMPLETED ? 'Завершено' :
-                                     'Ошибка'}">Статус</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label for="dateFromFilter" class="form-label">Дата с</label>
-                <input type="date" class="form-control" id="dateFromFilter" name="dateFrom">
-            </div>
-            <div class="col-md-2">
-                <label for="dateToFilter" class="form-label">Дата по</label>
-                <input type="date" class="form-control" id="dateToFilter" name="dateTo">
-            </div>
-            <div class="col-md-1 d-flex align-items-end">
-                <button type="button" class="btn btn-primary w-100" onclick="applyFilters()">
-                    <i class="fas fa-filter"></i>
-                </button>
-            </div>
-        </form>
+    <!-- Компактная панель фильтров -->
+    <div class="card mb-3">
+        <div class="card-body py-2 px-3">
+            <form id="filterForm" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label for="clientFilter" class="form-label mb-1 small text-muted">Клиент</label>
+                    <select class="form-select form-select-sm" id="clientFilter" name="clientId">
+                        <option value="">Все клиенты</option>
+                        <option th:each="client : ${clients}"
+                                th:value="${client.id}"
+                                th:text="${client.name}">Клиент</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="operationTypeFilter" class="form-label mb-1 small text-muted">Тип</label>
+                    <select class="form-select form-select-sm" id="operationTypeFilter" name="operationType">
+                        <option value="">Все типы</option>
+                        <option th:each="type : ${operationTypes}"
+                                th:value="${type}"
+                                th:text="${type == T(com.java.model.FileOperation$OperationType).IMPORT ? 'Импорт' :
+                                         type == T(com.java.model.FileOperation$OperationType).EXPORT ? 'Экспорт' :
+                                         'Обработка'}">Тип</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="statusFilter" class="form-label mb-1 small text-muted">Статус</label>
+                    <select class="form-select form-select-sm" id="statusFilter" name="status">
+                        <option value="">Все статусы</option>
+                        <option th:each="status : ${operationStatuses}"
+                                th:value="${status}"
+                                th:text="${status == T(com.java.model.FileOperation$OperationStatus).PENDING ? 'Ожидание' :
+                                         status == T(com.java.model.FileOperation$OperationStatus).PROCESSING ? 'В процессе' :
+                                         status == T(com.java.model.FileOperation$OperationStatus).COMPLETED ? 'Завершено' :
+                                         'Ошибка'}">Статус</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="dateFromFilter" class="form-label mb-1 small text-muted">Дата с</label>
+                    <input type="date" class="form-control form-control-sm" id="dateFromFilter" name="dateFrom">
+                </div>
+                <div class="col-md-2">
+                    <label for="dateToFilter" class="form-label mb-1 small text-muted">Дата по</label>
+                    <input type="date" class="form-control form-control-sm" id="dateToFilter" name="dateTo">
+                </div>
+                <div class="col-md-1">
+                    <button type="button" class="btn btn-primary btn-sm w-100" onclick="applyFilters()" title="Применить фильтры">
+                        <i class="fas fa-filter"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Таблица операций -->
     <div class="card">
-        <div class="card-header">
+        <div class="card-header py-2 px-3" style="background-color: #f8f9fa;">
             <div class="d-flex justify-content-between align-items-center">
-                <h6 class="card-title mb-0">
+                <h6 class="card-title mb-0 small">
                     <i class="fas fa-list me-2"></i>Последние операции
                 </h6>
                 <div class="d-flex align-items-center gap-2">
@@ -224,16 +221,16 @@
                     </button>
                     <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
-                        <label class="form-check-label" for="autoRefresh">
+                        <label class="form-check-label small" for="autoRefresh">
                             Автообновление
                         </label>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover operations-table" id="operationsTable">
+                <table class="table table-hover table-sm operations-table mb-0" id="operationsTable">
                     <thead>
                     <tr>
                         <th>ID</th>
