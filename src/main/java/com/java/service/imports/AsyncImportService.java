@@ -61,7 +61,6 @@ public class AsyncImportService {
     /**
      * Запускает асинхронный импорт файла
      */
-    @Async("importTaskExecutor")
     @Transactional
     public CompletableFuture<ImportSession> startImport(ImportRequestDto request, Long clientId) {
 
