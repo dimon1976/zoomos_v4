@@ -165,6 +165,16 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                    <!-- JVM параметры для оптимизации памяти -->
+                    <jvmArguments>
+                        -Xms256m
+                        -Xmx512m
+                        -XX:MaxMetaspaceSize=256m
+                        -XX:+UseG1GC
+                        -XX:MaxGCPauseMillis=200
+                        -XX:+UseStringDeduplication
+                        -Dfile.encoding=UTF-8
+                    </jvmArguments>
                 </configuration>
             </plugin>
         </plugins>

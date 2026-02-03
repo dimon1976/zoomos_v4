@@ -78,10 +78,89 @@ mvn flyway:info
 
 ## Application Profiles
 
-- **silent** (recommended): Minimal logging, fast startup, clean output
+- **silent** (recommended): Minimal logging, fast startup, clean output, memory optimized
 - **dev**: Moderate logging with DevTools enabled
 - **verbose**: Maximum debugging with SQL logging and TRACE level
 - **prod**: Production optimized with file logging
+
+## Performance and Memory Optimization
+
+### Memory Usage
+
+Приложение оптимизировано для работы с ограниченными ресурсами. Базовое потребление памяти в режиме простоя: **~350-450 MB**.
+
+### JVM Configuration
+
+JVM параметры настроены в [pom.xml](pom.xml) для spring-boot-maven-plugin:
+
+```xml
+<jvmArguments>
+    -Xms256m                          <!-- Начальный heap -->
+    -Xmx512m                          <!-- Максимальный heap -->
+    -XX:MaxMetaspaceSize=256m         <!-- Ограничение Metaspace -->
+    -XX:+UseG1GC                      <!-- G1 Garbage Collector -->
+    -XX:MaxGCPauseMillis=200          <!-- Целевая пауза GC -->
+    -XX:+UseStringDeduplication       <!-- Дедупликация строк -->
+</jvmArguments>
+```
+
+**Увеличение лимитов памяти:**
+
+Для работы с большими файлами (>500MB) или большим количеством одновременных операций увеличьте heap:
+
+```bash
+# Запуск с 1GB heap
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Xmx1024m"
+
+# Запуск с 2GB heap
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Xmx2048m"
+```
+
+### Database Connection Pool
+
+HikariCP настроен для минимального потребления памяти ([application.properties:27-32](src/main/resources/application.properties#L27-L32)):
+
+- **minimum-idle**: 2 соединения (вместо 10 по умолчанию)
+- **maximum-pool-size**: 5 соединений (вместо 10 по умолчанию)
+- **idle-timeout**: 5 минут
+- **max-lifetime**: 20 минут
+
+### Hibernate Optimization
+
+Настройки для снижения потребления памяти ([application.properties:34-39](src/main/resources/application.properties#L34-L39)):
+
+- **query.plan_cache_max_size**: 128 (вместо 2048)
+- **query.plan_parameter_metadata_max_size**: 64 (вместо 128)
+- **jdbc.batch_size**: 25 для оптимизации batch операций
+
+### Thread Pools (Silent Profile)
+
+Минимальная конфигурация пулов потоков ([application-silent.properties:42-50](src/main/resources/application-silent.properties#L42-L50)):
+
+- **Import Executor**: 1 core, 1 max, queue 25
+- **Export Executor**: 1 core, 2 max, queue 50
+- Другие утилиты используют минимальные настройки из AsyncConfig
+
+### Cache Configuration
+
+- **Thymeleaf cache**: Включён в `silent` профиле для экономии памяти
+- **Dashboard stats cache**: 5 секунд (вместо 10)
+- **Auto-refresh interval**: 15 секунд (вместо 30)
+
+### Memory Monitoring
+
+Отслеживание использования памяти через страницу System Health:
+
+- [System Health Page](http://localhost:8081/maintenance/system)
+- Предупреждение при >85% использования RAM
+- Автоматический мониторинг heap и non-heap памяти
+
+### Best Practices
+
+1. **Используйте профиль `silent`** для production - он оптимизирован для памяти
+2. **Закрывайте неиспользуемые вкладки браузера** - WebSocket соединения держат память
+3. **Периодически очищайте старые данные** через `/maintenance/database`
+4. **Мониторьте логи** - при нехватке памяти JVM выдаст `OutOfMemoryError`
 
 ## Recent Changes & Features
 
@@ -587,10 +666,10 @@ Enhanced Excel export for statistics with dedicated "Trends" sheet showing metri
 
 **Trends Sheet Format** (StatisticsExcelExportService.java:318-406):
 ```
-Группа    | Метрика           | Операция #1  | Операция #2  | ...
-----------|-------------------|--------------|--------------|-----
-ОБЩЕЕ     | PRICE             | ↑ (+5.2%)   | ↓ (-2.1%)   | ...
-Группа А  | DATE_MODIFICATIONS| ↓ (-4.0%)   | ↑ (+2.5%)   | ...
+| Группа   | Метрика            | Операция #1 | Операция #2 | ... |
+| -------- | ------------------ | ----------- | ----------- | --- |
+| ОБЩЕЕ    | PRICE              | ↑ (+5.2%)   | ↓ (-2.1%)   | ... |
+| Группа А | DATE_MODIFICATIONS | ↓ (-4.0%)   | ↑ (+2.5%)   | ... |
 ```
 
 **Key Methods**:
@@ -681,12 +760,12 @@ Enhanced Excel export for statistics with dedicated "Trends" sheet showing metri
 
 **Автоматическая адаптация формата**:
 
-| Excel значение | Date объект | Результат в БД |
-|----------------|-------------|----------------|
-| `20.10.2025` | 00:00:00 | `20.10.2025` |
-| `20.10.2025 06:32` | 06:32:00 | `20.10.2025 06:32` |
-| `20.10.2025 06:32:45` | 06:32:45 | `20.10.2025 06:32:45` |
-| `20.10.2025  6:32:00` | 06:32:00 | `20.10.2025 06:32` (унификация) |
+| Excel значение        | Date объект | Результат в БД                  |
+| --------------------- | ----------- | ------------------------------- |
+| `20.10.2025`          | 00:00:00    | `20.10.2025`                    |
+| `20.10.2025 06:32`    | 06:32:00    | `20.10.2025 06:32`              |
+| `20.10.2025 06:32:45` | 06:32:45    | `20.10.2025 06:32:45`           |
+| `20.10.2025  6:32:00` | 06:32:00    | `20.10.2025 06:32` (унификация) |
 
 **Преимущества**:
 - ✅ Компактное хранение - не добавляет лишние `:00` для секунд
