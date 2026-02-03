@@ -18,22 +18,6 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        .stats-icon {
-            font-size: 2.5rem;
-            opacity: 0.8;
-        }
-        .stats-card .card-body {
-            min-height: 120px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        .stats-card {
-            height: 100%;
-        }
-        .row .col-md-4 {
-            display: flex;
-        }
         .filter-panel {
             background-color: #f8f9fa;
             border-radius: 8px;
@@ -90,106 +74,92 @@
 </div>
 
 <section>
-    <!-- Статистические карточки -->
-    <div class="row mb-4" id="statsCards">
-        <div class="col-md-3 mb-3">
-            <div class="card stats-card bg-primary text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="h4 mb-0" id="totalOperations">
-                                <span th:text="${dashboardStats.totalOperations}">0</span>
+    <!-- Компактная статистика -->
+    <div class="row mb-3" id="statsCards">
+        <!-- Блок операций -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body py-2">
+                    <h6 class="text-muted mb-2 small">ОПЕРАЦИИ</h6>
+                    <div class="row g-2">
+                        <div class="col-3">
+                            <div class="text-center">
+                                <div class="h5 mb-0 text-primary" id="totalOperations">
+                                    <span th:text="${dashboardStats.totalOperations}">0</span>
+                                </div>
+                                <small class="text-muted">Всего</small>
                             </div>
-                            <small>Всего операций</small>
                         </div>
-                        <i class="fas fa-tasks stats-icon"></i>
+                        <div class="col-3">
+                            <div class="text-center">
+                                <div class="h5 mb-0 text-success" id="completedOperations">
+                                    <span th:text="${dashboardStats.completedOperations}">0</span>
+                                </div>
+                                <small class="text-muted">Завершено</small>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="text-center">
+                                <div class="h5 mb-0 text-warning" id="activeOperations">
+                                    <span th:text="${dashboardStats.activeOperations}">0</span>
+                                </div>
+                                <small class="text-muted">В процессе</small>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="text-center">
+                                <div class="h5 mb-0 text-danger" id="failedOperations">
+                                    <span th:text="${dashboardStats.failedOperations}">0</span>
+                                </div>
+                                <small class="text-muted">Ошибки</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3 mb-3">
-            <div class="card stats-card bg-success text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="h4 mb-0" id="completedOperations">
-                                <span th:text="${dashboardStats.completedOperations}">0</span>
-                            </div>
-                            <small>Завершено</small>
-                        </div>
-                        <i class="fas fa-check-circle stats-icon"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div class="card stats-card bg-warning text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="h4 mb-0" id="activeOperations">
-                                <span th:text="${dashboardStats.activeOperations}">0</span>
-                            </div>
-                            <small>В процессе</small>
-                        </div>
-                        <i class="fas fa-clock stats-icon"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div class="card stats-card bg-danger text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="h4 mb-0" id="failedOperations">
-                                <span th:text="${dashboardStats.failedOperations}">0</span>
-                            </div>
-                            <small>С ошибками</small>
-                        </div>
-                        <i class="fas fa-exclamation-triangle stats-icon"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- Дополнительная статистика -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card stats-card">
-                <div class="card-body text-center">
-                    <i class="fas fa-users text-info stats-icon"></i>
-                    <div class="h4 mt-2" id="totalClients">
-                        <span th:text="${dashboardStats.totalClients}">0</span>
+        <!-- Блок активности -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body py-2">
+                    <h6 class="text-muted mb-2 small">АКТИВНОСТЬ</h6>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="text-center">
+                                <div class="h5 mb-0 text-info" id="totalClients">
+                                    <span th:text="${dashboardStats.totalClients}">0</span>
+                                </div>
+                                <small class="text-muted">Клиентов</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center">
+                                <div class="h5 mb-0 text-secondary" id="totalFiles">
+                                    <span th:text="${dashboardStats.totalFilesProcessed}">0</span>
+                                </div>
+                                <small class="text-muted">Файлов</small>
+                            </div>
+                        </div>
                     </div>
-                    <small class="text-muted">Активных клиентов</small>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card stats-card">
-                <div class="card-body text-center">
-                    <i class="fas fa-file-alt text-secondary stats-icon"></i>
-                    <div class="h4 mt-2" id="totalFiles">
-                        <span th:text="${dashboardStats.totalFilesProcessed}">0</span>
-                    </div>
-                    <small class="text-muted">Файлов обработано</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card stats-card">
-                <div class="card-body text-center">
-                    <i class="fas fa-hdd text-primary stats-icon"></i>
-                    <div class="h4 mt-2" id="totalSize">
-                        <span th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</span>
-                    </div>
-                    <small class="text-muted">Общий объем</small>
-                    <div class="mt-2 small text-muted">
-                        <span class="me-2"><i class="fas fa-folder text-warning"></i> <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0</span></span>
-                        <span class="me-2"><i class="fas fa-download text-info"></i> <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0</span></span>
-                        <span><i class="fas fa-upload text-success"></i> <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0</span></span>
+
+        <!-- Блок дискового пространства -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body py-2">
+                    <h6 class="text-muted mb-2 small">ДИСКОВОЕ ПРОСТРАНСТВО</h6>
+                    <div class="text-center">
+                        <div class="h5 mb-1" id="totalSize">
+                            <span th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</span>
+                        </div>
+                        <small class="text-muted d-block">
+                            <i class="fas fa-folder text-warning"></i> <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0</span>
+                            <i class="fas fa-download text-info ms-1"></i> <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0</span>
+                            <i class="fas fa-upload text-success ms-1"></i> <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0</span>
+                        </small>
                     </div>
                 </div>
             </div>
