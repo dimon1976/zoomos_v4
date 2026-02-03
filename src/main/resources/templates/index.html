@@ -137,14 +137,20 @@
 
             <!-- Скрываемая системная информация -->
             <div class="collapse mt-2 pt-2 border-top" id="systemInfoCollapse" th:if="${dashboardStats.systemInfo}">
-                <div class="row g-2 small text-muted">
+                <div class="row g-3 small text-muted">
                     <div class="col-auto">
                         <strong>Java:</strong> <span th:text="${dashboardStats.systemInfo.javaVersion}">17</span>
                     </div>
                     <div class="col-auto">
-                        <strong>Память:</strong>
-                        <span th:text="${dashboardStats.systemInfo.usedMemoryMb}">512</span> /
-                        <span th:text="${dashboardStats.systemInfo.totalMemoryMb}">1024</span> МБ
+                        <strong>ОЗУ ПК:</strong>
+                        <span class="text-danger" id="systemUsedMemory" th:text="${dashboardStats.systemInfo.systemUsedMemoryGb}">8</span> /
+                        <span id="systemTotalMemory" th:text="${dashboardStats.systemInfo.systemTotalMemoryGb}">16</span> ГБ
+                        <span class="text-muted">(свободно: <span id="systemFreeMemory" th:text="${dashboardStats.systemInfo.systemFreeMemoryGb}">8</span> ГБ)</span>
+                    </div>
+                    <div class="col-auto">
+                        <strong>JVM Heap:</strong>
+                        <span id="jvmUsedMemory" th:text="${dashboardStats.systemInfo.jvmUsedMemoryMb}">128</span> /
+                        <span id="jvmTotalMemory" th:text="${dashboardStats.systemInfo.jvmTotalMemoryMb}">256</span> МБ
                     </div>
                     <div class="col-auto">
                         <strong>Uptime:</strong>
@@ -333,6 +339,20 @@
             if (uptimeEl) {
                 uptimeEl.textContent = stats.systemInfo.uptimeMinutes + ' мин';
             }
+
+            // Обновление системной памяти ПК
+            const systemUsedEl = document.getElementById('systemUsedMemory');
+            const systemTotalEl = document.getElementById('systemTotalMemory');
+            const systemFreeEl = document.getElementById('systemFreeMemory');
+            if (systemUsedEl) systemUsedEl.textContent = stats.systemInfo.systemUsedMemoryGb || 0;
+            if (systemTotalEl) systemTotalEl.textContent = stats.systemInfo.systemTotalMemoryGb || 0;
+            if (systemFreeEl) systemFreeEl.textContent = stats.systemInfo.systemFreeMemoryGb || 0;
+
+            // Обновление JVM Heap памяти
+            const jvmUsedEl = document.getElementById('jvmUsedMemory');
+            const jvmTotalEl = document.getElementById('jvmTotalMemory');
+            if (jvmUsedEl) jvmUsedEl.textContent = stats.systemInfo.jvmUsedMemoryMb || 0;
+            if (jvmTotalEl) jvmTotalEl.textContent = stats.systemInfo.jvmTotalMemoryMb || 0;
         }
     }
 
