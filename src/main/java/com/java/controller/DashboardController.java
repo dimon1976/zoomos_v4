@@ -69,9 +69,9 @@ public class DashboardController {
 
     /**
      * Автоматическое обновление статистики через WebSocket.
-     * Выполняется каждые 30 секунд
+     * Интервал настраивается через dashboard.auto-refresh.interval (по умолчанию 30 секунд)
      */
-    @Scheduled(fixedRate = 30000)
+    @Scheduled(fixedRateString = "${dashboard.auto-refresh.interval:30000}")
     public void broadcastStatsUpdate() {
         try {
             DashboardStatsDto stats = dashboardService.getDashboardStats();

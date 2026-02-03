@@ -22,6 +22,18 @@
             font-size: 2.5rem;
             opacity: 0.8;
         }
+        .stats-card .card-body {
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .stats-card {
+            height: 100%;
+        }
+        .row .col-md-4 {
+            display: flex;
+        }
         .filter-panel {
             background-color: #f8f9fa;
             border-radius: 8px;
@@ -65,9 +77,6 @@
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <button type="button" id="refreshButton" class="btn btn-outline-primary me-2" onclick="refreshDashboard()">
-        <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Обновить
-    </button>
     <a th:href="@{/clients/create}" class="btn btn-primary">
         <i class="fas fa-plus me-1"></i>Новый клиент
     </a>
@@ -177,10 +186,10 @@
                         <span th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</span>
                     </div>
                     <small class="text-muted">Общий объем</small>
-                    <div class="file-size mt-1">
-                        <div>Temp: <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0 МБ</span></div>
-                        <div>Импорт: <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0 МБ</span></div>
-                        <div>Экспорт: <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0 МБ</span></div>
+                    <div class="mt-2 small text-muted">
+                        <span class="me-2"><i class="fas fa-folder text-warning"></i> <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0</span></span>
+                        <span class="me-2"><i class="fas fa-download text-info"></i> <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0</span></span>
+                        <span><i class="fas fa-upload text-success"></i> <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0</span></span>
                     </div>
                 </div>
             </div>
@@ -273,11 +282,16 @@
                 <h6 class="card-title mb-0">
                     <i class="fas fa-list me-2"></i>Последние операции
                 </h6>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
-                    <label class="form-check-label" for="autoRefresh">
-                        Автообновление
-                    </label>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="refreshButton" class="btn btn-sm btn-outline-primary" onclick="refreshDashboard()">
+                        <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Обновить
+                    </button>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                        <label class="form-check-label" for="autoRefresh">
+                            Автообновление
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
