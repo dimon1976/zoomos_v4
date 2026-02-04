@@ -75,14 +75,13 @@
     </a>
 </div>
 
-<!-- Индикатор автообновления -->
-<div class="auto-update-indicator">
-    <span class="badge bg-success" id="updateIndicator" style="display: none;">
-        <i class="fas fa-wifi me-1"></i>Обновлено
-    </span>
-</div>
-
 <section>
+    <!-- Индикатор автообновления -->
+    <div class="auto-update-indicator">
+        <span class="badge bg-success" id="updateIndicator" style="display: none;">
+            <i class="fas fa-wifi me-1"></i>Обновлено
+        </span>
+    </div>
     <!-- Сверхкомпактная статистика в одну строку -->
     <div class="card mb-3" id="statsCards">
         <div class="card-body py-2 px-3">
@@ -143,14 +142,14 @@
                     </div>
                     <div class="col-auto">
                         <strong>ОЗУ ПК:</strong>
-                        <span class="text-danger" id="systemUsedMemory" th:text="${dashboardStats.systemInfo.systemUsedMemoryGb}">8</span> /
-                        <span id="systemTotalMemory" th:text="${dashboardStats.systemInfo.systemTotalMemoryGb}">16</span> ГБ
-                        <span class="text-muted">(свободно: <span id="systemFreeMemory" th:text="${dashboardStats.systemInfo.systemFreeMemoryGb}">8</span> ГБ)</span>
+                        <span class="text-danger" id="systemUsedMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemUsedMemoryGb, 1, 2)}">8.00</span> /
+                        <span id="systemTotalMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemTotalMemoryGb, 1, 2)}">16.00</span> ГБ
+                        <span class="text-muted">(свободно: <span id="systemFreeMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemFreeMemoryGb, 1, 2)}">8.00</span> ГБ)</span>
                     </div>
                     <div class="col-auto">
                         <strong>JVM Heap:</strong>
-                        <span id="jvmUsedMemory" th:text="${dashboardStats.systemInfo.jvmUsedMemoryMb}">128</span> /
-                        <span id="jvmTotalMemory" th:text="${dashboardStats.systemInfo.jvmTotalMemoryMb}">256</span> МБ
+                        <span id="jvmUsedMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.jvmUsedMemoryMb, 1, 2)}">128.00</span> /
+                        <span id="jvmTotalMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.jvmTotalMemoryMb, 1, 2)}">256.00</span> МБ
                     </div>
                     <div class="col-auto">
                         <strong>Uptime:</strong>
@@ -323,36 +322,39 @@
     }
 
     function updateStats(stats) {
-        document.getElementById('totalOperations').textContent = stats.totalOperations || 0;
-        document.getElementById('completedOperations').textContent = stats.completedOperations || 0;
-        document.getElementById('activeOperations').textContent = stats.activeOperations || 0;
-        document.getElementById('failedOperations').textContent = stats.failedOperations || 0;
-        document.getElementById('totalClients').textContent = stats.totalClients || 0;
-        document.getElementById('totalFiles').textContent = stats.totalFilesProcessed || 0;
-        document.querySelector('#totalSize span').textContent = stats.totalFileSizeFormatted || '0 МБ';
-        document.getElementById('tempSize').textContent = stats.tempDirSizeFormatted || '0 МБ';
-        document.getElementById('importSize').textContent = stats.importDirSizeFormatted || '0 МБ';
-        document.getElementById('exportSize').textContent = stats.exportDirSizeFormatted || '0 МБ';
+        try {
+            document.getElementById('totalOperations').textContent = stats.totalOperations || 0;
+            document.getElementById('completedOperations').textContent = stats.completedOperations || 0;
+            document.getElementById('activeOperations').textContent = stats.activeOperations || 0;
+            document.getElementById('failedOperations').textContent = stats.failedOperations || 0;
+            document.getElementById('totalClients').textContent = stats.totalClients || 0;
+            document.getElementById('totalSize').textContent = stats.totalFileSizeFormatted || '0 МБ';
+            document.getElementById('tempSize').textContent = stats.tempDirSizeFormatted || '0 МБ';
+            document.getElementById('importSize').textContent = stats.importDirSizeFormatted || '0 МБ';
+            document.getElementById('exportSize').textContent = stats.exportDirSizeFormatted || '0 МБ';
 
-        if (stats.systemInfo) {
-            const uptimeEl = document.getElementById('uptimeDisplay');
-            if (uptimeEl) {
-                uptimeEl.textContent = stats.systemInfo.uptimeMinutes + ' мин';
+            if (stats.systemInfo) {
+                const uptimeEl = document.getElementById('uptimeDisplay');
+                if (uptimeEl) {
+                    uptimeEl.textContent = stats.systemInfo.uptimeMinutes + ' мин';
+                }
+
+                // Обновление системной памяти ПК в ГБ с точностью до сотых
+                const systemUsedEl = document.getElementById('systemUsedMemory');
+                const systemTotalEl = document.getElementById('systemTotalMemory');
+                const systemFreeEl = document.getElementById('systemFreeMemory');
+                if (systemUsedEl) systemUsedEl.textContent = (stats.systemInfo.systemUsedMemoryGb || 0).toFixed(2);
+                if (systemTotalEl) systemTotalEl.textContent = (stats.systemInfo.systemTotalMemoryGb || 0).toFixed(2);
+                if (systemFreeEl) systemFreeEl.textContent = (stats.systemInfo.systemFreeMemoryGb || 0).toFixed(2);
+
+                // Обновление JVM Heap памяти в МБ с точностью до сотых
+                const jvmUsedEl = document.getElementById('jvmUsedMemory');
+                const jvmTotalEl = document.getElementById('jvmTotalMemory');
+                if (jvmUsedEl) jvmUsedEl.textContent = (stats.systemInfo.jvmUsedMemoryMb || 0).toFixed(2);
+                if (jvmTotalEl) jvmTotalEl.textContent = (stats.systemInfo.jvmTotalMemoryMb || 0).toFixed(2);
             }
-
-            // Обновление системной памяти ПК
-            const systemUsedEl = document.getElementById('systemUsedMemory');
-            const systemTotalEl = document.getElementById('systemTotalMemory');
-            const systemFreeEl = document.getElementById('systemFreeMemory');
-            if (systemUsedEl) systemUsedEl.textContent = stats.systemInfo.systemUsedMemoryGb || 0;
-            if (systemTotalEl) systemTotalEl.textContent = stats.systemInfo.systemTotalMemoryGb || 0;
-            if (systemFreeEl) systemFreeEl.textContent = stats.systemInfo.systemFreeMemoryGb || 0;
-
-            // Обновление JVM Heap памяти
-            const jvmUsedEl = document.getElementById('jvmUsedMemory');
-            const jvmTotalEl = document.getElementById('jvmTotalMemory');
-            if (jvmUsedEl) jvmUsedEl.textContent = stats.systemInfo.jvmUsedMemoryMb || 0;
-            if (jvmTotalEl) jvmTotalEl.textContent = stats.systemInfo.jvmTotalMemoryMb || 0;
+        } catch (error) {
+            console.error('Ошибка обновления статистики:', error);
         }
     }
 

@@ -82,15 +82,15 @@ public class DashboardStatsDto {
         private String javaVersion;
         private String springBootVersion;
 
-        // JVM Heap память
-        private Long jvmTotalMemoryMb;
-        private Long jvmUsedMemoryMb;
-        private Long jvmFreeMemoryMb;
+        // JVM Heap память (МБ) - с точностью до сотых
+        private Double jvmTotalMemoryMb;
+        private Double jvmUsedMemoryMb;
+        private Double jvmFreeMemoryMb;
 
-        // Системная память ПК (ОЗУ)
-        private Long systemTotalMemoryGb;
-        private Long systemUsedMemoryGb;
-        private Long systemFreeMemoryGb;
+        // Системная память ПК (ОЗУ) (ГБ) - с точностью до сотых
+        private Double systemTotalMemoryGb;
+        private Double systemUsedMemoryGb;
+        private Double systemFreeMemoryGb;
 
         private String operatingSystem;
         private String databaseUrl;

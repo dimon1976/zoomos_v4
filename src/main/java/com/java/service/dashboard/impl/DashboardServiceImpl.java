@@ -284,9 +284,10 @@ public class DashboardServiceImpl implements DashboardService {
             log.warn("Не удалось получить информацию о системной памяти: {}", e.getMessage());
         }
 
-        long systemTotalMemoryGb = systemTotalMemoryBytes / (1024 * 1024 * 1024);
-        long systemFreeMemoryGb = systemFreeMemoryBytes / (1024 * 1024 * 1024);
-        long systemUsedMemoryGb = systemTotalMemoryGb - systemFreeMemoryGb;
+        // Системная память в ГБ с точностью до сотых
+        double systemTotalMemoryGb = Math.round((systemTotalMemoryBytes / (1024.0 * 1024.0 * 1024.0)) * 100.0) / 100.0;
+        double systemFreeMemoryGb = Math.round((systemFreeMemoryBytes / (1024.0 * 1024.0 * 1024.0)) * 100.0) / 100.0;
+        double systemUsedMemoryGb = Math.round((systemTotalMemoryGb - systemFreeMemoryGb) * 100.0) / 100.0;
 
         long uptimeMs = ManagementFactory.getRuntimeMXBean().getUptime();
         long uptimeMinutes = uptimeMs / (1000 * 60);
@@ -294,10 +295,10 @@ public class DashboardServiceImpl implements DashboardService {
         return DashboardStatsDto.SystemInfoDto.builder()
                 .javaVersion(System.getProperty("java.version"))
                 .springBootVersion(SpringBootVersion.getVersion())
-                // JVM Heap
-                .jvmTotalMemoryMb(jvmTotalMemory / (1024 * 1024))
-                .jvmUsedMemoryMb(jvmUsedMemory / (1024 * 1024))
-                .jvmFreeMemoryMb(jvmFreeMemory / (1024 * 1024))
+                // JVM Heap в МБ с точностью до сотых
+                .jvmTotalMemoryMb(Math.round((jvmTotalMemory / (1024.0 * 1024.0)) * 100.0) / 100.0)
+                .jvmUsedMemoryMb(Math.round((jvmUsedMemory / (1024.0 * 1024.0)) * 100.0) / 100.0)
+                .jvmFreeMemoryMb(Math.round((jvmFreeMemory / (1024.0 * 1024.0)) * 100.0) / 100.0)
                 // Системная память
                 .systemTotalMemoryGb(systemTotalMemoryGb)
                 .systemUsedMemoryGb(systemUsedMemoryGb)
