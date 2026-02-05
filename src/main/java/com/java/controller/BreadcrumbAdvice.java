@@ -50,10 +50,15 @@ public class BreadcrumbAdvice {
 
     @ModelAttribute("breadcrumbs")
     public List<BreadcrumbItem> breadcrumbs(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+
+        // Не показываем breadcrumbs на главной странице
+        if ("/".equals(uri)) {
+            return null;
+        }
+
         List<BreadcrumbItem> crumbs = new ArrayList<>();
         crumbs.add(new BreadcrumbItem("Главная", "/"));
-
-        String uri = request.getRequestURI();
         
         // Проверяем специальные паттерны template paths
         Matcher templateMatcher = TEMPLATE_PATH_PATTERN.matcher(uri);

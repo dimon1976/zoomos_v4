@@ -45,7 +45,7 @@ public class DashboardMapper {
 
     private String formatFileSize(Long sizeInBytes) {
         if (sizeInBytes == null || sizeInBytes == 0) {
-            return null;
+            return "-";
         }
 
         final String[] units = {"Б", "КБ", "МБ", "ГБ"};

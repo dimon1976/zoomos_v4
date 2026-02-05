@@ -5,31 +5,36 @@
         ~{::section},
         ~{::script},
         ~{::style},
-        'Дашборд',
+        ${null},
         ~{::.page-actions}
       )}">
 <head>
     <title>Дашборд - Обработка файлов</title>
     <style>
-        .stats-card {
-            transition: transform 0.2s ease;
-        }
-        .stats-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .stats-icon {
-            font-size: 2.5rem;
-            opacity: 0.8;
-        }
-        .filter-panel {
-            background-color: #f8f9fa;
+        /* Компактные карточки */
+        .card {
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
         }
+
+        /* Вертикальный разделитель для статистики */
+        .vr {
+            display: inline-block;
+            align-self: stretch;
+            width: 1px;
+            min-height: 1em;
+            background-color: currentColor;
+            opacity: 0.25;
+        }
+
+        /* Компактная таблица */
         .operations-table {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+        }
+        .operations-table th,
+        .operations-table td {
+            padding: 0.5rem;
+            vertical-align: middle;
         }
         .status-badge {
             font-size: 0.8rem;
@@ -65,225 +70,172 @@
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <button type="button" id="refreshButton" class="btn btn-outline-primary me-2" onclick="refreshDashboard()">
-        <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Обновить
-    </button>
     <a th:href="@{/clients/create}" class="btn btn-primary">
         <i class="fas fa-plus me-1"></i>Новый клиент
     </a>
 </div>
 
-<!-- Индикатор автообновления -->
-<div class="auto-update-indicator">
-    <span class="badge bg-success" id="updateIndicator" style="display: none;">
-        <i class="fas fa-wifi me-1"></i>Обновлено
-    </span>
-</div>
-
 <section>
-    <!-- Статистические карточки -->
-    <div class="row mb-4" id="statsCards">
-        <div class="col-md-3 mb-3">
-            <div class="card stats-card bg-primary text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="h4 mb-0" id="totalOperations">
-                                <span th:text="${dashboardStats.totalOperations}">0</span>
-                            </div>
-                            <small>Всего операций</small>
-                        </div>
-                        <i class="fas fa-tasks stats-icon"></i>
-                    </div>
+    <!-- Индикатор автообновления -->
+    <div class="auto-update-indicator">
+        <span class="badge bg-success" id="updateIndicator" style="display: none;">
+            <i class="fas fa-wifi me-1"></i>Обновлено
+        </span>
+    </div>
+    <!-- Сверхкомпактная статистика в одну строку -->
+    <div class="card mb-3" id="statsCards">
+        <div class="card-body py-2 px-3">
+            <div class="row g-3 align-items-center small">
+                <!-- Операции -->
+                <div class="col-auto">
+                    <i class="fas fa-chart-line text-muted me-1"></i>
+                    <span class="text-muted">Операции:</span>
+                    <strong class="text-primary mx-1" id="totalOperations" th:text="${dashboardStats.totalOperations}">0</strong>
+                    <span class="text-success mx-1"><span id="completedOperations" th:text="${dashboardStats.completedOperations}">0</span>✓</span>
+                    <span class="text-warning mx-1"><span id="activeOperations" th:text="${dashboardStats.activeOperations}">0</span>⚙</span>
+                    <span class="text-danger mx-1"><span id="failedOperations" th:text="${dashboardStats.failedOperations}">0</span>✗</span>
+                </div>
+
+                <!-- Разделитель -->
+                <div class="col-auto">
+                    <div class="vr" style="height: 24px;"></div>
+                </div>
+
+                <!-- Клиенты -->
+                <div class="col-auto">
+                    <i class="fas fa-users text-muted me-1"></i>
+                    <span class="text-muted">Клиенты:</span>
+                    <strong id="totalClients" th:text="${dashboardStats.totalClients}">0</strong>
+                </div>
+
+                <!-- Разделитель -->
+                <div class="col-auto">
+                    <div class="vr" style="height: 24px;"></div>
+                </div>
+
+                <!-- Дисковое пространство -->
+                <div class="col-auto">
+                    <i class="fas fa-hdd text-muted me-1"></i>
+                    <span class="text-muted">Диск:</span>
+                    <strong id="totalSize" th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</strong>
+                    <span class="text-muted small ms-2">
+                        (<i class="fas fa-folder text-warning"></i> <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0</span>
+                        / <i class="fas fa-download text-info"></i> <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0</span>
+                        / <i class="fas fa-upload text-success"></i> <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0</span>)
+                    </span>
+                </div>
+
+                <!-- Системная информация (collapse) -->
+                <div class="col-auto ms-auto" th:if="${dashboardStats.systemInfo}">
+                    <button class="btn btn-sm btn-link text-muted p-0" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#systemInfoCollapse" title="Системная информация">
+                        <i class="fas fa-server"></i>
+                    </button>
                 </div>
             </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div class="card stats-card bg-success text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="h4 mb-0" id="completedOperations">
-                                <span th:text="${dashboardStats.completedOperations}">0</span>
-                            </div>
-                            <small>Завершено</small>
-                        </div>
-                        <i class="fas fa-check-circle stats-icon"></i>
+
+            <!-- Скрываемая системная информация -->
+            <div class="collapse mt-2 pt-2 border-top" id="systemInfoCollapse" th:if="${dashboardStats.systemInfo}">
+                <div class="row g-3 small text-muted">
+                    <div class="col-auto">
+                        <strong>Java:</strong> <span th:text="${dashboardStats.systemInfo.javaVersion}">17</span>
                     </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div class="card stats-card bg-warning text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="h4 mb-0" id="activeOperations">
-                                <span th:text="${dashboardStats.activeOperations}">0</span>
-                            </div>
-                            <small>В процессе</small>
-                        </div>
-                        <i class="fas fa-clock stats-icon"></i>
+                    <div class="col-auto">
+                        <strong>ОЗУ ПК:</strong>
+                        <span class="text-danger" id="systemUsedMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemUsedMemoryGb, 1, 2)}">8.00</span> /
+                        <span id="systemTotalMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemTotalMemoryGb, 1, 2)}">16.00</span> ГБ
+                        <span class="text-muted">(свободно: <span id="systemFreeMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemFreeMemoryGb, 1, 2)}">8.00</span> ГБ)</span>
                     </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div class="card stats-card bg-danger text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="h4 mb-0" id="failedOperations">
-                                <span th:text="${dashboardStats.failedOperations}">0</span>
-                            </div>
-                            <small>С ошибками</small>
-                        </div>
-                        <i class="fas fa-exclamation-triangle stats-icon"></i>
+                    <div class="col-auto">
+                        <strong>JVM Heap:</strong>
+                        <span id="jvmUsedMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.jvmUsedMemoryMb, 1, 2)}">128.00</span> /
+                        <span id="jvmTotalMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.jvmTotalMemoryMb, 1, 2)}">256.00</span> МБ
+                    </div>
+                    <div class="col-auto">
+                        <strong>Uptime:</strong>
+                        <span id="uptimeDisplay" th:text="${dashboardStats.systemInfo.uptimeMinutes} + ' мин'">120 мин</span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Дополнительная статистика -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card stats-card">
-                <div class="card-body text-center">
-                    <i class="fas fa-users text-info stats-icon"></i>
-                    <div class="h4 mt-2" id="totalClients">
-                        <span th:text="${dashboardStats.totalClients}">0</span>
-                    </div>
-                    <small class="text-muted">Активных клиентов</small>
+    <!-- Компактная панель фильтров -->
+    <div class="card mb-3">
+        <div class="card-body py-2 px-3">
+            <form id="filterForm" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label for="clientFilter" class="form-label mb-1 small text-muted">Клиент</label>
+                    <select class="form-select form-select-sm" id="clientFilter" name="clientId">
+                        <option value="">Все клиенты</option>
+                        <option th:each="client : ${clients}"
+                                th:value="${client.id}"
+                                th:text="${client.name}">Клиент</option>
+                    </select>
                 </div>
-            </div>
+                <div class="col-md-2">
+                    <label for="operationTypeFilter" class="form-label mb-1 small text-muted">Тип</label>
+                    <select class="form-select form-select-sm" id="operationTypeFilter" name="operationType">
+                        <option value="">Все типы</option>
+                        <option th:each="type : ${operationTypes}"
+                                th:value="${type}"
+                                th:text="${type == T(com.java.model.FileOperation$OperationType).IMPORT ? 'Импорт' :
+                                         type == T(com.java.model.FileOperation$OperationType).EXPORT ? 'Экспорт' :
+                                         'Обработка'}">Тип</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="statusFilter" class="form-label mb-1 small text-muted">Статус</label>
+                    <select class="form-select form-select-sm" id="statusFilter" name="status">
+                        <option value="">Все статусы</option>
+                        <option th:each="status : ${operationStatuses}"
+                                th:value="${status}"
+                                th:text="${status == T(com.java.model.FileOperation$OperationStatus).PENDING ? 'Ожидание' :
+                                         status == T(com.java.model.FileOperation$OperationStatus).PROCESSING ? 'В процессе' :
+                                         status == T(com.java.model.FileOperation$OperationStatus).COMPLETED ? 'Завершено' :
+                                         'Ошибка'}">Статус</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="dateFromFilter" class="form-label mb-1 small text-muted">Дата с</label>
+                    <input type="date" class="form-control form-control-sm" id="dateFromFilter" name="dateFrom">
+                </div>
+                <div class="col-md-2">
+                    <label for="dateToFilter" class="form-label mb-1 small text-muted">Дата по</label>
+                    <input type="date" class="form-control form-control-sm" id="dateToFilter" name="dateTo">
+                </div>
+                <div class="col-md-1">
+                    <button type="button" class="btn btn-primary btn-sm w-100" onclick="applyFilters()" title="Применить фильтры">
+                        <i class="fas fa-filter"></i>
+                    </button>
+                </div>
+            </form>
         </div>
-        <div class="col-md-4">
-            <div class="card stats-card">
-                <div class="card-body text-center">
-                    <i class="fas fa-file-alt text-secondary stats-icon"></i>
-                    <div class="h4 mt-2" id="totalFiles">
-                        <span th:text="${dashboardStats.totalFilesProcessed}">0</span>
-                    </div>
-                    <small class="text-muted">Файлов обработано</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card stats-card">
-                <div class="card-body text-center">
-                    <i class="fas fa-hdd text-primary stats-icon"></i>
-                    <div class="h4 mt-2" id="totalSize">
-                        <span th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</span>
-                    </div>
-                    <small class="text-muted">Общий объем</small>
-                    <div class="file-size mt-1">
-                        <div>Temp: <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0 МБ</span></div>
-                        <div>Импорт: <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0 МБ</span></div>
-                        <div>Экспорт: <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0 МБ</span></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Системная информация -->
-    <div class="card mb-4" th:if="${dashboardStats.systemInfo}">
-        <div class="card-header system-info">
-            <h6 class="card-title mb-0 text-white">
-                <i class="fas fa-server me-2"></i>Системная информация
-            </h6>
-        </div>
-        <div class="card-body">
-            <div class="row" id="systemInfo">
-                <div class="col-md-4">
-                    <small class="text-muted">Java:</small>
-                    <div th:text="${dashboardStats.systemInfo.javaVersion}">Java 17</div>
-                </div>
-                <div class="col-md-4">
-                    <small class="text-muted">Память:</small>
-                    <div>
-                        <span th:text="${dashboardStats.systemInfo.usedMemoryMb}">512</span> /
-                        <span th:text="${dashboardStats.systemInfo.totalMemoryMb}">1024</span> МБ
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <small class="text-muted">Время работы:</small>
-                    <div id="uptimeDisplay" th:text="${dashboardStats.systemInfo.uptimeMinutes} + ' мин'">120 мин</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Панель фильтров -->
-    <div class="filter-panel">
-        <form id="filterForm" class="row g-3">
-            <div class="col-md-3">
-                <label for="clientFilter" class="form-label">Клиент</label>
-                <select class="form-select" id="clientFilter" name="clientId">
-                    <option value="">Все клиенты</option>
-                    <option th:each="client : ${clients}"
-                            th:value="${client.id}"
-                            th:text="${client.name}">Клиент</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label for="operationTypeFilter" class="form-label">Тип операции</label>
-                <select class="form-select" id="operationTypeFilter" name="operationType">
-                    <option value="">Все типы</option>
-                    <option th:each="type : ${operationTypes}"
-                            th:value="${type}"
-                            th:text="${type == T(com.java.model.FileOperation$OperationType).IMPORT ? 'Импорт' :
-                                     type == T(com.java.model.FileOperation$OperationType).EXPORT ? 'Экспорт' :
-                                     'Обработка'}">Тип</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label for="statusFilter" class="form-label">Статус</label>
-                <select class="form-select" id="statusFilter" name="status">
-                    <option value="">Все статусы</option>
-                    <option th:each="status : ${operationStatuses}"
-                            th:value="${status}"
-                            th:text="${status == T(com.java.model.FileOperation$OperationStatus).PENDING ? 'Ожидание' :
-                                     status == T(com.java.model.FileOperation$OperationStatus).PROCESSING ? 'В процессе' :
-                                     status == T(com.java.model.FileOperation$OperationStatus).COMPLETED ? 'Завершено' :
-                                     'Ошибка'}">Статус</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label for="dateFromFilter" class="form-label">Дата с</label>
-                <input type="date" class="form-control" id="dateFromFilter" name="dateFrom">
-            </div>
-            <div class="col-md-2">
-                <label for="dateToFilter" class="form-label">Дата по</label>
-                <input type="date" class="form-control" id="dateToFilter" name="dateTo">
-            </div>
-            <div class="col-md-1 d-flex align-items-end">
-                <button type="button" class="btn btn-primary w-100" onclick="applyFilters()">
-                    <i class="fas fa-filter"></i>
-                </button>
-            </div>
-        </form>
     </div>
 
     <!-- Таблица операций -->
     <div class="card">
-        <div class="card-header">
+        <div class="card-header py-2 px-3" style="background-color: #f8f9fa;">
             <div class="d-flex justify-content-between align-items-center">
-                <h6 class="card-title mb-0">
+                <h6 class="card-title mb-0 small">
                     <i class="fas fa-list me-2"></i>Последние операции
                 </h6>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
-                    <label class="form-check-label" for="autoRefresh">
-                        Автообновление
-                    </label>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="refreshButton" class="btn btn-sm btn-outline-primary" onclick="refreshDashboard()">
+                        <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Обновить
+                    </button>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                        <label class="form-check-label small" for="autoRefresh">
+                            Автообновление
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover operations-table" id="operationsTable">
+                <table class="table table-hover table-sm operations-table mb-0" id="operationsTable">
                     <thead>
                     <tr>
                         <th>ID</th>
@@ -370,22 +322,39 @@
     }
 
     function updateStats(stats) {
-        document.getElementById('totalOperations').textContent = stats.totalOperations || 0;
-        document.getElementById('completedOperations').textContent = stats.completedOperations || 0;
-        document.getElementById('activeOperations').textContent = stats.activeOperations || 0;
-        document.getElementById('failedOperations').textContent = stats.failedOperations || 0;
-        document.getElementById('totalClients').textContent = stats.totalClients || 0;
-        document.getElementById('totalFiles').textContent = stats.totalFilesProcessed || 0;
-        document.querySelector('#totalSize span').textContent = stats.totalFileSizeFormatted || '0 МБ';
-        document.getElementById('tempSize').textContent = stats.tempDirSizeFormatted || '0 МБ';
-        document.getElementById('importSize').textContent = stats.importDirSizeFormatted || '0 МБ';
-        document.getElementById('exportSize').textContent = stats.exportDirSizeFormatted || '0 МБ';
+        try {
+            document.getElementById('totalOperations').textContent = stats.totalOperations || 0;
+            document.getElementById('completedOperations').textContent = stats.completedOperations || 0;
+            document.getElementById('activeOperations').textContent = stats.activeOperations || 0;
+            document.getElementById('failedOperations').textContent = stats.failedOperations || 0;
+            document.getElementById('totalClients').textContent = stats.totalClients || 0;
+            document.getElementById('totalSize').textContent = stats.totalFileSizeFormatted || '0 МБ';
+            document.getElementById('tempSize').textContent = stats.tempDirSizeFormatted || '0 МБ';
+            document.getElementById('importSize').textContent = stats.importDirSizeFormatted || '0 МБ';
+            document.getElementById('exportSize').textContent = stats.exportDirSizeFormatted || '0 МБ';
 
-        if (stats.systemInfo) {
-            const uptimeEl = document.getElementById('uptimeDisplay');
-            if (uptimeEl) {
-                uptimeEl.textContent = stats.systemInfo.uptimeMinutes + ' мин';
+            if (stats.systemInfo) {
+                const uptimeEl = document.getElementById('uptimeDisplay');
+                if (uptimeEl) {
+                    uptimeEl.textContent = stats.systemInfo.uptimeMinutes + ' мин';
+                }
+
+                // Обновление системной памяти ПК в ГБ с точностью до сотых
+                const systemUsedEl = document.getElementById('systemUsedMemory');
+                const systemTotalEl = document.getElementById('systemTotalMemory');
+                const systemFreeEl = document.getElementById('systemFreeMemory');
+                if (systemUsedEl) systemUsedEl.textContent = (stats.systemInfo.systemUsedMemoryGb || 0).toFixed(2);
+                if (systemTotalEl) systemTotalEl.textContent = (stats.systemInfo.systemTotalMemoryGb || 0).toFixed(2);
+                if (systemFreeEl) systemFreeEl.textContent = (stats.systemInfo.systemFreeMemoryGb || 0).toFixed(2);
+
+                // Обновление JVM Heap памяти в МБ с точностью до сотых
+                const jvmUsedEl = document.getElementById('jvmUsedMemory');
+                const jvmTotalEl = document.getElementById('jvmTotalMemory');
+                if (jvmUsedEl) jvmUsedEl.textContent = (stats.systemInfo.jvmUsedMemoryMb || 0).toFixed(2);
+                if (jvmTotalEl) jvmTotalEl.textContent = (stats.systemInfo.jvmTotalMemoryMb || 0).toFixed(2);
             }
+        } catch (error) {
+            console.error('Ошибка обновления статистики:', error);
         }
     }
 

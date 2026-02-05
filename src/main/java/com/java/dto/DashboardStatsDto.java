@@ -81,9 +81,17 @@ public class DashboardStatsDto {
     public static class SystemInfoDto {
         private String javaVersion;
         private String springBootVersion;
-        private Long totalMemoryMb;
-        private Long usedMemoryMb;
-        private Long freeMemoryMb;
+
+        // JVM Heap память (МБ) - с точностью до сотых
+        private Double jvmTotalMemoryMb;
+        private Double jvmUsedMemoryMb;
+        private Double jvmFreeMemoryMb;
+
+        // Системная память ПК (ОЗУ) (ГБ) - с точностью до сотых
+        private Double systemTotalMemoryGb;
+        private Double systemUsedMemoryGb;
+        private Double systemFreeMemoryGb;
+
         private String operatingSystem;
         private String databaseUrl;
         private Long uptimeMinutes;

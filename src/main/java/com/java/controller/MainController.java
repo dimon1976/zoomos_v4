@@ -52,7 +52,6 @@ public class MainController {
             model.addAttribute("operationTypes", operationTypes);
             model.addAttribute("operationStatuses", operationStatuses);
             model.addAttribute("currentUri", request.getRequestURI());
-            model.addAttribute("pageTitle", "Дашборд");
         } catch (Exception e) {
             log.error("Ошибка при подготовке данных для главной страницы: ", e);
             // Возвращаем простую страницу ошибки

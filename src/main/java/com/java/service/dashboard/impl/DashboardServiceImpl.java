@@ -266,10 +266,28 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private DashboardStatsDto.SystemInfoDto getSystemInfo() {
+        // JVM Heap память
         Runtime runtime = Runtime.getRuntime();
-        long totalMemory = runtime.totalMemory();
-        long freeMemory = runtime.freeMemory();
-        long usedMemory = totalMemory - freeMemory;
+        long jvmTotalMemory = runtime.totalMemory();
+        long jvmFreeMemory = runtime.freeMemory();
+        long jvmUsedMemory = jvmTotalMemory - jvmFreeMemory;
+
+        // Системная память ПК (ОЗУ)
+        long systemTotalMemoryBytes = 0;
+        long systemFreeMemoryBytes = 0;
+        try {
+            com.sun.management.OperatingSystemMXBean osBean =
+                (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+            systemTotalMemoryBytes = osBean.getTotalPhysicalMemorySize();
+            systemFreeMemoryBytes = osBean.getFreePhysicalMemorySize();
+        } catch (Exception e) {
+            log.warn("Не удалось получить информацию о системной памяти: {}", e.getMessage());
+        }
+
+        // Системная память в ГБ с точностью до сотых
+        double systemTotalMemoryGb = Math.round((systemTotalMemoryBytes / (1024.0 * 1024.0 * 1024.0)) * 100.0) / 100.0;
+        double systemFreeMemoryGb = Math.round((systemFreeMemoryBytes / (1024.0 * 1024.0 * 1024.0)) * 100.0) / 100.0;
+        double systemUsedMemoryGb = Math.round((systemTotalMemoryGb - systemFreeMemoryGb) * 100.0) / 100.0;
 
         long uptimeMs = ManagementFactory.getRuntimeMXBean().getUptime();
         long uptimeMinutes = uptimeMs / (1000 * 60);
@@ -277,9 +295,14 @@ public class DashboardServiceImpl implements DashboardService {
         return DashboardStatsDto.SystemInfoDto.builder()
                 .javaVersion(System.getProperty("java.version"))
                 .springBootVersion(SpringBootVersion.getVersion())
-                .totalMemoryMb(totalMemory / (1024 * 1024))
-                .usedMemoryMb(usedMemory / (1024 * 1024))
-                .freeMemoryMb(freeMemory / (1024 * 1024))
+                // JVM Heap в МБ с точностью до сотых
+                .jvmTotalMemoryMb(Math.round((jvmTotalMemory / (1024.0 * 1024.0)) * 100.0) / 100.0)
+                .jvmUsedMemoryMb(Math.round((jvmUsedMemory / (1024.0 * 1024.0)) * 100.0) / 100.0)
+                .jvmFreeMemoryMb(Math.round((jvmFreeMemory / (1024.0 * 1024.0)) * 100.0) / 100.0)
+                // Системная память
+                .systemTotalMemoryGb(systemTotalMemoryGb)
+                .systemUsedMemoryGb(systemUsedMemoryGb)
+                .systemFreeMemoryGb(systemFreeMemoryGb)
                 .operatingSystem(System.getProperty("os.name"))
                 .databaseUrl(environment.getProperty("spring.datasource.url"))
                 .uptimeMinutes(uptimeMinutes)

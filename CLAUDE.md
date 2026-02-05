@@ -85,9 +85,14 @@ mvn flyway:info
 
 ## Recent Changes & Features
 
+### 2026-02
+
+- **Import TimeoutException Fix** - Устранён TimeoutException при одновременном импорте нескольких файлов
+
 ### 2026-01
 
 - **Statistics Display Fix** - Исправлено дублирование номеров операций и TASK-номеров на странице статистики
+- **Memory Optimization** - Оптимизация потребления памяти приложения (JVM heap, HikariCP, Hibernate, Thread Pools)
 
 ### 2025-11
 - **Excel Export with Trends Sheet** - Двухлистовый Excel экспорт со страницей трендов (↑↓= индикаторы)
@@ -148,6 +153,76 @@ src/main/java/com/java/
 - `AsyncRedirectService` - Asynchronous redirect processing with WebSocket progress
 - `CurlStrategy`, `PlaywrightStrategy`, `HttpClientStrategy` - Strategy pattern for anti-bot bypass
 - `BarcodeMatchService`, `UrlCleanerService`, `LinkExtractorService` - Additional utilities
+
+## Async Import Processing
+
+### Architecture Pattern
+
+Система импорта использует паттерн **синхронного создания сессии + фоновой обработки**, идентичный ExportService.
+
+**Ключевые компоненты:**
+
+1. **AsyncImportService.startImport()** ([AsyncImportService.java:64](src/main/java/com/java/service/imports/AsyncImportService.java#L64))
+
+   - Выполняется **синхронно** в HTTP потоке (без @Async)
+   - Создаёт FileOperation и ImportSession немедленно
+   - Возвращает `CompletableFuture.completedFuture(session)` сразу
+   - Запускает фоновую обработку через `TransactionSynchronization.afterCommit()`
+
+2. **ImportController.startImport()** ([ImportController.java:164-240](src/main/java/com/java/controller/ImportController.java#L164-L240))
+
+   - Собирает все futures в список
+   - Ждёт завершения параллельно через `CompletableFuture.allOf()` (2 секунды)
+   - Извлекает operationId из каждой сессии
+   - Graceful degradation при timeout
+
+### Исправление TimeoutException (2026-02)
+
+**Проблема:**
+При загрузке 5+ файлов одновременно возникал `TimeoutException` из-за последовательного блокирующего ожидания:
+- Для каждого файла: `future.get(5, TimeUnit.SECONDS)`
+- Для 5 файлов: 5 × 5 секунд = **25 секунд** блокировки HTTP потока
+
+**Решение:**
+
+1. **Убрана @Async аннотация** с `AsyncImportService.startImport()`
+
+   - Создание сессии теперь синхронное (в HTTP потоке)
+   - FileOperation и ImportSession создаются немедленно
+   - Фоновая обработка остаётся через `afterCommit()`
+
+2. **Параллельное ожидание** в `ImportController`
+
+   - `CompletableFuture.allOf()` ждёт все futures одновременно
+   - Timeout: 2 секунды для всех файлов вместо 5 секунд на каждый
+   - Fallback для graceful degradation
+
+3. **Увеличены ресурсы** для множественных импортов
+
+   - Thread pool (silent): `core=2, max=5, queue=50`
+   - HikariCP pool: `max=10` (5 для импортов + 2 для HTTP + 3 резерв)
+
+**Результат:**
+
+- 5 файлов: **< 3 секунды** (было: 25+ секунд)
+- Нет TimeoutException
+- Консистентность с ExportService
+
+**Конфигурация** ([application-silent.properties:46-49](src/main/resources/application-silent.properties#L46-L49)):
+```properties
+import.async.core-pool-size=2
+import.async.max-pool-size=5
+import.async.queue-capacity=50
+```
+
+**HikariCP Pool** ([application.properties:26-32](src/main/resources/application.properties#L26-L32)):
+```properties
+spring.datasource.hikari.minimum-idle=2
+spring.datasource.hikari.maximum-pool-size=10
+spring.datasource.hikari.connection-timeout=20000
+spring.datasource.hikari.idle-timeout=300000
+spring.datasource.hikari.max-lifetime=1200000
+```
 
 ## HTTP Redirect Utility
 
