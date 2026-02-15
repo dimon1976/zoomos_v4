@@ -146,7 +146,9 @@ public class ZoomosParserService {
     }
 
     /**
-     * Авторизация через форму логина
+     * Авторизация через форму логина.
+     * Сайт использует Spring Security: поля j_username / j_password,
+     * форма отправляется на j_spring_security_check.
      */
     private void login(BrowserContext context) {
         Page page = context.newPage();
@@ -155,16 +157,16 @@ public class ZoomosParserService {
             page.navigate(config.getBaseUrl() + "/login");
             page.waitForLoadState(LoadState.NETWORKIDLE);
 
-            // Заполняем форму логина
-            page.fill("input[name='login'], input[name='username'], input[type='email']", config.getUsername());
-            page.fill("input[name='password'], input[type='password']", config.getPassword());
-            page.click("button[type='submit'], input[type='submit']");
+            page.fill("input[name='j_username']", config.getUsername());
+            page.fill("input[name='j_password']", config.getPassword());
+            page.click("input[type='submit']");
             page.waitForLoadState(LoadState.NETWORKIDLE);
 
+            // После успешного логина редиректит на главную, не на /login
             if (page.url().contains("/login")) {
-                throw new RuntimeException("Авторизация не удалась — проверьте логин и пароль");
+                throw new RuntimeException("Авторизация не удалась — проверьте логин и пароль в настройках zoomos.*");
             }
-            log.info("Авторизация успешна");
+            log.info("Авторизация успешна, URL: {}", page.url());
         } finally {
             page.close();
         }
@@ -211,13 +213,21 @@ public class ZoomosParserService {
     }
 
     /**
-     * Парсинг таблицы ID городов со страницы настроек
+     * Парсинг таблицы ID городов со страницы настроек.
+     * Структура HTML:
+     *   <tr><td>ID городов apteka-april.ru:</td>
+     *       <td><input type="text" value="4400,3345,..."></td></tr>
      */
     private int parseCityIds(Page page, ZoomosShop shop) {
-        // Ищем строки таблицы где label содержит "ID городов"
-        // Структура: <tr><td>ID городов apteka-april.ru:</td><td><input value="4400,3345,..."></td></tr>
         List<ElementHandle> rows = page.querySelectorAll("tr");
         int count = 0;
+
+        // Загружаем существующие записи одним запросом
+        Map<String, ZoomosCityId> existing = new java.util.HashMap<>();
+        cityIdRepository.findByShopIdOrderBySiteName(shop.getId())
+                .forEach(c -> existing.put(c.getSiteName(), c));
+
+        List<ZoomosCityId> toSave = new ArrayList<>();
 
         for (ElementHandle row : rows) {
             try {
@@ -227,22 +237,31 @@ public class ZoomosParserService {
                 String labelText = labelCell.innerText().trim();
                 if (!labelText.contains("ID городов")) continue;
 
-                // Извлекаем имя сайта из метки
-                // Пример: "ID городов apteka-april.ru:" → "apteka-april.ru"
+                // "ID городов apteka-april.ru:" → "apteka-april.ru"
                 String siteName = labelText.replace("ID городов", "").replace(":", "").trim();
                 if (siteName.isEmpty()) continue;
+                // Пропускаем строки где siteName содержит пробелы (несколько доменов или служебные поля)
+                if (siteName.contains(" ")) continue;
 
-                // Получаем значение из input в следующей ячейке
                 ElementHandle valueCell = row.querySelector("td:nth-child(2)");
                 if (valueCell == null) continue;
 
-                ElementHandle input = valueCell.querySelector("input");
-                String cityIds = input != null
-                        ? (String) input.getProperty("value").jsonValue()
-                        : valueCell.innerText().trim();
+                ElementHandle input = valueCell.querySelector("input[type='text']");
+                String cityIds = input != null ? input.getAttribute("value") : valueCell.innerText().trim();
+                if (cityIds == null) cityIds = "";
 
-                // UPSERT в БД
-                upsertCityId(shop, siteName, cityIds);
+                ZoomosCityId entry = existing.get(siteName);
+                if (entry != null) {
+                    entry.setCityIds(cityIds);
+                } else {
+                    entry = ZoomosCityId.builder()
+                            .shop(shop)
+                            .siteName(siteName)
+                            .cityIds(cityIds)
+                            .isActive(true)
+                            .build();
+                }
+                toSave.add(entry);
                 count++;
 
             } catch (Exception e) {
@@ -252,29 +271,10 @@ public class ZoomosParserService {
 
         if (count == 0) {
             log.warn("Таблица ID городов не найдена на странице. URL: {}", page.url());
+        } else {
+            cityIdRepository.saveAll(toSave);
         }
 
         return count;
-    }
-
-    /**
-     * UPSERT записи city_ids
-     */
-    private void upsertCityId(ZoomosShop shop, String siteName, String cityIds) {
-        cityIdRepository.findByShopIdOrderBySiteName(shop.getId()).stream()
-                .filter(c -> c.getSiteName().equals(siteName))
-                .findFirst()
-                .ifPresentOrElse(
-                        existing -> {
-                            existing.setCityIds(cityIds);
-                            cityIdRepository.save(existing);
-                        },
-                        () -> cityIdRepository.save(ZoomosCityId.builder()
-                                .shop(shop)
-                                .siteName(siteName)
-                                .cityIds(cityIds)
-                                .isActive(true)
-                                .build())
-                );
     }
 }

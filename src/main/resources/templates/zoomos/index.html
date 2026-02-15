@@ -18,6 +18,9 @@
             background: transparent;
             width: 100%;
             cursor: text;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .city-ids-input:focus {
             border-color: #86b7fe;
@@ -26,6 +29,9 @@
             box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
             border-radius: 4px;
             padding: 2px 4px;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: unset;
         }
         .city-ids-input:hover:not(:focus) {
             background: #f8f9fa;
@@ -34,6 +40,8 @@
         }
         .shop-card { margin-bottom: 1.5rem; }
         .sync-status { font-size: 0.8em; }
+        .city-ids-col { min-width: 200px; }
+        .shop-card.hidden-by-search { display: none; }
     </style>
 </th:block>
 
@@ -52,22 +60,42 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 
-    <!-- Форма добавления магазина -->
+    <!-- Панель управления: добавление + поиск -->
     <div class="card mb-4">
-        <div class="card-header"><i class="fas fa-plus me-2"></i>Добавить магазин</div>
+        <div class="card-header"><i class="fas fa-store me-2"></i>Управление магазинами</div>
         <div class="card-body">
-            <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
+            <div class="row g-3 align-items-end">
+                <!-- Форма добавления -->
+                <div class="col-md-5">
+                    <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
+                        <div class="col">
+                            <label class="form-label fw-semibold mb-1">Добавить магазин</label>
+                            <input type="text" name="shopName" class="form-control form-control-sm"
+                                   placeholder="vitaexpress.ru" required autocomplete="off">
+                        </div>
+                        <div class="col-auto">
+                            <button type="submit" class="btn btn-sm btn-primary">
+                                <i class="fas fa-plus me-1"></i>Добавить
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <!-- Поиск по имени -->
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold">Имя магазина на zoomos.by</label>
-                    <input type="text" name="shopName" class="form-control"
-                           placeholder="vitaexpress.ru" required autocomplete="off">
+                    <label class="form-label fw-semibold mb-1">Поиск по имени магазина</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" id="shopSearch" class="form-control"
+                               placeholder="Начните вводить имя...">
+                        <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="col-auto">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-plus me-1"></i>Добавить
-                    </button>
+                    <span id="searchCount" class="text-muted small"></span>
                 </div>
-            </form>
+            </div>
         </div>
     </div>
 
@@ -77,7 +105,8 @@
         Магазины не добавлены. Введите имя магазина выше.
     </div>
 
-    <div th:each="shop : ${shops}" class="card shop-card">
+    <div th:each="shop : ${shops}" class="card shop-card"
+         th:data-shop-name="${shop.shopName}">
         <div class="card-header d-flex justify-content-between align-items-center">
             <div>
                 <i class="fas fa-store me-2 text-primary"></i>
@@ -89,6 +118,12 @@
                 <span th:unless="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
                     <i class="fas fa-clock me-1"></i>Не синхронизировано
                 </span>
+                <!-- Ссылка на настройки на удалённом сайте -->
+                <a th:href="@{'https://export.zoomos.by/shop/' + ${shop.shopName} + '/settings'}"
+                   target="_blank" class="ms-3 small text-decoration-none text-muted"
+                   title="Открыть настройки на export.zoomos.by">
+                    <i class="fas fa-external-link-alt"></i> настройки
+                </a>
             </div>
             <div class="d-flex gap-2">
                 <form th:action="@{'/zoomos/shops/' + ${shop.shopName} + '/sync'}" method="post" class="d-inline">
@@ -110,38 +145,59 @@
         <div class="card-body p-0">
             <div th:with="entries=${cityIdsMap[shop.id]}">
                 <div th:if="${entries == null or entries.empty}" class="text-muted small p-3">
-                    Нет данных. Нажмите "Синхронизировать" для загрузки настроек.
+                    Нет данных. Нажмите «Синхронизировать» для загрузки настроек.
                 </div>
-                <div th:unless="${entries == null or entries.empty}" class="table-responsive">
-                    <table class="table table-sm table-hover table-bordered mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width:40px" class="text-center">✓</th>
-                                <th>Сайт</th>
-                                <th>ID городов</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr th:each="entry : ${entries}"
-                                th:id="'row-' + ${entry.id}"
-                                th:classappend="${not entry.isActive} ? 'table-secondary text-muted' : ''">
-                                <td class="text-center">
-                                    <input type="checkbox"
-                                           class="form-check-input city-toggle"
-                                           th:checked="${entry.isActive}"
-                                           th:data-id="${entry.id}">
-                                </td>
-                                <td class="small align-middle" th:text="${entry.siteName}">site.ru</td>
-                                <td>
-                                    <input type="text"
-                                           class="form-control-plaintext city-ids-input"
-                                           th:value="${entry.cityIds}"
-                                           th:data-id="${entry.id}"
-                                           placeholder="ID не заданы">
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div th:unless="${entries == null or entries.empty}">
+                    <!-- Заголовок секции с кнопкой collapse -->
+                    <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold small text-secondary">
+                            <i class="fas fa-map-marker-alt me-1"></i>
+                            ID городов по сайтам-конкурентам
+                            <span class="badge bg-secondary ms-1" th:text="${#lists.size(entries)}">0</span>
+                        </span>
+                        <button class="btn btn-sm btn-link text-decoration-none p-0 text-secondary collapse-toggle"
+                                type="button"
+                                th:data-bs-target="'#cityTable-' + ${shop.id}"
+                                data-bs-toggle="collapse"
+                                aria-expanded="false">
+                            <i class="fas fa-chevron-down"></i> Показать
+                        </button>
+                    </div>
+                    <!-- Таблица скрыта по умолчанию -->
+                    <div th:id="'cityTable-' + ${shop.id}" class="collapse">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover table-bordered mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:40px" class="text-center">✓</th>
+                                        <th style="width:200px">Сайт-конкурент</th>
+                                        <th class="city-ids-col">ID городов</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="entry : ${entries}"
+                                        th:id="'row-' + ${entry.id}"
+                                        th:classappend="${not entry.isActive} ? 'table-secondary text-muted' : ''">
+                                        <td class="text-center">
+                                            <input type="checkbox"
+                                                   class="form-check-input city-toggle"
+                                                   th:checked="${entry.isActive}"
+                                                   th:data-id="${entry.id}">
+                                        </td>
+                                        <td class="small align-middle" th:text="${entry.siteName}">site.ru</td>
+                                        <td>
+                                            <input type="text"
+                                                   class="form-control-plaintext city-ids-input"
+                                                   th:value="${entry.cityIds}"
+                                                   th:data-id="${entry.id}"
+                                                   th:title="${entry.cityIds}"
+                                                   placeholder="ID не заданы">
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -152,7 +208,47 @@
 
 <th:block th:fragment="scripts">
 <script>
-    // Переключение чекбокса is_active
+    // ---- Collapse кнопка: обновление текста ----
+    document.querySelectorAll('.collapse-toggle').forEach(btn => {
+        const targetId = btn.getAttribute('data-bs-target');
+        const collapseEl = document.querySelector(targetId);
+        if (!collapseEl) return;
+
+        collapseEl.addEventListener('show.bs.collapse', () => {
+            btn.innerHTML = '<i class="fas fa-chevron-up"></i> Скрыть';
+            btn.setAttribute('aria-expanded', 'true');
+        });
+        collapseEl.addEventListener('hide.bs.collapse', () => {
+            btn.innerHTML = '<i class="fas fa-chevron-down"></i> Показать';
+            btn.setAttribute('aria-expanded', 'false');
+        });
+    });
+
+    // ---- Поиск по имени магазина ----
+    const searchInput = document.getElementById('shopSearch');
+    const clearBtn = document.getElementById('clearSearch');
+    const countEl = document.getElementById('searchCount');
+    const shopCards = document.querySelectorAll('.shop-card');
+
+    function updateSearch() {
+        const q = searchInput.value.trim().toLowerCase();
+        let visible = 0;
+        shopCards.forEach(card => {
+            const name = (card.dataset.shopName || '').toLowerCase();
+            if (!q || name.includes(q)) {
+                card.classList.remove('hidden-by-search');
+                visible++;
+            } else {
+                card.classList.add('hidden-by-search');
+            }
+        });
+        countEl.textContent = q ? `Показано: ${visible} из ${shopCards.length}` : '';
+    }
+
+    searchInput.addEventListener('input', updateSearch);
+    clearBtn.addEventListener('click', () => { searchInput.value = ''; updateSearch(); searchInput.focus(); });
+
+    // ---- Переключение чекбокса is_active ----
     document.querySelectorAll('.city-toggle').forEach(cb => {
         cb.addEventListener('change', function() {
             const id = this.dataset.id;
@@ -161,7 +257,7 @@
                 .then(data => {
                     if (!data.success) {
                         alert('Ошибка: ' + (data.error || 'неизвестная'));
-                        this.checked = !this.checked; // откат
+                        this.checked = !this.checked;
                     } else {
                         const row = document.getElementById('row-' + id);
                         if (data.isActive) {
@@ -175,7 +271,7 @@
         });
     });
 
-    // Редактирование city_ids — сохранение по blur или Enter
+    // ---- Редактирование city_ids — сохранение по blur или Enter ----
     document.querySelectorAll('.city-ids-input').forEach(input => {
         let originalValue = input.value;
 
@@ -201,6 +297,7 @@
                 .then(data => {
                     if (data.success) {
                         originalValue = newValue;
+                        this.title = newValue;
                         this.style.borderColor = '#198754';
                         setTimeout(() => { this.style.borderColor = ''; }, 1000);
                     } else {
