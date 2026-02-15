@@ -29,9 +29,10 @@ mvn spring-boot:run -Dspring-boot.run.profiles=silent
 
 ### Основные разделы
 1. **Import/Export** (главная страница) - Импорт и экспорт файлов для клиентов
-2. **Utilities** (`/utils`) - HTTP Redirect Finder, Data Merger, Barcode Match, URL Cleaner
-3. **Maintenance** (`/maintenance`) - Файловые операции, очистка БД, мониторинг системы
-4. **Statistics** (`/statistics/setup`) - Анализ и сравнение операций экспорта
+2. **Handbook** (`/handbook`) - Справочник штрихкодов: накопление базы товаров и обогащение файлов ссылками
+3. **Utilities** (`/utils`) - HTTP Redirect Finder, Data Merger, Barcode Match, URL Cleaner
+4. **Maintenance** (`/maintenance`) - Файловые операции, очистка БД, мониторинг системы
+5. **Statistics** (`/statistics/setup`) - Анализ и сравнение операций экспорта
 
 ### Быстрая проверка работоспособности
 ```bash
@@ -87,6 +88,7 @@ mvn flyway:info
 
 ### 2026-02
 
+- **Barcode Handbook** - Справочник штрихкодов: накопление базы товаров (ШК+имена+ссылки) и обогащение рабочих файлов ссылками. Flyway V21, 4 таблицы, JDBC batch-импорт, поиск по ШК/имени/URL
 - **Import TimeoutException Fix** - Устранён TimeoutException при одновременном импорте нескольких файлов
 
 ### 2026-01
@@ -880,6 +882,126 @@ Results page:
   Операция #123   | Операция #456   ← exportSessionId (уникальны)
   TASK-00008125   | TASK-00007969   ← Разные TASK-номера
 ```
+
+## Barcode Handbook (Справочник штрихкодов)
+
+### Purpose
+Централизованная база знаний о товарах: штрихкоды → наименования → ссылки на страницы товаров у ритейлеров. Позволяет обогащать рабочие файлы (список ID + ШК) готовыми URL из справочника.
+
+### Database Schema (Flyway V21)
+
+```sql
+bh_products  -- центральная сущность товара
+  id, barcode (UNIQUE nullable), brand, manufacturer_code, created_at, updated_at
+
+bh_names     -- наименования товара (один продукт = много имён)
+  id, product_id → bh_products, name, source
+  UNIQUE(product_id, name)
+
+bh_urls      -- ссылки товара (один продукт = много ссылок)
+  id, product_id → bh_products, url, domain, site_name, source
+  UNIQUE(product_id, url)
+
+bh_domains   -- реестр доменов с флагом активности
+  id, domain (UNIQUE), is_active, url_count, description
+```
+
+### Import Types
+
+Используется **существующая система импорта** (шаблоны + AsyncImportService). Создаёшь шаблон с EntityType и импортируешь файл как обычно.
+
+**`BH_BARCODE_NAME`** — файл `штрихкод | наименование | бренд`:
+- Поля: `barcode`, `name`, `brand`, `manufacturerCode`
+- Несколько ШК через запятую (`"A,B"`) → хранятся отдельно
+- UPSERT продуктов по barcode, INSERT имён (ON CONFLICT DO NOTHING)
+- Реализация: `BarcodeHandbookService.persistBarcodeNameBatch()` — JDBC batch
+
+**`BH_NAME_URL`** — файл `наименование | url | site_name`:
+- Поля: `name`, `brand`, `url`, `siteName`
+- Продукты находятся/создаются по имени; UPSERT доменов автоматически
+- Реализация: `BarcodeHandbookService.persistNameUrlBatch()` — JDBC batch
+
+### Import Performance
+
+Реализован через **JDBC batch** (не JPA per-row):
+- `batchUpdate` + `ON CONFLICT DO NOTHING/DO UPDATE`
+- Один `SELECT ... IN (...)` для поиска существующих продуктов
+- ~50-100x быстрее JPA подхода (1M строк за минуты, не часы)
+- `EntityPersistenceService` вызывает `saveBhBarcodeNameBatch` / `saveBhNameUrlBatch` с целым батчем
+
+### Barcode Normalization (`BarcodeUtils`)
+
+**Файл**: [BarcodeUtils.java](src/main/java/com/java/util/BarcodeUtils.java)
+
+- `parseAndNormalize(String raw)` — разбивает по запятой, нормализует каждый ШК
+- `normalize(String raw)` — убирает пробелы/NBSP/управляющие символы, удаляет ведущий 0 у 14-значных EAN-14 → EAN-13
+
+Используется при импорте (`persistBarcodeNameBatch`) и при поиске (`searchAndExport`, `searchForUi`).
+
+### Search & Export Flow
+
+**URL**: `GET /handbook/search` → загрузка файла → `GET /handbook/search/configure` → настройка → `POST /handbook/search/process` → скачать результат
+
+1. Загружается CSV/XLSX с рабочим файлом (ID + ШК/наименования)
+2. На странице configure выбираются колонки (idColumn, barcodeColumn, nameColumn) и фильтр доменов
+3. `searchAndExport()` (`@Transactional(readOnly=true)`):
+   - Нормализует все ШК из файла через `BarcodeUtils.parseAndNormalize()`
+   - Один batch `SELECT ... WHERE barcode IN (...)` → Map<barcode, BhProduct>
+   - Для строк без найденного ШК — поиск по имени (`nameRepo.findByNameIgnoreCase`)
+   - Один batch `SELECT urls WHERE product_id IN (...)` с опциональным фильтром по доменам
+   - Строки без совпадений **не включаются** в результат
+   - Результат: XLSX или CSV с колонками `ID | Штрихкод | Наименование | Бренд | Домен | URL`
+   - Одна входная строка → N выходных строк (по числу найденных URL)
+
+**CSV чтение**: OpenCSV с `CSVParserBuilder` (корректная обработка кавычек)
+
+### UI Lookup (AJAX поиск на главной странице)
+
+**URL**: `GET /handbook` — страница со встроенным поиском
+
+**Endpoint**: `GET /handbook/lookup?q=<запрос>` → JSON
+
+Поиск одновременно по трём полям:
+1. Точное совпадение по штрихкоду (после нормализации)
+2. LIKE `%запрос%` по наименованиям (`bh_names`)
+3. LIKE `%запрос%` по URL (`bh_urls`)
+
+Таблица результатов: Штрихкод | Бренд | Наименования | Домен/URL | Найдено по (бейдж ШК/Наим./URL)
+
+### Domain Management
+
+**URL**: `GET /handbook/domains`
+
+- Список всех доменов из `bh_domains`, отсортированных по `url_count DESC`
+- Toggle активности (отключённые домены не попадают в фильтр при поиске)
+- AJAX-поиск доменов: `GET /handbook/domains/search?q=`
+- Домены создаются автоматически при импорте `BH_NAME_URL`
+
+### Key Files
+
+| Файл | Назначение |
+|------|-----------|
+| [V21__create_barcode_handbook.sql](src/main/resources/db/migration/V21__create_barcode_handbook.sql) | Flyway миграция (4 таблицы) |
+| [BarcodeHandbookService.java](src/main/java/com/java/service/handbook/BarcodeHandbookService.java) | Весь бизнес-код: импорт, поиск, домены |
+| [BarcodeHandbookController.java](src/main/java/com/java/controller/BarcodeHandbookController.java) | REST/MVC контроллер `/handbook/*` |
+| [BarcodeUtils.java](src/main/java/com/java/util/BarcodeUtils.java) | Нормализация и разбивка штрихкодов |
+| [BhProduct.java](src/main/java/com/java/model/entity/BhProduct.java) | JPA entity продукта |
+| [BhName.java](src/main/java/com/java/model/entity/BhName.java) | JPA entity наименования |
+| [BhUrl.java](src/main/java/com/java/model/entity/BhUrl.java) | JPA entity ссылки |
+| [BhDomain.java](src/main/java/com/java/model/entity/BhDomain.java) | JPA entity домена |
+| [EntityType.java](src/main/java/com/java/model/enums/EntityType.java) | Добавлены BH_BARCODE_NAME, BH_NAME_URL |
+| [EntityFieldService.java](src/main/java/com/java/service/EntityFieldService.java) | Добавлены поля для BH типов (UI dropdown) |
+| [EntityPersistenceService.java](src/main/java/com/java/service/imports/handlers/EntityPersistenceService.java) | Switch cases для BH типов |
+| [handbook/index.html](src/main/resources/templates/handbook/index.html) | Главная + AJAX поиск |
+| [handbook/search-configure.html](src/main/resources/templates/handbook/search-configure.html) | Настройка поиска (маппинг колонок + домены) |
+
+### Testing Status
+✅ Импорт BH_BARCODE_NAME — работает, JDBC batch
+✅ Импорт BH_NAME_URL — работает, JDBC batch
+✅ Multi-barcode (запятая) — разбивка и нормализация
+✅ Поиск и экспорт в XLSX/CSV — работает
+✅ UI AJAX поиск по ШК/имени/URL
+✅ Управление доменами
 
 ## Code References
 
