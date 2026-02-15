@@ -10,7 +10,9 @@ import com.java.repository.ZoomosCityIdRepository;
 import com.java.repository.ZoomosSessionRepository;
 import com.java.repository.ZoomosShopRepository;
 import com.microsoft.playwright.*;
+import com.microsoft.playwright.options.Cookie;
 import com.microsoft.playwright.options.LoadState;
+import com.microsoft.playwright.options.SameSiteAttribute;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -173,14 +175,33 @@ public class ZoomosParserService {
     }
 
     /**
-     * Загрузить куки из БД в BrowserContext
+     * Загрузить куки из БД в BrowserContext.
+     * Playwright Cookie не имеет дефолтного конструктора для Jackson,
+     * поэтому десериализуем через Map и создаём объекты вручную.
      */
     private boolean loadSession(BrowserContext context) {
         return sessionRepository.findTopByOrderByUpdatedAtDesc().map(session -> {
             try {
-                List<com.microsoft.playwright.options.Cookie> cookies =
+                List<Map<String, Object>> rawCookies =
                         objectMapper.readValue(session.getCookies(),
-                                new TypeReference<List<com.microsoft.playwright.options.Cookie>>() {});
+                                new TypeReference<List<Map<String, Object>>>() {});
+                List<Cookie> cookies = new ArrayList<>();
+                for (Map<String, Object> raw : rawCookies) {
+                    String name = (String) raw.get("name");
+                    String value = (String) raw.get("value");
+                    if (name == null || value == null) continue;
+                    Cookie c = new Cookie(name, value);
+                    if (raw.get("domain") != null) c.setDomain((String) raw.get("domain"));
+                    if (raw.get("path") != null)   c.setPath((String) raw.get("path"));
+                    if (raw.get("expires") != null) c.setExpires(((Number) raw.get("expires")).doubleValue());
+                    if (raw.get("httpOnly") != null) c.setHttpOnly((Boolean) raw.get("httpOnly"));
+                    if (raw.get("secure") != null)   c.setSecure((Boolean) raw.get("secure"));
+                    if (raw.get("sameSite") != null) {
+                        try { c.setSameSite(SameSiteAttribute.valueOf((String) raw.get("sameSite"))); }
+                        catch (IllegalArgumentException ignored) {}
+                    }
+                    cookies.add(c);
+                }
                 context.addCookies(cookies);
                 log.debug("Куки загружены из БД ({} шт.)", cookies.size());
                 return true;
@@ -196,7 +217,7 @@ public class ZoomosParserService {
      */
     private void saveSession(BrowserContext context) {
         try {
-            List<com.microsoft.playwright.options.Cookie> cookies = context.cookies();
+            List<Cookie> cookies = context.cookies();
             String cookiesJson = objectMapper.writeValueAsString(cookies);
 
             sessionRepository.findTopByOrderByUpdatedAtDesc().ifPresentOrElse(
@@ -220,13 +241,6 @@ public class ZoomosParserService {
      */
     private int parseCityIds(Page page, ZoomosShop shop) {
         List<ElementHandle> rows = page.querySelectorAll("tr");
-        int count = 0;
-
-        // Загружаем существующие записи одним запросом
-        Map<String, ZoomosCityId> existing = new java.util.HashMap<>();
-        cityIdRepository.findByShopIdOrderBySiteName(shop.getId())
-                .forEach(c -> existing.put(c.getSiteName(), c));
-
         List<ZoomosCityId> toSave = new ArrayList<>();
 
         for (ElementHandle row : rows) {
@@ -250,31 +264,26 @@ public class ZoomosParserService {
                 String cityIds = input != null ? input.getAttribute("value") : valueCell.innerText().trim();
                 if (cityIds == null) cityIds = "";
 
-                ZoomosCityId entry = existing.get(siteName);
-                if (entry != null) {
-                    entry.setCityIds(cityIds);
-                } else {
-                    entry = ZoomosCityId.builder()
-                            .shop(shop)
-                            .siteName(siteName)
-                            .cityIds(cityIds)
-                            .isActive(true)
-                            .build();
-                }
-                toSave.add(entry);
-                count++;
+                toSave.add(ZoomosCityId.builder()
+                        .shop(shop)
+                        .siteName(siteName)
+                        .cityIds(cityIds)
+                        .isActive(true)
+                        .build());
 
             } catch (Exception e) {
                 log.warn("Ошибка парсинга строки таблицы: {}", e.getMessage());
             }
         }
 
-        if (count == 0) {
+        if (toSave.isEmpty()) {
             log.warn("Таблица ID городов не найдена на странице. URL: {}", page.url());
-        } else {
-            cityIdRepository.saveAll(toSave);
+            return 0;
         }
 
-        return count;
+        // Заменяем все записи для магазина: удаляем старые, вставляем новые
+        cityIdRepository.deleteByShopId(shop.getId());
+        cityIdRepository.saveAll(toSave);
+        return toSave.size();
     }
 }
