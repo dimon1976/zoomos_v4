@@ -40,7 +40,7 @@ public class BarcodeHandbookController {
     private final FileAnalyzerService fileAnalyzerService;
 
     // =========================================================================
-    // Главная страница справочника
+    // Главная страница справочника + AJAX поиск
     // =========================================================================
 
     @GetMapping({"", "/"})
@@ -48,6 +48,13 @@ public class BarcodeHandbookController {
         model.addAttribute("pageTitle", "Справочник штрихкодов");
         model.addAttribute("stats", handbookService.getStats());
         return "handbook/index";
+    }
+
+    /** AJAX: поиск по штрихкоду / части наименования / части URL */
+    @GetMapping("/lookup")
+    @ResponseBody
+    public List<Map<String, Object>> lookup(@RequestParam(defaultValue = "") String q) {
+        return handbookService.searchForUi(q);
     }
 
     // =========================================================================

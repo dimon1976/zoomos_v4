@@ -10,9 +10,93 @@
       )}">
 <head><title>Справочник штрихкодов</title></head>
 
-<th:block th:fragment="styles"></th:block>
+<th:block th:fragment="styles">
+    <style>
+        .match-badge { font-size: 0.7em; vertical-align: middle; }
+        #searchResults td { vertical-align: top; font-size: 0.85em; }
+        .url-cell { max-width: 320px; word-break: break-all; }
+    </style>
+</th:block>
 <th:block th:fragment="pageActions"></th:block>
-<th:block th:fragment="scripts"></th:block>
+<th:block th:fragment="scripts">
+<script>
+    const lookupInput   = document.getElementById('lookupInput');
+    const lookupBtn     = document.getElementById('lookupBtn');
+    const lookupClear   = document.getElementById('lookupClear');
+    const lookupStatus  = document.getElementById('lookupStatus');
+    const resultsWrap   = document.getElementById('lookupResultsWrap');
+    const resultsBody   = document.getElementById('searchResults');
+
+    const matchLabels = { barcode: 'ШК', name: 'Наим.', url: 'URL' };
+    const matchColors = { barcode: 'primary', name: 'success', url: 'info' };
+
+    function doSearch() {
+        const q = lookupInput.value.trim();
+        if (!q) return;
+
+        lookupBtn.disabled = true;
+        lookupStatus.textContent = 'Поиск...';
+        lookupStatus.classList.remove('d-none');
+        resultsWrap.classList.add('d-none');
+
+        fetch('/handbook/lookup?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                resultsBody.innerHTML = '';
+                if (data.length === 0) {
+                    lookupStatus.textContent = 'Ничего не найдено.';
+                } else {
+                    lookupStatus.textContent = 'Найдено: ' + data.length + ' продукт(ов)';
+                    data.forEach(p => {
+                        const urls = p.urls || [];
+                        const rowCount = Math.max(urls.length, 1);
+                        urls.forEach((u, ui) => {
+                            const tr = document.createElement('tr');
+                            if (ui === 0) {
+                                const label = matchLabels[p.matchedBy] || p.matchedBy;
+                                const color = matchColors[p.matchedBy] || 'secondary';
+                                tr.innerHTML = `
+                                    <td rowspan="${rowCount}">${p.barcode || '<span class="text-muted">—</span>'}</td>
+                                    <td rowspan="${rowCount}">${p.brand || '<span class="text-muted">—</span>'}</td>
+                                    <td rowspan="${rowCount}">${(p.names || []).join('<br>')}</td>
+                                    <td class="url-cell">${u.domain ? '<span class="text-muted small">' + u.domain + '</span><br>' : ''}<a href="${u.url}" target="_blank" rel="noopener">${u.url}</a></td>
+                                    <td rowspan="${rowCount}"><span class="badge bg-${color} match-badge">${label}</span></td>`;
+                            } else {
+                                tr.innerHTML = `<td class="url-cell">${u.domain ? '<span class="text-muted small">' + u.domain + '</span><br>' : ''}<a href="${u.url}" target="_blank" rel="noopener">${u.url}</a></td>`;
+                            }
+                            resultsBody.appendChild(tr);
+                        });
+                        if (urls.length === 0) {
+                            const label = matchLabels[p.matchedBy] || p.matchedBy;
+                            const color = matchColors[p.matchedBy] || 'secondary';
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${p.barcode || '<span class="text-muted">—</span>'}</td>
+                                <td>${p.brand || '<span class="text-muted">—</span>'}</td>
+                                <td>${(p.names || []).join('<br>')}</td>
+                                <td class="text-muted small">Ссылок нет</td>
+                                <td><span class="badge bg-${color} match-badge">${label}</span></td>`;
+                            resultsBody.appendChild(tr);
+                        }
+                    });
+                    resultsWrap.classList.remove('d-none');
+                }
+            })
+            .catch(() => { lookupStatus.textContent = 'Ошибка запроса.'; })
+            .finally(() => { lookupBtn.disabled = false; });
+    }
+
+    lookupBtn.addEventListener('click', doSearch);
+    lookupInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+    lookupClear.addEventListener('click', () => {
+        lookupInput.value = '';
+        lookupStatus.classList.add('d-none');
+        resultsWrap.classList.add('d-none');
+        resultsBody.innerHTML = '';
+        lookupInput.focus();
+    });
+</script>
+</th:block>
 
 <th:block th:fragment="content">
 <div class="container-fluid">
@@ -49,6 +133,39 @@
                     <div class="fs-4 fw-bold text-warning" th:text="${stats.domains}">0</div>
                     <small class="text-muted">Доменов</small>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Поиск по справочнику -->
+    <div class="card mb-4">
+        <div class="card-header"><i class="fas fa-search me-2"></i>Проверка данных в справочнике</div>
+        <div class="card-body">
+            <div class="input-group mb-3">
+                <input type="text" id="lookupInput" class="form-control"
+                       placeholder="Штрихкод, наименование (часть) или URL (часть)..."
+                       autocomplete="off">
+                <button class="btn btn-primary" id="lookupBtn" type="button">
+                    <i class="fas fa-search me-1"></i>Найти
+                </button>
+                <button class="btn btn-outline-secondary" id="lookupClear" type="button">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="lookupStatus" class="text-muted small mb-2 d-none"></div>
+            <div class="table-responsive d-none" id="lookupResultsWrap">
+                <table class="table table-sm table-hover table-bordered mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Штрихкод</th>
+                            <th>Бренд</th>
+                            <th>Наименования</th>
+                            <th>Домен / URL</th>
+                            <th style="width:80px">Найдено по</th>
+                        </tr>
+                    </thead>
+                    <tbody id="searchResults"></tbody>
+                </table>
             </div>
         </div>
     </div>

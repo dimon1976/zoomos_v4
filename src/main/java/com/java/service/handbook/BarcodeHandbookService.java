@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
@@ -451,6 +450,86 @@ public class BarcodeHandbookService {
     }
 
     // =========================================================================
+    // ПОИСК В UI (AJAX)
+    // =========================================================================
+
+    /**
+     * Поиск по справочнику для отображения в UI.
+     * Ищет по штрихкоду (точное совпадение), части наименования или части URL.
+     * Возвращает список Map для сериализации в JSON.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> searchForUi(String query) {
+        if (query == null || query.isBlank()) return Collections.emptyList();
+        String q = query.trim();
+
+        // Нормализуем как штрихкод и ищем по нему
+        String normalizedBarcode = BarcodeUtils.normalize(q);
+
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        // 1. Поиск продуктов по штрихкоду (точное)
+        productRepo.findByBarcode(normalizedBarcode).ifPresent(p ->
+                results.add(buildProductResult(p, "barcode"))
+        );
+
+        // 2. Поиск по части наименования через JDBC (ILIKE)
+        Set<Long> foundIds = results.stream()
+                .map(r -> (Long) r.get("productId"))
+                .collect(Collectors.toSet());
+
+        String nameLike = "%" + q.toLowerCase() + "%";
+        jdbc.query(
+                "SELECT DISTINCT n.product_id FROM bh_names n WHERE LOWER(n.name) LIKE ? LIMIT 30",
+                (RowCallbackHandler) rs -> {
+                    long pid = rs.getLong("product_id");
+                    if (foundIds.add(pid)) {
+                        productRepo.findById(pid).ifPresent(p ->
+                                results.add(buildProductResult(p, "name"))
+                        );
+                    }
+                }, nameLike);
+
+        // 3. Поиск по части URL через JDBC
+        String urlLike = "%" + q.toLowerCase() + "%";
+        jdbc.query(
+                "SELECT DISTINCT u.product_id FROM bh_urls u WHERE LOWER(u.url) LIKE ? LIMIT 30",
+                (RowCallbackHandler) rs -> {
+                    long pid = rs.getLong("product_id");
+                    if (foundIds.add(pid)) {
+                        productRepo.findById(pid).ifPresent(p ->
+                                results.add(buildProductResult(p, "url"))
+                        );
+                    }
+                }, urlLike);
+
+        return results;
+    }
+
+    private Map<String, Object> buildProductResult(BhProduct p, String matchedBy) {
+        // Имена продукта
+        List<String> names = nameRepo.findByProductIdIn(List.of(p.getId()))
+                .stream().map(BhName::getName).collect(Collectors.toList());
+        // Ссылки продукта
+        List<Map<String, String>> urls = urlRepo.findByProductIdIn(List.of(p.getId()))
+                .stream().map(u -> {
+                    Map<String, String> m = new java.util.LinkedHashMap<>();
+                    m.put("url", u.getUrl());
+                    m.put("domain", u.getDomain() != null ? u.getDomain() : "");
+                    return m;
+                }).collect(Collectors.toList());
+
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("productId", p.getId());
+        result.put("barcode", p.getBarcode() != null ? p.getBarcode() : "");
+        result.put("brand", p.getBrand() != null ? p.getBrand() : "");
+        result.put("names", names);
+        result.put("urls", urls);
+        result.put("matchedBy", matchedBy);
+        return result;
+    }
+
+    // =========================================================================
     // УПРАВЛЕНИЕ ДОМЕНАМИ
     // =========================================================================
 
@@ -478,77 +557,6 @@ public class BarcodeHandbookService {
                 urlRepo.count(),
                 domainRepo.count()
         );
-    }
-
-    // =========================================================================
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ - Поиск/создание продуктов
-    // =========================================================================
-
-    private BhProduct findOrCreateByBarcode(String barcode, String brand, String mfCode) {
-        try {
-            return productRepo.findByBarcode(barcode)
-                    .orElseGet(() -> createProduct(barcode, brand, mfCode));
-        } catch (DataIntegrityViolationException e) {
-            // Гонка при параллельном создании — повторный поиск
-            return productRepo.findByBarcode(barcode)
-                    .orElseThrow(() -> new RuntimeException("Не удалось найти/создать продукт по штрихкоду: " + barcode));
-        }
-    }
-
-    private BhProduct findProductByName(String name, String brand, boolean requireBrandMatch) {
-        Optional<BhName> bhName = nameRepo.findByNameIgnoreCase(name);
-        if (bhName.isEmpty()) return null;
-        BhProduct p = bhName.get().getProduct();
-        if (requireBrandMatch && brand != null && !brand.isEmpty()) {
-            if (!brand.equalsIgnoreCase(p.getBrand())) return null;
-        }
-        return p;
-    }
-
-    private BhProduct createProduct(String barcode, String brand, String mfCode) {
-        BhProduct p = BhProduct.builder()
-                .barcode(barcode)
-                .brand(brand)
-                .manufacturerCode(mfCode)
-                .build();
-        return productRepo.save(p);
-    }
-
-    private void addNameIfAbsent(BhProduct product, String name, String source) {
-        if (name == null || name.isEmpty()) return;
-        if (!nameRepo.existsByProductIdAndName(product.getId(), name)) {
-            try {
-                BhName bn = BhName.builder()
-                        .product(product)
-                        .name(name)
-                        .source(source)
-                        .build();
-                nameRepo.save(bn);
-            } catch (DataIntegrityViolationException e) {
-                log.debug("BH: дублирование имени '{}' для продукта {} — пропуск", name, product.getId());
-            }
-        }
-    }
-
-    private void addUrlIfAbsent(BhProduct product, String url, String siteName, String source) {
-        if (url == null || url.isEmpty()) return;
-        String domain = extractDomain(url);
-
-        if (!urlRepo.existsByProductIdAndUrl(product.getId(), url)) {
-            try {
-                BhUrl bu = BhUrl.builder()
-                        .product(product)
-                        .url(url)
-                        .domain(domain)
-                        .siteName(siteName)
-                        .source(source)
-                        .build();
-                urlRepo.save(bu);
-                if (domain != null) registerDomain(domain);
-            } catch (DataIntegrityViolationException e) {
-                log.debug("BH: дублирование URL '{}' для продукта {} — пропуск", url, product.getId());
-            }
-        }
     }
 
     private String extractDomain(String url) {
