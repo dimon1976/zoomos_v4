@@ -240,33 +240,21 @@ public class EntityPersistenceService {
     }
 
     /**
-     * Сохраняет батч строк типа BH_BARCODE_NAME в справочник штрихкодов.
+     * Сохраняет батч строк типа BH_BARCODE_NAME — передаёт весь батч сразу в JDBC-метод.
      */
     private int saveBhBarcodeNameBatch(List<Map<String, Object>> batch, ImportSession session) {
         String source = session.getTemplate() != null ? session.getTemplate().getName() : "import";
-        int count = 0;
-        for (Map<String, Object> row : batch) {
-            Map<String, String> strRow = toStringMap(row);
-            barcodeHandbookService.persistBarcodeNameRow(strRow, source);
-            count++;
-        }
-        log.info("BH_BARCODE_NAME: сохранено {} строк", count);
-        return count;
+        List<Map<String, String>> strBatch = batch.stream().map(this::toStringMap).collect(java.util.stream.Collectors.toList());
+        return barcodeHandbookService.persistBarcodeNameBatch(strBatch, source);
     }
 
     /**
-     * Сохраняет батч строк типа BH_NAME_URL в справочник штрихкодов.
+     * Сохраняет батч строк типа BH_NAME_URL — передаёт весь батч сразу в JDBC-метод.
      */
     private int saveBhNameUrlBatch(List<Map<String, Object>> batch, ImportSession session) {
         String source = session.getTemplate() != null ? session.getTemplate().getName() : "import";
-        int count = 0;
-        for (Map<String, Object> row : batch) {
-            Map<String, String> strRow = toStringMap(row);
-            barcodeHandbookService.persistNameUrlRow(strRow, source);
-            count++;
-        }
-        log.info("BH_NAME_URL: сохранено {} строк", count);
-        return count;
+        List<Map<String, String>> strBatch = batch.stream().map(this::toStringMap).collect(java.util.stream.Collectors.toList());
+        return barcodeHandbookService.persistNameUrlBatch(strBatch, source);
     }
 
     /**

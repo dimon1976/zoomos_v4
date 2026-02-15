@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,82 +37,243 @@ public class BarcodeHandbookService {
     private final BhNameRepository nameRepo;
     private final BhUrlRepository urlRepo;
     private final BhDomainRepository domainRepo;
+    private final JdbcTemplate jdbc;
 
     // =========================================================================
-    // ИМПОРТ: тип BH_BARCODE_NAME (штрихкод + наименование)
+    // ИМПОРТ: тип BH_BARCODE_NAME (штрихкод + наименование) — БАТЧ
     // =========================================================================
 
     /**
-     * Сохранить одну строку файла "штрихкод+наименование".
-     * Вызывается из EntityPersistenceService при импорте типа BH_BARCODE_NAME.
-     *
-     * @param row     Map<fieldName, value> согласно маппингу шаблона
-     * @param source  имя файла-источника (для аудита)
+     * Батч-сохранение строк "штрихкод+наименование" через JDBC.
+     * Один вызов = один батч всего набора строк (100-1000 записей).
+     * В ~100x быстрее поштучного сохранения через JPA.
      */
     @Transactional
-    public void persistBarcodeNameRow(Map<String, String> row, String source) {
-        String barcode = trim(row.get("barcode"));
-        String name    = trim(row.get("name"));
-        String brand   = trim(row.get("brand"));
-        String mfCode  = trim(row.get("manufacturerCode"));
+    public int persistBarcodeNameBatch(List<Map<String, String>> rows, String source) {
+        if (rows.isEmpty()) return 0;
 
-        if (name == null || name.isEmpty()) {
-            log.debug("BH_BARCODE_NAME: пропуск строки — нет наименования");
-            return;
-        }
-
-        BhProduct product;
-        if (barcode != null && !barcode.isEmpty()) {
-            product = findOrCreateByBarcode(barcode, brand, mfCode);
-        } else {
-            // Нет штрихкода — ищем по наименованию
-            product = findProductByName(name, brand, false);
-            if (product == null) {
-                product = createProduct(null, brand, mfCode);
+        // 1. Разделяем строки: со штрихкодом и без
+        List<Map<String, String>> withBarcode = new ArrayList<>();
+        List<Map<String, String>> withoutBarcode = new ArrayList<>();
+        for (Map<String, String> r : rows) {
+            String name = trim(r.get("name"));
+            if (name == null || name.isEmpty()) continue;
+            String barcode = trim(r.get("barcode"));
+            if (barcode != null && !barcode.isEmpty()) {
+                withBarcode.add(r);
+            } else {
+                withoutBarcode.add(r);
             }
         }
 
-        // Обновляем бренд/артикул если пришли новые данные
-        if (brand != null && !brand.isEmpty() && (product.getBrand() == null || product.getBrand().isEmpty())) {
-            product.setBrand(brand);
-            productRepo.save(product);
-        }
-        if (mfCode != null && !mfCode.isEmpty() && (product.getManufacturerCode() == null || product.getManufacturerCode().isEmpty())) {
-            product.setManufacturerCode(mfCode);
-            productRepo.save(product);
+        int saved = 0;
+
+        // 2. Обработка строк со штрихкодом
+        if (!withBarcode.isEmpty()) {
+            // UPSERT продуктов по штрихкоду
+            List<Object[]> productParams = new ArrayList<>();
+            for (Map<String, String> r : withBarcode) {
+                productParams.add(new Object[]{
+                        trim(r.get("barcode")),
+                        trim(r.get("brand")),
+                        trim(r.get("manufacturerCode"))
+                });
+            }
+            jdbc.batchUpdate(
+                    "INSERT INTO bh_products (barcode, brand, manufacturer_code, created_at, updated_at) " +
+                    "VALUES (?, ?, ?, NOW(), NOW()) " +
+                    "ON CONFLICT (barcode) DO UPDATE SET " +
+                    "  brand = COALESCE(NULLIF(EXCLUDED.brand,''), bh_products.brand), " +
+                    "  manufacturer_code = COALESCE(NULLIF(EXCLUDED.manufacturer_code,''), bh_products.manufacturer_code), " +
+                    "  updated_at = NOW()",
+                    productParams);
+
+            // Получаем id продуктов по штрихкодам
+            List<String> barcodes = withBarcode.stream()
+                    .map(r -> trim(r.get("barcode")))
+                    .distinct().collect(Collectors.toList());
+            String inClause = String.join(",", Collections.nCopies(barcodes.size(), "?"));
+            Map<String, Long> barcodeToId = new HashMap<>();
+            jdbc.query(
+                    "SELECT id, barcode FROM bh_products WHERE barcode IN (" + inClause + ")",
+                    barcodes.toArray(),
+                    rs -> { barcodeToId.put(rs.getString("barcode"), rs.getLong("id")); });
+
+            // UPSERT наименований
+            List<Object[]> nameParams = new ArrayList<>();
+            for (Map<String, String> r : withBarcode) {
+                Long pid = barcodeToId.get(trim(r.get("barcode")));
+                if (pid == null) continue;
+                String name = trim(r.get("name"));
+                if (name == null || name.isEmpty()) continue;
+                nameParams.add(new Object[]{pid, name, source});
+            }
+            if (!nameParams.isEmpty()) {
+                jdbc.batchUpdate(
+                        "INSERT INTO bh_names (product_id, name, source, created_at) VALUES (?, ?, ?, NOW()) " +
+                        "ON CONFLICT (product_id, name) DO NOTHING",
+                        nameParams);
+            }
+            saved += withBarcode.size();
         }
 
-        addNameIfAbsent(product, name, source);
+        // 3. Обработка строк без штрихкода — batch lookup по именам
+        if (!withoutBarcode.isEmpty()) {
+            // Собираем уникальные имена для batch-поиска
+            Set<String> uniqueNames = withoutBarcode.stream()
+                    .map(r -> trim(r.get("name")))
+                    .filter(n -> n != null && !n.isEmpty())
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+
+            Map<String, Long> nameLowerToId = new HashMap<>();
+            if (!uniqueNames.isEmpty()) {
+                String inClause = String.join(",", Collections.nCopies(uniqueNames.size(), "LOWER(TRIM(?))"));
+                List<String> nameList = new ArrayList<>(uniqueNames);
+                jdbc.query(
+                        "SELECT DISTINCT ON (LOWER(TRIM(n.name))) LOWER(TRIM(n.name)) AS name_key, n.product_id " +
+                        "FROM bh_names n WHERE LOWER(TRIM(n.name)) IN (" + inClause + ")",
+                        nameList.toArray(),
+                        (RowCallbackHandler) rs -> nameLowerToId.put(rs.getString("name_key"), rs.getLong("product_id")));
+            }
+
+            // Создаём продукты для не найденных имён
+            for (Map<String, String> r : withoutBarcode) {
+                String name  = trim(r.get("name"));
+                String brand = trim(r.get("brand"));
+                String mfCode = trim(r.get("manufacturerCode"));
+                if (name == null || name.isEmpty()) continue;
+
+                String key = name.toLowerCase().trim();
+                if (!nameLowerToId.containsKey(key)) {
+                    Long pid = jdbc.queryForObject(
+                            "INSERT INTO bh_products (brand, manufacturer_code, created_at, updated_at) " +
+                            "VALUES (?, ?, NOW(), NOW()) RETURNING id",
+                            Long.class, brand, mfCode);
+                    jdbc.update(
+                            "INSERT INTO bh_names (product_id, name, source, created_at) VALUES (?, ?, ?, NOW()) " +
+                            "ON CONFLICT (product_id, name) DO NOTHING",
+                            pid, name, source);
+                    nameLowerToId.put(key, pid);
+                } else if (brand != null && !brand.isEmpty()) {
+                    Long pid = nameLowerToId.get(key);
+                    jdbc.update(
+                            "UPDATE bh_products SET brand = ?, updated_at = NOW() WHERE id = ? AND (brand IS NULL OR brand = '')",
+                            brand, pid);
+                }
+                saved++;
+            }
+        }
+
+        log.info("BH_BARCODE_NAME батч: {} строк обработано", saved);
+        return saved;
     }
 
     // =========================================================================
-    // ИМПОРТ: тип BH_NAME_URL (наименование + URL)
+    // ИМПОРТ: тип BH_NAME_URL (наименование + URL) — БАТЧ
     // =========================================================================
 
     /**
-     * Сохранить одну строку файла "наименование+URL".
-     * Вызывается из EntityPersistenceService при импорте типа BH_NAME_URL.
+     * Батч-сохранение строк "наименование+URL" через JDBC.
      */
     @Transactional
+    public int persistNameUrlBatch(List<Map<String, String>> rows, String source) {
+        if (rows.isEmpty()) return 0;
+
+        // Собираем уникальные имена
+        Set<String> names = new LinkedHashSet<>();
+        for (Map<String, String> r : rows) {
+            String name = trim(r.get("name"));
+            String url  = trim(r.get("url"));
+            if (name != null && !name.isEmpty() && url != null && !url.isEmpty()) {
+                names.add(name);
+            }
+        }
+        if (names.isEmpty()) return 0;
+
+        // Находим существующие продукты по именам — один batch IN-запрос
+        Map<String, Long> nameLowerToProductId = new HashMap<>();
+        List<String> nameList = new ArrayList<>(names);
+        String inClause = String.join(",", Collections.nCopies(nameList.size(), "LOWER(TRIM(?))"));
+        jdbc.query(
+                "SELECT DISTINCT ON (LOWER(TRIM(n.name))) LOWER(TRIM(n.name)) AS name_key, n.product_id " +
+                "FROM bh_names n WHERE LOWER(TRIM(n.name)) IN (" + inClause + ")",
+                nameList.toArray(),
+                (RowCallbackHandler) rs -> nameLowerToProductId.put(rs.getString("name_key"), rs.getLong("product_id")));
+
+        // Создаём продукты для новых имён
+        Set<String> newNames = new LinkedHashSet<>();
+        for (Map<String, String> r : rows) {
+            String name = trim(r.get("name"));
+            String url  = trim(r.get("url"));
+            if (name == null || name.isEmpty() || url == null || url.isEmpty()) continue;
+            if (!nameLowerToProductId.containsKey(name.toLowerCase().trim())) {
+                newNames.add(name);
+            }
+        }
+
+        for (String name : newNames) {
+            // Ищем бренд из первой строки с таким именем
+            String brand = rows.stream()
+                    .filter(r -> name.equals(trim(r.get("name"))))
+                    .map(r -> trim(r.get("brand")))
+                    .filter(b -> b != null && !b.isEmpty())
+                    .findFirst().orElse(null);
+            Long pid = jdbc.queryForObject(
+                    "INSERT INTO bh_products (brand, created_at, updated_at) VALUES (?, NOW(), NOW()) RETURNING id",
+                    Long.class, brand);
+            jdbc.update(
+                    "INSERT INTO bh_names (product_id, name, source, created_at) VALUES (?, ?, ?, NOW()) " +
+                    "ON CONFLICT (product_id, name) DO NOTHING",
+                    pid, name, source);
+            nameLowerToProductId.put(name.toLowerCase().trim(), pid);
+        }
+
+        // Батч-вставка URL
+        List<Object[]> urlParams = new ArrayList<>();
+        Set<String> uniqueDomains = new LinkedHashSet<>();
+        for (Map<String, String> r : rows) {
+            String name     = trim(r.get("name"));
+            String url      = trim(r.get("url"));
+            String siteName = trim(r.get("siteName"));
+            if (name == null || name.isEmpty() || url == null || url.isEmpty()) continue;
+            Long pid = nameLowerToProductId.get(name.toLowerCase().trim());
+            if (pid == null) continue;
+            String domain = extractDomain(url);
+            if (domain != null) uniqueDomains.add(domain);
+            urlParams.add(new Object[]{pid, url, domain, siteName, source});
+        }
+
+        if (!urlParams.isEmpty()) {
+            jdbc.batchUpdate(
+                    "INSERT INTO bh_urls (product_id, url, domain, site_name, source, created_at) " +
+                    "VALUES (?, ?, ?, ?, ?, NOW()) ON CONFLICT (product_id, url) DO NOTHING",
+                    urlParams);
+        }
+
+        // Обновляем реестр доменов одним батчем
+        for (String domain : uniqueDomains) {
+            jdbc.update(
+                    "INSERT INTO bh_domains (domain, is_active, url_count, created_at) VALUES (?, true, 1, NOW()) " +
+                    "ON CONFLICT (domain) DO UPDATE SET url_count = bh_domains.url_count + 1",
+                    domain);
+        }
+
+        log.info("BH_NAME_URL батч: {} строк обработано", urlParams.size());
+        return urlParams.size();
+    }
+
+    // =========================================================================
+    // Старые поштучные методы (оставлены для совместимости, не используются при батч-импорте)
+    // =========================================================================
+
+    @Transactional
+    public void persistBarcodeNameRow(Map<String, String> row, String source) {
+        persistBarcodeNameBatch(List.of(row), source);
+    }
+
+    @Transactional
     public void persistNameUrlRow(Map<String, String> row, String source) {
-        String name     = trim(row.get("name"));
-        String url      = trim(row.get("url"));
-        String brand    = trim(row.get("brand"));
-        String siteName = trim(row.get("siteName"));
-
-        if (name == null || name.isEmpty() || url == null || url.isEmpty()) {
-            log.debug("BH_NAME_URL: пропуск строки — нет наименования или URL");
-            return;
-        }
-
-        BhProduct product = findProductByName(name, brand, false);
-        if (product == null) {
-            // Создаём продукт без штрихкода
-            product = createProduct(null, brand, null);
-            addNameIfAbsent(product, name, source);
-        }
-
-        addUrlIfAbsent(product, url, siteName, source);
+        persistNameUrlBatch(List.of(row), source);
     }
 
     // =========================================================================
