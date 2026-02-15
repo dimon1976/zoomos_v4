@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.java.util.BarcodeUtils;
 
 /**
  * Основной сервис справочника штрихкодов.
@@ -52,15 +53,21 @@ public class BarcodeHandbookService {
     public int persistBarcodeNameBatch(List<Map<String, String>> rows, String source) {
         if (rows.isEmpty()) return 0;
 
-        // 1. Разделяем строки: со штрихкодом и без
+        // 1. Разворачиваем строки: один штрихкод из "a,b,c" → три отдельные записи
+        //    Строки без штрихкода идут в withoutBarcode
         List<Map<String, String>> withBarcode = new ArrayList<>();
         List<Map<String, String>> withoutBarcode = new ArrayList<>();
         for (Map<String, String> r : rows) {
             String name = trim(r.get("name"));
             if (name == null || name.isEmpty()) continue;
-            String barcode = trim(r.get("barcode"));
-            if (barcode != null && !barcode.isEmpty()) {
-                withBarcode.add(r);
+            String barcodeRaw = trim(r.get("barcode"));
+            if (barcodeRaw != null && !barcodeRaw.isEmpty()) {
+                // Разбиваем и нормализуем — каждый ШК как отдельная строка
+                for (String b : BarcodeUtils.parseAndNormalize(barcodeRaw)) {
+                    Map<String, String> expanded = new HashMap<>(r);
+                    expanded.put("barcode", b);
+                    withBarcode.add(expanded);
+                }
             } else {
                 withoutBarcode.add(r);
             }
@@ -70,11 +77,11 @@ public class BarcodeHandbookService {
 
         // 2. Обработка строк со штрихкодом
         if (!withBarcode.isEmpty()) {
-            // UPSERT продуктов по штрихкоду
+            // UPSERT продуктов по каждому штрихкоду
             List<Object[]> productParams = new ArrayList<>();
             for (Map<String, String> r : withBarcode) {
                 productParams.add(new Object[]{
-                        trim(r.get("barcode")),
+                        r.get("barcode"),
                         trim(r.get("brand")),
                         trim(r.get("manufacturerCode"))
                 });
@@ -90,7 +97,7 @@ public class BarcodeHandbookService {
 
             // Получаем id продуктов по штрихкодам
             List<String> barcodes = withBarcode.stream()
-                    .map(r -> trim(r.get("barcode")))
+                    .map(r -> r.get("barcode"))
                     .distinct().collect(Collectors.toList());
             String inClause = String.join(",", Collections.nCopies(barcodes.size(), "?"));
             Map<String, Long> barcodeToId = new HashMap<>();
@@ -99,10 +106,10 @@ public class BarcodeHandbookService {
                     barcodes.toArray(),
                     rs -> { barcodeToId.put(rs.getString("barcode"), rs.getLong("id")); });
 
-            // UPSERT наименований
+            // UPSERT наименований для каждого продукта
             List<Object[]> nameParams = new ArrayList<>();
             for (Map<String, String> r : withBarcode) {
-                Long pid = barcodeToId.get(trim(r.get("barcode")));
+                Long pid = barcodeToId.get(r.get("barcode"));
                 if (pid == null) continue;
                 String name = trim(r.get("name"));
                 if (name == null || name.isEmpty()) continue;
@@ -305,18 +312,21 @@ public class BarcodeHandbookService {
             throw new IllegalArgumentException("Не найдена колонка ID: " + config.getIdColumn());
         }
 
-        // --- Batch поиск по штрихкодам ---
-        List<String> barcodes = new ArrayList<>();
-        if (barcodeIdx >= 0) {
-            for (List<String> row : rows) {
-                String b = getCol(row, barcodeIdx);
-                if (b != null && !b.isEmpty()) barcodes.add(b);
-            }
+        // --- Batch поиск по штрихкодам (с нормализацией и разбивкой по запятой) ---
+        // rowBarcodes[i] = список нормализованных ШК для строки i (может быть пустым)
+        List<List<String>> rowBarcodes = new ArrayList<>();
+        List<String> allBarcodes = new ArrayList<>();
+        for (List<String> row : rows) {
+            List<String> bc = barcodeIdx >= 0
+                    ? BarcodeUtils.parseAndNormalize(getCol(row, barcodeIdx))
+                    : Collections.emptyList();
+            rowBarcodes.add(bc);
+            allBarcodes.addAll(bc);
         }
 
         Map<String, BhProduct> barcodeToProduct = new HashMap<>();
-        if (!barcodes.isEmpty()) {
-            productRepo.findByBarcodeIn(barcodes)
+        if (!allBarcodes.isEmpty()) {
+            productRepo.findByBarcodeIn(allBarcodes)
                     .forEach(p -> barcodeToProduct.put(p.getBarcode(), p));
         }
 
@@ -324,19 +334,24 @@ public class BarcodeHandbookService {
         Set<Long> productIds = new HashSet<>(barcodeToProduct.values()
                 .stream().map(BhProduct::getId).collect(Collectors.toSet()));
 
-        // Дополнительный поиск по именам для строк без штрихкода
+        // Дополнительный поиск по именам для строк, где штрихкод не дал результата
         List<Long> productIdsFromNames = new ArrayList<>();
         Map<String, BhProduct> nameToProduct = new HashMap<>();
         if (nameIdx >= 0) {
-            for (List<String> row : rows) {
-                String barcode = barcodeIdx >= 0 ? getCol(row, barcodeIdx) : null;
-                if (barcode != null && !barcode.isEmpty() && barcodeToProduct.containsKey(barcode)) continue;
+            for (int i = 0; i < rows.size(); i++) {
+                List<String> row = rows.get(i);
+                List<String> bcs = rowBarcodes.get(i);
+                // Пропускаем строку, если хотя бы один штрихкод найден в справочнике
+                boolean foundByBarcode = bcs.stream().anyMatch(barcodeToProduct::containsKey);
+                if (foundByBarcode) continue;
                 String name = getCol(row, nameIdx);
                 if (name == null || name.isEmpty()) continue;
+                String key = name.toLowerCase().trim();
+                if (nameToProduct.containsKey(key)) continue; // уже нашли
                 // Ленивый поиск — ищем по имени в БД
                 nameRepo.findByNameIgnoreCase(name).ifPresent(n -> {
                     BhProduct p = n.getProduct();
-                    nameToProduct.put(name.toLowerCase().trim(), p);
+                    nameToProduct.put(key, p);
                     productIdsFromNames.add(p.getId());
                 });
             }
@@ -364,14 +379,25 @@ public class BarcodeHandbookService {
         List<String[]> resultRows = new ArrayList<>();
         resultRows.add(new String[]{"ID", "Штрихкод", "Наименование", "Бренд", "Домен", "URL"});
 
-        for (List<String> row : rows) {
-            String id      = getCol(row, idIdx);
-            String barcode = barcodeIdx >= 0 ? getCol(row, barcodeIdx) : null;
-            String name    = nameIdx >= 0 ? getCol(row, nameIdx) : null;
+        for (int i = 0; i < rows.size(); i++) {
+            List<String> row = rows.get(i);
+            List<String> bcs = rowBarcodes.get(i);
 
+            String id   = getCol(row, idIdx);
+            String name = nameIdx >= 0 ? getCol(row, nameIdx) : null;
+            // Исходное (ненормализованное) значение штрихкода для отображения в результате
+            String rawBarcode = barcodeIdx >= 0 ? getCol(row, barcodeIdx) : null;
+
+            // Ищем продукт: сначала по нормализованным штрихкодам, потом по имени
             BhProduct product = null;
-            if (barcode != null && !barcode.isEmpty()) {
-                product = barcodeToProduct.get(barcode);
+            String foundBarcode = null; // нормализованный ШК, по которому нашли продукт
+            for (String bc : bcs) {
+                BhProduct p = barcodeToProduct.get(bc);
+                if (p != null) {
+                    product = p;
+                    foundBarcode = bc;
+                    break;
+                }
             }
             if (product == null && name != null && !name.isEmpty()) {
                 product = nameToProduct.get(name.toLowerCase().trim());
@@ -379,21 +405,32 @@ public class BarcodeHandbookService {
 
             if (product == null) {
                 // Не найдено — добавляем строку с пустыми URL
-                resultRows.add(new String[]{id, barcode != null ? barcode : "", name != null ? name : "", "", "", ""});
+                resultRows.add(new String[]{
+                        id,
+                        rawBarcode != null ? rawBarcode : "",
+                        name != null ? name : "",
+                        "", "", ""});
                 continue;
             }
 
+            // Для отображения штрихкода: предпочитаем найденный нормализованный ШК,
+            // иначе используем штрихкод из записи продукта
+            String displayBarcode = foundBarcode != null ? foundBarcode
+                    : (product.getBarcode() != null ? product.getBarcode() : "");
+
             List<BhUrl> productUrls = urlsByProduct.getOrDefault(product.getId(), Collections.emptyList());
             if (productUrls.isEmpty()) {
-                resultRows.add(new String[]{id,
-                        product.getBarcode() != null ? product.getBarcode() : "",
+                resultRows.add(new String[]{
+                        id,
+                        displayBarcode,
                         name != null ? name : "",
                         product.getBrand() != null ? product.getBrand() : "",
                         "", ""});
             } else {
                 for (BhUrl u : productUrls) {
-                    resultRows.add(new String[]{id,
-                            product.getBarcode() != null ? product.getBarcode() : "",
+                    resultRows.add(new String[]{
+                            id,
+                            displayBarcode,
                             name != null ? name : "",
                             product.getBrand() != null ? product.getBrand() : "",
                             u.getDomain() != null ? u.getDomain() : "",
