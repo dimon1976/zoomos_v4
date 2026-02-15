@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Справочник штрихкодов',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Справочник штрихкодов',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Справочник штрихкодов</title></head>
+
+<th:block th:fragment="styles"></th:block>
+<th:block th:fragment="pageActions"></th:block>
+<th:block th:fragment="scripts"></th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- Статистика -->
+    <div class="row mb-4" th:if="${stats}">
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-primary">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold text-primary" th:text="${stats.products}">0</div>
+                    <small class="text-muted">Продуктов</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-success">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold text-success" th:text="${stats.names}">0</div>
+                    <small class="text-muted">Наименований</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-info">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold text-info" th:text="${stats.urls}">0</div>
+                    <small class="text-muted">Ссылок</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-warning">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold text-warning" th:text="${stats.domains}">0</div>
+                    <small class="text-muted">Доменов</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Действия -->
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-file-import me-2 text-primary"></i>Импорт данных</h5>
+                    <p class="card-text text-muted">Добавление штрихкодов, наименований и ссылок через стандартный механизм импорта.</p>
+                    <a th:href="@{/handbook/import}" class="btn btn-primary">
+                        <i class="fas fa-info-circle me-1"></i>Инструкция по импорту
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-search me-2 text-success"></i>Поиск по справочнику</h5>
+                    <p class="card-text text-muted">Загрузите файл с ID и штрихкодами/наименованиями — получите ссылки из справочника.</p>
+                    <a th:href="@{/handbook/search}" class="btn btn-success">
+                        <i class="fas fa-search me-1"></i>Начать поиск
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-globe me-2 text-warning"></i>Управление доменами</h5>
+                    <p class="card-text text-muted">Просмотр и управление доменами сайтов. Включение/отключение доменов для фильтрации.</p>
+                    <a th:href="@{/handbook/domains}" class="btn btn-warning">
+                        <i class="fas fa-globe me-1"></i>Управление доменами
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+</th:block>
+</html>

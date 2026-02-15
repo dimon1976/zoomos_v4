@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Импорт в справочник',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Импорт в справочник',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Импорт в справочник</title></head>
+
+<th:block th:fragment="styles"></th:block>
+<th:block th:fragment="scripts"></th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/handbook}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <div class="row g-4">
+        <!-- Тип 1: штрихкод + наименование -->
+        <div class="col-md-6">
+            <div class="card border-primary h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-barcode me-2"></i>Тип: Штрихкод + Наименование
+                    <span class="badge bg-light text-primary ms-2 float-end">BH_BARCODE_NAME</span>
+                </div>
+                <div class="card-body">
+                    <p>Используется для загрузки базы штрихкодов с наименованиями.</p>
+                    <p><strong>Обязательные поля:</strong></p>
+                    <ul>
+                        <li><code>name</code> — Наименование товара</li>
+                    </ul>
+                    <p><strong>Дополнительные поля:</strong></p>
+                    <ul>
+                        <li><code>barcode</code> — Штрихкод (EAN-13)</li>
+                        <li><code>brand</code> — Бренд</li>
+                        <li><code>manufacturerCode</code> — Артикул производителя</li>
+                    </ul>
+                    <hr>
+                    <p class="text-muted small">Если штрихкод не указан — продукт создаётся без штрихкода и ищется по наименованию при дальнейшем импорте.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Тип 2: наименование + URL -->
+        <div class="col-md-6">
+            <div class="card border-success h-100">
+                <div class="card-header bg-success text-white">
+                    <i class="fas fa-link me-2"></i>Тип: Наименование + URL
+                    <span class="badge bg-light text-success ms-2 float-end">BH_NAME_URL</span>
+                </div>
+                <div class="card-body">
+                    <p>Используется для привязки ссылок на карточки товаров.</p>
+                    <p><strong>Обязательные поля:</strong></p>
+                    <ul>
+                        <li><code>name</code> — Наименование товара</li>
+                        <li><code>url</code> — Ссылка на карточку</li>
+                    </ul>
+                    <p><strong>Дополнительные поля:</strong></p>
+                    <ul>
+                        <li><code>brand</code> — Бренд (для уточнения совпадения)</li>
+                        <li><code>siteName</code> — Название сайта</li>
+                    </ul>
+                    <hr>
+                    <p class="text-muted small">Система автоматически определяет домен из URL и добавляет его в реестр доменов.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Инструкция по импорту -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <i class="fas fa-list-ol me-2"></i>Как импортировать данные
+        </div>
+        <div class="card-body">
+            <ol>
+                <li>Перейдите на главную страницу и выберите клиента</li>
+                <li>Нажмите <strong>"Новый импорт"</strong></li>
+                <li>Создайте шаблон импорта с типом <strong>BH_BARCODE_NAME</strong> или <strong>BH_NAME_URL</strong></li>
+                <li>Настройте маппинг колонок файла на поля справочника</li>
+                <li>Загрузите файл — данные автоматически попадут в справочник</li>
+            </ol>
+            <a th:href="@{/}" class="btn btn-primary">
+                <i class="fas fa-home me-1"></i>Перейти на главную
+            </a>
+        </div>
+    </div>
+
+</div>
+</th:block>
+</html>

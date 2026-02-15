@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Настройка поиска',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Настройка поиска по справочнику',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Настройка поиска</title></head>
+
+<th:block th:fragment="styles">
+    <style>
+        .domain-list { max-height: 280px; overflow-y: auto; }
+        .domain-item label { cursor: pointer; }
+        .search-result-item { padding: 4px 8px; cursor: pointer; }
+        .search-result-item:hover { background: #f0f0f0; }
+        .preview-table { font-size: 0.82em; }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/handbook/search}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid" th:if="${fileMetadata}">
+
+<form th:action="@{/handbook/search/process}" method="post" id="searchForm">
+
+    <div class="row g-3">
+
+        <!-- Колонка 1: Выбор колонок -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><i class="fas fa-columns me-2"></i>Маппинг колонок</div>
+                <div class="card-body">
+
+                    <!-- ID колонка -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">
+                            Колонка с ID <span class="text-danger">*</span>
+                        </label>
+                        <select name="idColumn" class="form-select" required>
+                            <option value="">-- Выберите --</option>
+                            <option th:each="h,i : ${fileMetadata.headers}"
+                                    th:value="${h}"
+                                    th:text="${h}">Колонка</option>
+                        </select>
+                    </div>
+
+                    <!-- Штрихкод -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Колонка со штрихкодом</label>
+                        <select name="barcodeColumn" class="form-select">
+                            <option value="">-- Не используется --</option>
+                            <option th:each="h : ${fileMetadata.headers}"
+                                    th:value="${h}"
+                                    th:text="${h}">Колонка</option>
+                        </select>
+                    </div>
+
+                    <!-- Наименование -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Колонка с наименованием</label>
+                        <select name="nameColumn" class="form-select">
+                            <option value="">-- Не используется --</option>
+                            <option th:each="h : ${fileMetadata.headers}"
+                                    th:value="${h}"
+                                    th:text="${h}">Колонка</option>
+                        </select>
+                    </div>
+
+                    <!-- Бренд -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Колонка с брендом (опционально)</label>
+                        <select name="brandColumn" class="form-select">
+                            <option value="">-- Не используется --</option>
+                            <option th:each="h : ${fileMetadata.headers}"
+                                    th:value="${h}"
+                                    th:text="${h}">Колонка</option>
+                        </select>
+                    </div>
+
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="requireBrandMatch"
+                               id="requireBrandMatch" value="true">
+                        <label class="form-check-label" for="requireBrandMatch">
+                            Требовать совпадение бренда при поиске по наименованию
+                        </label>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Колонка 2: Фильтр доменов + формат вывода -->
+        <div class="col-md-6">
+
+            <!-- Формат вывода -->
+            <div class="card mb-3">
+                <div class="card-header"><i class="fas fa-file-export me-2"></i>Формат результата</div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <label class="form-label">Формат файла</label>
+                            <select name="outputFormat" class="form-select" id="outputFormat">
+                                <option value="XLSX" selected>Excel (XLSX)</option>
+                                <option value="CSV">CSV</option>
+                            </select>
+                        </div>
+                        <div class="col-6" id="csvOptions" style="display:none;">
+                            <label class="form-label">Разделитель</label>
+                            <select name="csvDelimiter" class="form-select">
+                                <option value=";" selected>; (точка с запятой)</option>
+                                <option value=",">, (запятая)</option>
+                                <option value="&#9;">Tab</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Фильтр доменов -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-globe me-2"></i>Фильтр по доменам</span>
+                    <small class="text-muted">Пусто = все домены</small>
+                </div>
+                <div class="card-body p-2">
+
+                    <!-- Поиск доменов -->
+                    <div class="input-group input-group-sm mb-2">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" id="domainSearchInput" class="form-control"
+                               placeholder="Поиск домена...">
+                    </div>
+                    <!-- Результаты поиска -->
+                    <div id="domainSearchResults" class="border rounded mb-2 d-none"
+                         style="max-height:140px; overflow-y:auto; background:#fff;">
+                    </div>
+
+                    <!-- Разделитель -->
+                    <div class="text-muted small mb-1">Или выберите из полного списка:</div>
+
+                    <!-- Кнопки быстрого выбора -->
+                    <div class="mb-1">
+                        <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1"
+                                onclick="selectAllDomains(true)">Все</button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1"
+                                onclick="selectAllDomains(false)">Снять всё</button>
+                    </div>
+
+                    <!-- Полный список доменов -->
+                    <div class="domain-list border rounded p-1">
+                        <div th:if="${allDomains == null or allDomains.empty}" class="text-muted small p-2">
+                            Домены ещё не загружены. Импортируйте файлы с URL.
+                        </div>
+                        <div th:each="d : ${allDomains}" class="domain-item form-check"
+                             th:id="'domainItem_' + ${d.id}">
+                            <input class="form-check-input domain-checkbox" type="checkbox"
+                                   name="domainFilter"
+                                   th:value="${d.domain}"
+                                   th:id="'domain_' + ${d.id}"
+                                   th:disabled="${not d.isActive}">
+                            <label class="form-check-label small" th:for="'domain_' + ${d.id}">
+                                <span th:text="${d.domain}">example.com</span>
+                                <span class="text-muted ms-1" th:text="'(' + ${d.urlCount} + ')'"></span>
+                                <span th:if="${not d.isActive}" class="badge bg-secondary ms-1" style="font-size:0.7em">откл.</span>
+                            </label>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Превью файла -->
+    <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center"
+             data-bs-toggle="collapse" data-bs-target="#previewCollapse" style="cursor:pointer;">
+            <span><i class="fas fa-table me-2"></i>Превью файла (первые строки)</span>
+            <i class="fas fa-chevron-down"></i>
+        </div>
+        <div class="collapse" id="previewCollapse">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0 preview-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th th:each="h : ${fileMetadata.headers}" th:text="${h}">Колонка</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="row : ${fileMetadata.sampleData}">
+                                <td th:each="cell : ${row}" th:text="${cell}"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Кнопки -->
+    <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-success" id="processBtn">
+            <i class="fas fa-search me-1"></i>Найти и скачать результат
+        </button>
+        <form th:action="@{/handbook/search/cancel}" method="post" class="d-inline">
+            <button type="submit" class="btn btn-outline-secondary">
+                <i class="fas fa-times me-1"></i>Отмена
+            </button>
+        </form>
+    </div>
+
+</form>
+</div>
+
+<script>
+    // Переключение CSV-опций
+    document.getElementById('outputFormat').addEventListener('change', function() {
+        document.getElementById('csvOptions').style.display = this.value === 'CSV' ? 'block' : 'none';
+    });
+
+    // Выбрать/снять все домены
+    function selectAllDomains(checked) {
+        document.querySelectorAll('.domain-checkbox:not(:disabled)').forEach(cb => cb.checked = checked);
+    }
+
+    // Поиск доменов через AJAX
+    let searchTimer;
+    const searchInput = document.getElementById('domainSearchInput');
+    const searchResults = document.getElementById('domainSearchResults');
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimer);
+        const q = this.value.trim();
+        if (q.length < 1) { searchResults.classList.add('d-none'); return; }
+        searchTimer = setTimeout(() => fetchDomains(q), 300);
+    });
+
+    function fetchDomains(q) {
+        fetch('/handbook/domains/search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                searchResults.innerHTML = '';
+                if (data.length === 0) {
+                    searchResults.innerHTML = '<div class="px-2 py-1 text-muted small">Ничего не найдено</div>';
+                } else {
+                    data.forEach(d => {
+                        const div = document.createElement('div');
+                        div.className = 'search-result-item d-flex align-items-center gap-2';
+                        div.innerHTML = `
+                            <input type="checkbox" class="domain-checkbox-search form-check-input"
+                                   value="${d.domain}" ${d.isActive ? '' : 'disabled'}
+                                   id="sr_${d.id}">
+                            <label for="sr_${d.id}" class="small mb-0" style="cursor:pointer">
+                                ${d.domain} <span class="text-muted">(${d.urlCount})</span>
+                                ${!d.isActive ? '<span class="badge bg-secondary ms-1" style="font-size:0.7em">откл.</span>' : ''}
+                            </label>`;
+                        // Синхронизация с основным списком
+                        const mainCb = document.querySelector(`.domain-checkbox[value="${d.domain}"]`);
+                        if (mainCb) {
+                            div.querySelector('input').checked = mainCb.checked;
+                            div.querySelector('input').addEventListener('change', function() {
+                                if (mainCb) mainCb.checked = this.checked;
+                            });
+                        } else {
+                            // Домен не в основном списке — добавляем hidden input при выборе
+                            div.querySelector('input').addEventListener('change', function() {
+                                const existingHidden = document.getElementById('hidden_' + d.domain);
+                                if (this.checked) {
+                                    if (!existingHidden) {
+                                        const hidden = document.createElement('input');
+                                        hidden.type = 'hidden';
+                                        hidden.name = 'domainFilter';
+                                        hidden.value = d.domain;
+                                        hidden.id = 'hidden_' + d.domain;
+                                        document.getElementById('searchForm').appendChild(hidden);
+                                    }
+                                } else if (existingHidden) {
+                                    existingHidden.remove();
+                                }
+                            });
+                        }
+                        searchResults.appendChild(div);
+                    });
+                }
+                searchResults.classList.remove('d-none');
+            })
+            .catch(() => searchResults.classList.add('d-none'));
+    }
+
+    // Скрыть результаты поиска при клике вне области
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.classList.add('d-none');
+        }
+    });
+
+    // Валидация: хотя бы одна колонка поиска
+    document.getElementById('searchForm').addEventListener('submit', function(e) {
+        const barcode = document.querySelector('[name="barcodeColumn"]').value;
+        const name    = document.querySelector('[name="nameColumn"]').value;
+        if (!barcode && !name) {
+            e.preventDefault();
+            alert('Выберите хотя бы одну колонку для поиска: штрихкод или наименование.');
+        }
+    });
+</script>
+</th:block>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Поиск по справочнику',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Поиск по справочнику',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Поиск по справочнику</title></head>
+
+<th:block th:fragment="styles">
+    <link th:href="@{/css/upload.css}" rel="stylesheet">
+</th:block>
+
+<th:block th:fragment="scripts"></th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/handbook}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- Flash сообщения -->
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show">
+        <i class="fas fa-exclamation-triangle me-2"></i><span th:text="${error}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <i class="fas fa-upload me-2"></i>Загрузите файл для поиска
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Загрузите CSV или Excel файл, содержащий ID товаров и штрихкоды/наименования. Система найдёт соответствующие ссылки в справочнике.</p>
+
+            <form th:action="@{/handbook/search/upload}" method="post" enctype="multipart/form-data">
+                <div class="upload-area border border-dashed rounded p-4 text-center mb-3" id="uploadArea">
+                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">Перетащите файл сюда или нажмите для выбора</p>
+                    <input type="file" name="file" id="fileInput" class="d-none"
+                           accept=".csv,.xlsx,.xls">
+                    <label for="fileInput" class="btn btn-outline-primary">
+                        <i class="fas fa-folder-open me-1"></i>Выбрать файл
+                    </label>
+                    <div id="fileName" class="mt-2 text-success d-none">
+                        <i class="fas fa-file me-1"></i><span id="fileNameText"></span>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
+                    <i class="fas fa-arrow-right me-1"></i>Продолжить
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Подсказка по формату файла -->
+    <div class="card mt-3">
+        <div class="card-header">
+            <i class="fas fa-info-circle me-2"></i>Требования к файлу
+        </div>
+        <div class="card-body">
+            <p>Файл должен содержать строку заголовков. Поддерживаемые форматы: <strong>CSV, XLSX, XLS</strong>.</p>
+            <p><strong>Обязательные колонки:</strong></p>
+            <ul>
+                <li>Колонка с идентификатором строки (любое название, выбирается при настройке)</li>
+            </ul>
+            <p><strong>Дополнительные колонки (хотя бы одна из двух):</strong></p>
+            <ul>
+                <li>Штрихкод товара</li>
+                <li>Наименование товара</li>
+            </ul>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileName  = document.getElementById('fileName');
+    const fileNameText = document.getElementById('fileNameText');
+    const uploadArea = document.getElementById('uploadArea');
+
+    fileInput.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            fileNameText.textContent = this.files[0].name;
+            fileName.classList.remove('d-none');
+            uploadBtn.disabled = false;
+        }
+    });
+
+    uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('border-primary'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('border-primary'));
+    uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('border-primary');
+        if (e.dataTransfer.files.length > 0) {
+            fileInput.files = e.dataTransfer.files;
+            fileInput.dispatchEvent(new Event('change'));
+        }
+    });
+</script>
+</th:block>
+</html>

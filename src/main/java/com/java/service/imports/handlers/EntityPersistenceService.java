@@ -3,6 +3,7 @@ package com.java.service.imports.handlers;
 import com.java.model.entity.ImportSession;
 import com.java.model.enums.DataSourceType;
 import com.java.model.enums.EntityType;
+import com.java.service.handbook.BarcodeHandbookService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +31,7 @@ public class EntityPersistenceService {
 
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final JdbcTemplate jdbcTemplate;
+    private final BarcodeHandbookService barcodeHandbookService;
 
     // Трекинг сессий для однократной очистки AV_HANDBOOK
     private final Set<Long> clearedSessionsForHandbook = ConcurrentHashMap.newKeySet();
@@ -81,6 +84,10 @@ public class EntityPersistenceService {
                 return saveAvData(batch, session);
             case AV_HANDBOOK:
                 return saveAvHandbook(batch, session);
+            case BH_BARCODE_NAME:
+                return saveBhBarcodeNameBatch(batch, session);
+            case BH_NAME_URL:
+                return saveBhNameUrlBatch(batch, session);
             default:
                 throw new UnsupportedOperationException("Неподдерживаемый тип сущности: " + entityType);
         }
@@ -230,5 +237,47 @@ public class EntityPersistenceService {
         // DELETE FROM products WHERE import_session_id = ?
 
         log.info("Откат импорта завершен");
+    }
+
+    /**
+     * Сохраняет батч строк типа BH_BARCODE_NAME в справочник штрихкодов.
+     */
+    private int saveBhBarcodeNameBatch(List<Map<String, Object>> batch, ImportSession session) {
+        String source = session.getTemplate() != null ? session.getTemplate().getName() : "import";
+        int count = 0;
+        for (Map<String, Object> row : batch) {
+            Map<String, String> strRow = toStringMap(row);
+            barcodeHandbookService.persistBarcodeNameRow(strRow, source);
+            count++;
+        }
+        log.info("BH_BARCODE_NAME: сохранено {} строк", count);
+        return count;
+    }
+
+    /**
+     * Сохраняет батч строк типа BH_NAME_URL в справочник штрихкодов.
+     */
+    private int saveBhNameUrlBatch(List<Map<String, Object>> batch, ImportSession session) {
+        String source = session.getTemplate() != null ? session.getTemplate().getName() : "import";
+        int count = 0;
+        for (Map<String, Object> row : batch) {
+            Map<String, String> strRow = toStringMap(row);
+            barcodeHandbookService.persistNameUrlRow(strRow, source);
+            count++;
+        }
+        log.info("BH_NAME_URL: сохранено {} строк", count);
+        return count;
+    }
+
+    /**
+     * Конвертирует Map<String, Object> в Map<String, String> (безопасно).
+     */
+    private Map<String, String> toStringMap(Map<String, Object> source) {
+        Map<String, String> result = new HashMap<>();
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            Object val = entry.getValue();
+            result.put(entry.getKey(), val != null ? val.toString() : null);
+        }
+        return result;
     }
 }
