@@ -46,7 +46,7 @@
                         </label>
                         <select name="idColumn" class="form-select" required>
                             <option value="">-- Выберите --</option>
-                            <option th:each="h,i : ${fileMetadata.headers}"
+                            <option th:each="h,i : ${fileMetadata.columnHeaders}"
                                     th:value="${h}"
                                     th:text="${h}">Колонка</option>
                         </select>
@@ -57,7 +57,7 @@
                         <label class="form-label fw-semibold">Колонка со штрихкодом</label>
                         <select name="barcodeColumn" class="form-select">
                             <option value="">-- Не используется --</option>
-                            <option th:each="h : ${fileMetadata.headers}"
+                            <option th:each="h : ${fileMetadata.columnHeaders}"
                                     th:value="${h}"
                                     th:text="${h}">Колонка</option>
                         </select>
@@ -68,7 +68,7 @@
                         <label class="form-label fw-semibold">Колонка с наименованием</label>
                         <select name="nameColumn" class="form-select">
                             <option value="">-- Не используется --</option>
-                            <option th:each="h : ${fileMetadata.headers}"
+                            <option th:each="h : ${fileMetadata.columnHeaders}"
                                     th:value="${h}"
                                     th:text="${h}">Колонка</option>
                         </select>
@@ -79,7 +79,7 @@
                         <label class="form-label fw-semibold">Колонка с брендом (опционально)</label>
                         <select name="brandColumn" class="form-select">
                             <option value="">-- Не используется --</option>
-                            <option th:each="h : ${fileMetadata.headers}"
+                            <option th:each="h : ${fileMetadata.columnHeaders}"
                                     th:value="${h}"
                                     th:text="${h}">Колонка</option>
                         </select>
@@ -192,12 +192,12 @@
                     <table class="table table-sm table-bordered mb-0 preview-table">
                         <thead class="table-light">
                             <tr>
-                                <th th:each="h : ${fileMetadata.headers}" th:text="${h}">Колонка</th>
+                                <th th:each="h : ${fileMetadata.columnHeaders}" th:text="${h}">Колонка</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr th:each="row : ${fileMetadata.sampleData}">
-                                <td th:each="cell : ${row}" th:text="${cell}"></td>
+                                <td th:each="cell : ${row.values()}" th:text="${cell}"></td>
                             </tr>
                         </tbody>
                     </table>
