@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
@@ -385,8 +386,6 @@ public class BarcodeHandbookService {
 
             String id   = getCol(row, idIdx);
             String name = nameIdx >= 0 ? getCol(row, nameIdx) : null;
-            // Исходное (ненормализованное) значение штрихкода для отображения в результате
-            String rawBarcode = barcodeIdx >= 0 ? getCol(row, barcodeIdx) : null;
 
             // Ищем продукт: сначала по нормализованным штрихкодам, потом по имени
             BhProduct product = null;
@@ -404,13 +403,7 @@ public class BarcodeHandbookService {
             }
 
             if (product == null) {
-                // Не найдено — добавляем строку с пустыми URL
-                resultRows.add(new String[]{
-                        id,
-                        rawBarcode != null ? rawBarcode : "",
-                        name != null ? name : "",
-                        "", "", ""});
-                continue;
+                continue; // не найдено — пропускаем строку
             }
 
             // Для отображения штрихкода: предпочитаем найденный нормализованный ШК,
