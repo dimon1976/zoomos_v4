@@ -294,6 +294,7 @@ public class BarcodeHandbookService {
      * @param config    параметры поиска (колонки, фильтр доменов, формат вывода)
      * @return байты готового файла для скачивания
      */
+    @Transactional(readOnly = true)
     public byte[] searchAndExport(com.java.model.entity.FileMetadata metadata, BhSearchConfigDto config) throws IOException {
         // Читаем файл запроса (только данные, без заголовка)
         List<List<String>> rows = readFullFile(metadata);
@@ -627,14 +628,20 @@ public class BarcodeHandbookService {
     private List<List<String>> readCsvFile(Path path, FileMetadata metadata) throws IOException {
         List<List<String>> data = new ArrayList<>();
         String encoding = metadata.getDetectedEncoding() != null ? metadata.getDetectedEncoding() : "UTF-8";
-        String delimiter = metadata.getDetectedDelimiter() != null ? metadata.getDetectedDelimiter() : ";";
-        try (BufferedReader reader = Files.newBufferedReader(path, Charset.forName(encoding))) {
-            String line;
+        String delimStr = metadata.getDetectedDelimiter() != null ? metadata.getDetectedDelimiter() : ";";
+        char delim = delimStr.isEmpty() ? ';' : delimStr.charAt(0);
+        try (com.opencsv.CSVReader reader = new com.opencsv.CSVReaderBuilder(
+                Files.newBufferedReader(path, Charset.forName(encoding)))
+                .withCSVParser(new com.opencsv.CSVParserBuilder().withSeparator(delim).build())
+                .build()) {
+            String[] line;
             boolean isFirst = true;
-            while ((line = reader.readLine()) != null) {
+            while ((line = reader.readNext()) != null) {
                 if (isFirst) { isFirst = false; continue; }
-                data.add(Arrays.asList(line.split(delimiter, -1)));
+                data.add(Arrays.asList(line));
             }
+        } catch (com.opencsv.exceptions.CsvValidationException e) {
+            throw new IOException("Ошибка парсинга CSV: " + e.getMessage(), e);
         }
         return data;
     }

@@ -197,7 +197,8 @@
                         </thead>
                         <tbody>
                             <tr th:each="row : ${fileMetadata.sampleData}">
-                                <td th:each="cell : ${row.values()}" th:text="${cell}"></td>
+                                <td th:each="i : ${#numbers.sequence(0, fileMetadata.columnHeaders.size() - 1)}"
+                                    th:text="${row['column_' + i]}"></td>
                             </tr>
                         </tbody>
                     </table>

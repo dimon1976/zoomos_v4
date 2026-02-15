@@ -13,10 +13,10 @@ public interface BhUrlRepository extends JpaRepository<BhUrl, Long> {
 
     boolean existsByProductIdAndUrl(Long productId, String url);
 
-    @Query("SELECT u FROM BhUrl u WHERE u.product.id IN :productIds")
+    @Query("SELECT u FROM BhUrl u JOIN FETCH u.product WHERE u.product.id IN :productIds")
     List<BhUrl> findByProductIdIn(@Param("productIds") List<Long> productIds);
 
-    @Query("SELECT u FROM BhUrl u WHERE u.product.id IN :productIds AND u.domain IN :domains")
+    @Query("SELECT u FROM BhUrl u JOIN FETCH u.product WHERE u.product.id IN :productIds AND u.domain IN :domains")
     List<BhUrl> findByProductIdInAndDomainIn(
             @Param("productIds") List<Long> productIds,
             @Param("domains") List<String> domains
