@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Анализ выкачки',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Анализ выкачки',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Анализ выкачки</title></head>
+
+<th:block th:fragment="styles">
+    <style>
+        .city-ids-input {
+            font-size: 0.8em;
+            border: 1px solid transparent;
+            background: transparent;
+            width: 100%;
+            cursor: text;
+        }
+        .city-ids-input:focus {
+            border-color: #86b7fe;
+            background: #fff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
+            border-radius: 4px;
+            padding: 2px 4px;
+        }
+        .city-ids-input:hover:not(:focus) {
+            background: #f8f9fa;
+            border-color: #dee2e6;
+            border-radius: 4px;
+        }
+        .shop-card { margin-bottom: 1.5rem; }
+        .sync-status { font-size: 0.8em; }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions"></th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- Уведомления -->
+    <div th:if="${success}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="fas fa-check-circle me-2"></i><span th:text="${success}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="fas fa-exclamation-circle me-2"></i><span th:text="${error}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <!-- Форма добавления магазина -->
+    <div class="card mb-4">
+        <div class="card-header"><i class="fas fa-plus me-2"></i>Добавить магазин</div>
+        <div class="card-body">
+            <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Имя магазина на zoomos.by</label>
+                    <input type="text" name="shopName" class="form-control"
+                           placeholder="vitaexpress.ru" required autocomplete="off">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Добавить
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Список магазинов -->
+    <div th:if="${shops.empty}" class="text-muted text-center py-4">
+        <i class="fas fa-store fa-2x mb-2 d-block"></i>
+        Магазины не добавлены. Введите имя магазина выше.
+    </div>
+
+    <div th:each="shop : ${shops}" class="card shop-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <i class="fas fa-store me-2 text-primary"></i>
+                <strong th:text="${shop.shopName}">shop.ru</strong>
+                <span th:if="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
+                    <i class="fas fa-sync-alt me-1"></i>Обновлено:
+                    <span th:text="${#temporals.format(shop.lastSyncedAt, 'dd.MM.yyyy HH:mm')}"></span>
+                </span>
+                <span th:unless="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
+                    <i class="fas fa-clock me-1"></i>Не синхронизировано
+                </span>
+            </div>
+            <div class="d-flex gap-2">
+                <form th:action="@{'/zoomos/shops/' + ${shop.shopName} + '/sync'}" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-success"
+                            onclick="this.disabled=true; this.innerHTML='<i class=\'fas fa-spinner fa-spin me-1\'></i>Синхронизация...'; this.form.submit();">
+                        <i class="fas fa-sync-alt me-1"></i>Синхронизировать
+                    </button>
+                </form>
+                <form th:action="@{'/zoomos/shops/' + ${shop.id} + '/delete'}" method="post" class="d-inline"
+                      onsubmit="return confirm('Удалить магазин ' + this.dataset.name + '?')"
+                      th:data-name="${shop.shopName}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            <div th:with="entries=${cityIdsMap[shop.id]}">
+                <div th:if="${entries == null or entries.empty}" class="text-muted small p-3">
+                    Нет данных. Нажмите "Синхронизировать" для загрузки настроек.
+                </div>
+                <div th:unless="${entries == null or entries.empty}" class="table-responsive">
+                    <table class="table table-sm table-hover table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:40px" class="text-center">✓</th>
+                                <th>Сайт</th>
+                                <th>ID городов</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="entry : ${entries}"
+                                th:id="'row-' + ${entry.id}"
+                                th:classappend="${not entry.isActive} ? 'table-secondary text-muted' : ''">
+                                <td class="text-center">
+                                    <input type="checkbox"
+                                           class="form-check-input city-toggle"
+                                           th:checked="${entry.isActive}"
+                                           th:data-id="${entry.id}">
+                                </td>
+                                <td class="small align-middle" th:text="${entry.siteName}">site.ru</td>
+                                <td>
+                                    <input type="text"
+                                           class="form-control-plaintext city-ids-input"
+                                           th:value="${entry.cityIds}"
+                                           th:data-id="${entry.id}"
+                                           placeholder="ID не заданы">
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+    // Переключение чекбокса is_active
+    document.querySelectorAll('.city-toggle').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const id = this.dataset.id;
+            fetch('/zoomos/city-ids/' + id + '/toggle', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                        this.checked = !this.checked; // откат
+                    } else {
+                        const row = document.getElementById('row-' + id);
+                        if (data.isActive) {
+                            row.classList.remove('table-secondary', 'text-muted');
+                        } else {
+                            row.classList.add('table-secondary', 'text-muted');
+                        }
+                    }
+                })
+                .catch(() => { this.checked = !this.checked; });
+        });
+    });
+
+    // Редактирование city_ids — сохранение по blur или Enter
+    document.querySelectorAll('.city-ids-input').forEach(input => {
+        let originalValue = input.value;
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+            if (e.key === 'Escape') { this.value = originalValue; this.blur(); }
+        });
+
+        input.addEventListener('focus', function() {
+            originalValue = this.value;
+        });
+
+        input.addEventListener('blur', function() {
+            if (this.value === originalValue) return;
+            const id = this.dataset.id;
+            const newValue = this.value;
+
+            const fd = new FormData();
+            fd.append('cityIds', newValue);
+
+            fetch('/zoomos/city-ids/' + id + '/update', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        originalValue = newValue;
+                        this.style.borderColor = '#198754';
+                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+                    } else {
+                        alert('Ошибка сохранения: ' + (data.error || ''));
+                        this.value = originalValue;
+                    }
+                })
+                .catch(() => { this.value = originalValue; });
+        });
+    });
+</script>
+</th:block>
+</html>
