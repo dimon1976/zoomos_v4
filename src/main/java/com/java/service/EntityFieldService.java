@@ -28,6 +28,14 @@ public class EntityFieldService {
                 "handbookRetailNetworkCode", "handbookRetailNetwork", "handbookPhysicalAddress", "handbookPriceZoneCode", "handbookWebSite",
                 "handbookRegionCode", "handbookRegionName"
         ));
+
+        ENTITY_FIELDS.put(EntityType.BH_BARCODE_NAME, List.of(
+                "barcode", "name", "brand", "manufacturerCode"
+        ));
+
+        ENTITY_FIELDS.put(EntityType.BH_NAME_URL, List.of(
+                "name", "brand", "url", "siteName"
+        ));
     }
 
     public List<String> getFields(EntityType entityType) {
