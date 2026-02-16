@@ -33,6 +33,7 @@ mvn spring-boot:run -Dspring-boot.run.profiles=silent
 3. **Utilities** (`/utils`) - HTTP Redirect Finder, Data Merger, Barcode Match, URL Cleaner
 4. **Maintenance** (`/maintenance`) - Файловые операции, очистка БД, мониторинг системы
 5. **Statistics** (`/statistics/setup`) - Анализ и сравнение операций экспорта
+6. **Zoomos Check** (`/zoomos`) - Проверка выкачки: парсинг export.zoomos.by, вердикт по наличию товаров
 
 ### Быстрая проверка работоспособности
 ```bash
@@ -88,6 +89,7 @@ mvn flyway:info
 
 ### 2026-02
 
+- **Zoomos Check** — Проверка выкачки export.zoomos.by: парсинг истории через Playwright, вердикт готовности отчёта, сводка ИТ с копированием. Flyway V23+V24, 2 новые таблицы. См. секцию ниже.
 - **Barcode Handbook** - Справочник штрихкодов: накопление базы товаров (ШК+имена+ссылки) и обогащение рабочих файлов ссылками. Flyway V21, 4 таблицы, JDBC batch-импорт, поиск по ШК/имени/URL
 - **Import TimeoutException Fix** - Устранён TimeoutException при одновременном импорте нескольких файлов
 
@@ -882,6 +884,93 @@ Results page:
   Операция #123   | Операция #456   ← exportSessionId (уникальны)
   TASK-00008125   | TASK-00007969   ← Разные TASK-номера
 ```
+
+## Zoomos Check (Проверка выкачки)
+
+### Purpose
+Автоматическая проверка полноты выкачки данных с `export.zoomos.by` за выбранный период. Помогает быстро понять — можно ли отдавать отчёт клиенту или есть проблемы с наличием товаров.
+
+### URL
+- **Главная**: `/zoomos` — список магазинов, запуск проверки
+- **Результаты**: `/zoomos/check/results/{runId}` — вердикт + детали
+- **История**: `/zoomos/check/history` — все прошлые проверки
+
+### Database Schema (Flyway V23 + V24)
+```sql
+zoomos_check_runs  -- запись о каждой проверке
+  id, shop_id, date_from, date_to, status (RUNNING/COMPLETED/FAILED)
+  ok_count, warning_count, error_count, not_found_count
+  drop_threshold (default 10%), error_growth_threshold (default 30%)
+  started_at, completed_at
+
+zoomos_parsing_stats  -- одна строка из таблицы истории парсинга
+  id, check_run_id, site_name, city_name, server_name
+  start_time, finish_time, total_products, in_stock, error_count
+  completion_total, parsing_duration, check_type (API/ITEM)
+```
+
+### Логика оценки (`ZoomosCheckService.evaluateGroup`)
+
+Сравниваются только **последние две** выкачки (newest vs prev) — текущее состояние:
+
+| Условие | Статус |
+|---------|--------|
+| Падение "В наличии" > `dropThreshold`% | **ERROR** |
+| "В наличии": было >0, стало 0 | **ERROR** |
+| Рост ошибок парсинга > `errorGrowthThreshold`% | WARNING |
+| Падение числа товаров > `dropThreshold`% | WARNING |
+| Всегда нули в "В наличии" (особенность сайта) | OK (игнор) |
+
+**`canDeliver = false`** (нельзя отдавать отчёт) только при наличии ERROR или NOT_FOUND (нет данных за период).
+
+### Страница результатов (`check-results.html`)
+
+Четыре блока:
+1. **Вердикт** — зелёный "Отчёт готов" / красный "Есть проблемы", период, счётчики OK/Warn/Err
+2. **На что обратить внимание** — список issues, открыт если есть проблемы. Внизу — **текст для ИТ** с кнопкой копирования:
+   ```
+   site1.ru:
+     3612 - Нижний Новгород — В наличии: 500 → 0 (−100%)
+   site2.ru:
+     Нет данных за указанный период
+   ```
+3. **Детали по сайтам** — все свёрнуты, кнопки "Раскрыть всё" / "Свернуть всё". Внутри каждого сайта — подгруппы по городам с таблицей выкачек DESC по времени. Стрелки ↑↓ для изменений.
+4. **Графики динамики** — Chart.js, lazy load при первом раскрытии. Три dataset: Товаров / В наличии / Ошибки.
+
+### Ключевые файлы
+
+| Файл | Назначение |
+|------|-----------|
+| [ZoomosCheckService.java](src/main/java/com/java/service/ZoomosCheckService.java) | Playwright-парсинг, `evaluateGroup()`, WebSocket прогресс |
+| [ZoomosAnalysisController.java](src/main/java/com/java/controller/ZoomosAnalysisController.java) | `/zoomos/*` роуты, группировка по сайту, `itText`, `chartData` |
+| [ZoomosParserService.java](src/main/java/com/java/service/ZoomosParserService.java) | Управление магазинами и city_ids, синхронизация настроек |
+| [ZoomosCheckRun.java](src/main/java/com/java/model/entity/ZoomosCheckRun.java) | JPA entity проверки |
+| [ZoomosParsingStats.java](src/main/java/com/java/model/entity/ZoomosParsingStats.java) | JPA entity строки статистики |
+| [check-results.html](src/main/resources/templates/zoomos/check-results.html) | Страница результатов (4 блока) |
+| [index.html](src/main/resources/templates/zoomos/index.html) | Список магазинов + запуск проверки |
+| [V23__create_zoomos_check_tables.sql](src/main/resources/db/migration/V23__create_zoomos_check_tables.sql) | Flyway миграция |
+| [V24__add_check_thresholds.sql](src/main/resources/db/migration/V24__add_check_thresholds.sql) | Пороги dropThreshold/errorGrowthThreshold |
+
+### Технические детали
+
+**Парсинг** (Playwright headless Chrome):
+- URL: `{baseUrl}/shops-parser/{site}/parsing-history?dateFrom=DD.MM.YYYY&dateTo=DD.MM.YYYY`
+- API-тип: фильтрация по city IDs из настроек
+- ITEM-тип: + параметр `&shop={shopName}`
+- Авторизация через куки (`ZoomosSession`), автообновление при редиректе на `/login`
+
+**Inline JS данные для чартов**: передаются через `chartData` (List<Map>) — только примитивы, без JPA-объектов (иначе `LazyInitializationException`). `startTime` как epoch millis.
+
+**Даты**: localStorage с ключами `checkDateFrom-{shopId}` / `checkDateTo-{shopId}` — независимые для каждого магазина. После завершения проверки — автоматический редирект на `/zoomos/check/results/{runId}`.
+
+### Testing Status
+✅ Playwright-парсинг API и ITEM сайтов
+✅ Вердикт-блок (canDeliver логика)
+✅ Группировка по сайту → городу
+✅ Текст для ИТ с копированием
+✅ Графики Chart.js (lazy)
+✅ Авторедирект на результаты
+✅ Независимые даты по shopId
 
 ## Barcode Handbook (Справочник штрихкодов)
 
