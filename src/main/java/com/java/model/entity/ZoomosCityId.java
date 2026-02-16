@@ -31,6 +31,10 @@ public class ZoomosCityId {
     @Column(name = "city_ids", columnDefinition = "TEXT")
     private String cityIds;
 
+    @Column(name = "check_type")
+    @Builder.Default
+    private String checkType = "API";
+
     @Column(name = "is_active")
     @Builder.Default
     private Boolean isActive = true;

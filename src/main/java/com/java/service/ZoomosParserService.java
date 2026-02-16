@@ -92,6 +92,20 @@ public class ZoomosParserService {
     }
 
     /**
+     * Обновить тип проверки для строки (API / ITEM)
+     */
+    @Transactional
+    public ZoomosCityId updateCheckType(Long id, String checkType) {
+        if (!"API".equals(checkType) && !"ITEM".equals(checkType)) {
+            throw new IllegalArgumentException("Недопустимый тип: " + checkType);
+        }
+        ZoomosCityId entry = cityIdRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Запись не найдена: " + id));
+        entry.setCheckType(checkType);
+        return cityIdRepository.save(entry);
+    }
+
+    /**
      * Основной метод: парсинг страницы настроек магазина через Playwright
      */
     @Transactional

@@ -42,10 +42,16 @@
         .sync-status { font-size: 0.8em; }
         .city-ids-col { min-width: 200px; }
         .shop-card.hidden-by-search { display: none; }
+        .check-progress { font-size: 0.85em; }
+        .check-progress .progress { height: 18px; }
     </style>
 </th:block>
 
-<th:block th:fragment="pageActions"></th:block>
+<th:block th:fragment="pageActions">
+    <a th:href="@{/zoomos/check/history}" class="btn btn-sm btn-outline-info">
+        <i class="fas fa-history me-1"></i>История проверок
+    </a>
+</th:block>
 
 <th:block th:fragment="content">
 <div class="container-fluid">
@@ -60,13 +66,13 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 
-    <!-- Панель управления: добавление + поиск -->
+    <!-- Панель: добавление + поиск + период проверки -->
     <div class="card mb-4">
         <div class="card-header"><i class="fas fa-store me-2"></i>Управление магазинами</div>
         <div class="card-body">
             <div class="row g-3 align-items-end">
                 <!-- Форма добавления -->
-                <div class="col-md-5">
+                <div class="col-md-4">
                     <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
                         <div class="col">
                             <label class="form-label fw-semibold mb-1">Добавить магазин</label>
@@ -80,19 +86,17 @@
                         </div>
                     </form>
                 </div>
-                <!-- Поиск по имени -->
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold mb-1">Поиск по имени магазина</label>
+                <!-- Поиск -->
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold mb-1">Поиск</label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="fas fa-search"></i></span>
                         <input type="text" id="shopSearch" class="form-control"
-                               placeholder="Начните вводить имя...">
+                               placeholder="Имя магазина...">
                         <button class="btn btn-outline-secondary" type="button" id="clearSearch">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
-                </div>
-                <div class="col-auto">
                     <span id="searchCount" class="text-muted small"></span>
                 </div>
             </div>
@@ -106,7 +110,7 @@
     </div>
 
     <div th:each="shop : ${shops}" class="card shop-card"
-         th:data-shop-name="${shop.shopName}">
+         th:data-shop-name="${shop.shopName}" th:data-shop-id="${shop.id}">
         <div class="card-header d-flex justify-content-between align-items-center">
             <div>
                 <i class="fas fa-store me-2 text-primary"></i>
@@ -118,14 +122,13 @@
                 <span th:unless="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
                     <i class="fas fa-clock me-1"></i>Не синхронизировано
                 </span>
-                <!-- Ссылка на настройки на удалённом сайте -->
                 <a th:href="@{'https://export.zoomos.by/shop/' + ${shop.shopName} + '/settings'}"
                    target="_blank" class="ms-3 small text-decoration-none text-muted"
                    title="Открыть настройки на export.zoomos.by">
                     <i class="fas fa-external-link-alt"></i> настройки
                 </a>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 align-items-center">
                 <form th:action="@{'/zoomos/shops/' + ${shop.shopName} + '/sync'}" method="post" class="d-inline">
                     <button type="submit" class="btn btn-sm btn-success"
                             onclick="this.disabled=true; this.innerHTML='<i class=\'fas fa-spinner fa-spin me-1\'></i>Синхронизация...'; this.form.submit();">
@@ -139,6 +142,55 @@
                         <i class="fas fa-trash"></i>
                     </button>
                 </form>
+            </div>
+        </div>
+
+        <!-- Панель проверки: даты + пороги + кнопка -->
+        <div class="px-3 py-2 border-bottom d-flex align-items-center gap-2 bg-light flex-wrap">
+            <span class="small text-muted me-1"><i class="fas fa-calendar-alt me-1"></i>Проверка:</span>
+            <input type="date" class="form-control form-control-sm check-date-from"
+                   th:id="'dateFrom-' + ${shop.id}" style="width:140px;">
+            <span class="small text-muted">—</span>
+            <input type="date" class="form-control form-control-sm check-date-to"
+                   th:id="'dateTo-' + ${shop.id}" style="width:140px;">
+            <span class="small text-muted ms-2" title="Порог падения 'В наличии' (%)">Падение%</span>
+            <input type="number" class="form-control form-control-sm check-drop-threshold"
+                   th:id="'dropThreshold-' + ${shop.id}" value="10" min="1" max="100" style="width:60px;">
+            <span class="small text-muted" title="Порог роста ошибок (%)">Ошибки%</span>
+            <input type="number" class="form-control form-control-sm check-err-threshold"
+                   th:id="'errThreshold-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
+            <button type="button" class="btn btn-sm btn-outline-primary btn-run-check"
+                    th:data-shop-id="${shop.id}"
+                    title="Запустить проверку выкачки за выбранный период">
+                <i class="fas fa-search me-1"></i>Проверить
+            </button>
+        </div>
+
+        <!-- Мини-прогресс проверки (скрыт по умолчанию) -->
+        <div class="check-progress px-3 py-2 border-bottom" th:id="'check-progress-' + ${shop.id}" style="display:none;">
+            <div class="d-flex align-items-center gap-2">
+                <div class="flex-grow-1">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             th:id="'check-bar-' + ${shop.id}" style="width:0%">0%</div>
+                    </div>
+                </div>
+                <span class="text-muted small" th:id="'check-msg-' + ${shop.id}"></span>
+            </div>
+        </div>
+
+        <!-- Результат проверки (скрыт по умолчанию) -->
+        <div class="px-3 py-2 border-bottom bg-light" th:id="'check-result-' + ${shop.id}" style="display:none;">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <span class="fw-semibold small"><i class="fas fa-check-circle text-success me-1"></i>Проверка завершена</span>
+                <span class="badge bg-light text-dark border small" th:id="'result-period-' + ${shop.id}"></span>
+                <span class="badge bg-success" th:id="'result-ok-' + ${shop.id}">0 OK</span>
+                <span class="badge bg-warning text-dark" th:id="'result-warn-' + ${shop.id}">0 Warn</span>
+                <span class="badge bg-danger" th:id="'result-err-' + ${shop.id}">0 Error</span>
+                <span class="badge bg-secondary" th:id="'result-na-' + ${shop.id}">0 N/A</span>
+                <a href="#" class="btn btn-sm btn-outline-primary" th:id="'result-link-' + ${shop.id}">
+                    <i class="fas fa-table me-1"></i>Результаты
+                </a>
             </div>
         </div>
 
@@ -171,6 +223,7 @@
                                     <tr>
                                         <th style="width:40px" class="text-center">✓</th>
                                         <th style="width:200px">Сайт-конкурент</th>
+                                        <th style="width:130px" class="text-center">Тип проверки</th>
                                         <th class="city-ids-col">ID городов</th>
                                     </tr>
                                 </thead>
@@ -185,6 +238,14 @@
                                                    th:data-id="${entry.id}">
                                         </td>
                                         <td class="small align-middle" th:text="${entry.siteName}">site.ru</td>
+                                        <td class="text-center">
+                                            <select class="form-select form-select-sm check-type-select"
+                                                    th:data-id="${entry.id}"
+                                                    style="font-size:0.8em; padding:3px 24px 3px 8px;">
+                                                <option value="API" th:selected="${entry.checkType == 'API'}">API</option>
+                                                <option value="ITEM" th:selected="${entry.checkType == 'ITEM'}">ITEM</option>
+                                            </select>
+                                        </td>
                                         <td>
                                             <input type="text"
                                                    class="form-control-plaintext city-ids-input"
@@ -208,6 +269,30 @@
 
 <th:block th:fragment="scripts">
 <script>
+    // ---- Дата: независимые даты для каждого магазина, ключ в localStorage по shopId ----
+    function localDateStr(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    }
+    const todayStr = localDateStr(new Date());
+
+    document.querySelectorAll('.shop-card').forEach(card => {
+        const shopId = card.dataset.shopId;
+        if (!shopId) return;
+        const fromEl = document.getElementById('dateFrom-' + shopId);
+        const toEl   = document.getElementById('dateTo-' + shopId);
+        if (!fromEl || !toEl) return;
+
+        // Восстанавливаем сохранённые или ставим сегодня
+        fromEl.value = localStorage.getItem('checkDateFrom-' + shopId) || todayStr;
+        toEl.value   = localStorage.getItem('checkDateTo-' + shopId)   || todayStr;
+
+        fromEl.addEventListener('change', () => localStorage.setItem('checkDateFrom-' + shopId, fromEl.value));
+        toEl.addEventListener('change',   () => localStorage.setItem('checkDateTo-' + shopId,   toEl.value));
+    });
+
     // ---- Collapse кнопка: обновление текста ----
     document.querySelectorAll('.collapse-toggle').forEach(btn => {
         const targetId = btn.getAttribute('data-bs-target');
@@ -271,6 +356,26 @@
         });
     });
 
+    // ---- Переключение check_type (API/ITEM) ----
+    document.querySelectorAll('.check-type-select').forEach(sel => {
+        sel.addEventListener('change', function() {
+            const id = this.dataset.id;
+            const fd = new FormData();
+            fd.append('checkType', this.value);
+            fetch('/zoomos/city-ids/' + id + '/check-type', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    } else {
+                        this.style.borderColor = '#198754';
+                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+                    }
+                })
+                .catch(() => alert('Ошибка сети'));
+        });
+    });
+
     // ---- Редактирование city_ids — сохранение по blur или Enter ----
     document.querySelectorAll('.city-ids-input').forEach(input => {
         let originalValue = input.value;
@@ -307,6 +412,179 @@
                 })
                 .catch(() => { this.value = originalValue; });
         });
+    });
+
+    // ==================================================================
+    // Запуск проверки выкачки из карточки клиента
+    // ==================================================================
+
+    document.querySelectorAll('.btn-run-check').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const dateFrom = document.getElementById('dateFrom-' + shopId).value;
+            const dateTo = document.getElementById('dateTo-' + shopId).value;
+            const dropThreshold = document.getElementById('dropThreshold-' + shopId).value || '10';
+            const errThreshold = document.getElementById('errThreshold-' + shopId).value || '30';
+
+            if (!dateFrom || !dateTo) {
+                alert('Укажите период проверки');
+                return;
+            }
+
+            // Блокируем кнопку
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Запуск...';
+
+            // Показываем прогресс, скрываем старый результат
+            const progressEl = document.getElementById('check-progress-' + shopId);
+            const resultEl = document.getElementById('check-result-' + shopId);
+            const barEl = document.getElementById('check-bar-' + shopId);
+            const msgEl = document.getElementById('check-msg-' + shopId);
+            progressEl.style.display = 'block';
+            resultEl.style.display = 'none';
+            barEl.style.width = '0%';
+            barEl.textContent = '0%';
+            barEl.classList.remove('bg-success', 'bg-danger');
+            barEl.classList.add('progress-bar-animated');
+            msgEl.textContent = 'Запуск...';
+
+            const fd = new FormData();
+            fd.append('shopId', shopId);
+            fd.append('dateFrom', dateFrom);
+            fd.append('dateTo', dateTo);
+            fd.append('dropThreshold', dropThreshold);
+            fd.append('errorGrowthThreshold', errThreshold);
+
+            const btnRef = this;
+
+            fetch('/zoomos/check/run', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        subscribeToCheck(shopId, data.operationId, btnRef);
+                    } else {
+                        msgEl.textContent = 'Ошибка: ' + (data.error || 'неизвестная');
+                        barEl.classList.remove('progress-bar-animated');
+                        barEl.classList.add('bg-danger');
+                        resetCheckBtn(btnRef);
+                    }
+                })
+                .catch(err => {
+                    msgEl.textContent = 'Ошибка сети: ' + err.message;
+                    barEl.classList.remove('progress-bar-animated');
+                    barEl.classList.add('bg-danger');
+                    resetCheckBtn(btnRef);
+                });
+        });
+    });
+
+    function resetCheckBtn(btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-search me-1"></i>Проверить';
+    }
+
+    function subscribeToCheck(shopId, operationId, btn) {
+        const barEl = document.getElementById('check-bar-' + shopId);
+        const msgEl = document.getElementById('check-msg-' + shopId);
+        const progressEl = document.getElementById('check-progress-' + shopId);
+        const resultEl = document.getElementById('check-result-' + shopId);
+
+        const socket = new SockJS('/ws');
+        const stompClient = Stomp.over(socket);
+        stompClient.debug = null;
+
+        stompClient.connect({}, function() {
+            msgEl.textContent = 'Подключено...';
+
+            stompClient.subscribe('/topic/zoomos-check/' + operationId, function(msg) {
+                const data = JSON.parse(msg.body);
+                const pct = data.percent || 0;
+                barEl.style.width = pct + '%';
+                barEl.textContent = pct + '%';
+                msgEl.textContent = data.message || '';
+
+                // Завершено — сразу переходим на страницу результатов
+                if (data.message && data.message.includes('завершена')) {
+                    barEl.classList.remove('progress-bar-animated');
+                    barEl.classList.add('bg-success');
+                    barEl.style.width = '100%';
+                    barEl.textContent = '100%';
+                    msgEl.textContent = 'Переход на результаты...';
+                    stompClient.disconnect();
+
+                    // Небольшая задержка чтобы пользователь увидел 100%, затем редирект
+                    setTimeout(() => {
+                        fetch('/zoomos/check/latest?shopId=' + shopId)
+                            .then(r => r.json())
+                            .then(d => {
+                                if (d.runId && d.runId > 0) {
+                                    window.location.href = '/zoomos/check/results/' + d.runId;
+                                } else {
+                                    resetCheckBtn(btn);
+                                }
+                            })
+                            .catch(() => { resetCheckBtn(btn); });
+                    }, 800);
+                }
+
+                if (data.message && data.message.includes('Ошибка')) {
+                    barEl.classList.remove('progress-bar-animated');
+                    barEl.classList.add('bg-danger');
+                    resetCheckBtn(btn);
+                    stompClient.disconnect();
+                }
+            });
+        }, function() {
+            msgEl.textContent = 'Ошибка WebSocket';
+            resetCheckBtn(btn);
+        });
+    }
+
+    function fetchCheckResult(shopId, progressEl, resultEl) {
+        fetch('/zoomos/check/latest?shopId=' + shopId)
+            .then(r => r.json())
+            .then(data => {
+                if (data.runId && data.runId > 0) {
+                    showCheckResult(shopId, data);
+                    if (progressEl) progressEl.style.display = 'none';
+                    if (resultEl) resultEl.style.display = 'block';
+                }
+            })
+            .catch(() => {});
+    }
+
+    function fmtDate(iso) {
+        if (!iso) return '';
+        const [y, m, d] = iso.split('-');
+        return d + '.' + m;
+    }
+
+    function showCheckResult(shopId, data) {
+        document.getElementById('result-ok-' + shopId).textContent = (data.okCount || 0) + ' OK';
+        document.getElementById('result-warn-' + shopId).textContent = (data.warningCount || 0) + ' Warn';
+        document.getElementById('result-err-' + shopId).textContent = (data.errorCount || 0) + ' Error';
+        document.getElementById('result-na-' + shopId).textContent = (data.notFoundCount || 0) + ' N/A';
+        const periodEl = document.getElementById('result-period-' + shopId);
+        if (periodEl && data.dateFrom && data.dateTo) {
+            periodEl.textContent = fmtDate(data.dateFrom) + ' — ' + fmtDate(data.dateTo);
+            periodEl.style.display = '';
+        }
+        document.getElementById('result-link-' + shopId).href = '/zoomos/check/results/' + data.runId;
+        document.getElementById('check-result-' + shopId).style.display = 'block';
+    }
+
+    // ---- Загрузка сводки последней проверки при открытии страницы ----
+    document.querySelectorAll('.shop-card').forEach(card => {
+        const shopId = card.dataset.shopId;
+        if (!shopId) return;
+        fetch('/zoomos/check/latest?shopId=' + shopId)
+            .then(r => r.json())
+            .then(data => {
+                if (data.runId && data.runId > 0) {
+                    showCheckResult(shopId, data);
+                }
+            })
+            .catch(() => {});
     });
 </script>
 </th:block>

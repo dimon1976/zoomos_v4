@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='История проверок',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='История проверок',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>История проверок</title></head>
+
+<th:block th:fragment="styles"></th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/zoomos/check}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <div th:if="${runs.empty}" class="text-muted text-center py-4">
+        <i class="fas fa-history fa-2x mb-2 d-block"></i>
+        Проверок ещё не было. Перейдите на страницу проверки.
+    </div>
+
+    <div th:unless="${runs.empty}" class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover table-bordered mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center">#</th>
+                            <th>Клиент</th>
+                            <th class="text-center">Период</th>
+                            <th class="text-center">Статус</th>
+                            <th class="text-center">Сайтов</th>
+                            <th class="text-center text-success">OK</th>
+                            <th class="text-center text-warning">Warn</th>
+                            <th class="text-center text-danger">Error</th>
+                            <th class="text-center text-secondary">N/A</th>
+                            <th class="text-center">Дата</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="r : ${runs}">
+                            <td class="text-center" th:text="${r.id}">1</td>
+                            <td th:text="${r.shop.shopName}">shop.ru</td>
+                            <td class="text-center small">
+                                <span th:text="${#temporals.format(r.dateFrom, 'dd.MM.yy')}"></span> —
+                                <span th:text="${#temporals.format(r.dateTo, 'dd.MM.yy')}"></span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge"
+                                      th:classappend="${r.status == 'COMPLETED'} ? 'bg-success' : (${r.status == 'FAILED'} ? 'bg-danger' : 'bg-warning')"
+                                      th:text="${r.status}">OK</span>
+                            </td>
+                            <td class="text-center" th:text="${r.totalSites}">0</td>
+                            <td class="text-center" th:text="${r.okCount}">0</td>
+                            <td class="text-center" th:text="${r.warningCount}">0</td>
+                            <td class="text-center" th:text="${r.errorCount}">0</td>
+                            <td class="text-center" th:text="${r.notFoundCount}">0</td>
+                            <td class="text-center small"
+                                th:text="${r.startedAt != null} ? ${#temporals.format(r.startedAt, 'dd.MM.yy HH:mm')} : ''"></td>
+                            <td class="text-center">
+                                <a th:href="@{'/zoomos/check/results/' + ${r.id}}"
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+</th:block>
+
+<th:block th:fragment="scripts"></th:block>
+</html>
