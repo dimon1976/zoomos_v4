@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -167,6 +168,78 @@ public class ZoomosParserService {
         } catch (Exception e) {
             log.error("Ошибка синхронизации {}: {}", shopName, e.getMessage(), e);
             throw new RuntimeException("Ошибка синхронизации: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Загружает список сайтов со страницы матчинга и добавляет новые в zoomos_city_ids.
+     * Существующие записи не затрагиваются.
+     */
+    @Transactional
+    public String syncFromMatchingPage(String shopName) {
+        ZoomosShop shop = shopRepository.findByShopName(shopName.trim().toLowerCase())
+                .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopName));
+
+        log.info("Синхронизация сайтов из матчинга для: {}", shopName);
+
+        try (Playwright playwright = Playwright.create()) {
+            Browser browser = playwright.chromium().launch(
+                    new BrowserType.LaunchOptions().setHeadless(true));
+            BrowserContext context = browser.newContext(
+                    new Browser.NewContextOptions().setViewportSize(1920, 1080));
+            context.setDefaultTimeout(config.getTimeoutSeconds() * 1000L);
+
+            if (!loadSession(context)) {
+                login(context);
+            }
+
+            Page page = context.newPage();
+            String url = config.getBaseUrl() + "/shop/" + shopName + "/sites-items-mapping"
+                    + "?upd=" + System.currentTimeMillis();
+            page.navigate(url);
+            page.waitForLoadState(LoadState.NETWORKIDLE);
+
+            if (page.url().contains("/login")) {
+                login(context);
+                page.navigate(url);
+                page.waitForLoadState(LoadState.NETWORKIDLE);
+            }
+            saveSession(context);
+
+            // Извлекаем все option.value из select[name="site"] (кроме пустых)
+            @SuppressWarnings("unchecked")
+            List<String> siteNames = (List<String>) page.evaluate(
+                    "() => Array.from(document.querySelectorAll('select[name=\"site\"] option'))" +
+                    ".filter(o => o.value).map(o => o.value)");
+
+            page.close();
+            browser.close();
+
+            if (siteNames == null || siteNames.isEmpty()) {
+                return "Сайты на странице матчинга не найдены";
+            }
+
+            // Добавляем только новые сайты
+            Map<String, ZoomosCityId> existing = cityIdRepository.findByShopIdOrderBySiteName(shop.getId())
+                    .stream().collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c));
+
+            int added = 0;
+            for (String siteName : siteNames) {
+                if (!existing.containsKey(siteName)) {
+                    String checkType = knownSiteRepository.findBySiteName(siteName)
+                            .map(ZoomosKnownSite::getCheckType).orElse("ITEM");
+                    cityIdRepository.save(ZoomosCityId.builder()
+                            .shop(shop).siteName(siteName).checkType(checkType).build());
+                    added++;
+                }
+            }
+
+            log.info("Из матчинга: найдено={}, добавлено={} для {}", siteNames.size(), added, shopName);
+            return "Добавлено " + added + " новых сайтов из " + siteNames.size() + " найденных на странице матчинга";
+
+        } catch (Exception e) {
+            log.error("Ошибка синхронизации из матчинга {}: {}", shopName, e.getMessage(), e);
+            throw new RuntimeException("Ошибка: " + e.getMessage(), e);
         }
     }
 

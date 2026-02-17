@@ -96,6 +96,18 @@ public class ZoomosAnalysisController {
         return "redirect:/zoomos";
     }
 
+    @PostMapping("/shops/{shopName}/sync-from-matching")
+    public String syncFromMatching(@PathVariable String shopName, RedirectAttributes ra) {
+        try {
+            String result = parserService.syncFromMatchingPage(shopName);
+            ra.addFlashAttribute("success", result);
+        } catch (Exception e) {
+            log.error("Ошибка синхронизации из матчинга {}", shopName, e);
+            ra.addFlashAttribute("error", "Ошибка: " + e.getMessage());
+        }
+        return "redirect:/zoomos";
+    }
+
     // =========================================================================
     // AJAX: управление city_ids
     // =========================================================================
@@ -136,6 +148,17 @@ public class ZoomosAnalysisController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
         }
+    }
+
+    @PostMapping("/city-ids/{id}/update-addresses")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> updateAddressIds(@PathVariable Long id,
+                                                                 @RequestParam(required = false) String addressIds) {
+        return cityIdRepository.findById(id).map(entry -> {
+            entry.setAddressIds(addressIds != null && !addressIds.isBlank() ? addressIds.trim() : null);
+            cityIdRepository.save(entry);
+            return ResponseEntity.ok(Map.<String, Object>of("success", true));
+        }).orElse(ResponseEntity.notFound().<Map<String, Object>>build());
     }
 
     // =========================================================================

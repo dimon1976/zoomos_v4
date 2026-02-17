@@ -236,8 +236,9 @@ public class ZoomosCheckService {
         page.navigate(url);
         page.waitForLoadState(LoadState.NETWORKIDLE);
 
-        // Собираем все допустимые city ID для фильтрации
+        // Собираем все допустимые city ID и address ID для фильтрации
         Set<String> allowedCityIds = new HashSet<>();
+        Set<String> allowedAddressIds = new HashSet<>();
         Map<String, ZoomosCityId> cityIdMap = new HashMap<>();
         for (ZoomosCityId entry : cityIdEntries) {
             if (entry.getCityIds() != null && !entry.getCityIds().isBlank()) {
@@ -249,10 +250,16 @@ public class ZoomosCheckService {
                     }
                 }
             }
+            if (entry.getAddressIds() != null && !entry.getAddressIds().isBlank()) {
+                for (String aid : entry.getAddressIds().split(",")) {
+                    String trimmed = aid.trim();
+                    if (!trimmed.isEmpty()) allowedAddressIds.add(trimmed);
+                }
+            }
         }
 
         // Для API-сайтов берём только глобальные выкачки (поле "Клиент" пустое)
-        return parseTable(page, run, siteName, "API", allowedCityIds, cityIdMap).stream()
+        return parseTable(page, run, siteName, "API", allowedCityIds, cityIdMap, allowedAddressIds).stream()
                 .filter(s -> s.getClientName() == null || s.getClientName().isBlank())
                 .collect(Collectors.toList());
     }
@@ -277,6 +284,7 @@ public class ZoomosCheckService {
         page.waitForLoadState(LoadState.NETWORKIDLE);
 
         Set<String> allowedCityIds = new HashSet<>();
+        Set<String> allowedAddressIds = new HashSet<>();
         Map<String, ZoomosCityId> cityIdMap = new HashMap<>();
         for (ZoomosCityId entry : cityIdEntries) {
             if (entry.getCityIds() != null && !entry.getCityIds().isBlank()) {
@@ -288,9 +296,15 @@ public class ZoomosCheckService {
                     }
                 }
             }
+            if (entry.getAddressIds() != null && !entry.getAddressIds().isBlank()) {
+                for (String aid : entry.getAddressIds().split(",")) {
+                    String trimmed = aid.trim();
+                    if (!trimmed.isEmpty()) allowedAddressIds.add(trimmed);
+                }
+            }
         }
 
-        return parseTable(page, run, siteName, "ITEM", allowedCityIds, cityIdMap);
+        return parseTable(page, run, siteName, "ITEM", allowedCityIds, cityIdMap, allowedAddressIds);
     }
 
     // =========================================================================
@@ -316,6 +330,7 @@ public class ZoomosCheckService {
         page.waitForLoadState(LoadState.NETWORKIDLE);
 
         Set<String> allowedCityIds = new HashSet<>();
+        Set<String> allowedAddressIds = new HashSet<>();
         Map<String, ZoomosCityId> cityIdMap = new HashMap<>();
         if (cid.getCityIds() != null && !cid.getCityIds().isBlank()) {
             for (String id : cid.getCityIds().split(",")) {
@@ -326,8 +341,14 @@ public class ZoomosCheckService {
                 }
             }
         }
+        if (cid.getAddressIds() != null && !cid.getAddressIds().isBlank()) {
+            for (String aid : cid.getAddressIds().split(",")) {
+                String trimmed = aid.trim();
+                if (!trimmed.isEmpty()) allowedAddressIds.add(trimmed);
+            }
+        }
 
-        List<ZoomosParsingStats> stats = parseTable(page, run, siteName, checkType, allowedCityIds, cityIdMap);
+        List<ZoomosParsingStats> stats = parseTable(page, run, siteName, checkType, allowedCityIds, cityIdMap, allowedAddressIds);
         // Для API — только глобальные выкачки (без клиента)
         if ("API".equals(checkType)) {
             stats = stats.stream()
@@ -347,7 +368,8 @@ public class ZoomosCheckService {
     private List<ZoomosParsingStats> parseTable(Page page, ZoomosCheckRun run,
                                                  String defaultSiteName, String checkType,
                                                  Set<String> allowedCityIds,
-                                                 Map<String, ZoomosCityId> cityIdMap) {
+                                                 Map<String, ZoomosCityId> cityIdMap,
+                                                 Set<String> allowedAddressIds) {
         List<ZoomosParsingStats> results = new ArrayList<>();
 
         // Извлекаем все данные таблицы одним вызовом JS в браузере,
@@ -404,10 +426,19 @@ public class ZoomosCheckService {
                 String siteName = (site != null && !site.isEmpty()) ? site : defaultSiteName;
                 if (siteName == null) continue;
 
-                String cityId = extractCityId(city);
+                String addressRaw = getCellValue(cells, colIndex, "адрес");
+                String addressId  = extractAddressId(addressRaw);
+                String cityId     = extractCityId(city);
 
-                if (!allowedCityIds.isEmpty() && cityId != null && !allowedCityIds.contains(cityId)) {
-                    continue;
+                // Фильтрация: если заданы addressIds — фильтруем по адресу; иначе по cityId
+                if (!allowedAddressIds.isEmpty()) {
+                    if (addressId == null || !allowedAddressIds.contains(addressId)) {
+                        continue;
+                    }
+                } else if (!allowedCityIds.isEmpty()) {
+                    if (cityId != null && !allowedCityIds.contains(cityId)) {
+                        continue;
+                    }
                 }
 
                 ZoomosCityId cityIdRef = cityId != null ? cityIdMap.get(cityId) : null;
@@ -426,6 +457,7 @@ public class ZoomosCheckService {
                         .cityName(city)
                         .serverName(server)
                         .clientName(clientName)
+                        .addressId(addressId)
                         .startTime(startTime)
                         .finishTime(finishTime)
                         .updatedTime(parseDateTime(updatedStr))
@@ -482,6 +514,17 @@ public class ZoomosCheckService {
         if (idx == null || idx >= cells.size()) return null;
         String text = cells.get(idx);
         return (text == null || text.isEmpty()) ? null : text;
+    }
+
+    private String extractAddressId(String addressStr) {
+        if (addressStr == null || addressStr.isEmpty()) return null;
+        // "[14342] Братск, Ленина пр-кт, 7" → "14342"
+        String trimmed = addressStr.trim();
+        if (trimmed.startsWith("[")) {
+            int close = trimmed.indexOf("]");
+            if (close > 1) return trimmed.substring(1, close).trim();
+        }
+        return null;
     }
 
     private String extractCityId(String cityStr) {
