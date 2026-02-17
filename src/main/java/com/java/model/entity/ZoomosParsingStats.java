@@ -81,6 +81,9 @@ public class ZoomosParsingStats {
     @Column(name = "address_id")
     private String addressId;    // "14342" — ID адреса из колонки Адрес: "[14342] Братск..."
 
+    @Column(name = "address_name", columnDefinition = "TEXT")
+    private String addressName;  // "[14342] Братск, Ленина пр-кт, 7" — полная строка адреса
+
     @Column(name = "updated_time")
     private ZonedDateTime updatedTime;
 

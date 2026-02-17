@@ -236,10 +236,16 @@ public class ZoomosAnalysisController {
         int dropThreshold = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
         int errorGrowthThreshold = run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30;
 
-        // Группируем по site+city для оценки динамики
+        // Группируем по site+city+address для оценки динамики.
+        // Строки с addressId → отдельная группа внутри города (address-level проверка).
         Map<String, List<ZoomosParsingStats>> bySiteCity = stats.stream()
-                .collect(Collectors.groupingBy(s ->
-                        s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")));
+                .collect(Collectors.groupingBy(s -> {
+                    String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
+                    if (s.getAddressId() != null && !s.getAddressId().isBlank()) {
+                        key += "|" + s.getAddressId();
+                    }
+                    return key;
+                }));
 
         List<Map<String, Object>> issues = new ArrayList<>();
 
@@ -309,10 +315,13 @@ public class ZoomosAnalysisController {
         List<Map<String, Object>> groups = new ArrayList<>();
 
         bySite.forEach((siteName, siteStats) -> {
-            // Худший статус по всем city в этом сайте
+            // Худший статус по всем city в этом сайте (с учётом addressId в ключе)
             String worstStatus = siteStats.stream()
-                    .map(s -> siteCityStatuses.getOrDefault(
-                            s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : ""), "OK"))
+                    .map(s -> {
+                        String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
+                        if (s.getAddressId() != null && !s.getAddressId().isBlank()) key += "|" + s.getAddressId();
+                        return siteCityStatuses.getOrDefault(key, "OK");
+                    })
                     .min(Comparator.comparingInt(st -> "ERROR".equals(st) ? 0 : "WARNING".equals(st) ? 1 : 2))
                     .orElse("OK");
 
@@ -330,11 +339,55 @@ public class ZoomosAnalysisController {
                 cityStats.sort(Comparator.comparing(
                         (ZoomosParsingStats s) -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now())
                         .reversed());
-                String cityStatus = siteCityStatuses.getOrDefault(siteName + "|" + cityName, "OK");
+
+                // Подгруппируем по addressId внутри города
+                // "" — строки без адреса (city-level), остальные — отдельные адреса
+                Map<String, List<ZoomosParsingStats>> byAddress = new LinkedHashMap<>();
+                for (ZoomosParsingStats s : cityStats) {
+                    String addrKey = s.getAddressId() != null && !s.getAddressId().isBlank()
+                            ? s.getAddressId() : "";
+                    byAddress.computeIfAbsent(addrKey, k -> new ArrayList<>()).add(s);
+                }
+
+                List<Map<String, Object>> addressGroups = new ArrayList<>();
+                byAddress.forEach((addrId, addrStats) -> {
+                    addrStats.sort(Comparator.comparing(
+                            (ZoomosParsingStats s) -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now())
+                            .reversed());
+                    String addrStatusKey = siteName + "|" + cityName
+                            + (addrId.isEmpty() ? "" : "|" + addrId);
+                    String addrStatus = siteCityStatuses.getOrDefault(addrStatusKey, "OK");
+                    // Имя адреса из первой строки с addressName
+                    String addrName = addrStats.stream()
+                            .filter(s -> s.getAddressName() != null)
+                            .findFirst().map(ZoomosParsingStats::getAddressName).orElse(null);
+                    Map<String, Object> ag = new LinkedHashMap<>();
+                    ag.put("addressId", addrId.isEmpty() ? null : addrId);
+                    ag.put("addressName", addrName);
+                    ag.put("status", addrStatus);
+                    ag.put("stats", addrStats);
+                    addressGroups.add(ag);
+                });
+                // Сортируем адресные группы: ERROR первыми
+                addressGroups.sort(Comparator.comparingInt(ag ->
+                        "ERROR".equals(ag.get("status")) ? 0 : "WARNING".equals(ag.get("status")) ? 1 : 2));
+
+                // Если в городе есть хотя бы один адрес с 100% завершением → город OK
+                boolean anyFullyComplete = cityStats.stream()
+                        .anyMatch(s -> Boolean.TRUE.equals(s.getIsFinished())
+                                && s.getCompletionPercent() != null && s.getCompletionPercent() == 100
+                                && s.getAddressId() != null);
+                String cityStatus = anyFullyComplete ? "OK"
+                        : addressGroups.stream()
+                                .map(ag -> (String) ag.get("status"))
+                                .min(Comparator.comparingInt(st -> "ERROR".equals(st) ? 0 : "WARNING".equals(st) ? 1 : 2))
+                                .orElse(siteCityStatuses.getOrDefault(siteName + "|" + cityName, "OK"));
+
                 Map<String, Object> cg = new LinkedHashMap<>();
                 cg.put("cityName", cityName.isEmpty() ? null : cityName);
                 cg.put("status", cityStatus);
                 cg.put("stats", cityStats);
+                cg.put("addressGroups", addressGroups);
                 cityGroups.add(cg);
             });
             // Сортируем города: ERROR первыми
@@ -397,25 +450,31 @@ public class ZoomosAnalysisController {
 
         Map<String, List<String>> itBySite = new LinkedHashMap<>();
         for (Map<String, Object> issue : issues) {
-            String site      = (String) issue.get("site");
-            String city      = (String) issue.get("city");
-            String msg       = (String) issue.get("message");
-            String type      = (String) issue.get("type");
-            String checkType = (String) issue.get("checkType");
-            String shopName  = (String) issue.get("shopName");
-            String cityId    = (String) issue.get("cityId");
+            String site        = (String) issue.get("site");
+            String city        = (String) issue.get("city");
+            String msg         = (String) issue.get("message");
+            String type        = (String) issue.get("type");
+            String checkType   = (String) issue.get("checkType");
+            String shopName    = (String) issue.get("shopName");
+            String cityId      = (String) issue.get("cityId");
+            String addressId   = (String) issue.get("addressId");
+            String addressName = (String) issue.get("addressName");
             if (cityId == null) cityId = "";
 
             String cityPart = (city != null && !city.isBlank()) ? city : null;
+            // Добавляем адрес в строку, если он задан
+            String addrPart = (addressName != null && !addressName.isBlank()) ? " [" + addressName + "]" : "";
             String detail = (msg != null && !msg.isBlank()) ? msg : type;
+            // addressId передаём в параметр &address= для прямого фильтра в истории
+            String addrParam = (addressId != null && !addressId.isBlank()) ? addressId : "";
             String historyUrl = zoomosConfig.getBaseUrl()
                     + "/shops-parser/" + site + "/parsing-history"
                     + "?upd=" + ts
                     + "&dateFrom=" + dateFromStr
                     + "&dateTo=" + dateToStr
                     + "&launchDate=&shop=" + ("API".equals(checkType) ? "-" : shopName)
-                    + "&site=&cityId=" + cityId + "&address=&accountId=&server=";
-            String line = (cityPart != null ? cityPart + " — " : "") + detail
+                    + "&site=&cityId=" + cityId + "&address=" + addrParam + "&accountId=&server=";
+            String line = (cityPart != null ? cityPart + addrPart + " — " : "") + detail
                     + "\n    История: " + historyUrl;
             itBySite.computeIfAbsent(site, k -> new ArrayList<>()).add(line);
         }
@@ -445,9 +504,11 @@ public class ZoomosAnalysisController {
         ZoomosParsingStats prev = sortedAsc.get(sortedAsc.size() - 2);
         ZoomosParsingStats newest = sortedAsc.get(sortedAsc.size() - 1);
 
-        String siteName = newest.getSiteName();
-        String cityName = newest.getCityName();
-        String checkType = newest.getCheckType();
+        String siteName   = newest.getSiteName();
+        String cityName   = newest.getCityName();
+        String checkType  = newest.getCheckType();
+        String addressId  = newest.getAddressId();
+        String addressName = newest.getAddressName();
         // Извлекаем числовой ID города из "3509 - Вологда"
         String cityId = cityName != null && cityName.contains(" - ")
                 ? cityName.substring(0, cityName.indexOf(" - ")).trim()
@@ -463,6 +524,7 @@ public class ZoomosAnalysisController {
                 if (newStock != null && newStock == 0) {
                     Map<String, Object> issue = new LinkedHashMap<>();
                     issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                    issue.put("addressId", addressId); issue.put("addressName", addressName);
                     issue.put("checkType", checkType); issue.put("shopName", shopName);
                     issue.put("type", "ERROR");
                     issue.put("message", String.format("В наличии: %d → 0 (−100%%)", prevStock));
@@ -472,6 +534,7 @@ public class ZoomosAnalysisController {
                     if (drop > dropThreshold) {
                         Map<String, Object> issue = new LinkedHashMap<>();
                         issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                        issue.put("addressId", addressId); issue.put("addressName", addressName);
                         issue.put("checkType", checkType); issue.put("shopName", shopName);
                         issue.put("type", "ERROR");
                         issue.put("message", String.format("Падение 'В наличии': %d → %d (−%.0f%%)", prevStock, newStock, drop));
@@ -489,6 +552,7 @@ public class ZoomosAnalysisController {
             if (growth > errorGrowthThreshold) {
                 Map<String, Object> issue = new LinkedHashMap<>();
                 issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                issue.put("addressId", addressId); issue.put("addressName", addressName);
                 issue.put("checkType", checkType); issue.put("shopName", shopName);
                 issue.put("type", "WARNING");
                 issue.put("message", String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErr, newErr, growth));
@@ -504,6 +568,7 @@ public class ZoomosAnalysisController {
             if (drop > dropThreshold) {
                 Map<String, Object> issue = new LinkedHashMap<>();
                 issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                issue.put("addressId", addressId); issue.put("addressName", addressName);
                 issue.put("checkType", checkType); issue.put("shopName", shopName);
                 issue.put("type", "WARNING");
                 issue.put("message", String.format("Падение товаров: %d → %d (−%.0f%%)", prevTotal, newTotal, drop));

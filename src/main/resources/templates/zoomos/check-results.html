@@ -121,6 +121,8 @@
                             <strong th:text="${issue['site']}"></strong>
                             <span th:if="${issue['city']}" class="text-muted ms-1 small"
                                   th:text="'(' + ${issue['city']} + ')'"></span>
+                            <span th:if="${issue['addressName'] != null}" class="badge bg-info text-dark ms-1 small"
+                                  th:text="${issue['addressName']}"></span>
                             <span class="small text-muted ms-2" th:text="${issue['message']}"></span>
                             <span th:if="${issue['inProgress'] != null and issue['inProgress'].updatedTime != null}"
                                   class="small ms-1 text-secondary"
@@ -137,7 +139,7 @@
                             </a>
                             <!-- История (API) -->
                             <a th:if="${issue['checkType'] == 'API'}"
-                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&address=&accountId=&server='}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&address=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
                                target="_blank"
                                class="btn btn-sm btn-outline-secondary py-0 px-2"
                                style="font-size:0.78rem"
@@ -146,7 +148,7 @@
                             </a>
                             <!-- История (ITEM) -->
                             <a th:if="${issue['checkType'] == 'ITEM' or issue['checkType'] == null}"
-                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&address=&accountId=&server='}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&address=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
                                target="_blank"
                                class="btn btn-sm btn-outline-secondary py-0 px-2"
                                style="font-size:0.78rem"
@@ -252,61 +254,75 @@
                           th:classappend="${cg['status'] == 'ERROR'} ? 'bg-danger' : (${cg['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
                           th:text="${cg['status']}"></span>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover table-bordered mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th class="text-center" style="width:110px">Старт</th>
-                                <th class="text-center">Сервер</th>
-                                <th class="text-center">Клиент</th>
-                                <th class="text-end">Товаров</th>
-                                <th class="text-end">В наличии</th>
-                                <th class="text-end">Ошибки</th>
-                                <th class="text-center">Завершено</th>
-                                <th class="text-center">Время</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr th:each="stat, si : ${cg['stats']}"
-                                th:with="nextStat=${si.index + 1 < cg['stats'].size() ? cg['stats'][si.index + 1] : null}"
-                                th:classappend="${si.first} ? 'table-active fw-semibold' : ''">
-                                <td class="text-center small"
-                                    th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
-                                <td class="text-center small" th:text="${stat.serverName}"></td>
-                                <td class="text-center small" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
-                                <td class="text-end">
-                                    <span th:text="${stat.totalProducts != null} ? ${#numbers.formatInteger(stat.totalProducts, 1, 'COMMA')} : '—'"></span>
-                                    <span th:if="${nextStat != null and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"
-                                          th:with="pct=${(stat.totalProducts - nextStat.totalProducts) * 100 / nextStat.totalProducts}">
-                                        <small th:if="${pct < -10}" class="delta-drop"> &#9660;</small>
-                                        <small th:if="${pct > 10}"  class="delta-down"> &#9650;</small>
-                                    </span>
-                                </td>
-                                <td class="text-end">
-                                    <span th:text="${stat.inStock != null} ? ${#numbers.formatInteger(stat.inStock, 1, 'COMMA')} : '—'"></span>
-                                    <span th:if="${nextStat != null and stat.inStock != null and nextStat.inStock != null and nextStat.inStock > 0}"
-                                          th:with="pct=${(stat.inStock - nextStat.inStock) * 100 / nextStat.inStock}">
-                                        <small th:if="${stat.inStock == 0}" class="delta-drop"> &#9660;0</small>
-                                        <small th:if="${stat.inStock > 0 and pct < -10}" class="delta-drop"> &#9660;</small>
-                                        <small th:if="${pct > 10}" class="delta-down"> &#9650;</small>
-                                    </span>
-                                    <small th:if="${nextStat != null and nextStat.inStock != null and nextStat.inStock > 0 and (stat.inStock == null or stat.inStock == 0)}"
-                                           class="delta-drop"> &#9660;0</small>
-                                </td>
-                                <td class="text-end"
-                                    th:classappend="${stat.errorCount != null and stat.errorCount > 0} ? 'text-danger' : ''">
-                                    <span th:text="${stat.errorCount != null} ? ${stat.errorCount} : '—'"></span>
-                                    <span th:if="${nextStat != null and stat.errorCount != null and nextStat.errorCount != null and nextStat.errorCount > 0}"
-                                          th:with="pct=${(stat.errorCount - nextStat.errorCount) * 100 / nextStat.errorCount}">
-                                        <small th:if="${pct > 30}" class="delta-up"> &#9650;</small>
-                                        <small th:if="${pct < -30}" class="delta-down"> &#9660;</small>
-                                    </span>
-                                </td>
-                                <td class="text-center small" th:text="${stat.completionTotal != null} ? ${stat.completionTotal} : '—'"></td>
-                                <td class="text-center small" th:text="${stat.parsingDuration != null} ? ${stat.parsingDuration} : '—'"></td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <!-- Подгруппы по адресу внутри города -->
+                <div th:each="ag : ${cg['addressGroups']}">
+                    <!-- Заголовок адреса (если для города настроены адреса) -->
+                    <div th:if="${ag['addressId'] != null}"
+                         class="px-3 py-1 small border-bottom d-flex align-items-center gap-2"
+                         th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10 text-danger' :
+                                        (${ag['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
+                        <i class="fas fa-map-pin"></i>
+                        <span th:text="${ag['addressName'] != null ? ag['addressName'] : ag['addressId']}"></span>
+                        <span class="badge ms-1"
+                              th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger' : (${ag['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
+                              th:text="${ag['status']}"></span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-center" style="width:110px">Старт</th>
+                                    <th class="text-center">Сервер</th>
+                                    <th class="text-center">Клиент</th>
+                                    <th class="text-end">Товаров</th>
+                                    <th class="text-end">В наличии</th>
+                                    <th class="text-end">Ошибки</th>
+                                    <th class="text-center">Завершено</th>
+                                    <th class="text-center">Время</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="stat, si : ${ag['stats']}"
+                                    th:with="nextStat=${si.index + 1 < ag['stats'].size() ? ag['stats'][si.index + 1] : null}"
+                                    th:classappend="${si.first} ? 'table-active fw-semibold' : ''">
+                                    <td class="text-center small"
+                                        th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
+                                    <td class="text-center small" th:text="${stat.serverName}"></td>
+                                    <td class="text-center small" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
+                                    <td class="text-end">
+                                        <span th:text="${stat.totalProducts != null} ? ${#numbers.formatInteger(stat.totalProducts, 1, 'COMMA')} : '—'"></span>
+                                        <span th:if="${nextStat != null and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"
+                                              th:with="pct=${(stat.totalProducts - nextStat.totalProducts) * 100 / nextStat.totalProducts}">
+                                            <small th:if="${pct < -10}" class="delta-drop"> &#9660;</small>
+                                            <small th:if="${pct > 10}"  class="delta-down"> &#9650;</small>
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span th:text="${stat.inStock != null} ? ${#numbers.formatInteger(stat.inStock, 1, 'COMMA')} : '—'"></span>
+                                        <span th:if="${nextStat != null and stat.inStock != null and nextStat.inStock != null and nextStat.inStock > 0}"
+                                              th:with="pct=${(stat.inStock - nextStat.inStock) * 100 / nextStat.inStock}">
+                                            <small th:if="${stat.inStock == 0}" class="delta-drop"> &#9660;0</small>
+                                            <small th:if="${stat.inStock > 0 and pct < -10}" class="delta-drop"> &#9660;</small>
+                                            <small th:if="${pct > 10}" class="delta-down"> &#9650;</small>
+                                        </span>
+                                        <small th:if="${nextStat != null and nextStat.inStock != null and nextStat.inStock > 0 and (stat.inStock == null or stat.inStock == 0)}"
+                                               class="delta-drop"> &#9660;0</small>
+                                    </td>
+                                    <td class="text-end"
+                                        th:classappend="${stat.errorCount != null and stat.errorCount > 0} ? 'text-danger' : ''">
+                                        <span th:text="${stat.errorCount != null} ? ${stat.errorCount} : '—'"></span>
+                                        <span th:if="${nextStat != null and stat.errorCount != null and nextStat.errorCount != null and nextStat.errorCount > 0}"
+                                              th:with="pct=${(stat.errorCount - nextStat.errorCount) * 100 / nextStat.errorCount}">
+                                            <small th:if="${pct > 30}" class="delta-up"> &#9650;</small>
+                                            <small th:if="${pct < -30}" class="delta-down"> &#9660;</small>
+                                        </span>
+                                    </td>
+                                    <td class="text-center small" th:text="${stat.completionTotal != null} ? ${stat.completionTotal} : '—'"></td>
+                                    <td class="text-center small" th:text="${stat.parsingDuration != null} ? ${stat.parsingDuration} : '—'"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>

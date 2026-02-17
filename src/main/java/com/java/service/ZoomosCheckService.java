@@ -22,6 +22,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -430,17 +431,6 @@ public class ZoomosCheckService {
                 String addressId  = extractAddressId(addressRaw);
                 String cityId     = extractCityId(city);
 
-                // Фильтрация: если заданы addressIds — фильтруем по адресу; иначе по cityId
-                if (!allowedAddressIds.isEmpty()) {
-                    if (addressId == null || !allowedAddressIds.contains(addressId)) {
-                        continue;
-                    }
-                } else if (!allowedCityIds.isEmpty()) {
-                    if (cityId != null && !allowedCityIds.contains(cityId)) {
-                        continue;
-                    }
-                }
-
                 ZoomosCityId cityIdRef = cityId != null ? cityIdMap.get(cityId) : null;
 
                 ZonedDateTime startTime = parseDateTime(startStr);
@@ -458,6 +448,7 @@ public class ZoomosCheckService {
                         .serverName(server)
                         .clientName(clientName)
                         .addressId(addressId)
+                        .addressName(addressRaw)
                         .startTime(startTime)
                         .finishTime(finishTime)
                         .updatedTime(parseDateTime(updatedStr))
@@ -479,6 +470,28 @@ public class ZoomosCheckService {
             } catch (Exception e) {
                 log.warn("Ошибка парсинга строки таблицы: {}", e.getMessage());
             }
+        }
+
+        // Применяем комбинированный фильтр: address-покрытые города → только по addressId,
+        // остальные города → по cityId
+        if (!allowedCityIds.isEmpty() || !allowedAddressIds.isEmpty()) {
+            // Находим cityId-ы, для которых в данных есть хотя бы одна строка с подходящим addressId.
+            // Такие города считаются "покрытыми адресами" — их city-level строки исключаем.
+            Set<String> addressCoveredCityIds = results.stream()
+                    .filter(s -> s.getAddressId() != null && allowedAddressIds.contains(s.getAddressId()))
+                    .map(s -> extractCityId(s.getCityName()))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+            results = results.stream().filter(s -> {
+                String addrId = s.getAddressId();
+                String cId    = extractCityId(s.getCityName());
+                // Строка подходит по addressId → включаем всегда
+                if (addrId != null && allowedAddressIds.contains(addrId)) return true;
+                // Строка подходит по cityId И этот город не покрыт адресами → включаем
+                if (cId != null && allowedCityIds.contains(cId) && !addressCoveredCityIds.contains(cId)) return true;
+                return false;
+            }).collect(Collectors.toList());
         }
 
         log.info("Распарсено {} записей (checkType={}) со страницы: {}", results.size(), checkType, page.url());
@@ -612,10 +625,16 @@ public class ZoomosCheckService {
 
     private void updateRunSummary(ZoomosCheckRun run, List<ZoomosParsingStats> stats,
                                    List<ZoomosCityId> allCityIds) {
-        // Группируем данные по site+city (уникальная пара = одна "линия выкачки")
+        // Группируем данные по site+city+address (уникальная группа = одна "линия выкачки")
+        // Если addressId задан — это отдельная группа внутри города
         Map<String, List<ZoomosParsingStats>> grouped = stats.stream()
-                .collect(Collectors.groupingBy(s ->
-                        s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")));
+                .collect(Collectors.groupingBy(s -> {
+                    String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
+                    if (s.getAddressId() != null && !s.getAddressId().isBlank()) {
+                        key += "|" + s.getAddressId();
+                    }
+                    return key;
+                }));
 
         // Определяем какие site+city были ожидаемы
         Set<String> expectedKeys = new HashSet<>();
