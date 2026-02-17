@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Справочник сайтов',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Справочник сайтов',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Справочник сайтов</title></head>
+
+<th:block th:fragment="styles">
+<style>
+    .site-name-cell { font-family: monospace; font-size: 0.9em; }
+</style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/zoomos}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>К магазинам
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- Форма добавления -->
+    <div class="card mb-4">
+        <div class="card-header py-2"><i class="fas fa-plus me-2"></i>Добавить сайт(ы)</div>
+        <div class="card-body py-3">
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <input type="text" id="addSiteNames" class="form-control"
+                       style="min-width:280px; max-width:460px"
+                       placeholder="site1.by, site2.by (через запятую)">
+                <select id="addCheckType" class="form-select" style="width:auto">
+                    <option value="ITEM" selected>ITEM</option>
+                    <option value="API">API</option>
+                </select>
+                <button type="button" class="btn btn-primary" id="addSitesBtn">
+                    <i class="fas fa-plus me-1"></i>Добавить
+                </button>
+            </div>
+            <div class="form-text mt-1">Можно указать несколько сайтов через запятую</div>
+            <div id="addResult" class="mt-2 small d-none"></div>
+        </div>
+    </div>
+
+    <!-- Фильтр -->
+    <div class="mb-3 d-flex align-items-center gap-2">
+        <input type="text" id="siteSearch" class="form-control form-control-sm w-auto"
+               placeholder="Фильтр по имени сайта..." style="min-width:260px">
+        <span id="searchCount" class="text-muted small"></span>
+    </div>
+
+    <!-- Таблица -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div th:if="${sites.empty}" class="text-muted text-center py-4">
+                <i class="fas fa-book fa-2x mb-2 d-block"></i>
+                Справочник пуст. Добавьте сайты вручную или синхронизируйте магазин.
+            </div>
+            <table th:unless="${sites.empty}" class="table table-sm table-hover table-bordered mb-0" id="sitesTable">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px" class="text-center">#</th>
+                        <th>Сайт</th>
+                        <th style="width:150px" class="text-center">Тип выкачки</th>
+                        <th style="width:150px" class="text-center">Добавлен</th>
+                        <th style="width:80px" class="text-center">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="site, si : ${sites}" th:id="'site-row-' + ${site.id}">
+                        <td class="text-center text-muted small" th:text="${si.count}"></td>
+                        <td class="site-name-cell" th:text="${site.siteName}"></td>
+                        <td class="text-center">
+                            <select class="form-select form-select-sm site-check-type"
+                                    th:data-id="${site.id}"
+                                    style="font-size:0.85em; padding:3px 24px 3px 8px;">
+                                <option value="ITEM" th:selected="${site.checkType == 'ITEM'}">ITEM</option>
+                                <option value="API" th:selected="${site.checkType == 'API'}">API</option>
+                            </select>
+                        </td>
+                        <td class="text-center small text-muted"
+                            th:text="${site.createdAt != null} ? ${#temporals.format(site.createdAt, 'dd.MM.yyyy')} : '—'"></td>
+                        <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 delete-site-btn"
+                                    th:data-id="${site.id}"
+                                    th:data-name="${site.siteName}"
+                                    title="Удалить">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+    // ---- Добавление сайтов ----
+    document.getElementById('addSitesBtn').addEventListener('click', function() {
+        const names = document.getElementById('addSiteNames').value.trim();
+        const checkType = document.getElementById('addCheckType').value;
+        const resultEl = document.getElementById('addResult');
+        if (!names) { resultEl.textContent = 'Введите имя сайта'; resultEl.className = 'mt-2 small text-danger'; return; }
+
+        const fd = new FormData();
+        fd.append('siteNames', names);
+        fd.append('checkType', checkType);
+
+        fetch('/zoomos/sites/add', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const added = data.added || [];
+                    const skipped = data.skipped || [];
+                    let msg = '';
+                    if (added.length) msg += 'Добавлено: ' + added.join(', ') + '. ';
+                    if (skipped.length) msg += 'Уже есть: ' + skipped.join(', ') + '.';
+                    resultEl.textContent = msg || 'Готово';
+                    resultEl.className = 'mt-2 small text-success';
+                    if (added.length) setTimeout(() => location.reload(), 800);
+                } else {
+                    resultEl.textContent = 'Ошибка: ' + (data.error || 'неизвестная');
+                    resultEl.className = 'mt-2 small text-danger';
+                }
+                resultEl.classList.remove('d-none');
+            })
+            .catch(() => {
+                resultEl.textContent = 'Ошибка сети';
+                resultEl.className = 'mt-2 small text-danger d-block';
+            });
+    });
+
+    // Enter в поле ввода
+    document.getElementById('addSiteNames').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') document.getElementById('addSitesBtn').click();
+    });
+
+    // ---- Изменение типа выкачки ----
+    document.querySelectorAll('.site-check-type').forEach(sel => {
+        sel.addEventListener('change', function() {
+            const id = this.dataset.id;
+            const fd = new FormData();
+            fd.append('checkType', this.value);
+            fetch('/zoomos/sites/' + id + '/check-type', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        this.style.borderColor = '#198754';
+                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(() => alert('Ошибка сети'));
+        });
+    });
+
+    // ---- Удаление сайта ----
+    document.querySelectorAll('.delete-site-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const name = this.dataset.name;
+            if (!confirm('Удалить сайт "' + name + '" из справочника?')) return;
+
+            fetch('/zoomos/sites/' + id + '/delete', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('site-row-' + id).remove();
+                        updateSearchCount();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(() => alert('Ошибка сети'));
+        });
+    });
+
+    // ---- Фильтр по имени ----
+    const siteSearch = document.getElementById('siteSearch');
+    const countEl = document.getElementById('searchCount');
+
+    function updateSearchCount() {
+        const rows = document.querySelectorAll('#sitesTable tbody tr');
+        const visible = Array.from(rows).filter(r => r.style.display !== 'none').length;
+        countEl.textContent = rows.length !== visible ? `Показано: ${visible} из ${rows.length}` : '';
+    }
+
+    if (siteSearch) {
+        siteSearch.addEventListener('input', function() {
+            const q = this.value.trim().toLowerCase();
+            document.querySelectorAll('#sitesTable tbody tr').forEach(row => {
+                const name = row.querySelector('.site-name-cell')?.textContent.toLowerCase() || '';
+                row.style.display = (!q || name.includes(q)) ? '' : 'none';
+            });
+            updateSearchCount();
+        });
+    }
+</script>
+</th:block>
+
+</html>

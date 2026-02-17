@@ -14,6 +14,8 @@ public interface ZoomosCityIdRepository extends JpaRepository<ZoomosCityId, Long
 
     List<ZoomosCityId> findByShopIdOrderBySiteName(Long shopId);
 
+    List<ZoomosCityId> findAllBySiteName(String siteName);
+
     @Modifying
     @Transactional
     @Query("DELETE FROM ZoomosCityId c WHERE c.shop.id = :shopId")

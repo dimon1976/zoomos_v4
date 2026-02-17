@@ -4,9 +4,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.config.ZoomosConfig;
 import com.java.model.entity.ZoomosCityId;
+import com.java.model.entity.ZoomosKnownSite;
 import com.java.model.entity.ZoomosSession;
 import com.java.model.entity.ZoomosShop;
 import com.java.repository.ZoomosCityIdRepository;
+import com.java.repository.ZoomosKnownSiteRepository;
 import com.java.repository.ZoomosSessionRepository;
 import com.java.repository.ZoomosShopRepository;
 import com.microsoft.playwright.*;
@@ -30,6 +32,7 @@ public class ZoomosParserService {
     private final ZoomosShopRepository shopRepository;
     private final ZoomosCityIdRepository cityIdRepository;
     private final ZoomosSessionRepository sessionRepository;
+    private final ZoomosKnownSiteRepository knownSiteRepository;
     private final ObjectMapper objectMapper;
 
     /**
@@ -102,7 +105,13 @@ public class ZoomosParserService {
         ZoomosCityId entry = cityIdRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Запись не найдена: " + id));
         entry.setCheckType(checkType);
-        return cityIdRepository.save(entry);
+        cityIdRepository.save(entry);
+        // Каскад: обновляем справочник
+        knownSiteRepository.findBySiteName(entry.getSiteName()).ifPresent(known -> {
+            known.setCheckType(checkType);
+            knownSiteRepository.save(known);
+        });
+        return entry;
     }
 
     /**
@@ -295,9 +304,45 @@ public class ZoomosParserService {
             return 0;
         }
 
-        // Заменяем все записи для магазина: удаляем старые, вставляем новые
-        cityIdRepository.deleteByShopId(shop.getId());
-        cityIdRepository.saveAll(toSave);
-        return toSave.size();
+        // UPSERT: сохраняем check_type существующих записей
+        Map<String, ZoomosCityId> existingMap = cityIdRepository.findByShopIdOrderBySiteName(shop.getId())
+                .stream().collect(java.util.stream.Collectors.toMap(ZoomosCityId::getSiteName, c -> c));
+
+        Set<String> parsedSiteNames = toSave.stream()
+                .map(ZoomosCityId::getSiteName)
+                .collect(java.util.stream.Collectors.toSet());
+
+        List<ZoomosCityId> upserted = new ArrayList<>();
+        for (ZoomosCityId parsed : toSave) {
+            String sn = parsed.getSiteName();
+            ZoomosCityId existing = existingMap.get(sn);
+            if (existing != null) {
+                // Обновляем только cityIds, сохраняем check_type и is_active
+                existing.setCityIds(parsed.getCityIds());
+                upserted.add(existing);
+            } else {
+                // Новый сайт: берём checkType из справочника, иначе ITEM
+                String checkType = knownSiteRepository.findBySiteName(sn)
+                        .map(ZoomosKnownSite::getCheckType)
+                        .orElse("ITEM");
+                parsed.setCheckType(checkType);
+                upserted.add(parsed);
+                // Добавляем в справочник если ещё нет
+                if (!knownSiteRepository.existsBySiteName(sn)) {
+                    knownSiteRepository.save(ZoomosKnownSite.builder()
+                            .siteName(sn).checkType(checkType).build());
+                }
+            }
+        }
+
+        // Удаляем записи, которых больше нет в настройках
+        for (ZoomosCityId existing : existingMap.values()) {
+            if (!parsedSiteNames.contains(existing.getSiteName())) {
+                cityIdRepository.delete(existing);
+            }
+        }
+
+        cityIdRepository.saveAll(upserted);
+        return upserted.size();
     }
 }

@@ -75,6 +75,16 @@ public class ZoomosParsingStats {
     @Column(name = "parsing_duration_minutes")
     private Integer parsingDurationMinutes;
 
+    @Column(name = "client_name")
+    private String clientName;
+
+    @Column(name = "updated_time")
+    private ZonedDateTime updatedTime;
+
+    @Column(name = "is_finished")
+    @Builder.Default
+    private Boolean isFinished = true;
+
     // Мета
     @Column(name = "parsing_date", nullable = false)
     private LocalDate parsingDate;

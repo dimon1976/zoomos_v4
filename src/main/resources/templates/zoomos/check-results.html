@@ -65,8 +65,10 @@
                         <span class="badge bg-light text-dark stat-badge border">
                             <i class="fas fa-calendar me-1"></i>
                             <span th:text="${#temporals.format(run.dateFrom,'dd.MM.yyyy')}"></span>
+                            <span th:if="${run.timeFrom != null}" th:text="' ' + ${run.timeFrom}"></span>
                             &nbsp;—&nbsp;
                             <span th:text="${#temporals.format(run.dateTo,'dd.MM.yyyy')}"></span>
+                            <span th:if="${run.timeTo != null}" th:text="' ' + ${run.timeTo}"></span>
                         </span>
                         <span class="badge bg-success stat-badge">
                             <i class="fas fa-check me-1"></i>OK: <span th:text="${run.okCount}">0</span>
@@ -107,18 +109,51 @@
             <div class="list-group list-group-flush">
                 <div th:each="issue : ${issues}" class="list-group-item py-2 px-3"
                      th:classappend="${issue['type'] == 'ERROR'} ? 'issue-error' :
-                                    (${issue['type'] == 'WARNING'} ? 'issue-warning' : 'issue-notfound')">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
+                                    (${issue['type'] == 'WARNING'} ? 'issue-warning' :
+                                    (${issue['type'] == 'IN_PROGRESS'} ? 'list-group-item-warning' : 'issue-notfound'))">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="flex-grow-1">
                             <span class="badge me-2"
                                   th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger' :
-                                                 (${issue['type'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-secondary')"
-                                  th:text="${issue['type']}"></span>
+                                                 (${issue['type'] == 'WARNING'} ? 'bg-warning text-dark' :
+                                                 (${issue['type'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' : 'bg-secondary'))"
+                                  th:text="${issue['type'] == 'IN_PROGRESS'} ? 'В процессе' : ${issue['type']}"></span>
                             <strong th:text="${issue['site']}"></strong>
                             <span th:if="${issue['city']}" class="text-muted ms-1 small"
                                   th:text="'(' + ${issue['city']} + ')'"></span>
+                            <span class="small text-muted ms-2" th:text="${issue['message']}"></span>
+                            <span th:if="${issue['inProgress'] != null and issue['inProgress'].updatedTime != null}"
+                                  class="small ms-1 text-secondary"
+                                  th:text="'обновл.: ' + ${#temporals.format(issue['inProgress'].updatedTime, 'dd.MM HH:mm')}"></span>
                         </div>
-                        <span class="small text-muted" th:text="${issue['message']}"></span>
+                        <div class="d-flex gap-1 flex-shrink-0">
+                            <!-- Матчинг -->
+                            <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-primary py-0 px-2"
+                               style="font-size:0.78rem"
+                               title="Матчинг на export.zoomos.by">
+                                <i class="fas fa-link"></i> Матчинг
+                            </a>
+                            <!-- История (API) -->
+                            <a th:if="${issue['checkType'] == 'API'}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&address=&accountId=&server='}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-secondary py-0 px-2"
+                               style="font-size:0.78rem"
+                               title="История парсинга (API)">
+                                <i class="fas fa-history"></i> История
+                            </a>
+                            <!-- История (ITEM) -->
+                            <a th:if="${issue['checkType'] == 'ITEM' or issue['checkType'] == null}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&address=&accountId=&server='}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-secondary py-0 px-2"
+                               style="font-size:0.78rem"
+                               title="История парсинга (ITEM)">
+                                <i class="fas fa-history"></i> История
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -153,24 +188,54 @@
 
     <div th:each="group, groupIter : ${groups}" class="card mb-2">
         <!-- Заголовок -->
-        <div class="card-header py-2 group-header d-flex justify-content-between align-items-center"
+        <div class="card-header py-2 group-header"
              th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10' :
-                            (${group['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light')"
-             data-bs-toggle="collapse"
-             th:data-bs-target="'#grp-' + ${groupIter.index}"
-             aria-expanded="false">
-            <div>
-                <i class="fas fa-chevron-down chevron me-2"></i>
-                <strong th:text="${group['siteName']}">site.ru</strong>
-                <span class="badge ms-2"
-                      th:classappend="${group['checkType'] == 'API'} ? 'badge-api' : 'badge-item'"
-                      th:text="${group['checkType']}">API</span>
-                <span class="text-muted ms-2 small" th:text="${group['count']} + ' выкач.'"></span>
+                            (${group['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light')">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-1"
+                     style="cursor:pointer"
+                     data-bs-toggle="collapse"
+                     th:data-bs-target="'#grp-' + ${groupIter.index}"
+                     aria-expanded="false">
+                    <i class="fas fa-chevron-down chevron me-2"></i>
+                    <strong th:text="${group['siteName']}">site.ru</strong>
+                    <span class="badge ms-2"
+                          th:classappend="${group['checkType'] == 'API'} ? 'badge-api' : 'badge-item'"
+                          th:text="${group['checkType']}">API</span>
+                    <span class="text-muted ms-2 small" th:text="${group['count']} + ' выкач.'"></span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <!-- Ссылка на матчинг -->
+                    <a th:href="${baseUrl + '/shop/' + run.shop.shopName + '/sites-items-mapping?site=' + group['siteName'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
+                       target="_blank"
+                       class="btn btn-sm btn-outline-primary py-0 px-2"
+                       title="Матчинг на export.zoomos.by"
+                       onclick="event.stopPropagation()">
+                        <i class="fas fa-link"></i> Матчинг
+                    </a>
+                    <!-- Ссылка на историю выкачки (зависит от типа) -->
+                    <a th:if="${group['checkType'] == 'API'}"
+                       th:href="${baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=&address=&accountId=&server='}"
+                       target="_blank"
+                       class="btn btn-sm btn-outline-secondary py-0 px-2"
+                       title="История парсинга (API)"
+                       onclick="event.stopPropagation()">
+                        <i class="fas fa-history"></i> История
+                    </a>
+                    <a th:if="${group['checkType'] == 'ITEM'}"
+                       th:href="${baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + run.shop.shopName + '&site=&cityId=&address=&accountId=&server='}"
+                       target="_blank"
+                       class="btn btn-sm btn-outline-secondary py-0 px-2"
+                       title="История парсинга (ITEM)"
+                       onclick="event.stopPropagation()">
+                        <i class="fas fa-history"></i> История
+                    </a>
+                    <span class="badge"
+                          th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger' :
+                                         (${group['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
+                          th:text="${group['status']}">OK</span>
+                </div>
             </div>
-            <span class="badge"
-                  th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger' :
-                                 (${group['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
-                  th:text="${group['status']}">OK</span>
         </div>
 
         <!-- Тело: подгруппы по городам -->
@@ -193,6 +258,7 @@
                             <tr>
                                 <th class="text-center" style="width:110px">Старт</th>
                                 <th class="text-center">Сервер</th>
+                                <th class="text-center">Клиент</th>
                                 <th class="text-end">Товаров</th>
                                 <th class="text-end">В наличии</th>
                                 <th class="text-end">Ошибки</th>
@@ -207,6 +273,7 @@
                                 <td class="text-center small"
                                     th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
                                 <td class="text-center small" th:text="${stat.serverName}"></td>
+                                <td class="text-center small" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
                                 <td class="text-end">
                                     <span th:text="${stat.totalProducts != null} ? ${#numbers.formatInteger(stat.totalProducts, 1, 'COMMA')} : '—'"></span>
                                     <span th:if="${nextStat != null and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"

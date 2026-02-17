@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -44,6 +45,7 @@ public class ZoomosCheckService {
      */
     @Transactional
     public ZoomosCheckRun runCheck(Long shopId, LocalDate dateFrom, LocalDate dateTo,
+                                    String timeFrom, String timeTo,
                                     int dropThreshold, int errorGrowthThreshold,
                                     String operationId) {
         ZoomosShop shop = shopRepository.findById(shopId)
@@ -57,11 +59,24 @@ public class ZoomosCheckService {
             throw new IllegalStateException("Нет активных сайтов для проверки у " + shop.getShopName());
         }
 
+        // Вычисляем временной диапазон фильтрации
+        LocalTime tFrom = (timeFrom != null && !timeFrom.isBlank())
+                ? LocalTime.parse(timeFrom) : LocalTime.MIDNIGHT;
+        LocalTime tTo   = (timeTo != null && !timeTo.isBlank())
+                ? LocalTime.parse(timeTo) : LocalTime.of(23, 59);
+        ZoneId zone = ZoneId.systemDefault();
+        ZonedDateTime rangeStart = dateFrom.atTime(tFrom).atZone(zone);
+        ZonedDateTime rangeEnd   = dateTo.atTime(tTo).atZone(zone);
+        boolean hasTimeFilter = (timeFrom != null && !timeFrom.isBlank())
+                || (timeTo != null && !timeTo.isBlank());
+
         // Создаём запись о проверке
         ZoomosCheckRun run = ZoomosCheckRun.builder()
                 .shop(shop)
                 .dateFrom(dateFrom)
                 .dateTo(dateTo)
+                .timeFrom(timeFrom != null && !timeFrom.isBlank() ? timeFrom : null)
+                .timeTo(timeTo != null && !timeTo.isBlank() ? timeTo : null)
                 .totalSites(allCityIds.size())
                 .dropThreshold(dropThreshold)
                 .errorGrowthThreshold(errorGrowthThreshold)
@@ -115,6 +130,9 @@ public class ZoomosCheckService {
                 sendProgress(operationId, processed, total, "Проверяем " + siteName + " (API)...");
 
                 List<ZoomosParsingStats> stats = parseApiPage(page, siteName, dateFrom, dateTo, cityIdEntries, run);
+                if (hasTimeFilter) {
+                    stats = filterByTime(stats, rangeStart, rangeEnd);
+                }
                 allStats.addAll(stats);
 
                 processed += cityIdEntries.size();
@@ -135,10 +153,41 @@ public class ZoomosCheckService {
 
                 List<ZoomosParsingStats> stats = parseItemPage(page, siteName, shop.getShopName(),
                         dateFrom, dateTo, cityIdEntries, run);
+                if (hasTimeFilter) {
+                    stats = filterByTime(stats, rangeStart, rangeEnd);
+                }
                 allStats.addAll(stats);
 
                 processed += cityIdEntries.size();
                 sendProgress(operationId, processed, total, siteName + " — " + stats.size() + " записей");
+            }
+
+            // Дополнительный запрос для NOT_FOUND сайтов (без &onlyFinished=1)
+            Set<String> sitesWithData = allStats.stream()
+                    .map(ZoomosParsingStats::getSiteName).collect(Collectors.toSet());
+            List<ZoomosCityId> notFoundSites = allCityIds.stream()
+                    .filter(c -> !sitesWithData.contains(c.getSiteName()))
+                    .collect(Collectors.toList());
+
+            if (!notFoundSites.isEmpty()) {
+                sendProgress(operationId, processed, total, "Проверка незавершённых выкачек...");
+                Map<String, List<ZoomosCityId>> notFoundByType = notFoundSites.stream()
+                        .collect(Collectors.groupingBy(c -> c.getCheckType() != null ? c.getCheckType() : "ITEM"));
+
+                for (Map.Entry<String, List<ZoomosCityId>> entry : notFoundByType.entrySet()) {
+                    for (ZoomosCityId cid : entry.getValue()) {
+                        try {
+                            List<ZoomosParsingStats> inProgressStats = parseInProgressPage(
+                                    page, cid, shop.getShopName(), dateFrom, dateTo, run);
+                            if (hasTimeFilter) {
+                                inProgressStats = filterByTime(inProgressStats, rangeStart, rangeEnd);
+                            }
+                            allStats.addAll(inProgressStats);
+                        } catch (Exception ex) {
+                            log.warn("Ошибка проверки in-progress для {}: {}", cid.getSiteName(), ex.getMessage());
+                        }
+                    }
+                }
             }
 
             page.close();
@@ -177,10 +226,11 @@ public class ZoomosCheckService {
                                                    List<ZoomosCityId> cityIdEntries,
                                                    ZoomosCheckRun run) {
         String url = config.getBaseUrl() + "/shops-parser/" + siteName + "/parsing-history"
-                + "?dateFrom=" + dateFrom.format(DATE_PARAM_FORMAT)
+                + "?upd=" + System.currentTimeMillis()
+                + "&dateFrom=" + dateFrom.format(DATE_PARAM_FORMAT)
                 + "&dateTo=" + dateTo.format(DATE_PARAM_FORMAT)
-                + "&onlyFinished=1"
-                + "&upd=" + System.currentTimeMillis();
+                + "&launchDate=&shop=-&site=&cityId=&address=&accountId=&server="
+                + "&onlyFinished=1";
 
         log.info("Парсинг API страницы: {}", url);
         page.navigate(url);
@@ -201,7 +251,10 @@ public class ZoomosCheckService {
             }
         }
 
-        return parseTable(page, run, siteName, "API", allowedCityIds, cityIdMap);
+        // Для API-сайтов берём только глобальные выкачки (поле "Клиент" пустое)
+        return parseTable(page, run, siteName, "API", allowedCityIds, cityIdMap).stream()
+                .filter(s -> s.getClientName() == null || s.getClientName().isBlank())
+                .collect(Collectors.toList());
     }
 
     // =========================================================================
@@ -213,11 +266,11 @@ public class ZoomosCheckService {
                                                     List<ZoomosCityId> cityIdEntries,
                                                     ZoomosCheckRun run) {
         String url = config.getBaseUrl() + "/shops-parser/" + siteName + "/parsing-history"
-                + "?dateFrom=" + dateFrom.format(DATE_PARAM_FORMAT)
+                + "?upd=" + System.currentTimeMillis()
+                + "&dateFrom=" + dateFrom.format(DATE_PARAM_FORMAT)
                 + "&dateTo=" + dateTo.format(DATE_PARAM_FORMAT)
-                + "&shop=" + shopName
-                + "&onlyFinished=1"
-                + "&upd=" + System.currentTimeMillis();
+                + "&launchDate=&shop=" + shopName + "&site=&cityId=&address=&accountId=&server="
+                + "&onlyFinished=1";
 
         log.info("Парсинг ITEM страницы: {}", url);
         page.navigate(url);
@@ -238,6 +291,52 @@ public class ZoomosCheckService {
         }
 
         return parseTable(page, run, siteName, "ITEM", allowedCityIds, cityIdMap);
+    }
+
+    // =========================================================================
+    // Парсинг in-progress страницы для NOT_FOUND сайтов (без &onlyFinished=1)
+    // =========================================================================
+
+    private List<ZoomosParsingStats> parseInProgressPage(Page page, ZoomosCityId cid,
+                                                          String shopName,
+                                                          LocalDate dateFrom, LocalDate dateTo,
+                                                          ZoomosCheckRun run) {
+        String siteName = cid.getSiteName();
+        String checkType = cid.getCheckType() != null ? cid.getCheckType() : "ITEM";
+
+        String shopParam = "ITEM".equals(checkType) ? shopName : "-";
+        String url = config.getBaseUrl() + "/shops-parser/" + siteName + "/parsing-history"
+                + "?upd=" + System.currentTimeMillis()
+                + "&dateFrom=" + dateFrom.format(DATE_PARAM_FORMAT)
+                + "&dateTo=" + dateTo.format(DATE_PARAM_FORMAT)
+                + "&launchDate=&shop=" + shopParam + "&site=&cityId=&address=&accountId=&server=";
+
+        log.info("Парсинг in-progress страницы: {}", url);
+        page.navigate(url);
+        page.waitForLoadState(LoadState.NETWORKIDLE);
+
+        Set<String> allowedCityIds = new HashSet<>();
+        Map<String, ZoomosCityId> cityIdMap = new HashMap<>();
+        if (cid.getCityIds() != null && !cid.getCityIds().isBlank()) {
+            for (String id : cid.getCityIds().split(",")) {
+                String trimmed = id.trim();
+                if (!trimmed.isEmpty()) {
+                    allowedCityIds.add(trimmed);
+                    cityIdMap.put(trimmed, cid);
+                }
+            }
+        }
+
+        List<ZoomosParsingStats> stats = parseTable(page, run, siteName, checkType, allowedCityIds, cityIdMap);
+        // Для API — только глобальные выкачки (без клиента)
+        if ("API".equals(checkType)) {
+            stats = stats.stream()
+                    .filter(s -> s.getClientName() == null || s.getClientName().isBlank())
+                    .collect(Collectors.toList());
+        }
+        // Помечаем как незавершённые
+        stats.forEach(s -> s.setIsFinished(false));
+        return stats;
     }
 
     // =========================================================================
@@ -289,6 +388,7 @@ public class ZoomosCheckService {
             try {
                 String id = getCellValue(cells, colIndex, "id");
                 String server = getCellValue(cells, colIndex, "сервер");
+                String clientName = getCellValue(cells, colIndex, "клиент");
                 String site = getCellValue(cells, colIndex, "сайт");
                 String city = getCellValue(cells, colIndex, "город");
                 String startStr = getCellValue(cells, colIndex, "старт (общий)");
@@ -297,6 +397,7 @@ public class ZoomosCheckService {
                 String categoriesStr = getCellValue(cells, colIndex, "кол-во категорий");
                 String inStockStr = getCellValue(cells, colIndex, "в наличии");
                 String errorsStr = getCellValue(cells, colIndex, "кол-во ошибок");
+                String updatedStr = getCellValue(cells, colIndex, "обновлено");
                 String completionStr = getCellValue(cells, colIndex, "завершено (всего)");
                 String timeStr = getCellValue(cells, colIndex, "время");
 
@@ -324,8 +425,10 @@ public class ZoomosCheckService {
                         .siteName(siteName)
                         .cityName(city)
                         .serverName(server)
+                        .clientName(clientName)
                         .startTime(startTime)
                         .finishTime(finishTime)
+                        .updatedTime(parseDateTime(updatedStr))
                         .totalProducts(parseInt(countStr))
                         .categoryCount(parseInt(categoriesStr))
                         .inStock(parseInt(inStockStr))
@@ -336,6 +439,7 @@ public class ZoomosCheckService {
                         .parsingDurationMinutes(parseDurationMinutes(timeStr))
                         .parsingDate(parsingDate)
                         .checkType(checkType)
+                        .isFinished(true)
                         .build();
 
                 results.add(stat);
@@ -352,6 +456,26 @@ public class ZoomosCheckService {
     // =========================================================================
     // Вспомогательные методы парсинга
     // =========================================================================
+
+    private List<ZoomosParsingStats> filterByTime(List<ZoomosParsingStats> stats,
+                                                   ZonedDateTime rangeStart,
+                                                   ZonedDateTime rangeEnd) {
+        return stats.stream()
+                .filter(s -> {
+                    // Нижняя граница: выкачка должна стартовать не раньше rangeStart
+                    if (s.getStartTime() != null && s.getStartTime().isBefore(rangeStart)) {
+                        return false;
+                    }
+                    // Верхняя граница: выкачка должна быть завершена до rangeEnd
+                    // Используем finishTime (когда данные реально готовы), при отсутствии — startTime
+                    ZonedDateTime endRef = s.getFinishTime() != null ? s.getFinishTime() : s.getStartTime();
+                    if (endRef != null && endRef.isAfter(rangeEnd)) {
+                        return false;
+                    }
+                    return true;
+                })
+                .collect(Collectors.toList());
+    }
 
     private String getCellValue(List<String> cells, Map<String, Integer> colIndex, String colName) {
         Integer idx = colIndex.get(colName);

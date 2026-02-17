@@ -31,6 +31,12 @@ public class ZoomosCheckRun {
     @Column(name = "date_to", nullable = false)
     private LocalDate dateTo;
 
+    @Column(name = "time_from")
+    private String timeFrom;   // "HH:mm" или null → 00:00
+
+    @Column(name = "time_to")
+    private String timeTo;     // "HH:mm" или null → 23:59
+
     @Column(name = "total_sites")
     @Builder.Default
     private Integer totalSites = 0;

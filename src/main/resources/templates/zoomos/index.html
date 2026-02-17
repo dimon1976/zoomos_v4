@@ -48,6 +48,9 @@
 </th:block>
 
 <th:block th:fragment="pageActions">
+    <a th:href="@{/zoomos/sites}" class="btn btn-sm btn-outline-secondary me-2">
+        <i class="fas fa-book me-1"></i>Справочник сайтов
+    </a>
     <a th:href="@{/zoomos/check/history}" class="btn btn-sm btn-outline-info">
         <i class="fas fa-history me-1"></i>История проверок
     </a>
@@ -150,9 +153,15 @@
             <span class="small text-muted me-1"><i class="fas fa-calendar-alt me-1"></i>Проверка:</span>
             <input type="date" class="form-control form-control-sm check-date-from"
                    th:id="'dateFrom-' + ${shop.id}" style="width:140px;">
+            <input type="time" class="form-control form-control-sm check-time-from"
+                   th:id="'timeFrom-' + ${shop.id}" style="width:110px;"
+                   title="Время начала (необязательно, по умолчанию 00:00)">
             <span class="small text-muted">—</span>
             <input type="date" class="form-control form-control-sm check-date-to"
                    th:id="'dateTo-' + ${shop.id}" style="width:140px;">
+            <input type="time" class="form-control form-control-sm check-time-to"
+                   th:id="'timeTo-' + ${shop.id}" style="width:110px;"
+                   title="Время окончания (необязательно, по умолчанию 23:59)">
             <span class="small text-muted ms-2" title="Порог падения 'В наличии' (%)">Падение%</span>
             <input type="number" class="form-control form-control-sm check-drop-threshold"
                    th:id="'dropThreshold-' + ${shop.id}" value="10" min="1" max="100" style="width:60px;">
@@ -207,13 +216,27 @@
                             ID городов по сайтам-конкурентам
                             <span class="badge bg-secondary ms-1" th:text="${#lists.size(entries)}">0</span>
                         </span>
-                        <button class="btn btn-sm btn-link text-decoration-none p-0 text-secondary collapse-toggle"
-                                type="button"
-                                th:data-bs-target="'#cityTable-' + ${shop.id}"
-                                data-bs-toggle="collapse"
-                                aria-expanded="false">
-                            <i class="fas fa-chevron-down"></i> Показать
-                        </button>
+                        <div class="d-flex align-items-center gap-2">
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-success select-all-btn"
+                                    type="button"
+                                    th:data-shop-id="${shop.id}"
+                                    title="Выбрать все">
+                                <i class="fas fa-check-square"></i> Все
+                            </button>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-danger deselect-all-btn"
+                                    type="button"
+                                    th:data-shop-id="${shop.id}"
+                                    title="Снять все">
+                                <i class="fas fa-square"></i> Снять
+                            </button>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-secondary collapse-toggle"
+                                    type="button"
+                                    th:data-bs-target="'#cityTable-' + ${shop.id}"
+                                    data-bs-toggle="collapse"
+                                    aria-expanded="false">
+                                <i class="fas fa-chevron-down"></i> Показать
+                            </button>
+                        </div>
                     </div>
                     <!-- Таблица скрыта по умолчанию -->
                     <div th:id="'cityTable-' + ${shop.id}" class="collapse">
@@ -283,14 +306,20 @@
         if (!shopId) return;
         const fromEl = document.getElementById('dateFrom-' + shopId);
         const toEl   = document.getElementById('dateTo-' + shopId);
+        const timeFromEl = document.getElementById('timeFrom-' + shopId);
+        const timeToEl   = document.getElementById('timeTo-' + shopId);
         if (!fromEl || !toEl) return;
 
         // Восстанавливаем сохранённые или ставим сегодня
         fromEl.value = localStorage.getItem('checkDateFrom-' + shopId) || todayStr;
         toEl.value   = localStorage.getItem('checkDateTo-' + shopId)   || todayStr;
+        if (timeFromEl) timeFromEl.value = localStorage.getItem('checkTimeFrom-' + shopId) || '';
+        if (timeToEl)   timeToEl.value   = localStorage.getItem('checkTimeTo-' + shopId)   || '';
 
         fromEl.addEventListener('change', () => localStorage.setItem('checkDateFrom-' + shopId, fromEl.value));
         toEl.addEventListener('change',   () => localStorage.setItem('checkDateTo-' + shopId,   toEl.value));
+        if (timeFromEl) timeFromEl.addEventListener('change', () => localStorage.setItem('checkTimeFrom-' + shopId, timeFromEl.value));
+        if (timeToEl)   timeToEl.addEventListener('change',   () => localStorage.setItem('checkTimeTo-' + shopId,   timeToEl.value));
     });
 
     // ---- Collapse кнопка: обновление текста ----
@@ -353,6 +382,43 @@
                     }
                 })
                 .catch(() => { this.checked = !this.checked; });
+        });
+    });
+
+    // ---- Выбрать все / Снять все для одного магазина ----
+    function setCityIdsActive(shopId, active) {
+        const tableId = '#cityTable-' + shopId;
+        const checkboxes = document.querySelectorAll(tableId + ' .city-toggle');
+        checkboxes.forEach(cb => {
+            if (cb.checked !== active) {
+                cb.checked = active;
+                const id = cb.dataset.id;
+                fetch('/zoomos/city-ids/' + id + '/toggle', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        const row = document.getElementById('row-' + id);
+                        if (row) {
+                            if (data.isActive) {
+                                row.classList.remove('table-secondary', 'text-muted');
+                            } else {
+                                row.classList.add('table-secondary', 'text-muted');
+                            }
+                        }
+                    })
+                    .catch(() => {});
+            }
+        });
+    }
+
+    document.querySelectorAll('.select-all-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            setCityIdsActive(this.dataset.shopId, true);
+        });
+    });
+
+    document.querySelectorAll('.deselect-all-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            setCityIdsActive(this.dataset.shopId, false);
         });
     });
 
@@ -423,6 +489,8 @@
             const shopId = this.dataset.shopId;
             const dateFrom = document.getElementById('dateFrom-' + shopId).value;
             const dateTo = document.getElementById('dateTo-' + shopId).value;
+            const timeFrom = (document.getElementById('timeFrom-' + shopId) || {}).value || '';
+            const timeTo   = (document.getElementById('timeTo-' + shopId)   || {}).value || '';
             const dropThreshold = document.getElementById('dropThreshold-' + shopId).value || '10';
             const errThreshold = document.getElementById('errThreshold-' + shopId).value || '30';
 
@@ -452,6 +520,8 @@
             fd.append('shopId', shopId);
             fd.append('dateFrom', dateFrom);
             fd.append('dateTo', dateTo);
+            if (timeFrom) fd.append('timeFrom', timeFrom);
+            if (timeTo)   fd.append('timeTo', timeTo);
             fd.append('dropThreshold', dropThreshold);
             fd.append('errorGrowthThreshold', errThreshold);
 
@@ -503,25 +573,23 @@
                 barEl.textContent = pct + '%';
                 msgEl.textContent = data.message || '';
 
-                // Завершено — сразу переходим на страницу результатов
+                // Завершено — показываем блок результата, без авторедиректа
                 if (data.message && data.message.includes('завершена')) {
                     barEl.classList.remove('progress-bar-animated');
                     barEl.classList.add('bg-success');
                     barEl.style.width = '100%';
                     barEl.textContent = '100%';
-                    msgEl.textContent = 'Переход на результаты...';
+                    msgEl.textContent = 'Завершено';
                     stompClient.disconnect();
 
-                    // Небольшая задержка чтобы пользователь увидел 100%, затем редирект
                     setTimeout(() => {
                         fetch('/zoomos/check/latest?shopId=' + shopId)
                             .then(r => r.json())
                             .then(d => {
                                 if (d.runId && d.runId > 0) {
-                                    window.location.href = '/zoomos/check/results/' + d.runId;
-                                } else {
-                                    resetCheckBtn(btn);
+                                    showCheckResult(shopId, d);
                                 }
+                                resetCheckBtn(btn);
                             })
                             .catch(() => { resetCheckBtn(btn); });
                     }, 800);
