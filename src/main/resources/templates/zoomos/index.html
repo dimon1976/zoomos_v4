@@ -540,7 +540,11 @@
         if (trimmed.startsWith('{')) {
             try {
                 const parsed = JSON.parse(trimmed);
-                Object.keys(parsed).forEach(k => { result[k] = Array.isArray(parsed[k]) ? parsed[k] : []; });
+                Object.keys(parsed).forEach(k => {
+                    // Нормализуем: если элемент содержит запятую — дробим его на отдельные ID
+                    const raw2 = Array.isArray(parsed[k]) ? parsed[k] : [];
+                    result[k] = raw2.flatMap(id => String(id).split(',').map(s => s.trim()).filter(s => s));
+                });
             } catch(e) {}
         } else {
             // Плоский формат — привязка неизвестна, покажем как "без города"
@@ -604,10 +608,16 @@
                 const val = (input.value || '').trim();
                 if (!val) return;
                 if (!addrModalData[city]) addrModalData[city] = [];
-                if (!addrModalData[city].includes(val)) {
-                    addrModalData[city].push(val);
-                    renderAddrModal();
-                }
+                // Поддержка ввода через запятую — добавляем каждый ID отдельно
+                const newIds = val.split(',').map(s => s.trim()).filter(s => s);
+                let changed = false;
+                newIds.forEach(id => {
+                    if (!addrModalData[city].includes(id)) {
+                        addrModalData[city].push(id);
+                        changed = true;
+                    }
+                });
+                if (changed) renderAddrModal();
                 input.value = '';
             });
         });

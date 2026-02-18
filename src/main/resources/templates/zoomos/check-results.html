@@ -71,16 +71,16 @@
                             <span th:if="${run.timeTo != null}" th:text="' ' + ${run.timeTo}"></span>
                         </span>
                         <span class="badge bg-success stat-badge">
-                            <i class="fas fa-check me-1"></i>OK: <span th:text="${run.okCount}">0</span>
+                            <i class="fas fa-check me-1"></i>OK: <span th:text="${liveOkCount}">0</span>
                         </span>
-                        <span th:if="${run.warningCount > 0}" class="badge bg-warning text-dark stat-badge">
-                            <i class="fas fa-exclamation-triangle me-1"></i>Warn: <span th:text="${run.warningCount}">0</span>
+                        <span th:if="${liveWarnCount > 0}" class="badge bg-warning text-dark stat-badge">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Warn: <span th:text="${liveWarnCount}">0</span>
                         </span>
-                        <span th:if="${run.errorCount > 0}" class="badge bg-danger stat-badge">
-                            <i class="fas fa-times me-1"></i>Error: <span th:text="${run.errorCount}">0</span>
+                        <span th:if="${liveErrCount > 0}" class="badge bg-danger stat-badge">
+                            <i class="fas fa-times me-1"></i>Error: <span th:text="${liveErrCount}">0</span>
                         </span>
-                        <span th:if="${run.notFoundCount > 0}" class="badge bg-secondary stat-badge">
-                            <i class="fas fa-question me-1"></i>Нет данных: <span th:text="${run.notFoundCount}">0</span>
+                        <span th:if="${liveNotFoundCount > 0}" class="badge bg-secondary stat-badge">
+                            <i class="fas fa-question me-1"></i>Нет данных: <span th:text="${liveNotFoundCount}">0</span>
                         </span>
                         <span class="text-muted small ms-2">
                             Пороги: падение ≥<span th:text="${run.dropThreshold}">10</span>%,
@@ -140,7 +140,7 @@
                             </a>
                             <!-- История (API) -->
                             <a th:if="${issue['checkType'] == 'API'}"
-                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&address=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
                                target="_blank"
                                class="btn btn-sm btn-outline-secondary py-0 px-2"
                                style="font-size:0.78rem"
@@ -149,7 +149,7 @@
                             </a>
                             <!-- История (ITEM) -->
                             <a th:if="${issue['checkType'] == 'ITEM' or issue['checkType'] == null}"
-                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&address=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
                                target="_blank"
                                class="btn btn-sm btn-outline-secondary py-0 px-2"
                                style="font-size:0.78rem"
@@ -260,15 +260,26 @@
                     <!-- Заголовок адреса (если для города настроены адреса) -->
                     <div th:if="${ag['addressId'] != null}"
                          class="px-3 py-1 small border-bottom d-flex align-items-center gap-2"
-                         th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10 text-danger' :
-                                        (${ag['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
+                         th:classappend="${ag['status'] == 'ERROR' or ag['status'] == 'NOT_FOUND'} ? 'bg-danger bg-opacity-10 text-danger' :
+                                        (${ag['status'] == 'WARNING' or ag['status'] == 'IN_PROGRESS'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
                         <i class="fas fa-map-pin"></i>
                         <span th:text="${ag['addressName'] != null ? ag['addressName'] : ag['addressId']}"></span>
                         <span class="badge ms-1"
-                              th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger' : (${ag['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
-                              th:text="${ag['status']}"></span>
+                              th:classappend="${ag['status'] == 'ERROR' or ag['status'] == 'NOT_FOUND'} ? 'bg-danger' :
+                                             (${ag['status'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' :
+                                             (${ag['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success'))"
+                              th:text="${ag['status'] == 'IN_PROGRESS'} ? 'В процессе' :
+                                       (${ag['status'] == 'NOT_FOUND'} ? 'Нет данных' : ${ag['status']})"></span>
                     </div>
-                    <div class="table-responsive">
+                    <!-- Нет данных (NOT_FOUND / IN_PROGRESS) — строка-заглушка вместо таблицы -->
+                    <div th:if="${ag['stats'].isEmpty() and ag['issueMessage'] != null}"
+                         class="px-3 py-2 border-bottom text-muted small"
+                         th:classappend="${ag['status'] == 'NOT_FOUND'} ? 'bg-secondary bg-opacity-10' : 'bg-warning bg-opacity-10'">
+                        <i th:classappend="${ag['status'] == 'IN_PROGRESS'} ? 'fas fa-spinner me-1' : 'fas fa-ban me-1'"></i>
+                        <span th:text="${ag['issueMessage']}"></span>
+                    </div>
+                    <!-- Таблица выкачек (если данные есть) -->
+                    <div th:unless="${ag['stats'].isEmpty()}" class="table-responsive">
                         <table class="table table-sm table-hover table-bordered mb-0">
                             <thead class="table-light">
                                 <tr>
@@ -281,12 +292,13 @@
                                     <th class="text-end">Ошибки</th>
                                     <th class="text-center">Завершено</th>
                                     <th class="text-center">Время</th>
+                                    <th class="text-center"></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr th:each="stat, si : ${ag['stats']}"
                                     th:with="nextStat=${si.index + 1 < ag['stats'].size() ? ag['stats'][si.index + 1] : null}"
-                                    th:classappend="${si.first} ? 'table-active fw-semibold' : ''">
+                                    th:classappend="${si.first ? (ag['status'] == 'ERROR' ? 'table-danger' : (ag['status'] == 'WARNING' ? 'table-warning' : 'table-active')) + ' fw-semibold' : ''}">
                                     <td class="text-center small"
                                         th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
                                     <td class="text-center small"
@@ -323,6 +335,23 @@
                                     </td>
                                     <td class="text-center small" th:text="${stat.completionTotal != null} ? ${stat.completionTotal} : '—'"></td>
                                     <td class="text-center small" th:text="${stat.parsingDuration != null} ? ${stat.parsingDuration} : '—'"></td>
+                                    <td class="text-center"
+                                        th:with="cid=${stat.cityName != null and stat.cityName.contains(' - ') ? stat.cityName.substring(0, stat.cityName.indexOf(' - ')).trim() : (stat.cityName != null ? stat.cityName.trim() : '')}">
+                                        <a th:if="${baseUrl != null and stat.checkType == 'API'}"
+                                           th:href="${baseUrl + '/shops-parser/' + stat.siteName + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + cid + '&addressId=' + (stat.addressId != null ? stat.addressId : '') + '&accountId=&server='}"
+                                           target="_blank"
+                                           class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                           title="История парсинга">
+                                            <i class="fas fa-history"></i>
+                                        </a>
+                                        <a th:if="${baseUrl != null and (stat.checkType == 'ITEM' or stat.checkType == null)}"
+                                           th:href="${baseUrl + '/shops-parser/' + stat.siteName + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + run.shop.shopName + '&site=&cityId=' + cid + '&addressId=' + (stat.addressId != null ? stat.addressId : '') + '&accountId=&server='}"
+                                           target="_blank"
+                                           class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                           title="История парсинга">
+                                            <i class="fas fa-history"></i>
+                                        </a>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>

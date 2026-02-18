@@ -620,8 +620,12 @@ public class ZoomosCheckService {
                     Set<String> addrs = new HashSet<>();
                     if (entry.getValue() instanceof java.util.List<?> list) {
                         for (Object item : list) {
-                            String s = String.valueOf(item).trim();
-                            if (!s.isEmpty()) addrs.add(s);
+                            // Разбиваем по запятой на случай, если несколько ID были
+                            // сохранены одной строкой (напр. "394,101,456,34")
+                            for (String part : String.valueOf(item).split(",")) {
+                                String s = part.trim();
+                                if (!s.isEmpty()) addrs.add(s);
+                            }
                         }
                     }
                     result.put(entry.getKey(), addrs);
@@ -811,9 +815,14 @@ public class ZoomosCheckService {
         // sortedGroup отсортирован ASC (от старых к новым)
         ZoomosParsingStats newest = sortedGroup.get(sortedGroup.size() - 1);
 
-        // Одна запись — смотрим только на completionPercent
+        // Одна запись — смотрим только на completionPercent и наличие товаров
         if (sortedGroup.size() < 2) {
             if (newest.getCompletionPercent() != null && newest.getCompletionPercent() < 100) {
+                return "WARNING";
+            }
+            // 100% выкачка, но нет товаров — нужна проверка
+            if ((newest.getTotalProducts() == null || newest.getTotalProducts() == 0)
+                    && newest.getCompletionPercent() != null && newest.getCompletionPercent() >= 100) {
                 return "WARNING";
             }
             return "OK";
@@ -828,6 +837,15 @@ public class ZoomosCheckService {
 
         boolean hasWarning = false;
         boolean hasError = false;
+
+        // WARNING: 100% выкачка, но нет товаров совсем — нужна проверка
+        boolean alwaysZeroProducts = sortedGroup.stream()
+                .allMatch(s -> s.getTotalProducts() == null || s.getTotalProducts() == 0);
+        boolean allFullyComplete = sortedGroup.stream()
+                .allMatch(s -> s.getCompletionPercent() != null && s.getCompletionPercent() >= 100);
+        if (alwaysZeroProducts && allFullyComplete) {
+            hasWarning = true;
+        }
 
         double dropThresholdFraction = dropThreshold / 100.0;
         double errGrowthFraction = errorGrowthThreshold / 100.0;

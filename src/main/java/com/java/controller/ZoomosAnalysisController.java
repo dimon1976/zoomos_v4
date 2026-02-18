@@ -652,6 +652,14 @@ public class ZoomosAnalysisController {
             }
         }
 
+        // Считаем счётчики динамически из текущей оценки, чтобы не зависеть от устаревших run.warningCount
+        long liveOkCount      = siteCityStatuses.values().stream().filter("OK"::equals).count();
+        long liveWarnCount    = siteCityStatuses.values().stream().filter("WARNING"::equals).count();
+        long liveErrCount     = siteCityStatuses.values().stream().filter("ERROR"::equals).count();
+        long liveNotFoundCount = issues.stream()
+                .filter(i -> "NOT_FOUND".equals(i.get("type")) || "IN_PROGRESS".equals(i.get("type")))
+                .count();
+
         model.addAttribute("run", run);
         model.addAttribute("groups", groups);
         model.addAttribute("issues", issues);
@@ -659,15 +667,16 @@ public class ZoomosAnalysisController {
         model.addAttribute("chartData", chartData);
         model.addAttribute("itText", itText.toString().trim());
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
+        model.addAttribute("liveOkCount", liveOkCount);
+        model.addAttribute("liveWarnCount", liveWarnCount);
+        model.addAttribute("liveErrCount", liveErrCount);
+        model.addAttribute("liveNotFoundCount", liveNotFoundCount);
         return "zoomos/check-results";
     }
 
     private void buildGroupIssues(List<ZoomosParsingStats> sortedAsc, String groupStatus,
                                     int dropThreshold, int errorGrowthThreshold,
                                     List<Map<String, Object>> issues, String shopName) {
-        if (sortedAsc.size() < 2) return;
-        // Оцениваем только последнюю пару (текущее состояние)
-        ZoomosParsingStats prev = sortedAsc.get(sortedAsc.size() - 2);
         ZoomosParsingStats newest = sortedAsc.get(sortedAsc.size() - 1);
 
         String siteName   = newest.getSiteName();
@@ -679,6 +688,25 @@ public class ZoomosAnalysisController {
         String cityId = cityName != null && cityName.contains(" - ")
                 ? cityName.substring(0, cityName.indexOf(" - ")).trim()
                 : (cityName != null ? cityName.trim() : "");
+
+        // WARNING: 100% выкачка, но нет товаров совсем — нужна проверка
+        boolean alwaysZeroProducts = sortedAsc.stream()
+                .allMatch(s -> s.getTotalProducts() == null || s.getTotalProducts() == 0);
+        boolean allFullyComplete = sortedAsc.stream()
+                .allMatch(s -> s.getCompletionPercent() != null && s.getCompletionPercent() >= 100);
+        if (alwaysZeroProducts && allFullyComplete) {
+            Map<String, Object> issue = new LinkedHashMap<>();
+            issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+            issue.put("addressId", addressId); issue.put("addressName", addressName);
+            issue.put("checkType", checkType); issue.put("shopName", shopName);
+            issue.put("type", "WARNING");
+            issue.put("message", "100% выкачка, нет товаров — нужна проверка");
+            issues.add(issue);
+        }
+
+        if (sortedAsc.size() < 2) return;
+        // Оцениваем только последнюю пару (текущее состояние)
+        ZoomosParsingStats prev = sortedAsc.get(sortedAsc.size() - 2);
         boolean alwaysZeroStock = sortedAsc.stream()
                 .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
 
@@ -724,6 +752,14 @@ public class ZoomosAnalysisController {
                 issue.put("message", String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErr, newErr, growth));
                 issues.add(issue);
             }
+        } else if (prevErr == 0 && newErr > 10) {
+            Map<String, Object> issue = new LinkedHashMap<>();
+            issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+            issue.put("addressId", addressId); issue.put("addressName", addressName);
+            issue.put("checkType", checkType); issue.put("shopName", shopName);
+            issue.put("type", "WARNING");
+            issue.put("message", String.format("Ошибки парсинга: 0 → %d", newErr));
+            issues.add(issue);
         }
 
         // WARNING: падение товаров
