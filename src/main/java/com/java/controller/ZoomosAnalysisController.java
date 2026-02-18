@@ -636,58 +636,27 @@ public class ZoomosAnalysisController {
             }
         }
 
-        // Упрощённые данные для графиков (без JPA-объектов — только примитивы)
-        List<Map<String, Object>> chartData = new ArrayList<>();
-        for (Map<String, Object> g : groups) {
-            Map<String, Object> cd = new LinkedHashMap<>();
-            cd.put("siteName", g.get("siteName"));
-            List<Map<String, Object>> cityCd = new ArrayList<>();
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> cgList = (List<Map<String, Object>>) g.get("cityGroups");
-            for (Map<String, Object> cg : cgList) {
-                Map<String, Object> cityCdItem = new LinkedHashMap<>();
-                cityCdItem.put("cityName", cg.get("cityName"));
-                @SuppressWarnings("unchecked")
-                List<ZoomosParsingStats> cityStats = (List<ZoomosParsingStats>) cg.get("stats");
-                List<Map<String, Object>> statsCd = new ArrayList<>();
-                for (ZoomosParsingStats s : cityStats) {
-                    Map<String, Object> sc = new LinkedHashMap<>();
-                    sc.put("startTime", s.getStartTime() != null ? s.getStartTime().toInstant().toEpochMilli() : null);
-                    sc.put("totalProducts", s.getTotalProducts());
-                    sc.put("inStock", s.getInStock());
-                    sc.put("errorCount", s.getErrorCount());
-                    statsCd.add(sc);
-                }
-                cityCdItem.put("stats", statsCd);
-                cityCd.add(cityCdItem);
-            }
-            cd.put("cityGroups", cityCd);
-            chartData.add(cd);
-        }
-
-        // Текст для ИТ: сайт — список городов (через запятую) — проблема + ссылка на историю
+        // CSV для ИТ: сайт;город;тип;сообщение;ссылка_на_историю
         DateTimeFormatter itDateFmt = DateTimeFormatter.ofPattern("dd.MM.yyyy");
         String dateFromStr = run.getDateFrom().format(itDateFmt);
         String dateToStr   = run.getDateTo().format(itDateFmt);
         long ts = System.currentTimeMillis();
 
-        Map<String, List<String>> itBySite = new LinkedHashMap<>();
+        StringBuilder itText = new StringBuilder();
+        itText.append("Сайт;Город;Тип;Сообщение;История\n");
         for (Map<String, Object> issue : issues) {
-            // TREND_WARNING — только информационный, не включаем в текст для ИТ
+            // TREND_WARNING — только информационный, не включаем в CSV для ИТ
             if ("TREND_WARNING".equals(issue.get("type"))) continue;
-            String site        = (String) issue.get("site");
-            String city        = (String) issue.get("city");
-            String msg         = (String) issue.get("message");
-            String type        = (String) issue.get("type");
-            String checkType   = (String) issue.get("checkType");
-            String shopName    = (String) issue.get("shopName");
-            String cityId      = (String) issue.get("cityId");
-            String addressId   = (String) issue.get("addressId");
-            String addressName = (String) issue.get("addressName");
+            String site      = (String) issue.get("site");
+            String city      = (String) issue.get("city");
+            String msg       = (String) issue.get("message");
+            String type      = (String) issue.get("type");
+            String checkType = (String) issue.get("checkType");
+            String shopName  = (String) issue.get("shopName");
+            String cityId    = (String) issue.get("cityId");
+            String addressId = (String) issue.get("addressId");
             if (cityId == null) cityId = "";
 
-            // Заголовок строки: "cityId — addressId (если есть) — сообщение"
-            // ВАЖНО: cityId и addressId — одиночные значения (не массивы)
             String addrParam = (addressId != null && !addressId.isBlank()) ? addressId : "";
             String historyUrl = zoomosConfig.getBaseUrl()
                     + "/shops-parser/" + site + "/parsing-history"
@@ -696,19 +665,17 @@ public class ZoomosAnalysisController {
                     + "&dateTo=" + dateToStr
                     + "&launchDate=&shop=" + ("API".equals(checkType) ? "-" : shopName)
                     + "&site=&cityId=" + cityId + "&addressId=" + addrParam + "&accountId=&server=";
-            String cityPart = (city != null && !city.isBlank()) ? city : null;
-            String addrPart = addrParam.isBlank() ? "" : ", адрес " + addrParam;
+
+            String cityCell = (city != null && !city.isBlank()) ? city : "";
+            if (addrParam != null && !addrParam.isBlank()) cityCell += " (адрес " + addrParam + ")";
             String detail = (msg != null && !msg.isBlank()) ? msg : type;
-            String line = (cityPart != null ? cityPart + addrPart + " — " : "") + detail
-                    + "\n    История: " + historyUrl;
-            itBySite.computeIfAbsent(site, k -> new ArrayList<>()).add(line);
-        }
-        StringBuilder itText = new StringBuilder();
-        for (Map.Entry<String, List<String>> e : itBySite.entrySet()) {
-            itText.append(e.getKey()).append(":\n");
-            for (String line : e.getValue()) {
-                itText.append("  ").append(line).append("\n");
-            }
+
+            // Экранирование: если поле содержит ; или " — обернуть в кавычки
+            itText.append(csvEscape(site)).append(";")
+                  .append(csvEscape(cityCell)).append(";")
+                  .append(csvEscape(type)).append(";")
+                  .append(csvEscape(detail)).append(";")
+                  .append(historyUrl).append("\n");
         }
 
         // Считаем счётчики динамически из текущей оценки, чтобы не зависеть от устаревших run.warningCount
@@ -723,7 +690,6 @@ public class ZoomosAnalysisController {
         model.addAttribute("groups", groups);
         model.addAttribute("issues", issues);
         model.addAttribute("canDeliver", canDeliver);
-        model.addAttribute("chartData", chartData);
         model.addAttribute("itText", itText.toString().trim());
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
         model.addAttribute("liveOkCount", liveOkCount);
@@ -977,5 +943,14 @@ public class ZoomosAnalysisController {
         }
         knownSiteRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    /** CSV-экранирование: оборачивает значение в кавычки если содержит ; " или перевод строки. */
+    private static String csvEscape(String value) {
+        if (value == null) return "";
+        if (value.contains(";") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 }

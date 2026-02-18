@@ -379,61 +379,12 @@
         Нет данных за указанный период
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════
-         БЛОК 4: ГРАФИКИ ДИНАМИКИ (collapsible, свёрнут)
-    ═══════════════════════════════════════════════════════ -->
-    <div th:unless="${groups.isEmpty()}" class="card mt-3">
-        <div class="card-header group-header d-flex justify-content-between align-items-center py-2"
-             data-bs-toggle="collapse" data-bs-target="#chartsBlock" aria-expanded="false">
-            <span>
-                <i class="fas fa-chevron-down chevron me-2"></i>
-                <i class="fas fa-chart-line me-1 text-primary"></i>
-                <strong>Графики динамики</strong>
-            </span>
-        </div>
-        <div id="chartsBlock" class="collapse">
-            <div class="card-body">
-                <ul class="nav nav-tabs mb-3" id="chartTabs" role="tablist">
-                    <li class="nav-item" th:each="group, gi : ${groups}" role="presentation">
-                        <button class="nav-link" th:classappend="${gi.first} ? ' active' : ''"
-                                th:id="'ctab-' + ${gi.index}"
-                                data-bs-toggle="tab"
-                                th:data-bs-target="'#cpanel-' + ${gi.index}"
-                                type="button" role="tab">
-                            <span class="badge me-1"
-                                  th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger' : (${group['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
-                                  th:text="${group['status']}"></span>
-                            <span th:text="${group['siteName']}"></span>
-                        </button>
-                    </li>
-                </ul>
-                <div class="tab-content">
-                    <div th:each="group, gi : ${groups}"
-                         th:id="'cpanel-' + ${gi.index}"
-                         th:classappend="${gi.first} ? ' show active' : ''"
-                         class="tab-pane fade">
-                        <div th:each="cg, cgIter : ${group['cityGroups']}" class="mb-4">
-                            <h6 class="text-muted small" th:if="${group['cityGroups'].size() > 1}">
-                                <i class="fas fa-map-marker-alt me-1"></i>
-                                <span th:text="${cg['cityName'] != null} ? ${cg['cityName']} : 'Без города'"></span>
-                            </h6>
-                            <canvas th:id="'cv-' + ${gi.index} + '-' + ${cgIter.index}" height="90"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
 </div>
 </th:block>
 
 <th:block th:fragment="scripts">
-<script th:inline="javascript">
-    /*<![CDATA[*/
-    const chartGroups = /*[[${chartData}]]*/ [];
-    /*]]>*/
-
+<script>
     // Chevron rotation для всех collapsible
     document.querySelectorAll('.group-header').forEach(header => {
         const targetId = header.getAttribute('data-bs-target');
@@ -475,82 +426,6 @@
         });
     });
 
-    // Графики: строим при первом открытии
-    let chartsBuilt = false;
-    const chartsBlock = document.getElementById('chartsBlock');
-    if (chartsBlock) {
-        chartsBlock.addEventListener('show.bs.collapse', () => {
-            if (!chartsBuilt) { buildCharts(); chartsBuilt = true; }
-        });
-    }
-
-    function buildCharts() {
-        chartGroups.forEach((group, gi) => {
-            (group.cityGroups || []).forEach((cg, ci) => {
-                const canvas = document.getElementById('cv-' + gi + '-' + ci);
-                if (!canvas) return;
-                const sorted = [...(cg.stats || [])].reverse(); // ASC для графика
-                const labels = sorted.map(s => {
-                    if (!s.startTime) return '';
-                    const d = new Date(s.startTime); // epoch millis
-                    return d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'})
-                         + ' ' + d.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
-                });
-                new Chart(canvas, {
-                    type: 'line',
-                    data: {
-                        labels,
-                        datasets: [
-                            {
-                                label: 'В наличии',
-                                data: sorted.map(s => s.inStock ?? null),
-                                borderColor: '#0d6efd',
-                                backgroundColor: 'rgba(13,110,253,0.07)',
-                                fill: true, tension: 0.3, pointRadius: 4, yAxisID: 'y'
-                            },
-                            {
-                                label: 'Товаров',
-                                data: sorted.map(s => s.totalProducts ?? null),
-                                borderColor: '#198754',
-                                fill: false, tension: 0.3, pointRadius: 3,
-                                borderDash: [5,4], yAxisID: 'y'
-                            },
-                            {
-                                label: 'Ошибки',
-                                data: sorted.map(s => s.errorCount ?? null),
-                                borderColor: '#dc3545',
-                                fill: false, tension: 0.3, pointRadius: 4, yAxisID: 'yErr'
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        interaction: { mode: 'index', intersect: false },
-                        plugins: {
-                            legend: { position: 'top' },
-                            tooltip: { callbacks: {
-                                label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y != null ? ctx.parsed.y.toLocaleString('ru-RU') : '—')
-                            }}
-                        },
-                        scales: {
-                            x: { ticks: { maxRotation: 45, font: { size: 11 } } },
-                            y: {
-                                position: 'left',
-                                title: { display: true, text: 'Товаров / В наличии', font: { size: 11 } },
-                                ticks: { callback: v => v.toLocaleString('ru-RU') }
-                            },
-                            yErr: {
-                                position: 'right',
-                                title: { display: true, text: 'Ошибки', font: { size: 11 } },
-                                grid: { drawOnChartArea: false },
-                                ticks: { color: '#dc3545' }
-                            }
-                        }
-                    }
-                });
-            });
-        });
-    }
 </script>
 </th:block>
 </html>
