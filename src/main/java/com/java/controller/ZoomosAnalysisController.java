@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -188,9 +189,10 @@ public class ZoomosAnalysisController {
             @RequestParam(required = false) String timeFrom,
             @RequestParam(required = false) String timeTo,
             @RequestParam(defaultValue = "10") int dropThreshold,
-            @RequestParam(defaultValue = "30") int errorGrowthThreshold) {
-        log.info("runCheck: shopId={} dateFrom='{}' dateTo='{}' timeFrom='{}' timeTo='{}'",
-                shopId, dateFrom, dateTo, timeFrom, timeTo);
+            @RequestParam(defaultValue = "30") int errorGrowthThreshold,
+            @RequestParam(defaultValue = "7") int baselineDays) {
+        log.info("runCheck: shopId={} dateFrom='{}' dateTo='{}' timeFrom='{}' timeTo='{}' baselineDays={}",
+                shopId, dateFrom, dateTo, timeFrom, timeTo, baselineDays);
         if (dateFrom == null || dateFrom.isBlank() || dateTo == null || dateTo.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Не указаны даты проверки"));
         }
@@ -204,13 +206,14 @@ public class ZoomosAnalysisController {
         }
         final String tf = (timeFrom != null && !timeFrom.isBlank()) ? timeFrom : null;
         final String tt = (timeTo   != null && !timeTo.isBlank())   ? timeTo   : null;
+        final int bl = Math.max(0, baselineDays);
         try {
             String operationId = UUID.randomUUID().toString();
 
             // Запускаем в фоне, чтобы не блокировать HTTP
             CompletableFuture.runAsync(() -> {
                 try {
-                    checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, operationId);
+                    checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, operationId);
                 } catch (Exception e) {
                     log.error("Ошибка фоновой проверки: {}", e.getMessage(), e);
                 }
@@ -231,7 +234,7 @@ public class ZoomosAnalysisController {
                 .orElseThrow(() -> new IllegalArgumentException("Проверка не найдена: " + runId));
 
         List<ZoomosParsingStats> allStatsList = parsingStatsRepository
-                .findByCheckRunIdOrderBySiteNameAscCityNameAsc(runId);
+                .findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(runId);
 
         // Разделяем на завершённые и in-progress
         List<ZoomosParsingStats> stats = allStatsList.stream()
@@ -579,6 +582,60 @@ public class ZoomosAnalysisController {
                         || "NOT_FOUND".equals(i.get("type"))
                         || "IN_PROGRESS".equals(i.get("type")));
 
+        // ---- Исторический baseline-анализ ----
+        int baselineDays = run.getBaselineDays() != null ? run.getBaselineDays() : 0;
+        if (baselineDays > 0) {
+            LocalDate baselineFrom = run.getDateFrom().minusDays(baselineDays);
+            LocalDate baselineTo   = run.getDateFrom().minusDays(1);
+            ZonedDateTime bFrom = baselineFrom.atStartOfDay(ZoneOffset.UTC);
+            ZonedDateTime bTo   = baselineTo.atTime(23, 59).atZone(ZoneOffset.UTC);
+
+            model.addAttribute("baselineDays", baselineDays);
+            model.addAttribute("baselineFrom", baselineFrom.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
+            model.addAttribute("baselineTo",   baselineTo.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
+
+            // Для каждой группы site+city вычисляем trend
+            for (Map.Entry<String, List<ZoomosParsingStats>> entry : bySiteCity.entrySet()) {
+                List<ZoomosParsingStats> group = new ArrayList<>(entry.getValue());
+                if (group.isEmpty()) continue;
+
+                group.sort(Comparator.comparing(
+                        s -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now(),
+                        Comparator.naturalOrder()));
+                ZoomosParsingStats current = group.get(group.size() - 1);
+                if (current.getCompletionPercent() == null || current.getCompletionPercent() < 100) continue;
+
+                String siteName = current.getSiteName();
+                String cityName = current.getCityName();
+
+                // Загружаем исторические данные для данного сайта+города
+                List<ZoomosParsingStats> historical = parsingStatsRepository
+                        .findForBaseline(siteName, cityName, bFrom, bTo);
+
+                if (historical.size() < 3) continue; // недостаточно данных
+
+                Map<String, Double> baseline = checkService.computeMedianBaseline(historical);
+                List<String> trendWarnings = checkService.evaluateTrend(
+                        current, baseline,
+                        run.getDropThreshold() != null ? run.getDropThreshold() : 10,
+                        run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30,
+                        baselineFrom, baselineTo);
+
+                for (String msg : trendWarnings) {
+                    Map<String, Object> issue = new LinkedHashMap<>();
+                    issue.put("site", siteName);
+                    issue.put("city", cityName);
+                    issue.put("cityId", ZoomosCheckService.extractCityId(cityName));
+                    issue.put("addressId", current.getAddressId());
+                    issue.put("checkType", current.getCheckType());
+                    issue.put("shopName", run.getShop().getShopName());
+                    issue.put("type", "TREND_WARNING");
+                    issue.put("message", msg);
+                    issues.add(issue);
+                }
+            }
+        }
+
         // Упрощённые данные для графиков (без JPA-объектов — только примитивы)
         List<Map<String, Object>> chartData = new ArrayList<>();
         for (Map<String, Object> g : groups) {
@@ -616,6 +673,8 @@ public class ZoomosAnalysisController {
 
         Map<String, List<String>> itBySite = new LinkedHashMap<>();
         for (Map<String, Object> issue : issues) {
+            // TREND_WARNING — только информационный, не включаем в текст для ИТ
+            if ("TREND_WARNING".equals(issue.get("type"))) continue;
             String site        = (String) issue.get("site");
             String city        = (String) issue.get("city");
             String msg         = (String) issue.get("message");

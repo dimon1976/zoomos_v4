@@ -91,6 +91,10 @@ public class ZoomosParsingStats {
     @Builder.Default
     private Boolean isFinished = true;
 
+    @Column(name = "is_baseline")
+    @Builder.Default
+    private Boolean isBaseline = false;
+
     // Мета
     @Column(name = "parsing_date", nullable = false)
     private LocalDate parsingDate;

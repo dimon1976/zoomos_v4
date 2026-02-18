@@ -16,9 +16,10 @@
         .badge-item { background-color: #6f42c1; color:#fff; }
         .verdict-ok   { background: #d1e7dd; border-left: 5px solid #198754; }
         .verdict-fail { background: #f8d7da; border-left: 5px solid #dc3545; }
-        .issue-error    { border-left: 3px solid #dc3545; }
-        .issue-warning  { border-left: 3px solid #ffc107; }
-        .issue-notfound { border-left: 3px solid #6c757d; }
+        .issue-error        { border-left: 3px solid #dc3545; }
+        .issue-warning      { border-left: 3px solid #ffc107; }
+        .issue-notfound     { border-left: 3px solid #6c757d; }
+        .issue-trend        { border-left: 3px solid #0dcaf0; }
         .group-header { cursor: pointer; user-select: none; }
         .group-header:hover { filter: brightness(0.96); }
         .group-header .chevron { transition: transform 0.2s; }
@@ -86,6 +87,12 @@
                             Пороги: падение ≥<span th:text="${run.dropThreshold}">10</span>%,
                             ошибки ≥<span th:text="${run.errorGrowthThreshold}">30</span>%
                         </span>
+                        <span th:if="${baselineDays != null and baselineDays > 0}"
+                              class="badge bg-info bg-opacity-25 text-dark stat-badge ms-1"
+                              title="Исторический период для тренд-анализа">
+                            <i class="fas fa-chart-line me-1"></i>Baseline:
+                            <span th:text="${baselineFrom}"></span>–<span th:text="${baselineTo}"></span>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -110,14 +117,20 @@
                 <div th:each="issue : ${issues}" class="list-group-item py-2 px-3"
                      th:classappend="${issue['type'] == 'ERROR'} ? 'issue-error' :
                                     (${issue['type'] == 'WARNING'} ? 'issue-warning' :
-                                    (${issue['type'] == 'IN_PROGRESS'} ? 'list-group-item-warning' : 'issue-notfound'))">
+                                    (${issue['type'] == 'IN_PROGRESS'} ? 'list-group-item-warning' :
+                                    (${issue['type'] == 'TREND_WARNING'} ? 'issue-trend' : 'issue-notfound')))">
                     <div class="d-flex justify-content-between align-items-start gap-2">
                         <div class="flex-grow-1">
                             <span class="badge me-2"
                                   th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger' :
                                                  (${issue['type'] == 'WARNING'} ? 'bg-warning text-dark' :
-                                                 (${issue['type'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' : 'bg-secondary'))"
-                                  th:text="${issue['type'] == 'IN_PROGRESS'} ? 'В процессе' : ${issue['type']}"></span>
+                                                 (${issue['type'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' :
+                                                 (${issue['type'] == 'TREND_WARNING'} ? 'bg-info text-dark' : 'bg-secondary')))"
+                                  th:text="${issue['type'] == 'IN_PROGRESS'} ? 'В процессе' :
+                                           (${issue['type'] == 'TREND_WARNING'} ? 'Тренд' : ${issue['type']})">
+                            </span>
+                            <i th:if="${issue['type'] == 'TREND_WARNING'}"
+                               class="fas fa-chart-line me-1 text-info" title="Отклонение от исторической нормы"></i>
                             <strong th:text="${issue['site']}"></strong>
                             <span th:if="${issue['city']}" class="text-muted ms-1 small"
                                   th:text="'(' + ${issue['city']} + ')'"></span>
@@ -129,7 +142,7 @@
                                   th:text="${issue['addressName']}"></span>
                             <span class="small text-muted ms-2" th:text="${issue['message']}"></span>
                         </div>
-                        <div class="d-flex gap-1 flex-shrink-0">
+                        <div th:if="${issue['type'] != 'TREND_WARNING'}" class="d-flex gap-1 flex-shrink-0">
                             <!-- Матчинг -->
                             <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
                                target="_blank"

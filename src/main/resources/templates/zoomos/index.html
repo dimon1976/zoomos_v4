@@ -181,6 +181,9 @@
             <span class="small text-muted" title="Порог роста ошибок (%)">Ошибки%</span>
             <input type="number" class="form-control form-control-sm check-err-threshold"
                    th:id="'errThreshold-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
+            <span class="small text-muted ms-2" title="Горизонт сравнения с историей (0 = без анализа)">Baseline</span>
+            <input type="number" class="form-control form-control-sm check-baseline-days"
+                   th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30" style="width:55px;">
             <button type="button" class="btn btn-sm btn-outline-primary btn-run-check"
                     th:data-shop-id="${shop.id}"
                     title="Запустить проверку выкачки за выбранный период">
@@ -366,6 +369,13 @@
         toEl.addEventListener('change',   () => localStorage.setItem('checkDateTo-' + shopId,   toEl.value));
         if (timeFromEl) timeFromEl.addEventListener('change', () => localStorage.setItem('checkTimeFrom-' + shopId, timeFromEl.value));
         if (timeToEl)   timeToEl.addEventListener('change',   () => localStorage.setItem('checkTimeTo-' + shopId,   timeToEl.value));
+
+        const baselineDaysEl = document.getElementById('baselineDays-' + shopId);
+        if (baselineDaysEl) {
+            baselineDaysEl.value = localStorage.getItem('checkBaselineDays-' + shopId) || '7';
+            baselineDaysEl.addEventListener('change', () =>
+                localStorage.setItem('checkBaselineDays-' + shopId, baselineDaysEl.value));
+        }
     });
 
     // ---- Collapse кнопка: обновление текста ----
@@ -753,6 +763,9 @@
             barEl.classList.add('progress-bar-animated');
             msgEl.textContent = 'Запуск...';
 
+            const baselineDaysEl2 = document.getElementById('baselineDays-' + shopId);
+            const baselineDays = baselineDaysEl2 ? (baselineDaysEl2.value || '7') : '7';
+
             const fd = new FormData();
             fd.append('shopId', shopId);
             fd.append('dateFrom', dateFrom);
@@ -761,6 +774,7 @@
             if (timeTo)   fd.append('timeTo', timeTo);
             fd.append('dropThreshold', dropThreshold);
             fd.append('errorGrowthThreshold', errThreshold);
+            fd.append('baselineDays', baselineDays);
 
             const btnRef = this;
 

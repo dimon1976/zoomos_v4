@@ -40,6 +40,7 @@ public class ZoomosCheckService {
 
     private static final DateTimeFormatter DATE_PARAM_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     private static final DateTimeFormatter DATETIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yy H:mm");
+    private static final DateTimeFormatter DD_MM = DateTimeFormatter.ofPattern("dd.MM");
 
     /**
      * Запуск проверки выкачки по всем активным сайтам клиента.
@@ -48,7 +49,7 @@ public class ZoomosCheckService {
     public ZoomosCheckRun runCheck(Long shopId, LocalDate dateFrom, LocalDate dateTo,
                                     String timeFrom, String timeTo,
                                     int dropThreshold, int errorGrowthThreshold,
-                                    String operationId) {
+                                    int baselineDays, String operationId) {
         ZoomosShop shop = shopRepository.findById(shopId)
                 .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopId));
 
@@ -80,6 +81,7 @@ public class ZoomosCheckService {
                 .totalSites(allCityIds.size())
                 .dropThreshold(dropThreshold)
                 .errorGrowthThreshold(errorGrowthThreshold)
+                .baselineDays(Math.max(0, baselineDays))
                 .build();
         run = checkRunRepository.save(run);
 
@@ -212,6 +214,15 @@ public class ZoomosCheckService {
                     } catch (Exception ex) {
                         log.warn("Ошибка проверки in-progress для {}: {}", cid.getSiteName(), ex.getMessage());
                     }
+                }
+            }
+
+            // Загружаем baseline-данные (исторический период) если нужно
+            if (run.getBaselineDays() != null && run.getBaselineDays() > 0) {
+                try {
+                    fetchBaselineIfNeeded(page, run, allCityIds, dateFrom, shop.getShopName(), operationId);
+                } catch (Exception ex) {
+                    log.warn("Ошибка загрузки baseline: {}", ex.getMessage());
                 }
             }
 
@@ -712,6 +723,161 @@ public class ZoomosCheckService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    // =========================================================================
+    // Baseline-анализ: загрузка исторических данных и вычисление медианы
+    // =========================================================================
+
+    /**
+     * Проверяет наличие достаточного количества исторических данных в БД.
+     * Если данных < 3, парсит последний день baseline-периода через Playwright.
+     * Записи сохраняются с is_baseline=true и привязываются к текущему run.
+     */
+    private void fetchBaselineIfNeeded(Page page, ZoomosCheckRun run,
+                                        List<ZoomosCityId> allCityIds,
+                                        LocalDate dateFrom, String shopName,
+                                        String operationId) {
+        LocalDate baselineFrom = dateFrom.minusDays(run.getBaselineDays());
+        LocalDate baselineTo   = dateFrom.minusDays(1);
+        ZonedDateTime bFrom = baselineFrom.atStartOfDay(java.time.ZoneOffset.UTC);
+        ZonedDateTime bTo   = baselineTo.atTime(23, 59).atZone(java.time.ZoneOffset.UTC);
+
+        // Группируем по siteName+checkType
+        Map<String, List<ZoomosCityId>> byTypeAndSite = allCityIds.stream()
+                .collect(Collectors.groupingBy(c ->
+                        c.getSiteName() + "|" + (c.getCheckType() != null ? c.getCheckType() : "API")));
+
+        List<ZoomosParsingStats> allBaselineToSave = new ArrayList<>();
+
+        for (Map.Entry<String, List<ZoomosCityId>> entry : byTypeAndSite.entrySet()) {
+            String site = entry.getValue().get(0).getSiteName();
+            String checkType = entry.getValue().get(0).getCheckType() != null
+                    ? entry.getValue().get(0).getCheckType() : "API";
+
+            // Проверяем сколько исторических записей есть в БД
+            List<ZoomosParsingStats> existing = parsingStatsRepository.findForBaseline(
+                    site, null, bFrom, bTo);
+
+            if (existing.size() >= 3) {
+                log.debug("Baseline для {}: {} записей в БД — парсинг не нужен", site, existing.size());
+                continue;
+            }
+
+            log.info("Baseline для {}: только {} записей в БД — парсим последний день baseline ({})",
+                    site, existing.size(), baselineTo);
+            sendProgress(operationId, 0, 0, "Загрузка baseline " + site + "...");
+
+            try {
+                List<ZoomosCityId> cityIdEntries = entry.getValue();
+                List<ZoomosParsingStats> fetched;
+                if ("API".equals(checkType)) {
+                    fetched = parseApiPage(page, site, baselineTo, baselineTo, cityIdEntries, run);
+                } else {
+                    fetched = parseItemPage(page, site, shopName, baselineTo, baselineTo, cityIdEntries, run);
+                }
+                // Помечаем как baseline
+                fetched.forEach(s -> s.setIsBaseline(true));
+                allBaselineToSave.addAll(fetched);
+                log.info("Baseline для {}: загружено {} записей", site, fetched.size());
+            } catch (Exception ex) {
+                log.warn("Ошибка парсинга baseline для {}: {}", site, ex.getMessage());
+            }
+        }
+
+        if (!allBaselineToSave.isEmpty()) {
+            parsingStatsRepository.saveAll(allBaselineToSave);
+            log.info("Baseline: сохранено {} записей", allBaselineToSave.size());
+        }
+    }
+
+    /**
+     * Вычисляет медианные значения метрик по списку исторических выкачек.
+     * Возвращает Map: "stockRatio", "errorCount", "durationMinutes".
+     */
+    public Map<String, Double> computeMedianBaseline(List<ZoomosParsingStats> historicalStats) {
+        Map<String, Double> result = new HashMap<>();
+
+        List<Double> stockRatios = historicalStats.stream()
+                .filter(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0 && s.getInStock() != null)
+                .map(s -> (double) s.getInStock() / s.getTotalProducts())
+                .sorted().collect(Collectors.toList());
+        if (!stockRatios.isEmpty()) result.put("stockRatio", computeMedian(stockRatios));
+
+        List<Double> errors = historicalStats.stream()
+                .filter(s -> s.getErrorCount() != null)
+                .map(s -> (double) s.getErrorCount())
+                .sorted().collect(Collectors.toList());
+        if (!errors.isEmpty()) result.put("errorCount", computeMedian(errors));
+
+        List<Double> durations = historicalStats.stream()
+                .filter(s -> s.getParsingDurationMinutes() != null && s.getParsingDurationMinutes() > 0)
+                .map(s -> (double) s.getParsingDurationMinutes())
+                .sorted().collect(Collectors.toList());
+        if (!durations.isEmpty()) result.put("durationMinutes", computeMedian(durations));
+
+        return result;
+    }
+
+    private double computeMedian(List<Double> sorted) {
+        int n = sorted.size();
+        if (n == 0) return -1;
+        int mid = n / 2;
+        return n % 2 == 0 ? (sorted.get(mid - 1) + sorted.get(mid)) / 2.0 : sorted.get(mid);
+    }
+
+    /**
+     * Сравнивает последнюю выкачку с baseline-медианой.
+     * Возвращает список TREND_WARNING сообщений (пустой если всё в норме).
+     */
+    public List<String> evaluateTrend(ZoomosParsingStats current,
+                                       Map<String, Double> baseline,
+                                       int dropThreshold, int errorGrowthThreshold,
+                                       LocalDate baselineFrom, LocalDate baselineTo) {
+        List<String> warnings = new ArrayList<>();
+        String period = baselineFrom.format(DD_MM) + "–" + baselineTo.format(DD_MM);
+        double dropFrac  = dropThreshold / 100.0;
+        double errFrac   = errorGrowthThreshold / 100.0;
+
+        // Stock ratio
+        if (baseline.containsKey("stockRatio")
+                && current.getTotalProducts() != null && current.getTotalProducts() > 0
+                && current.getInStock() != null) {
+            double cur  = (double) current.getInStock() / current.getTotalProducts();
+            double base = baseline.get("stockRatio");
+            if (base > 0 && (base - cur) / base > dropFrac) {
+                warnings.add(String.format(
+                        "Доля «В наличии» снизилась: было %.1f%% → стало %.1f%% (−%.0f%%) [норма %s]",
+                        base * 100, cur * 100, (base - cur) / base * 100, period));
+            }
+        }
+
+        // Error count
+        if (baseline.containsKey("errorCount") && current.getErrorCount() != null) {
+            double cur  = current.getErrorCount();
+            double base = baseline.get("errorCount");
+            if (base > 0 && (cur - base) / base > errFrac) {
+                warnings.add(String.format(
+                        "Рост ошибок: было %.0f → стало %.0f (+%.0f%%) [норма %s]",
+                        base, cur, (cur - base) / base * 100, period));
+            } else if (base == 0 && cur > 10) {
+                warnings.add(String.format(
+                        "Появились ошибки: было 0 → стало %.0f [норма %s]", cur, period));
+            }
+        }
+
+        // Duration
+        if (baseline.containsKey("durationMinutes") && current.getParsingDurationMinutes() != null) {
+            double cur  = current.getParsingDurationMinutes();
+            double base = baseline.get("durationMinutes");
+            if (base > 0 && (cur - base) / base > dropFrac) {
+                warnings.add(String.format(
+                        "Время выкачки выросло: было %.0f мин → стало %.0f мин (+%.0f%%) [норма %s]",
+                        base, cur, (cur - base) / base * 100, period));
+            }
+        }
+
+        return warnings;
     }
 
     // =========================================================================

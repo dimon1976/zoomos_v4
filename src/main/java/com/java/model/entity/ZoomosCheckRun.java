@@ -65,6 +65,10 @@ public class ZoomosCheckRun {
     @Builder.Default
     private Integer errorGrowthThreshold = 30;
 
+    @Column(name = "baseline_days")
+    @Builder.Default
+    private Integer baselineDays = 7;
+
     @Column(name = "status")
     @Builder.Default
     private String status = "RUNNING";
