@@ -65,9 +65,8 @@ public class ZoomosCheckService {
                 ? LocalTime.parse(timeFrom) : LocalTime.MIDNIGHT;
         LocalTime tTo   = (timeTo != null && !timeTo.isBlank())
                 ? LocalTime.parse(timeTo) : LocalTime.of(23, 59);
-        ZoneId zone = ZoneId.systemDefault();
-        ZonedDateTime rangeStart = dateFrom.atTime(tFrom).atZone(zone);
-        ZonedDateTime rangeEnd   = dateTo.atTime(tTo).atZone(zone);
+        ZonedDateTime rangeStart = dateFrom.atTime(tFrom).atZone(java.time.ZoneOffset.UTC);
+        ZonedDateTime rangeEnd   = dateTo.atTime(tTo).atZone(java.time.ZoneOffset.UTC);
         boolean hasTimeFilter = (timeFrom != null && !timeFrom.isBlank())
                 || (timeTo != null && !timeTo.isBlank());
 
@@ -163,30 +162,55 @@ public class ZoomosCheckService {
                 sendProgress(operationId, processed, total, siteName + " — " + stats.size() + " записей");
             }
 
-            // Дополнительный запрос для NOT_FOUND сайтов (без &onlyFinished=1)
-            Set<String> sitesWithData = allStats.stream()
-                    .map(ZoomosParsingStats::getSiteName).collect(Collectors.toSet());
-            List<ZoomosCityId> notFoundSites = allCityIds.stream()
-                    .filter(c -> !sitesWithData.contains(c.getSiteName()))
-                    .collect(Collectors.toList());
+            // Дополнительный запрос in-progress для сайтов с неполными данными
+            // (нет данных совсем, или нет данных по некоторым городам/адресам)
+            Set<String> foundCityKeysCheck = new HashSet<>();    // "siteName|cityId"
+            Set<String> foundAddressKeysCheck = new HashSet<>(); // "siteName|addressId"
+            for (ZoomosParsingStats s : allStats) {
+                String cId = extractCityId(s.getCityName());
+                if (cId != null) foundCityKeysCheck.add(s.getSiteName() + "|" + cId);
+                if (s.getAddressId() != null && !s.getAddressId().isBlank()) {
+                    foundAddressKeysCheck.add(s.getSiteName() + "|" + s.getAddressId());
+                }
+            }
 
-            if (!notFoundSites.isEmpty()) {
-                sendProgress(operationId, processed, total, "Проверка незавершённых выкачек...");
-                Map<String, List<ZoomosCityId>> notFoundByType = notFoundSites.stream()
-                        .collect(Collectors.groupingBy(c -> c.getCheckType() != null ? c.getCheckType() : "ITEM"));
+            List<ZoomosCityId> needsInProgress = allCityIds.stream().filter(cid -> {
+                String site = cid.getSiteName();
+                Set<String> expectedCities = parseCommaSeparated(cid.getCityIds());
+                Map<String, Set<String>> addrMapping = parseAddressMapping(cid.getAddressIds());
+                Set<String> allAddrs = flattenAddressIds(addrMapping);
+                // Если хотя бы один адрес или один город без покрытия адресами не найден — нужен in-progress
+                for (String aid : allAddrs) {
+                    if (!foundAddressKeysCheck.contains(site + "|" + aid)) return true;
+                }
+                Set<String> addrCoveredCities = addrMapping.entrySet().stream()
+                        .filter(e -> !e.getKey().isEmpty() && !e.getValue().isEmpty())
+                        .map(Map.Entry::getKey).collect(Collectors.toSet());
+                for (String cityId : expectedCities) {
+                    if (!addrCoveredCities.contains(cityId) && !foundCityKeysCheck.contains(site + "|" + cityId)) {
+                        return true;
+                    }
+                }
+                return false;
+            }).collect(Collectors.toList());
 
-                for (Map.Entry<String, List<ZoomosCityId>> entry : notFoundByType.entrySet()) {
-                    for (ZoomosCityId cid : entry.getValue()) {
-                        try {
-                            List<ZoomosParsingStats> inProgressStats = parseInProgressPage(
-                                    page, cid, shop.getShopName(), dateFrom, dateTo, run);
-                            if (hasTimeFilter) {
-                                inProgressStats = filterByTime(inProgressStats, rangeStart, rangeEnd);
-                            }
-                            allStats.addAll(inProgressStats);
-                        } catch (Exception ex) {
-                            log.warn("Ошибка проверки in-progress для {}: {}", cid.getSiteName(), ex.getMessage());
+            if (!needsInProgress.isEmpty()) {
+                sendProgress(operationId, processed, total, "Проверка незавершённых выкачек (" + needsInProgress.size() + ")...");
+                // Дедуплицируем по siteName — один запрос на сайт
+                Map<String, ZoomosCityId> inProgressBySite = new LinkedHashMap<>();
+                for (ZoomosCityId cid : needsInProgress) {
+                    inProgressBySite.putIfAbsent(cid.getSiteName(), cid);
+                }
+                for (ZoomosCityId cid : inProgressBySite.values()) {
+                    try {
+                        List<ZoomosParsingStats> inProgressStats = parseInProgressPage(
+                                page, cid, shop.getShopName(), dateFrom, dateTo, run);
+                        if (hasTimeFilter) {
+                            inProgressStats = filterByTime(inProgressStats, rangeStart, rangeEnd);
                         }
+                        allStats.addAll(inProgressStats);
+                    } catch (Exception ex) {
+                        log.warn("Ошибка проверки in-progress для {}: {}", cid.getSiteName(), ex.getMessage());
                     }
                 }
             }
@@ -251,12 +275,7 @@ public class ZoomosCheckService {
                     }
                 }
             }
-            if (entry.getAddressIds() != null && !entry.getAddressIds().isBlank()) {
-                for (String aid : entry.getAddressIds().split(",")) {
-                    String trimmed = aid.trim();
-                    if (!trimmed.isEmpty()) allowedAddressIds.add(trimmed);
-                }
-            }
+            allowedAddressIds.addAll(flattenAddressIds(parseAddressMapping(entry.getAddressIds())));
         }
 
         // Для API-сайтов берём только глобальные выкачки (поле "Клиент" пустое)
@@ -297,12 +316,7 @@ public class ZoomosCheckService {
                     }
                 }
             }
-            if (entry.getAddressIds() != null && !entry.getAddressIds().isBlank()) {
-                for (String aid : entry.getAddressIds().split(",")) {
-                    String trimmed = aid.trim();
-                    if (!trimmed.isEmpty()) allowedAddressIds.add(trimmed);
-                }
-            }
+            allowedAddressIds.addAll(flattenAddressIds(parseAddressMapping(entry.getAddressIds())));
         }
 
         return parseTable(page, run, siteName, "ITEM", allowedCityIds, cityIdMap, allowedAddressIds);
@@ -342,12 +356,7 @@ public class ZoomosCheckService {
                 }
             }
         }
-        if (cid.getAddressIds() != null && !cid.getAddressIds().isBlank()) {
-            for (String aid : cid.getAddressIds().split(",")) {
-                String trimmed = aid.trim();
-                if (!trimmed.isEmpty()) allowedAddressIds.add(trimmed);
-            }
-        }
+        allowedAddressIds.addAll(flattenAddressIds(parseAddressMapping(cid.getAddressIds())));
 
         List<ZoomosParsingStats> stats = parseTable(page, run, siteName, checkType, allowedCityIds, cityIdMap, allowedAddressIds);
         // Для API — только глобальные выкачки (без клиента)
@@ -405,10 +414,41 @@ public class ZoomosCheckService {
             colIndex.put(headersList.get(i), i);
         }
 
-        log.info("Найдены столбцы ({}): {}", colIndex.size(), colIndex.keySet());
+        // Fallback-маппинг колонок: если точное имя не найдено, ищем по вхождению
+        Map<String, String[]> fallbackAliases = Map.of(
+                "старт (общий)", new String[]{"старт"},
+                "кол-во товаров", new String[]{"товаров", "количество товаров"},
+                "кол-во ошибок", new String[]{"ошибок", "количество ошибок"},
+                "кол-во категорий", new String[]{"категорий", "количество категорий"},
+                "завершено (всего)", new String[]{"завершено"},
+                "в наличии", new String[]{"наличии"}
+        );
+        for (Map.Entry<String, String[]> alias : fallbackAliases.entrySet()) {
+            if (!colIndex.containsKey(alias.getKey())) {
+                for (String alt : alias.getValue()) {
+                    for (Map.Entry<String, Integer> col : colIndex.entrySet()) {
+                        if (col.getKey().contains(alt)) {
+                            colIndex.put(alias.getKey(), col.getValue());
+                            log.info("Fallback маппинг: '{}' → колонка '{}' (idx={})", alias.getKey(), col.getKey(), col.getValue());
+                            break;
+                        }
+                    }
+                    if (colIndex.containsKey(alias.getKey())) break;
+                }
+            }
+        }
 
+        log.info("Найдены столбцы ({}): {}", colIndex.size(), colIndex);
+
+        boolean firstRow = true;
         for (List<String> cells : rowsList) {
             try {
+                // Debug-логирование первой строки для диагностики маппинга
+                if (firstRow) {
+                    log.info("Первая строка raw данных ({} ячеек): {}", cells.size(), cells);
+                    firstRow = false;
+                }
+
                 String id = getCellValue(cells, colIndex, "id");
                 String server = getCellValue(cells, colIndex, "сервер");
                 String clientName = getCellValue(cells, colIndex, "клиент");
@@ -540,7 +580,7 @@ public class ZoomosCheckService {
         return null;
     }
 
-    private String extractCityId(String cityStr) {
+    public static String extractCityId(String cityStr) {
         if (cityStr == null || cityStr.isEmpty()) return null;
         // "3612 - Нижний Новгород" → "3612"
         String trimmed = cityStr.trim();
@@ -553,6 +593,57 @@ public class ZoomosCheckService {
         return null;
     }
 
+    public static Set<String> parseCommaSeparated(String csv) {
+        if (csv == null || csv.isBlank()) return Collections.emptySet();
+        Set<String> result = new HashSet<>();
+        for (String part : csv.split(",")) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty()) result.add(trimmed);
+        }
+        return result;
+    }
+
+    /**
+     * Парсит addressIds в структурированный маппинг cityId → Set<addressId>.
+     * JSON формат: {"3435":["18121","18122"],"4036":[]}
+     * Плоский формат (обратная совместимость): "18121,18122" → {"":["18121","18122"]}
+     */
+    public static Map<String, Set<String>> parseAddressMapping(String addressIds) {
+        if (addressIds == null || addressIds.isBlank()) return Collections.emptyMap();
+        String trimmed = addressIds.trim();
+        if (trimmed.startsWith("{")) {
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> raw = new com.fasterxml.jackson.databind.ObjectMapper().readValue(trimmed, Map.class);
+                Map<String, Set<String>> result = new LinkedHashMap<>();
+                for (Map.Entry<String, Object> entry : raw.entrySet()) {
+                    Set<String> addrs = new HashSet<>();
+                    if (entry.getValue() instanceof java.util.List<?> list) {
+                        for (Object item : list) {
+                            String s = String.valueOf(item).trim();
+                            if (!s.isEmpty()) addrs.add(s);
+                        }
+                    }
+                    result.put(entry.getKey(), addrs);
+                }
+                return result;
+            } catch (Exception e) {
+                // Fallback: парсим как плоский
+            }
+        }
+        // Плоский формат — без привязки к городу
+        Set<String> flat = parseCommaSeparated(trimmed);
+        if (flat.isEmpty()) return Collections.emptyMap();
+        return Map.of("", flat);
+    }
+
+    /**
+     * Извлекает все addressId из маппинга (все города).
+     */
+    public static Set<String> flattenAddressIds(Map<String, Set<String>> mapping) {
+        return mapping.values().stream().flatMap(Set::stream).collect(Collectors.toSet());
+    }
+
     private ZonedDateTime parseDateTime(String str) {
         if (str == null || str.isEmpty()) return null;
         try {
@@ -560,7 +651,7 @@ public class ZoomosCheckService {
             // Берём первую часть до скобки
             String clean = str.contains("(") ? str.substring(0, str.indexOf("(")).trim() : str.trim();
             var local = java.time.LocalDateTime.parse(clean, DATETIME_PARSE_FORMAT);
-            return local.atZone(ZoneId.systemDefault());
+            return local.atZone(java.time.ZoneOffset.UTC);
         } catch (Exception e) {
             log.trace("Не удалось распарсить дату '{}': {}", str, e.getMessage());
             return null;
@@ -636,26 +727,51 @@ public class ZoomosCheckService {
                     return key;
                 }));
 
-        // Определяем какие site+city были ожидаемы
-        Set<String> expectedKeys = new HashSet<>();
-        for (ZoomosCityId cid : allCityIds) {
-            expectedKeys.add(cid.getSiteName() + "|" + (cid.getCityIds() != null ? cid.getCityIds() : ""));
-        }
-
-        // Считаем: для каждого site+city проверяем динамику внутри периода
         int notFound = 0;
         int ok = 0;
         int warning = 0;
         int error = 0;
 
-        // Сначала — сайты без данных
-        Set<String> sitesWithData = stats.stream()
-                .map(ZoomosParsingStats::getSiteName)
-                .collect(Collectors.toSet());
+        // Строим множества найденных городов и адресов из реальных данных
+        Set<String> foundCityKeys = new HashSet<>();    // "siteName|cityId"
+        Set<String> foundAddressKeys = new HashSet<>(); // "siteName|addressId"
+        Map<String, String> addressToCityFromData = new HashMap<>(); // "siteName|addressId" → cityId
 
+        for (ZoomosParsingStats s : stats) {
+            String cId = extractCityId(s.getCityName());
+            if (cId != null) foundCityKeys.add(s.getSiteName() + "|" + cId);
+            if (s.getAddressId() != null && !s.getAddressId().isBlank()) {
+                foundAddressKeys.add(s.getSiteName() + "|" + s.getAddressId());
+                if (cId != null) addressToCityFromData.put(s.getSiteName() + "|" + s.getAddressId(), cId);
+            }
+        }
+
+        // Проверяем каждый ожидаемый город/адрес
         for (ZoomosCityId cid : allCityIds) {
-            if (!sitesWithData.contains(cid.getSiteName())) {
-                notFound++;
+            String site = cid.getSiteName();
+            Set<String> expectedCities = parseCommaSeparated(cid.getCityIds());
+            Map<String, Set<String>> addrMapping = parseAddressMapping(cid.getAddressIds());
+
+            // Города покрытые адресами — из конфигурации (не из данных парсинга)
+            Set<String> addressCoveredCities = addrMapping.entrySet().stream()
+                    .filter(e -> !e.getKey().isEmpty() && !e.getValue().isEmpty())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toSet());
+
+            // Проверяем адреса
+            Set<String> allExpectedAddresses = flattenAddressIds(addrMapping);
+            for (String aid : allExpectedAddresses) {
+                if (!foundAddressKeys.contains(site + "|" + aid)) {
+                    notFound++;
+                }
+            }
+
+            // Проверяем города без покрытия адресами
+            for (String cityId : expectedCities) {
+                if (addressCoveredCities.contains(cityId)) continue;
+                if (!foundCityKeys.contains(site + "|" + cityId)) {
+                    notFound++;
+                }
             }
         }
 

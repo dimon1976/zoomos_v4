@@ -153,9 +153,17 @@ public class ZoomosAnalysisController {
     @PostMapping("/city-ids/{id}/update-addresses")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> updateAddressIds(@PathVariable Long id,
-                                                                 @RequestParam(required = false) String addressIds) {
+                                                                 @RequestBody(required = false) Map<String, List<String>> addressMapping) {
         return cityIdRepository.findById(id).map(entry -> {
-            entry.setAddressIds(addressIds != null && !addressIds.isBlank() ? addressIds.trim() : null);
+            if (addressMapping == null || addressMapping.isEmpty()) {
+                entry.setAddressIds(null);
+            } else {
+                try {
+                    entry.setAddressIds(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(addressMapping));
+                } catch (Exception e) {
+                    return ResponseEntity.badRequest().body(Map.<String, Object>of("success", false, "error", e.getMessage()));
+                }
+            }
             cityIdRepository.save(entry);
             return ResponseEntity.ok(Map.<String, Object>of("success", true));
         }).orElse(ResponseEntity.notFound().<Map<String, Object>>build());
@@ -263,46 +271,111 @@ public class ZoomosAnalysisController {
             }
         }
 
-        // Ожидаемые сайты — проверяем ненайденные
+        // Ожидаемые города/адреса — проверяем ненайденные на уровне каждого города и адреса
         List<ZoomosCityId> allCityIds = parserService.getCityIds(run.getShop().getId())
                 .stream().filter(c -> Boolean.TRUE.equals(c.getIsActive()))
                 .collect(Collectors.toList());
-        Set<String> sitesWithData = stats.stream()
-                .map(ZoomosParsingStats::getSiteName)
-                .collect(Collectors.toSet());
-        // Сайты с in-progress данными
-        Map<String, ZoomosParsingStats> inProgressBySite = inProgressStats.stream()
-                .collect(Collectors.toMap(
-                        ZoomosParsingStats::getSiteName,
-                        s -> s,
-                        (a, b) -> a.getStartTime() != null && b.getStartTime() != null
-                                && a.getStartTime().isAfter(b.getStartTime()) ? a : b));
+
+        // Множества найденных городов и адресов из реальных данных
+        Set<String> foundCityKeys = new HashSet<>();    // "siteName|cityId"
+        Set<String> foundAddressKeys = new HashSet<>(); // "siteName|addressId"
+        Map<String, String> addressToCityFromData = new HashMap<>(); // "siteName|addressId" → cityId
+        for (ZoomosParsingStats s : stats) {
+            String cId = ZoomosCheckService.extractCityId(s.getCityName());
+            if (cId != null) foundCityKeys.add(s.getSiteName() + "|" + cId);
+            if (s.getAddressId() != null && !s.getAddressId().isBlank()) {
+                foundAddressKeys.add(s.getSiteName() + "|" + s.getAddressId());
+                if (cId != null) addressToCityFromData.put(s.getSiteName() + "|" + s.getAddressId(), cId);
+            }
+        }
+
+        // In-progress данные — индексируем по site+city и site+address
+        Map<String, ZoomosParsingStats> inProgressByCityKey = new HashMap<>();
+        for (ZoomosParsingStats ip : inProgressStats) {
+            String cId = ZoomosCheckService.extractCityId(ip.getCityName());
+            if (cId != null) {
+                String key = ip.getSiteName() + "|" + cId;
+                inProgressByCityKey.merge(key, ip, (a, b) ->
+                        a.getStartTime() != null && b.getStartTime() != null
+                                && a.getStartTime().isAfter(b.getStartTime()) ? a : b);
+            }
+        }
+
+        // Также индексируем in-progress по site+address
+        Map<String, ZoomosParsingStats> inProgressByAddrKey = new HashMap<>();
+        for (ZoomosParsingStats ip : inProgressStats) {
+            if (ip.getAddressId() != null && !ip.getAddressId().isBlank()) {
+                String key = ip.getSiteName() + "|" + ip.getAddressId();
+                inProgressByAddrKey.merge(key, ip, (a, b) ->
+                        a.getStartTime() != null && b.getStartTime() != null
+                                && a.getStartTime().isAfter(b.getStartTime()) ? a : b);
+            }
+        }
+
         for (ZoomosCityId cid : allCityIds) {
-            if (!sitesWithData.contains(cid.getSiteName())) {
-                // Первый city ID из списка для фильтра в URL истории
-                String firstCityId = "";
-                if (cid.getCityIds() != null && !cid.getCityIds().isBlank()) {
-                    firstCityId = cid.getCityIds().split(",")[0].trim();
+            String site = cid.getSiteName();
+            Set<String> expectedCities = ZoomosCheckService.parseCommaSeparated(cid.getCityIds());
+            Map<String, Set<String>> addrMapping = ZoomosCheckService.parseAddressMapping(cid.getAddressIds());
+
+            // Для плоского формата (key="") определяем город из данных парсинга
+            // Строим полный маппинг addressId → cityId с учётом конфигурации и данных
+            Set<String> addressCoveredCities = new HashSet<>();
+            Map<String, String> addrToCityResolved = new HashMap<>(); // aid → cityId
+
+            for (Map.Entry<String, Set<String>> addrEntry : addrMapping.entrySet()) {
+                String mappedCity = addrEntry.getKey();
+                for (String aid : addrEntry.getValue()) {
+                    String resolvedCity;
+                    if (!mappedCity.isEmpty()) {
+                        resolvedCity = mappedCity;
+                    } else {
+                        // Плоский формат — ищем город из данных парсинга
+                        resolvedCity = addressToCityFromData.get(site + "|" + aid);
+                    }
+                    if (resolvedCity != null) {
+                        addrToCityResolved.put(aid, resolvedCity);
+                        addressCoveredCities.add(resolvedCity);
+                    }
                 }
+            }
+
+            // Проверяем каждый ожидаемый адрес ИНДИВИДУАЛЬНО
+            Set<String> allExpectedAddresses = ZoomosCheckService.flattenAddressIds(addrMapping);
+            for (String aid : allExpectedAddresses) {
+                if (foundAddressKeys.contains(site + "|" + aid)) continue; // данные есть — ОК
+
+                String addrCity = addrToCityResolved.get(aid);
                 Map<String, Object> issue = new LinkedHashMap<>();
-                issue.put("site", cid.getSiteName());
-                issue.put("city", cid.getCityIds());
-                issue.put("cityId", firstCityId);
+                issue.put("site", site);
+                issue.put("city", addrCity != null ? addrCity : "");
+                issue.put("cityId", addrCity != null ? addrCity : "");
+                issue.put("addressId", aid);
                 issue.put("checkType", cid.getCheckType());
                 issue.put("shopName", run.getShop().getShopName());
-                ZoomosParsingStats ip = inProgressBySite.get(cid.getSiteName());
-                if (ip != null) {
-                    boolean frozen = ip.getUpdatedTime() != null &&
-                            ip.getUpdatedTime().isBefore(ZonedDateTime.now().minusHours(2));
-                    issue.put("type", frozen ? "NOT_FOUND" : "IN_PROGRESS");
-                    issue.put("message", frozen
-                            ? "Выкачка зависла (нет обновлений >2 ч): " + ip.getCompletionTotal()
-                            : "Выкачка в процессе: " + ip.getCompletionTotal());
-                    issue.put("inProgress", ip);
-                } else {
-                    issue.put("type", "NOT_FOUND");
-                    issue.put("message", "Нет данных за указанный период");
+
+                // Ищем in-progress сначала по адресу, потом по городу
+                ZoomosParsingStats ip = inProgressByAddrKey.get(site + "|" + aid);
+                if (ip == null && addrCity != null) {
+                    ip = inProgressByCityKey.get(site + "|" + addrCity);
                 }
+                addIssueStatus(issue, ip);
+                issues.add(issue);
+            }
+
+            // Проверяем города без покрытия адресами
+            for (String cityId : expectedCities) {
+                if (addressCoveredCities.contains(cityId)) continue;
+                if (foundCityKeys.contains(site + "|" + cityId)) continue;
+
+                Map<String, Object> issue = new LinkedHashMap<>();
+                issue.put("site", site);
+                issue.put("city", cityId);
+                issue.put("cityId", cityId);
+                issue.put("checkType", cid.getCheckType());
+                issue.put("shopName", run.getShop().getShopName());
+
+                ZoomosParsingStats ip = inProgressByCityKey.get(site + "|" + cityId);
+                addIssueStatus(issue, ip);
                 issues.add(issue);
             }
         }
@@ -461,11 +534,8 @@ public class ZoomosAnalysisController {
             String addressName = (String) issue.get("addressName");
             if (cityId == null) cityId = "";
 
-            String cityPart = (city != null && !city.isBlank()) ? city : null;
-            // Добавляем адрес в строку, если он задан
-            String addrPart = (addressName != null && !addressName.isBlank()) ? " [" + addressName + "]" : "";
-            String detail = (msg != null && !msg.isBlank()) ? msg : type;
-            // addressId передаём в параметр &address= для прямого фильтра в истории
+            // Заголовок строки: "cityId — addressId (если есть) — сообщение"
+            // ВАЖНО: cityId и addressId — одиночные значения (не массивы)
             String addrParam = (addressId != null && !addressId.isBlank()) ? addressId : "";
             String historyUrl = zoomosConfig.getBaseUrl()
                     + "/shops-parser/" + site + "/parsing-history"
@@ -474,6 +544,9 @@ public class ZoomosAnalysisController {
                     + "&dateTo=" + dateToStr
                     + "&launchDate=&shop=" + ("API".equals(checkType) ? "-" : shopName)
                     + "&site=&cityId=" + cityId + "&address=" + addrParam + "&accountId=&server=";
+            String cityPart = (city != null && !city.isBlank()) ? city : null;
+            String addrPart = addrParam.isBlank() ? "" : ", адрес " + addrParam;
+            String detail = (msg != null && !msg.isBlank()) ? msg : type;
             String line = (cityPart != null ? cityPart + addrPart + " — " : "") + detail
                     + "\n    История: " + historyUrl;
             itBySite.computeIfAbsent(site, k -> new ArrayList<>()).add(line);
@@ -573,6 +646,43 @@ public class ZoomosAnalysisController {
                 issue.put("type", "WARNING");
                 issue.put("message", String.format("Падение товаров: %d → %d (−%.0f%%)", prevTotal, newTotal, drop));
                 issues.add(issue);
+            }
+        }
+    }
+
+    /**
+     * Устанавливает тип и сообщение для issue на основе in-progress статистики.
+     * IN_PROGRESS: показывает старт, процент выполнения и время обновления.
+     * NOT_FOUND:   данных нет совсем.
+     */
+    private void addIssueStatus(Map<String, Object> issue, ZoomosParsingStats ip) {
+        if (ip == null) {
+            issue.put("type", "NOT_FOUND");
+            String aid = (String) issue.get("addressId");
+            String cityId = (String) issue.get("cityId");
+            if (aid != null && !aid.isBlank()) {
+                issue.put("message", "Нет данных по адресу " + aid + " за указанный период");
+            } else {
+                issue.put("message", "Нет данных по городу " + (cityId != null ? cityId : "") + " за указанный период");
+            }
+        } else {
+            boolean frozen = ip.getUpdatedTime() != null &&
+                    ip.getUpdatedTime().isBefore(ZonedDateTime.now().minusHours(2));
+            issue.put("type", frozen ? "NOT_FOUND" : "IN_PROGRESS");
+            issue.put("inProgress", ip);
+            String pct = ip.getCompletionTotal() != null ? ip.getCompletionTotal() : "?";
+            String startStr = ip.getStartTime() != null
+                    ? ip.getStartTime().format(DateTimeFormatter.ofPattern("dd.MM HH:mm"))
+                    : "?";
+            String updStr = ip.getUpdatedTime() != null
+                    ? ip.getUpdatedTime().format(DateTimeFormatter.ofPattern("dd.MM HH:mm"))
+                    : null;
+            if (frozen) {
+                issue.put("message", "Выкачка зависла: старт " + startStr + ", выполнено " + pct
+                        + (updStr != null ? ", обновл. " + updStr : ""));
+            } else {
+                issue.put("message", "Выкачка в процессе: старт " + startStr + ", выполнено " + pct
+                        + (updStr != null ? ", обновл. " + updStr : ""));
             }
         }
     }

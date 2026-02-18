@@ -38,32 +38,11 @@
             border-color: #dee2e6;
             border-radius: 4px;
         }
-        .address-ids-input {
-            font-size: 0.8em;
-            border: 1px solid transparent;
-            background: transparent;
-            width: 100%;
-            cursor: text;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .address-ids-input:focus {
-            border-color: #86b7fe;
-            background: #fff;
-            outline: 0;
-            box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
-            border-radius: 4px;
-            padding: 2px 4px;
-            white-space: normal;
-            overflow: visible;
-            text-overflow: unset;
-        }
-        .address-ids-input:hover:not(:focus) {
-            background: #f8f9fa;
-            border-color: #dee2e6;
-            border-radius: 4px;
-        }
+        .addr-badge { display: inline-flex; align-items: center; gap: 4px; margin: 2px; }
+        .addr-badge .btn-close { font-size: 0.5em; }
+        .addr-city-section { border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; }
+        .addr-city-section .city-label { font-weight: 600; font-size: 0.85em; color: #495057; }
+        .addr-add-input { width: 100px; font-size: 0.8em; }
         .shop-card { margin-bottom: 1.5rem; }
         .sync-status { font-size: 0.8em; }
         .city-ids-col { min-width: 200px; }
@@ -312,19 +291,43 @@
                                                    th:title="${entry.cityIds}"
                                                    placeholder="ID не заданы">
                                         </td>
-                                        <td>
-                                            <input type="text"
-                                                   class="form-control-plaintext address-ids-input"
-                                                   th:value="${entry.addressIds}"
-                                                   th:data-id="${entry.id}"
-                                                   th:title="${entry.addressIds}"
-                                                   placeholder="не заданы">
+                                        <td class="text-center">
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-secondary btn-edit-addresses"
+                                                    th:data-id="${entry.id}"
+                                                    th:data-site="${entry.siteName}"
+                                                    th:data-cities="${entry.cityIds}"
+                                                    th:data-addresses="${entry.addressIds}">
+                                                <i class="fas fa-map-marker-alt me-1"></i>
+                                                <span class="addr-count-label">Адреса</span>
+                                            </button>
                                         </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка редактирования адресов -->
+    <div class="modal fade" id="addressModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-map-marker-alt me-2"></i>Адреса: <span id="addrModalSite"></span></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="addrModalBody">
+                    <!-- JS заполняет секции по городам -->
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="addrModalSave">
+                        <i class="fas fa-save me-1"></i>Сохранить
+                    </button>
                 </div>
             </div>
         </div>
@@ -523,41 +526,184 @@
         });
     });
 
-    // ---- Address IDs input: сохранение по blur/Enter ----
-    document.querySelectorAll('.address-ids-input').forEach(input => {
-        let originalValue = input.value;
+    // ---- Модалка адресов ----
+    let addrModalEntryId = null;
+    let addrModalData = {}; // cityId → [addressIds]
+    const addrModal = new bootstrap.Modal(document.getElementById('addressModal'));
 
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
-            if (e.key === 'Escape') { this.value = originalValue; this.blur(); }
+    // Парсинг addressIds: JSON {"3435":["18121"]} или плоский "18121,18122"
+    function parseAddrData(raw, cities) {
+        const result = {};
+        (cities || '').split(',').forEach(c => { c = c.trim(); if (c) result[c] = []; });
+        if (!raw || !raw.trim()) return result;
+        const trimmed = raw.trim();
+        if (trimmed.startsWith('{')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                Object.keys(parsed).forEach(k => { result[k] = Array.isArray(parsed[k]) ? parsed[k] : []; });
+            } catch(e) {}
+        } else {
+            // Плоский формат — привязка неизвестна, покажем как "без города"
+            const flat = trimmed.split(',').map(s => s.trim()).filter(s => s);
+            if (flat.length > 0) {
+                // Если только один город — привяжем к нему
+                const cityKeys = Object.keys(result);
+                if (cityKeys.length === 1) {
+                    result[cityKeys[0]] = flat;
+                } else {
+                    result[''] = flat;
+                }
+            }
+        }
+        return result;
+    }
+
+    function renderAddrModal() {
+        const body = document.getElementById('addrModalBody');
+        body.innerHTML = '';
+        const cities = Object.keys(addrModalData);
+        if (cities.length === 0) {
+            body.innerHTML = '<p class="text-muted small">Нет городов. Сначала укажите ID городов.</p>';
+            return;
+        }
+        cities.forEach(cityId => {
+            const sec = document.createElement('div');
+            sec.className = 'addr-city-section';
+            const label = cityId || 'Без привязки к городу';
+            let html = '<div class="d-flex justify-content-between align-items-center mb-2">' +
+                '<span class="city-label"><i class="fas fa-city me-1"></i>Город ' + escHtml(label) + '</span></div>';
+            html += '<div class="addr-list" data-city="' + escHtml(cityId) + '">';
+            (addrModalData[cityId] || []).forEach(aid => {
+                html += '<span class="badge bg-light text-dark border addr-badge">' +
+                    escHtml(aid) +
+                    ' <button type="button" class="btn-close btn-close-sm" data-city="' + escHtml(cityId) +
+                    '" data-aid="' + escHtml(aid) + '"></button></span>';
+            });
+            html += '</div>';
+            html += '<div class="mt-2 d-flex gap-1">' +
+                '<input type="text" class="form-control form-control-sm addr-add-input" placeholder="ID адреса" data-city="' + escHtml(cityId) + '">' +
+                '<button type="button" class="btn btn-sm btn-outline-success addr-add-btn" data-city="' + escHtml(cityId) + '">' +
+                '<i class="fas fa-plus"></i></button></div>';
+            sec.innerHTML = html;
+            body.appendChild(sec);
         });
-
-        input.addEventListener('focus', function() {
-            originalValue = this.value;
+        // Обработчики удаления
+        body.querySelectorAll('.btn-close-sm').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const city = this.dataset.city;
+                const aid = this.dataset.aid;
+                addrModalData[city] = (addrModalData[city] || []).filter(a => a !== aid);
+                renderAddrModal();
+            });
         });
+        // Обработчики добавления
+        body.querySelectorAll('.addr-add-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const city = this.dataset.city;
+                const input = body.querySelector('.addr-add-input[data-city="' + city + '"]');
+                const val = (input.value || '').trim();
+                if (!val) return;
+                if (!addrModalData[city]) addrModalData[city] = [];
+                if (!addrModalData[city].includes(val)) {
+                    addrModalData[city].push(val);
+                    renderAddrModal();
+                }
+                input.value = '';
+            });
+        });
+        // Enter для добавления
+        body.querySelectorAll('.addr-add-input').forEach(input => {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    body.querySelector('.addr-add-btn[data-city="' + this.dataset.city + '"]').click();
+                }
+            });
+        });
+    }
 
-        input.addEventListener('blur', function() {
-            if (this.value === originalValue) return;
-            const id = this.dataset.id;
-            const newValue = this.value;
+    function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-            const fd = new FormData();
-            fd.append('addressIds', newValue);
+    // Инициализация бейджей на кнопках при загрузке
+    document.querySelectorAll('.btn-edit-addresses').forEach(btn => {
+        const raw = btn.dataset.addresses || '';
+        const cities = btn.dataset.cities || '';
+        const data = parseAddrData(raw, cities);
+        const total = Object.values(data).reduce((s, a) => s + a.length, 0);
+        const label = btn.querySelector('.addr-count-label');
+        if (total > 0) {
+            label.textContent = total;
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('btn-outline-primary');
+        }
+    });
 
-            fetch('/zoomos/city-ids/' + id + '/update-addresses', { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        originalValue = newValue;
-                        this.title = newValue;
-                        this.style.borderColor = '#198754';
-                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+    // Открытие модалки
+    document.querySelectorAll('.btn-edit-addresses').forEach(btn => {
+        btn.addEventListener('click', function() {
+            addrModalEntryId = this.dataset.id;
+            document.getElementById('addrModalSite').textContent = this.dataset.site;
+            addrModalData = parseAddrData(this.dataset.addresses || '', this.dataset.cities || '');
+            // Убираем ключ "" если есть города
+            const realCities = Object.keys(addrModalData).filter(k => k !== '');
+            if (realCities.length > 0 && addrModalData['']) {
+                // Перенести "без привязки" адреса в первый город (или показать отдельно)
+            }
+            renderAddrModal();
+            addrModal.show();
+        });
+    });
+
+    // Сохранение
+    document.getElementById('addrModalSave').addEventListener('click', function() {
+        const mapping = {};
+        Object.keys(addrModalData).forEach(k => {
+            if (k) mapping[k] = addrModalData[k] || [];
+        });
+        // Адреса без привязки к городу — если есть
+        if (addrModalData[''] && addrModalData[''].length > 0) {
+            mapping[''] = addrModalData[''];
+        }
+
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Сохранение...';
+        const saveBtn = this;
+
+        fetch('/zoomos/city-ids/' + addrModalEntryId + '/update-addresses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(mapping)
+        })
+        .then(r => r.json())
+        .then(data => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
+            if (data.success) {
+                addrModal.hide();
+                // Обновить data-addresses на кнопке и бейдж
+                const btn = document.querySelector('.btn-edit-addresses[data-id="' + addrModalEntryId + '"]');
+                if (btn) {
+                    btn.dataset.addresses = JSON.stringify(mapping);
+                    const total = Object.values(mapping).reduce((s, a) => s + a.length, 0);
+                    const label = btn.querySelector('.addr-count-label');
+                    if (total > 0) {
+                        label.textContent = total;
+                        btn.classList.remove('btn-outline-secondary');
+                        btn.classList.add('btn-outline-primary');
                     } else {
-                        alert('Ошибка сохранения: ' + (data.error || ''));
-                        this.value = originalValue;
+                        label.textContent = 'Адреса';
+                        btn.classList.remove('btn-outline-primary');
+                        btn.classList.add('btn-outline-secondary');
                     }
-                })
-                .catch(() => { this.value = originalValue; });
+                }
+            } else {
+                alert('Ошибка: ' + (data.error || 'неизвестная'));
+            }
+        })
+        .catch(err => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
+            alert('Ошибка сети: ' + err.message);
         });
     });
 

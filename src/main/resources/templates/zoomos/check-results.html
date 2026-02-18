@@ -121,12 +121,13 @@
                             <strong th:text="${issue['site']}"></strong>
                             <span th:if="${issue['city']}" class="text-muted ms-1 small"
                                   th:text="'(' + ${issue['city']} + ')'"></span>
-                            <span th:if="${issue['addressName'] != null}" class="badge bg-info text-dark ms-1 small"
+                            <span th:if="${issue['addressId'] != null and issue['type'] != 'ERROR' and issue['type'] != 'WARNING'}"
+                                  class="badge bg-light text-secondary border ms-1 small"
+                                  th:text="'адрес ' + ${issue['addressId']}"></span>
+                            <span th:if="${issue['addressName'] != null and (issue['type'] == 'ERROR' or issue['type'] == 'WARNING')}"
+                                  class="badge bg-info text-dark ms-1 small"
                                   th:text="${issue['addressName']}"></span>
                             <span class="small text-muted ms-2" th:text="${issue['message']}"></span>
-                            <span th:if="${issue['inProgress'] != null and issue['inProgress'].updatedTime != null}"
-                                  class="small ms-1 text-secondary"
-                                  th:text="'обновл.: ' + ${#temporals.format(issue['inProgress'].updatedTime, 'dd.MM HH:mm')}"></span>
                         </div>
                         <div class="d-flex gap-1 flex-shrink-0">
                             <!-- Матчинг -->
@@ -272,6 +273,7 @@
                             <thead class="table-light">
                                 <tr>
                                     <th class="text-center" style="width:110px">Старт</th>
+                                    <th class="text-center" style="width:110px">Финиш</th>
                                     <th class="text-center">Сервер</th>
                                     <th class="text-center">Клиент</th>
                                     <th class="text-end">Товаров</th>
@@ -287,6 +289,8 @@
                                     th:classappend="${si.first} ? 'table-active fw-semibold' : ''">
                                     <td class="text-center small"
                                         th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
+                                    <td class="text-center small"
+                                        th:text="${stat.finishTime != null} ? ${#temporals.format(stat.finishTime, 'dd.MM HH:mm')} : '—'"></td>
                                     <td class="text-center small" th:text="${stat.serverName}"></td>
                                     <td class="text-center small" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
                                     <td class="text-end">
