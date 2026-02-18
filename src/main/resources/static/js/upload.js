@@ -13,6 +13,7 @@ class UploadManager {
             buttonId: null,
             allowedTypes: [],
             maxFileSize: 600 * 1024 * 1024, // 600MB по умолчанию
+            maxTotalSize: null,              // null = без ограничения суммарного размера
             multiple: false,
             autoUpload: false,
             showFileSize: true,
@@ -153,6 +154,17 @@ class UploadManager {
 
         this.selectedFiles = validFiles;
         this.displayPreview();
+
+        // Проверяем суммарный размер всех файлов
+        if (this.config.maxTotalSize) {
+            const totalSize = validFiles.reduce((sum, f) => sum + f.size, 0);
+            if (totalSize > this.config.maxTotalSize) {
+                this.showNotification(
+                    `Суммарный размер файлов (${this.formatFileSize(totalSize)}) превышает допустимый лимит ${this.formatFileSize(this.config.maxTotalSize)}. Загрузка будет отклонена сервером.`,
+                    'warning'
+                );
+            }
+        }
 
         // Вызываем callback
         if (this.config.onFileSelect) {

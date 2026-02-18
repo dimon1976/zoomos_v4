@@ -54,22 +54,18 @@ public class BarcodeHandbookService {
         if (rows.isEmpty()) return 0;
 
         // 1. Разворачиваем строки: один штрихкод из "a,b,c" → три отдельные записи
-        //    Строки без штрихкода идут в withoutBarcode
+        //    Строки без штрихкода пропускаются — наименование без ШК не сохраняется
         List<Map<String, String>> withBarcode = new ArrayList<>();
-        List<Map<String, String>> withoutBarcode = new ArrayList<>();
         for (Map<String, String> r : rows) {
             String name = trim(r.get("name"));
             if (name == null || name.isEmpty()) continue;
             String barcodeRaw = trim(r.get("barcode"));
-            if (barcodeRaw != null && !barcodeRaw.isEmpty()) {
-                // Разбиваем и нормализуем — каждый ШК как отдельная строка
-                for (String b : BarcodeUtils.parseAndNormalize(barcodeRaw)) {
-                    Map<String, String> expanded = new HashMap<>(r);
-                    expanded.put("barcode", b);
-                    withBarcode.add(expanded);
-                }
-            } else {
-                withoutBarcode.add(r);
+            if (barcodeRaw == null || barcodeRaw.isEmpty()) continue;
+            // Разбиваем и нормализуем — каждый ШК как отдельная строка
+            for (String b : BarcodeUtils.parseAndNormalize(barcodeRaw)) {
+                Map<String, String> expanded = new HashMap<>(r);
+                expanded.put("barcode", b);
+                withBarcode.add(expanded);
             }
         }
 
@@ -122,53 +118,6 @@ public class BarcodeHandbookService {
                         nameParams);
             }
             saved += withBarcode.size();
-        }
-
-        // 3. Обработка строк без штрихкода — batch lookup по именам
-        if (!withoutBarcode.isEmpty()) {
-            // Собираем уникальные имена для batch-поиска
-            Set<String> uniqueNames = withoutBarcode.stream()
-                    .map(r -> trim(r.get("name")))
-                    .filter(n -> n != null && !n.isEmpty())
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-
-            Map<String, Long> nameLowerToId = new HashMap<>();
-            if (!uniqueNames.isEmpty()) {
-                String inClause = String.join(",", Collections.nCopies(uniqueNames.size(), "LOWER(TRIM(?))"));
-                List<String> nameList = new ArrayList<>(uniqueNames);
-                jdbc.query(
-                        "SELECT DISTINCT ON (LOWER(TRIM(n.name))) LOWER(TRIM(n.name)) AS name_key, n.product_id " +
-                        "FROM bh_names n WHERE LOWER(TRIM(n.name)) IN (" + inClause + ")",
-                        nameList.toArray(),
-                        (RowCallbackHandler) rs -> nameLowerToId.put(rs.getString("name_key"), rs.getLong("product_id")));
-            }
-
-            // Создаём продукты для не найденных имён
-            for (Map<String, String> r : withoutBarcode) {
-                String name  = trim(r.get("name"));
-                String brand = trim(r.get("brand"));
-                String mfCode = trim(r.get("manufacturerCode"));
-                if (name == null || name.isEmpty()) continue;
-
-                String key = name.toLowerCase().trim();
-                if (!nameLowerToId.containsKey(key)) {
-                    Long pid = jdbc.queryForObject(
-                            "INSERT INTO bh_products (brand, manufacturer_code, created_at, updated_at) " +
-                            "VALUES (?, ?, NOW(), NOW()) RETURNING id",
-                            Long.class, brand, mfCode);
-                    jdbc.update(
-                            "INSERT INTO bh_names (product_id, name, source, created_at) VALUES (?, ?, ?, NOW()) " +
-                            "ON CONFLICT (product_id, name) DO NOTHING",
-                            pid, name, source);
-                    nameLowerToId.put(key, pid);
-                } else if (brand != null && !brand.isEmpty()) {
-                    Long pid = nameLowerToId.get(key);
-                    jdbc.update(
-                            "UPDATE bh_products SET brand = ?, updated_at = NOW() WHERE id = ? AND (brand IS NULL OR brand = '')",
-                            brand, pid);
-                }
-                saved++;
-            }
         }
 
         log.info("BH_BARCODE_NAME батч: {} строк обработано", saved);

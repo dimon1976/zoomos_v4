@@ -120,18 +120,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Обработка ошибок размера загружаемого файла
+     * Обработка ошибок размера загружаемого файла.
+     * Редирект на страницу-источник с flash-сообщением об ошибке.
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public String handleMaxUploadSizeExceeded(
-            MaxUploadSizeExceededException ex, Model model, HttpServletRequest request) {
+    public RedirectView handleMaxUploadSizeExceeded(
+            MaxUploadSizeExceededException ex, HttpServletRequest request,
+            RedirectAttributes redirectAttributes) {
 
         logError("Превышен размер файла", ex);
-        setErrorAttributes(model,
-                "Превышен максимальный размер файла. Максимальный размер: 1200MB.", request);
+        redirectAttributes.addFlashAttribute("errorMessage",
+                "Превышен максимальный суммарный размер файлов (лимит: 1200 МБ). Уменьшите количество или размер файлов.");
 
-        return FILE_ERROR_VIEW;
+        String referer = request.getHeader("Referer");
+        String redirectUrl = (referer != null && !referer.isEmpty()) ? referer : "/";
+        return new RedirectView(redirectUrl);
     }
 
     /**
