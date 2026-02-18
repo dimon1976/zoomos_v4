@@ -236,9 +236,19 @@ public class ZoomosAnalysisController {
         // Разделяем на завершённые и in-progress
         List<ZoomosParsingStats> stats = allStatsList.stream()
                 .filter(s -> !Boolean.FALSE.equals(s.getIsFinished()))
-                .collect(Collectors.toList());
+                .collect(Collectors.toCollection(ArrayList::new));
         List<ZoomosParsingStats> inProgressStats = allStatsList.stream()
                 .filter(s -> Boolean.FALSE.equals(s.getIsFinished()))
+                .collect(Collectors.toList());
+
+        // Записи с completionPercent >= 100 фактически завершены — сервер просто не показывает
+        // их на глобальной onlyFinished=1 странице когда внутренний % < 100.
+        // Промоутируем в stats: появятся в деталях и участвуют в оценке динамики.
+        inProgressStats.stream()
+                .filter(ip -> ip.getCompletionPercent() != null && ip.getCompletionPercent() >= 100)
+                .forEach(stats::add);
+        inProgressStats = inProgressStats.stream()
+                .filter(ip -> ip.getCompletionPercent() == null || ip.getCompletionPercent() < 100)
                 .collect(Collectors.toList());
 
         int dropThreshold = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
@@ -288,20 +298,6 @@ public class ZoomosAnalysisController {
                 if (cId != null) addressToCityFromData.put(s.getSiteName() + "|" + s.getAddressId(), cId);
             }
         }
-        // In-progress записи с completionPercent >= 100 — выкачка фактически завершена,
-        // просто сервер не показывает их на глобальной onlyFinished-странице (внутренний % < 100).
-        // Считаем их найденными, чтобы не генерировать ложный NOT_FOUND.
-        for (ZoomosParsingStats ip : inProgressStats) {
-            if (ip.getCompletionPercent() != null && ip.getCompletionPercent() >= 100) {
-                String cId = ZoomosCheckService.extractCityId(ip.getCityName());
-                if (cId != null) foundCityKeys.add(ip.getSiteName() + "|" + cId);
-                if (ip.getAddressId() != null && !ip.getAddressId().isBlank()) {
-                    foundAddressKeys.add(ip.getSiteName() + "|" + ip.getAddressId());
-                    if (cId != null) addressToCityFromData.put(ip.getSiteName() + "|" + ip.getAddressId(), cId);
-                }
-            }
-        }
-
         // In-progress данные — индексируем по site+city и site+address
         Map<String, ZoomosParsingStats> inProgressByCityKey = new HashMap<>();
         for (ZoomosParsingStats ip : inProgressStats) {
