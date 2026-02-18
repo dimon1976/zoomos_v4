@@ -288,6 +288,19 @@ public class ZoomosAnalysisController {
                 if (cId != null) addressToCityFromData.put(s.getSiteName() + "|" + s.getAddressId(), cId);
             }
         }
+        // In-progress записи с completionPercent >= 100 — выкачка фактически завершена,
+        // просто сервер не показывает их на глобальной onlyFinished-странице (внутренний % < 100).
+        // Считаем их найденными, чтобы не генерировать ложный NOT_FOUND.
+        for (ZoomosParsingStats ip : inProgressStats) {
+            if (ip.getCompletionPercent() != null && ip.getCompletionPercent() >= 100) {
+                String cId = ZoomosCheckService.extractCityId(ip.getCityName());
+                if (cId != null) foundCityKeys.add(ip.getSiteName() + "|" + cId);
+                if (ip.getAddressId() != null && !ip.getAddressId().isBlank()) {
+                    foundAddressKeys.add(ip.getSiteName() + "|" + ip.getAddressId());
+                    if (cId != null) addressToCityFromData.put(ip.getSiteName() + "|" + ip.getAddressId(), cId);
+                }
+            }
+        }
 
         // In-progress данные — индексируем по site+city и site+address
         Map<String, ZoomosParsingStats> inProgressByCityKey = new HashMap<>();
@@ -395,7 +408,7 @@ public class ZoomosAnalysisController {
                         if (s.getAddressId() != null && !s.getAddressId().isBlank()) key += "|" + s.getAddressId();
                         return siteCityStatuses.getOrDefault(key, "OK");
                     })
-                    .min(Comparator.comparingInt(st -> "ERROR".equals(st) ? 0 : "WARNING".equals(st) ? 1 : 2))
+                    .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
                     .orElse("OK");
 
             String checkType = siteStats.get(0).getCheckType();
@@ -442,8 +455,7 @@ public class ZoomosAnalysisController {
                     addressGroups.add(ag);
                 });
                 // Сортируем адресные группы: ERROR первыми
-                addressGroups.sort(Comparator.comparingInt(ag ->
-                        "ERROR".equals(ag.get("status")) ? 0 : "WARNING".equals(ag.get("status")) ? 1 : 2));
+                addressGroups.sort(Comparator.comparingInt(ag -> statusPriority((String) ag.get("status"))));
 
                 // Если в городе есть хотя бы один адрес с 100% завершением → город OK
                 boolean anyFullyComplete = cityStats.stream()
@@ -453,7 +465,7 @@ public class ZoomosAnalysisController {
                 String cityStatus = anyFullyComplete ? "OK"
                         : addressGroups.stream()
                                 .map(ag -> (String) ag.get("status"))
-                                .min(Comparator.comparingInt(st -> "ERROR".equals(st) ? 0 : "WARNING".equals(st) ? 1 : 2))
+                                .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
                                 .orElse(siteCityStatuses.getOrDefault(siteName + "|" + cityName, "OK"));
 
                 Map<String, Object> cg = new LinkedHashMap<>();
@@ -464,8 +476,7 @@ public class ZoomosAnalysisController {
                 cityGroups.add(cg);
             });
             // Сортируем города: ERROR первыми
-            cityGroups.sort(Comparator.comparingInt(cg ->
-                    "ERROR".equals(cg.get("status")) ? 0 : "WARNING".equals(cg.get("status")) ? 1 : 2));
+            cityGroups.sort(Comparator.comparingInt(cg -> statusPriority((String) cg.get("status"))));
 
             Map<String, Object> g = new LinkedHashMap<>();
             g.put("siteName", siteName);
@@ -477,8 +488,94 @@ public class ZoomosAnalysisController {
         });
 
         // Сортируем группы: ERROR первые, потом WARNING, потом OK, внутри — по имени сайта
-        groups.sort(Comparator.comparingInt((Map<String, Object> g) ->
-                "ERROR".equals(g.get("status")) ? 0 : "WARNING".equals(g.get("status")) ? 1 : 2)
+        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> statusPriority((String) g.get("status")))
+                .thenComparing(g -> (String) g.get("siteName")));
+
+        // Добавляем NOT_FOUND/IN_PROGRESS пары в groups для отображения в Блоке 3
+        Map<String, Map<String, Object>> groupBySite = new LinkedHashMap<>();
+        for (Map<String, Object> g : groups) {
+            groupBySite.put((String) g.get("siteName"), g);
+        }
+        for (Map<String, Object> issue : issues) {
+            String iType = (String) issue.get("type");
+            if (!"NOT_FOUND".equals(iType) && !"IN_PROGRESS".equals(iType)) continue;
+            String iSite      = (String) issue.get("site");
+            String iCity      = (String) issue.get("city");
+            String iCityId    = (String) issue.get("cityId");
+            String iAddrId    = (String) issue.get("addressId");
+            String iAddrName  = (String) issue.get("addressName");
+            String iMsg       = (String) issue.get("message");
+            String iCheckType = (String) issue.get("checkType");
+
+            // Найти или создать site group
+            Map<String, Object> siteGroup = groupBySite.computeIfAbsent(iSite, k -> {
+                Map<String, Object> ng = new LinkedHashMap<>();
+                ng.put("siteName", iSite);
+                ng.put("checkType", iCheckType);
+                ng.put("status", iType);
+                ng.put("count", 0);
+                ng.put("cityGroups", new ArrayList<>());
+                groups.add(ng);
+                return ng;
+            });
+
+            // Найти или создать city group по cityId
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> siteGroupCityGroups = (List<Map<String, Object>>) siteGroup.get("cityGroups");
+            Map<String, Object> cityGroup = siteGroupCityGroups.stream()
+                    .filter(cg -> {
+                        String cgCityName = (String) cg.get("cityName");
+                        String cgCityId = ZoomosCheckService.extractCityId(cgCityName);
+                        return iCityId.equals(cgCityId) || iCityId.equals(cgCityName) || iCity.equals(cgCityName);
+                    })
+                    .findFirst()
+                    .orElseGet(() -> {
+                        Map<String, Object> ncg = new LinkedHashMap<>();
+                        ncg.put("cityName", iCity);
+                        ncg.put("status", iType);
+                        ncg.put("stats", new ArrayList<>());
+                        ncg.put("addressGroups", new ArrayList<>());
+                        siteGroupCityGroups.add(ncg);
+                        return ncg;
+                    });
+
+            // Добавить address group с пустыми stats и issueMessage (если нет дубля)
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> cityGroupAddrGroups = (List<Map<String, Object>>) cityGroup.get("addressGroups");
+            boolean alreadyExists = cityGroupAddrGroups.stream().anyMatch(ag ->
+                    iAddrId != null ? iAddrId.equals(ag.get("addressId")) : ag.get("addressId") == null);
+            if (!alreadyExists) {
+                Map<String, Object> ag = new LinkedHashMap<>();
+                ag.put("addressId", iAddrId);
+                ag.put("addressName", iAddrName);
+                ag.put("status", iType);
+                ag.put("stats", new ArrayList<>());
+                ag.put("issueMessage", iMsg);
+                ag.put("inProgressStat", issue.get("inProgress"));
+                cityGroupAddrGroups.add(ag);
+            }
+        }
+
+        // Пересортировать все уровни с учётом новых записей
+        for (Map<String, Object> g : groups) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> cgs = (List<Map<String, Object>>) g.get("cityGroups");
+            for (Map<String, Object> cg : cgs) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> ags = (List<Map<String, Object>>) cg.get("addressGroups");
+                ags.sort(Comparator.comparingInt(ag -> statusPriority((String) ag.get("status"))));
+                String worstCityStatus = ags.stream().map(ag -> (String) ag.get("status"))
+                        .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
+                        .orElse((String) cg.get("status"));
+                cg.put("status", worstCityStatus);
+            }
+            cgs.sort(Comparator.comparingInt(cg -> statusPriority((String) cg.get("status"))));
+            String worstSiteStatus = cgs.stream().map(cg -> (String) cg.get("status"))
+                    .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
+                    .orElse((String) g.get("status"));
+            g.put("status", worstSiteStatus);
+        }
+        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> statusPriority((String) g.get("status")))
                 .thenComparing(g -> (String) g.get("siteName")));
 
         boolean canDeliver = issues.stream()
@@ -543,7 +640,7 @@ public class ZoomosAnalysisController {
                     + "&dateFrom=" + dateFromStr
                     + "&dateTo=" + dateToStr
                     + "&launchDate=&shop=" + ("API".equals(checkType) ? "-" : shopName)
-                    + "&site=&cityId=" + cityId + "&address=" + addrParam + "&accountId=&server=";
+                    + "&site=&cityId=" + cityId + "&addressId=" + addrParam + "&accountId=&server=";
             String cityPart = (city != null && !city.isBlank()) ? city : null;
             String addrPart = addrParam.isBlank() ? "" : ", адрес " + addrParam;
             String detail = (msg != null && !msg.isBlank()) ? msg : type;
@@ -685,6 +782,15 @@ public class ZoomosAnalysisController {
                         + (updStr != null ? ", обновл. " + updStr : ""));
             }
         }
+    }
+
+    private static int statusPriority(String st) {
+        return switch (st != null ? st : "") {
+            case "ERROR", "NOT_FOUND" -> 0;
+            case "IN_PROGRESS" -> 1;
+            case "WARNING" -> 2;
+            default -> 3; // OK
+        };
     }
 
     @GetMapping("/check/latest")
