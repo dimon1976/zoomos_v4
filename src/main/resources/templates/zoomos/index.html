@@ -38,11 +38,32 @@
             border-color: #dee2e6;
             border-radius: 4px;
         }
-        .addr-badge { display: inline-flex; align-items: center; gap: 4px; margin: 2px; }
-        .addr-badge .btn-close { font-size: 0.5em; }
-        .addr-city-section { border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; }
-        .addr-city-section .city-label { font-weight: 600; font-size: 0.85em; color: #495057; }
-        .addr-add-input { width: 100px; font-size: 0.8em; }
+        .addr-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            background: #dbeafe; color: #1e3a8a;
+            border: 1px solid #bfdbfe; border-radius: 5px;
+            padding: 1px 6px; font-size: 0.78em; font-weight: 500;
+        }
+        .addr-badge .btn-close { font-size: 0.45em; filter: invert(1) brightness(0.4); }
+        #addrModalBody {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 8px; max-height: 65vh; overflow-y: auto;
+        }
+        .addr-city-section {
+            display: flex; flex-direction: column; gap: 5px;
+            border: 1px solid #bfdbfe; border-radius: 8px;
+            padding: 7px; background: #f0f7ff;
+        }
+        .addr-city-id {
+            display: block; text-align: center;
+            background: linear-gradient(135deg, #1e3a5f, #2d5a8e);
+            color: #e0f0ff; border-radius: 5px;
+            font-size: 0.75em; font-weight: 700; letter-spacing: 0.04em;
+            padding: 3px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+        }
+        .addr-list { display: flex; flex-wrap: wrap; gap: 3px; flex: 1; }
+        .addr-row-add { display: flex; gap: 4px; align-items: center; }
+        .addr-add-input { font-size: 0.8em; min-width: 0; flex: 1; }
         .shop-card { margin-bottom: 1.5rem; }
         .sync-status { font-size: 0.8em; }
         .city-ids-col { min-width: 200px; }
@@ -340,7 +361,7 @@
 
     <!-- Модалка редактирования адресов -->
     <div class="modal fade" id="addressModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content">
                 <div class="modal-header py-2">
                     <h6 class="modal-title"><i class="fas fa-map-marker-alt me-2"></i>Адреса: <span id="addrModalSite"></span></h6>
@@ -606,22 +627,20 @@
         cities.forEach(cityId => {
             const sec = document.createElement('div');
             sec.className = 'addr-city-section';
-            const label = cityId || 'Без привязки к городу';
-            let html = '<div class="d-flex justify-content-between align-items-center mb-2">' +
-                '<span class="city-label"><i class="fas fa-city me-1"></i>Город ' + escHtml(label) + '</span></div>';
-            html += '<div class="addr-list" data-city="' + escHtml(cityId) + '">';
-            (addrModalData[cityId] || []).forEach(aid => {
-                html += '<span class="badge bg-light text-dark border addr-badge">' +
-                    escHtml(aid) +
-                    ' <button type="button" class="btn-close btn-close-sm" data-city="' + escHtml(cityId) +
-                    '" data-aid="' + escHtml(aid) + '"></button></span>';
-            });
-            html += '</div>';
-            html += '<div class="mt-2 d-flex gap-1">' +
-                '<input type="text" class="form-control form-control-sm addr-add-input" placeholder="ID адреса" data-city="' + escHtml(cityId) + '">' +
-                '<button type="button" class="btn btn-sm btn-outline-success addr-add-btn" data-city="' + escHtml(cityId) + '">' +
-                '<i class="fas fa-plus"></i></button></div>';
-            sec.innerHTML = html;
+            const label = cityId || '—';
+            const addrBadges = (addrModalData[cityId] || []).map(aid =>
+                '<span class="badge bg-light text-dark border addr-badge">' +
+                escHtml(aid) +
+                ' <button type="button" class="btn-close btn-close-sm" data-city="' + escHtml(cityId) +
+                '" data-aid="' + escHtml(aid) + '"></button></span>'
+            ).join('');
+            sec.innerHTML =
+                '<span class="addr-city-id">' + escHtml(label) + '</span>' +
+                '<div class="addr-list" data-city="' + escHtml(cityId) + '">' + addrBadges + '</div>' +
+                '<div class="addr-row-add">' +
+                    '<input type="text" class="form-control form-control-sm addr-add-input" placeholder="ID" data-city="' + escHtml(cityId) + '">' +
+                    '<button type="button" class="btn btn-sm btn-outline-success addr-add-btn" data-city="' + escHtml(cityId) + '"><i class="fas fa-plus"></i></button>' +
+                '</div>';
             body.appendChild(sec);
         });
         // Обработчики удаления
