@@ -49,6 +49,20 @@
         .shop-card.hidden-by-search { display: none; }
         .check-progress { font-size: 0.85em; }
         .check-progress .progress { height: 18px; }
+        .btn-thresholds {
+            color: #6c757d;
+            padding: 2px 5px;
+            font-size: 0.8em;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: transparent;
+            line-height: 1.5;
+            cursor: pointer;
+        }
+        .btn-thresholds:hover {
+            background: #e9ecef;
+            color: #495057;
+        }
     </style>
 </th:block>
 
@@ -161,7 +175,7 @@
             </div>
         </div>
 
-        <!-- Панель проверки: даты + пороги + кнопка -->
+        <!-- Панель проверки: даты + кнопка настроек + кнопка запуска -->
         <div class="px-3 py-2 border-bottom d-flex align-items-center gap-2 bg-light flex-wrap">
             <span class="small text-muted me-1"><i class="fas fa-calendar-alt me-1"></i>Проверка:</span>
             <input type="date" class="form-control form-control-sm check-date-from"
@@ -175,20 +189,29 @@
             <input type="time" class="form-control form-control-sm check-time-to"
                    th:id="'timeTo-' + ${shop.id}" style="width:110px;"
                    title="Время окончания (необязательно, по умолчанию 23:59)">
-            <span class="small text-muted ms-2" title="Порог падения 'В наличии' (%)">Падение%</span>
-            <input type="number" class="form-control form-control-sm check-drop-threshold"
-                   th:id="'dropThreshold-' + ${shop.id}" value="10" min="1" max="100" style="width:60px;">
-            <span class="small text-muted" title="Порог роста ошибок (%)">Ошибки%</span>
-            <input type="number" class="form-control form-control-sm check-err-threshold"
-                   th:id="'errThreshold-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
-            <span class="small text-muted ms-2" title="Горизонт сравнения с историей (0 = без анализа)">Baseline</span>
-            <input type="number" class="form-control form-control-sm check-baseline-days"
-                   th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30" style="width:55px;">
+            <button type="button" class="btn-thresholds"
+                    data-bs-toggle="collapse"
+                    th:data-bs-target="'#thresholds-' + ${shop.id}"
+                    title="Настройки порогов">⚙</button>
             <button type="button" class="btn btn-sm btn-outline-primary btn-run-check"
                     th:data-shop-id="${shop.id}"
                     title="Запустить проверку выкачки за выбранный период">
                 <i class="fas fa-search me-1"></i>Проверить
             </button>
+        </div>
+        <!-- Скрытая панель с порогами -->
+        <div th:id="'thresholds-' + ${shop.id}" class="collapse border-bottom">
+            <div class="px-3 py-1 bg-light d-flex align-items-center gap-2 flex-wrap">
+                <span class="small text-muted" title="Порог падения 'В наличии' (%)">Падение%</span>
+                <input type="number" class="form-control form-control-sm check-drop-threshold"
+                       th:id="'dropThreshold-' + ${shop.id}" value="10" min="1" max="100" style="width:60px;">
+                <span class="small text-muted" title="Порог роста ошибок (%)">Ошибки%</span>
+                <input type="number" class="form-control form-control-sm check-err-threshold"
+                       th:id="'errThreshold-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
+                <span class="small text-muted ms-2" title="Горизонт сравнения с историей (0 = без анализа)">Baseline</span>
+                <input type="number" class="form-control form-control-sm check-baseline-days"
+                       th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30" style="width:55px;">
+            </div>
         </div>
 
         <!-- Мини-прогресс проверки (скрыт по умолчанию) -->
