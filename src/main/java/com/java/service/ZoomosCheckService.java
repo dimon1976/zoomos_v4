@@ -35,6 +35,7 @@ public class ZoomosCheckService {
     private final ZoomosSessionRepository sessionRepository;
     private final ZoomosCheckRunRepository checkRunRepository;
     private final ZoomosParsingStatsRepository parsingStatsRepository;
+    private final ZoomosCityNameRepository cityNameRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -241,6 +242,7 @@ public class ZoomosCheckService {
         // Сохраняем все результаты
         if (!allStats.isEmpty()) {
             parsingStatsRepository.saveAll(allStats);
+            upsertCityNames(allStats);
         }
 
         // Подсчитываем итоги
@@ -602,6 +604,27 @@ public class ZoomosCheckService {
         // Если просто число
         if (trimmed.matches("\\d+")) return trimmed;
         return null;
+    }
+
+    public static String extractCityName(String cityStr) {
+        if (cityStr == null) return null;
+        int dashIdx = cityStr.indexOf(" - ");
+        if (dashIdx >= 0) return cityStr.substring(dashIdx + 3).trim();
+        return null;
+    }
+
+    private void upsertCityNames(List<ZoomosParsingStats> stats) {
+        Map<String, String> names = new LinkedHashMap<>();
+        for (ZoomosParsingStats s : stats) {
+            String id   = extractCityId(s.getCityName());
+            String name = extractCityName(s.getCityName());
+            if (id != null && name != null && !name.isBlank() && !names.containsKey(id)) {
+                names.put(id, name);
+            }
+        }
+        for (Map.Entry<String, String> e : names.entrySet()) {
+            cityNameRepository.upsert(e.getKey(), e.getValue());
+        }
     }
 
     public static Set<String> parseCommaSeparated(String csv) {

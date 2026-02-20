@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Справочник городов',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Справочник городов',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Справочник городов</title></head>
+
+<th:block th:fragment="styles">
+<style>
+    .city-id-cell { font-family: monospace; font-size: 0.9em; font-weight: 600; }
+</style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/zoomos}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>К магазинам
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <div class="alert alert-info py-2 small mb-3">
+        <i class="fas fa-info-circle me-1"></i>
+        Справочник заполняется автоматически при запуске проверки выкачки.
+        Здесь можно добавить или отредактировать названия вручную.
+    </div>
+
+    <!-- Форма добавления -->
+    <div class="card mb-4">
+        <div class="card-header py-2"><i class="fas fa-plus me-2"></i>Добавить / обновить</div>
+        <div class="card-body py-3">
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <input type="text" id="addCityId" class="form-control form-control-sm"
+                       style="width:120px" placeholder="ID города" autocomplete="off">
+                <input type="text" id="addCityName" class="form-control form-control-sm"
+                       style="min-width:220px; max-width:360px" placeholder="Название города" autocomplete="off">
+                <button type="button" class="btn btn-sm btn-primary" id="addCityBtn">
+                    <i class="fas fa-save me-1"></i>Сохранить
+                </button>
+            </div>
+            <div id="addResult" class="mt-2 small d-none"></div>
+        </div>
+    </div>
+
+    <!-- Фильтр -->
+    <div class="mb-3 d-flex align-items-center gap-2">
+        <input type="text" id="citySearch" class="form-control form-control-sm w-auto"
+               placeholder="Фильтр..." style="min-width:260px">
+        <span id="searchCount" class="text-muted small"></span>
+        <span class="text-muted small ms-2">Всего: <span th:text="${#lists.size(cityNames)}">0</span></span>
+    </div>
+
+    <!-- Таблица -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div th:if="${cityNames.empty}" class="text-muted text-center py-4">
+                <i class="fas fa-city fa-2x mb-2 d-block"></i>
+                Справочник пуст. Запустите проверку выкачки — города добавятся автоматически.
+            </div>
+            <table th:unless="${cityNames.empty}" class="table table-sm table-hover table-bordered mb-0" id="citiesTable">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px" class="text-center">#</th>
+                        <th style="width:120px">ID города</th>
+                        <th>Название</th>
+                        <th style="width:140px" class="text-center">Обновлено</th>
+                        <th style="width:80px" class="text-center">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="cn, si : ${cityNames}" th:id="'city-row-' + ${cn.cityId}">
+                        <td class="text-center text-muted small" th:text="${si.count}"></td>
+                        <td class="city-id-cell" th:text="${cn.cityId}"></td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm city-name-input"
+                                   th:value="${cn.cityName}"
+                                   th:data-city-id="${cn.cityId}"
+                                   style="border:1px solid transparent; background:transparent;">
+                        </td>
+                        <td class="text-center small text-muted"
+                            th:text="${cn.updatedAt != null} ? ${#temporals.format(cn.updatedAt, 'dd.MM.yyyy HH:mm')} : '—'"></td>
+                        <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 delete-city-btn"
+                                    th:data-city-id="${cn.cityId}"
+                                    th:data-city-name="${cn.cityName}"
+                                    title="Удалить">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+    // ---- Добавление / обновление ----
+    function saveCityName(cityId, cityName, onSuccess) {
+        const resultEl = document.getElementById('addResult');
+        const fd = new FormData();
+        fd.append('cityId', cityId);
+        fd.append('cityName', cityName);
+        fetch('/zoomos/city-names/save', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    if (onSuccess) onSuccess();
+                } else {
+                    if (resultEl) {
+                        resultEl.textContent = 'Ошибка: ' + (data.error || 'неизвестная');
+                        resultEl.className = 'mt-2 small text-danger';
+                        resultEl.classList.remove('d-none');
+                    }
+                }
+            })
+            .catch(() => alert('Ошибка сети'));
+    }
+
+    document.getElementById('addCityBtn').addEventListener('click', function() {
+        const cityId   = document.getElementById('addCityId').value.trim();
+        const cityName = document.getElementById('addCityName').value.trim();
+        const resultEl = document.getElementById('addResult');
+        if (!cityId || !cityName) {
+            resultEl.textContent = 'Заполните оба поля';
+            resultEl.className = 'mt-2 small text-danger';
+            resultEl.classList.remove('d-none');
+            return;
+        }
+        saveCityName(cityId, cityName, () => {
+            resultEl.textContent = 'Сохранено';
+            resultEl.className = 'mt-2 small text-success';
+            resultEl.classList.remove('d-none');
+            setTimeout(() => location.reload(), 600);
+        });
+    });
+
+    ['addCityId', 'addCityName'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', e => {
+            if (e.key === 'Enter') document.getElementById('addCityBtn').click();
+        });
+    });
+
+    // ---- Inline-редактирование названия ----
+    document.querySelectorAll('.city-name-input').forEach(input => {
+        let original = input.value;
+        input.addEventListener('focus', function() {
+            original = this.value;
+            this.style.border = '1px solid #86b7fe';
+            this.style.background = '#fff';
+        });
+        input.addEventListener('blur', function() {
+            this.style.border = '1px solid transparent';
+            this.style.background = 'transparent';
+            if (this.value.trim() === original.trim()) return;
+            saveCityName(this.dataset.cityId, this.value.trim(), () => { original = this.value.trim(); });
+        });
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+            if (e.key === 'Escape') { this.value = original; this.blur(); }
+        });
+    });
+
+    // ---- Удаление ----
+    document.querySelectorAll('.delete-city-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const cityId   = this.dataset.cityId;
+            const cityName = this.dataset.cityName;
+            if (!confirm('Удалить "' + cityId + ' — ' + cityName + '" из справочника?')) return;
+            fetch('/zoomos/city-names/' + encodeURIComponent(cityId) + '/delete', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('city-row-' + cityId).remove();
+                        updateSearchCount();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(() => alert('Ошибка сети'));
+        });
+    });
+
+    // ---- Фильтр ----
+    const citySearch = document.getElementById('citySearch');
+    const countEl = document.getElementById('searchCount');
+
+    function updateSearchCount() {
+        const rows = document.querySelectorAll('#citiesTable tbody tr');
+        const visible = Array.from(rows).filter(r => r.style.display !== 'none').length;
+        countEl.textContent = rows.length !== visible ? `Показано: ${visible} из ${rows.length}` : '';
+    }
+
+    citySearch.addEventListener('input', function() {
+        const q = this.value.trim().toLowerCase();
+        document.querySelectorAll('#citiesTable tbody tr').forEach(row => {
+            const id   = row.querySelector('.city-id-cell')?.textContent.toLowerCase() || '';
+            const name = row.querySelector('.city-name-input')?.value.toLowerCase() || '';
+            row.style.display = (!q || id.includes(q) || name.includes(q)) ? '' : 'none';
+        });
+        updateSearchCount();
+    });
+</script>
+</th:block>
+
+</html>

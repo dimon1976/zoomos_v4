@@ -3,6 +3,7 @@ package com.java.controller;
 import com.java.config.ZoomosConfig;
 import com.java.model.entity.*;
 import com.java.repository.ZoomosCityIdRepository;
+import com.java.repository.ZoomosCityNameRepository;
 import com.java.repository.ZoomosCheckRunRepository;
 import com.java.repository.ZoomosKnownSiteRepository;
 import com.java.repository.ZoomosParsingStatsRepository;
@@ -40,19 +41,53 @@ public class ZoomosAnalysisController {
     private final ZoomosParsingStatsRepository parsingStatsRepository;
     private final ZoomosKnownSiteRepository knownSiteRepository;
     private final ZoomosCityIdRepository cityIdRepository;
+    private final ZoomosCityNameRepository cityNameRepository;
     private final ZoomosConfig zoomosConfig;
 
     @GetMapping({"", "/"})
     public String index(Model model) {
         List<ZoomosShop> shops = parserService.getAllShops();
-        // Map<shopId, List<ZoomosCityId>> для удобного доступа в шаблоне
         Map<Long, List<ZoomosCityId>> cityIdsMap = new java.util.LinkedHashMap<>();
         for (ZoomosShop shop : shops) {
             cityIdsMap.put(shop.getId(), parserService.getCityIds(shop.getId()));
         }
+        Map<String, String> cityNamesMap = cityNameRepository.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        ZoomosCityName::getCityId, ZoomosCityName::getCityName));
         model.addAttribute("shops", shops);
         model.addAttribute("cityIdsMap", cityIdsMap);
+        model.addAttribute("cityNamesMap", cityNamesMap);
         return "zoomos/index";
+    }
+
+    // =========================================================================
+    // Справочник городов
+    // =========================================================================
+
+    @GetMapping("/city-names")
+    public String cityNamesPage(Model model) {
+        model.addAttribute("cityNames", cityNameRepository.findAll()
+                .stream().sorted(java.util.Comparator.comparing(ZoomosCityName::getCityId))
+                .toList());
+        return "zoomos/city-names";
+    }
+
+    @PostMapping("/city-names/save")
+    @ResponseBody
+    public ResponseEntity<?> saveCityName(@RequestParam String cityId,
+                                          @RequestParam String cityName) {
+        if (cityId == null || cityId.isBlank() || cityName == null || cityName.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Поля не могут быть пустыми"));
+        }
+        cityNameRepository.upsert(cityId.trim(), cityName.trim());
+        return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    @PostMapping("/city-names/{cityId}/delete")
+    @ResponseBody
+    public ResponseEntity<?> deleteCityName(@PathVariable String cityId) {
+        cityNameRepository.deleteById(cityId);
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
     // =========================================================================
