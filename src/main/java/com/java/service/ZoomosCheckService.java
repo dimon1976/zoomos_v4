@@ -36,6 +36,7 @@ public class ZoomosCheckService {
     private final ZoomosCheckRunRepository checkRunRepository;
     private final ZoomosParsingStatsRepository parsingStatsRepository;
     private final ZoomosCityNameRepository cityNameRepository;
+    private final ZoomosCityAddressRepository cityAddressRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -243,6 +244,7 @@ public class ZoomosCheckService {
         if (!allStats.isEmpty()) {
             parsingStatsRepository.saveAll(allStats);
             upsertCityNames(allStats);
+            upsertCityAddresses(allStats);
         }
 
         // Подсчитываем итоги
@@ -611,6 +613,15 @@ public class ZoomosCheckService {
         int dashIdx = cityStr.indexOf(" - ");
         if (dashIdx >= 0) return cityStr.substring(dashIdx + 3).trim();
         return null;
+    }
+
+    private void upsertCityAddresses(List<ZoomosParsingStats> stats) {
+        for (ZoomosParsingStats s : stats) {
+            String cityId = extractCityId(s.getCityName());
+            if (cityId != null && s.getAddressId() != null && !s.getAddressId().isBlank()) {
+                cityAddressRepository.upsert(cityId, s.getAddressId(), s.getAddressName());
+            }
+        }
     }
 
     private void upsertCityNames(List<ZoomosParsingStats> stats) {

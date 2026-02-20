@@ -2,6 +2,7 @@ package com.java.controller;
 
 import com.java.config.ZoomosConfig;
 import com.java.model.entity.*;
+import com.java.repository.ZoomosCityAddressRepository;
 import com.java.repository.ZoomosCityIdRepository;
 import com.java.repository.ZoomosCityNameRepository;
 import com.java.repository.ZoomosCheckRunRepository;
@@ -42,6 +43,7 @@ public class ZoomosAnalysisController {
     private final ZoomosKnownSiteRepository knownSiteRepository;
     private final ZoomosCityIdRepository cityIdRepository;
     private final ZoomosCityNameRepository cityNameRepository;
+    private final ZoomosCityAddressRepository cityAddressRepository;
     private final ZoomosConfig zoomosConfig;
 
     @GetMapping({"", "/"})
@@ -69,7 +71,57 @@ public class ZoomosAnalysisController {
         model.addAttribute("cityNames", cityNameRepository.findAll()
                 .stream().sorted(java.util.Comparator.comparing(ZoomosCityName::getCityId))
                 .toList());
+        // Количество адресов по каждому городу
+        Map<String, Long> addrCounts = new java.util.LinkedHashMap<>();
+        cityAddressRepository.countByCityId()
+                .forEach(row -> addrCounts.put((String) row[0], (Long) row[1]));
+        model.addAttribute("addrCounts", addrCounts);
         return "zoomos/city-names";
+    }
+
+    /** Адреса из справочника для списка cityIds (через запятую) или всех */
+    @GetMapping("/city-addresses")
+    @ResponseBody
+    public ResponseEntity<?> getCityAddresses(
+            @RequestParam(required = false) String cityIds) {
+        List<com.java.model.entity.ZoomosCityAddress> addrs;
+        if (cityIds != null && !cityIds.isBlank()) {
+            List<String> ids = Arrays.asList(cityIds.split(","));
+            addrs = cityAddressRepository.findByCityIdInOrderByCityIdAscAddressIdAsc(ids);
+        } else {
+            addrs = cityAddressRepository.findAll();
+        }
+        Map<String, List<Map<String, String>>> result = new java.util.LinkedHashMap<>();
+        for (com.java.model.entity.ZoomosCityAddress a : addrs) {
+            result.computeIfAbsent(a.getCityId(), k -> new java.util.ArrayList<>())
+                    .add(Map.of("id", a.getAddressId(),
+                                "name", a.getAddressName() != null ? a.getAddressName() : ""));
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/city-addresses/save")
+    @ResponseBody
+    public ResponseEntity<?> saveCityAddress(@RequestParam String cityId,
+                                             @RequestParam String addressId,
+                                             @RequestParam(required = false) String addressName) {
+        if (cityId.isBlank() || addressId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Поля не могут быть пустыми"));
+        }
+        cityAddressRepository.upsert(cityId.trim(), addressId.trim(),
+                addressName != null ? addressName.trim() : null);
+        return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    @PostMapping("/city-addresses/delete")
+    @ResponseBody
+    public ResponseEntity<?> deleteCityAddress(@RequestParam String cityId,
+                                               @RequestParam String addressId) {
+        cityAddressRepository.findByCityIdOrderByAddressId(cityId).stream()
+                .filter(a -> a.getAddressId().equals(addressId))
+                .findFirst()
+                .ifPresent(a -> cityAddressRepository.deleteById(a.getId()));
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
     @PostMapping("/city-names/save")

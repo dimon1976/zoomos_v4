@@ -64,7 +64,17 @@
         }
         .addr-city-id .city-id-num { font-size: 1em; }
         .addr-city-id .city-id-name { font-size: 0.85em; font-weight: 400; opacity: 0.85; display: block; }
-        .addr-list { display: flex; flex-wrap: wrap; gap: 3px; flex: 1; }
+        .addr-list { display: flex; flex-wrap: wrap; gap: 3px; flex: 1; min-height: 18px; }
+        .addr-suggest-section { border-top: 1px dashed #bfdbfe; padding-top: 4px; }
+        .addr-suggest-label { font-size: 0.68em; color: #64748b; margin-bottom: 3px; }
+        .addr-suggest-list { display: flex; flex-wrap: wrap; gap: 3px; }
+        .addr-suggest-badge {
+            cursor: pointer; background: #f0fdf4; color: #166534;
+            border: 1px dashed #86efac; border-radius: 5px;
+            padding: 1px 6px; font-size: 0.78em; font-weight: 500;
+            display: inline-flex; align-items: center;
+        }
+        .addr-suggest-badge:hover { background: #dcfce7; border-color: #4ade80; }
         .addr-row-add { display: flex; gap: 4px; align-items: center; }
         .addr-add-input { font-size: 0.8em; min-width: 0; flex: 1; }
         .shop-card { margin-bottom: 1.5rem; }
@@ -594,6 +604,7 @@
     // ---- Модалка адресов ----
     let addrModalEntryId = null;
     let addrModalData = {}; // cityId → [addressIds]
+    let knownAddresses = {}; // cityId → [{id, name}]  — справочник адресов
     const addrModal = new bootstrap.Modal(document.getElementById('addressModal'));
 
     // Парсинг addressIds: JSON {"3435":["18121"]} или плоский "18121,18122"
@@ -638,6 +649,7 @@
         cities.forEach(cityId => {
             const sec = document.createElement('div');
             sec.className = 'addr-city-section';
+            sec.dataset.city = cityId;
             const label = cityId || '—';
             const addrBadges = (addrModalData[cityId] || []).map(aid =>
                 '<span class="badge bg-light text-dark border addr-badge">' +
@@ -658,6 +670,7 @@
                 '</div>';
             body.appendChild(sec);
         });
+        applySuggestions();
         // Обработчики удаления
         body.querySelectorAll('.btn-close-sm').forEach(btn => {
             btn.addEventListener('click', function() {
@@ -699,6 +712,55 @@
         });
     }
 
+    function applySuggestions() {
+        const body = document.getElementById('addrModalBody');
+        Object.keys(knownAddresses).forEach(cityId => {
+            const sec = body.querySelector('.addr-city-section[data-city="' + cityId + '"]');
+            if (!sec) return;
+            const selected = addrModalData[cityId] || [];
+            const candidates = (knownAddresses[cityId] || []).filter(a => !selected.includes(a.id));
+            let suggestDiv = sec.querySelector('.addr-suggest-section');
+            if (candidates.length === 0) {
+                if (suggestDiv) suggestDiv.remove();
+                return;
+            }
+            if (!suggestDiv) {
+                suggestDiv = document.createElement('div');
+                suggestDiv.className = 'addr-suggest-section';
+                sec.querySelector('.addr-row-add').before(suggestDiv);
+            }
+            const badges = candidates.map(a => {
+                const shortName = a.name ? a.name.replace(/^\[\d+\]\s*/, '') : '';
+                return '<span class="addr-suggest-badge" data-city="' + escHtml(cityId) +
+                    '" data-aid="' + escHtml(a.id) +
+                    '" title="' + escHtml(shortName || a.id) + '">+ ' + escHtml(a.id) + '</span>';
+            }).join('');
+            suggestDiv.innerHTML =
+                '<div class="addr-suggest-label"><i class="fas fa-bookmark me-1"></i>Из справочника:</div>' +
+                '<div class="addr-suggest-list">' + badges + '</div>';
+            suggestDiv.querySelectorAll('.addr-suggest-badge').forEach(badge => {
+                badge.addEventListener('click', function() {
+                    const city = this.dataset.city;
+                    const aid = this.dataset.aid;
+                    if (!addrModalData[city]) addrModalData[city] = [];
+                    if (!addrModalData[city].includes(aid)) {
+                        addrModalData[city].push(aid);
+                        renderAddrModal();
+                    }
+                });
+            });
+        });
+    }
+
+    function loadSuggestions() {
+        const cityIds = Object.keys(addrModalData).filter(id => id);
+        if (!cityIds.length) return;
+        fetch('/zoomos/city-addresses?cityIds=' + encodeURIComponent(cityIds.join(',')))
+            .then(r => r.json())
+            .then(data => { knownAddresses = data; applySuggestions(); })
+            .catch(() => {});
+    }
+
     function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
     // Инициализация бейджей на кнопках при загрузке
@@ -721,13 +783,10 @@
             addrModalEntryId = this.dataset.id;
             document.getElementById('addrModalSite').textContent = this.dataset.site;
             addrModalData = parseAddrData(this.dataset.addresses || '', this.dataset.cities || '');
-            // Убираем ключ "" если есть города
-            const realCities = Object.keys(addrModalData).filter(k => k !== '');
-            if (realCities.length > 0 && addrModalData['']) {
-                // Перенести "без привязки" адреса в первый город (или показать отдельно)
-            }
+            knownAddresses = {};
             renderAddrModal();
             addrModal.show();
+            loadSuggestions();
         });
     });
 

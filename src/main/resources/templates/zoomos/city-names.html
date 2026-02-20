@@ -69,6 +69,7 @@
                         <th style="width:40px" class="text-center">#</th>
                         <th style="width:120px">ID города</th>
                         <th>Название</th>
+                        <th style="width:110px" class="text-center">Адреса</th>
                         <th style="width:140px" class="text-center">Обновлено</th>
                         <th style="width:80px" class="text-center">Действия</th>
                     </tr>
@@ -83,6 +84,15 @@
                                    th:data-city-id="${cn.cityId}"
                                    style="border:1px solid transparent; background:transparent;">
                         </td>
+                        <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 show-addresses-btn"
+                                    th:data-city-id="${cn.cityId}"
+                                    th:title="'Адресов: ' + ${addrCounts[cn.cityId] ?: 0}">
+                                <i class="fas fa-map-marker-alt me-1"></i>
+                                <span class="addr-count-badge"
+                                      th:text="${addrCounts[cn.cityId] ?: 0}">0</span>
+                            </button>
+                        </td>
                         <td class="text-center small text-muted"
                             th:text="${cn.updatedAt != null} ? ${#temporals.format(cn.updatedAt, 'dd.MM.yyyy HH:mm')} : '—'"></td>
                         <td class="text-center">
@@ -92,6 +102,14 @@
                                     title="Удалить">
                                 <i class="fas fa-trash"></i>
                             </button>
+                        </td>
+                    </tr>
+                    <!-- Раскрываемая строка с адресами -->
+                    <tr th:each="cn : ${cityNames}" th:id="'addr-row-' + ${cn.cityId}" style="display:none">
+                        <td colspan="6" class="p-2 bg-light">
+                            <div th:id="'addr-list-' + ${cn.cityId}" class="d-flex flex-wrap gap-1 align-items-center">
+                                <span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Загрузка...</span>
+                            </div>
                         </td>
                     </tr>
                 </tbody>
@@ -189,6 +207,87 @@
                 .catch(() => alert('Ошибка сети'));
         });
     });
+
+    // ---- Раскрытие списка адресов по городу ----
+    document.querySelectorAll('.show-addresses-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const cityId = this.dataset.cityId;
+            const addrRow = document.getElementById('addr-row-' + cityId);
+            const listDiv = document.getElementById('addr-list-' + cityId);
+            if (addrRow.style.display !== 'none') {
+                addrRow.style.display = 'none';
+                this.classList.remove('btn-info');
+                this.classList.add('btn-outline-info');
+                return;
+            }
+            addrRow.style.display = '';
+            this.classList.remove('btn-outline-info');
+            this.classList.add('btn-info');
+            // Загружаем адреса
+            fetch('/zoomos/city-addresses?cityIds=' + encodeURIComponent(cityId))
+                .then(r => r.json())
+                .then(data => {
+                    const addrs = data[cityId] || [];
+                    if (addrs.length === 0) {
+                        listDiv.innerHTML = '<span class="text-muted small">Нет адресов в справочнике</span>';
+                        return;
+                    }
+                    listDiv.innerHTML = addrs.map(a => {
+                        const shortName = a.name ? a.name.replace(/^\[\d+\]\s*/, '') : '';
+                        return '<span class="badge border addr-entry-badge" ' +
+                            'style="background:#dbeafe;color:#1e3a8a;font-weight:500" ' +
+                            'title="' + escH(shortName) + '">' +
+                            escH(a.id) +
+                            (shortName ? '<span class="ms-1 fw-normal text-secondary" style="font-size:0.85em">— ' + escH(shortName) + '</span>' : '') +
+                            ' <button type="button" class="btn-close ms-1 delete-addr-btn" style="font-size:0.4em" ' +
+                            'data-city-id="' + escH(cityId) + '" data-address-id="' + escH(a.id) + '"></button>' +
+                            '</span>';
+                    }).join('') +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-2 add-addr-inline-btn" data-city-id="' + escH(cityId) + '">' +
+                    '<i class="fas fa-plus me-1"></i>Добавить</button>';
+                    bindAddrActions(listDiv, cityId, this);
+                })
+                .catch(() => { listDiv.innerHTML = '<span class="text-danger small">Ошибка загрузки</span>'; });
+        });
+    });
+
+    function escH(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+    function bindAddrActions(listDiv, cityId, toggleBtn) {
+        // Удаление адреса
+        listDiv.querySelectorAll('.delete-addr-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const addrId = this.dataset.addressId;
+                const fd = new FormData();
+                fd.append('cityId', cityId);
+                fd.append('addressId', addrId);
+                fetch('/zoomos/city-addresses/delete', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            this.closest('.addr-entry-badge').remove();
+                            const newCount = listDiv.querySelectorAll('.addr-entry-badge').length;
+                            toggleBtn.querySelector('.addr-count-badge').textContent = newCount;
+                        }
+                    })
+                    .catch(() => {});
+            });
+        });
+        // Добавление адреса
+        listDiv.querySelectorAll('.add-addr-inline-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const val = prompt('ID адреса:');
+                if (!val || !val.trim()) return;
+                const fd = new FormData();
+                fd.append('cityId', cityId);
+                fd.append('addressId', val.trim());
+                fetch('/zoomos/city-addresses/save', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(d => { if (d.success) location.reload(); })
+                    .catch(() => {});
+            });
+        });
+    }
 
     // ---- Фильтр ----
     const citySearch = document.getElementById('citySearch');
