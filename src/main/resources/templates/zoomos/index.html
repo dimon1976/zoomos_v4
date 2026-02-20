@@ -652,7 +652,7 @@
             sec.dataset.city = cityId;
             const label = cityId || '—';
             const addrBadges = (addrModalData[cityId] || []).map(aid =>
-                '<span class="badge bg-light text-dark border addr-badge">' +
+                '<span class="badge bg-light text-dark border addr-badge" data-aid="' + escHtml(aid) + '">' +
                 escHtml(aid) +
                 ' <button type="button" class="btn-close btn-close-sm" data-city="' + escHtml(cityId) +
                 '" data-aid="' + escHtml(aid) + '"></button></span>'
@@ -714,6 +714,16 @@
 
     function applySuggestions() {
         const body = document.getElementById('addrModalBody');
+        // Строим плоскую карту addressId → name по всем городам
+        const addrNameMap = {};
+        Object.values(knownAddresses).forEach(list =>
+            list.forEach(a => { if (a.name) addrNameMap[a.id] = a.name.replace(/^\[\d+\]\s*/, ''); })
+        );
+        // Обновляем tooltip выбранных адресов
+        body.querySelectorAll('.addr-badge[data-aid]').forEach(badge => {
+            const aid = badge.dataset.aid;
+            if (addrNameMap[aid]) badge.title = addrNameMap[aid];
+        });
         Object.keys(knownAddresses).forEach(cityId => {
             const sec = body.querySelector('.addr-city-section[data-city="' + cityId + '"]');
             if (!sec) return;

@@ -75,7 +75,8 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr th:each="cn, si : ${cityNames}" th:id="'city-row-' + ${cn.cityId}">
+                    <th:block th:each="cn, si : ${cityNames}">
+                    <tr th:id="'city-row-' + ${cn.cityId}">
                         <td class="text-center text-muted small" th:text="${si.count}"></td>
                         <td class="city-id-cell" th:text="${cn.cityId}"></td>
                         <td>
@@ -104,14 +105,15 @@
                             </button>
                         </td>
                     </tr>
-                    <!-- Раскрываемая строка с адресами -->
-                    <tr th:each="cn : ${cityNames}" th:id="'addr-row-' + ${cn.cityId}" style="display:none">
-                        <td colspan="6" class="p-2 bg-light">
+                    <!-- Раскрываемая строка с адресами — сразу под городом -->
+                    <tr th:id="'addr-row-' + ${cn.cityId}" style="display:none">
+                        <td colspan="6" class="p-2 bg-light border-top-0">
                             <div th:id="'addr-list-' + ${cn.cityId}" class="d-flex flex-wrap gap-1 align-items-center">
                                 <span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Загрузка...</span>
                             </div>
                         </td>
                     </tr>
+                    </th:block>
                 </tbody>
             </table>
         </div>
