@@ -29,9 +29,11 @@ mvn spring-boot:run -Dspring-boot.run.profiles=silent
 
 ### Основные разделы
 1. **Import/Export** (главная страница) - Импорт и экспорт файлов для клиентов
-2. **Utilities** (`/utils`) - HTTP Redirect Finder, Data Merger, Barcode Match, URL Cleaner
-3. **Maintenance** (`/maintenance`) - Файловые операции, очистка БД, мониторинг системы
-4. **Statistics** (`/statistics/setup`) - Анализ и сравнение операций экспорта
+2. **Handbook** (`/handbook`) - Справочник штрихкодов: накопление базы товаров и обогащение файлов ссылками
+3. **Utilities** (`/utils`) - HTTP Redirect Finder, Data Merger, Barcode Match, URL Cleaner
+4. **Maintenance** (`/maintenance`) - Файловые операции, очистка БД, мониторинг системы
+5. **Statistics** (`/statistics/setup`) - Анализ и сравнение операций экспорта
+6. **Zoomos Check** (`/zoomos`) - Проверка выкачки: парсинг export.zoomos.by, вердикт по наличию товаров
 
 ### Быстрая проверка работоспособности
 ```bash
@@ -87,6 +89,10 @@ mvn flyway:info
 
 ### 2026-02
 
+- **Zoomos Check — Baseline тренд-анализ** — Исторический анализ метрик выкачек за N дней. TREND_WARNING issues (не влияют на canDeliver). Flyway V29, поле `baselineDays` на форме. См. секцию ниже.
+- **Zoomos Check — CSV для ИТ** — «Текст для ИТ» теперь в формате CSV с разделителем `;` (Сайт;Город;Тип;Сообщение;История).
+- **Zoomos Check** — Проверка выкачки export.zoomos.by: парсинг истории через Playwright, вердикт готовности отчёта, сводка ИТ с копированием. Flyway V23–V28, 2 новые таблицы. См. секцию ниже.
+- **Barcode Handbook** - Справочник штрихкодов: накопление базы товаров (ШК+имена+ссылки) и обогащение рабочих файлов ссылками. Flyway V21, 4 таблицы, JDBC batch-импорт, поиск по ШК/имени/URL
 - **Import TimeoutException Fix** - Устранён TimeoutException при одновременном импорте нескольких файлов
 
 ### 2026-01
@@ -880,6 +886,253 @@ Results page:
   Операция #123   | Операция #456   ← exportSessionId (уникальны)
   TASK-00008125   | TASK-00007969   ← Разные TASK-номера
 ```
+
+## Zoomos Check (Проверка выкачки)
+
+### Purpose
+Автоматическая проверка полноты выкачки данных с `export.zoomos.by` за выбранный период. Помогает быстро понять — можно ли отдавать отчёт клиенту или есть проблемы с наличием товаров.
+
+### URL
+- **Главная**: `/zoomos` — список магазинов, запуск проверки
+- **Результаты**: `/zoomos/check/results/{runId}` — вердикт + детали
+- **История**: `/zoomos/check/history` — все прошлые проверки
+- **Справочник сайтов**: `/zoomos/sites` — список известных сайтов (zoomos_known_sites)
+
+### Database Schema (Flyway V23–V26)
+```sql
+zoomos_check_runs  -- запись о каждой проверке
+  id, shop_id, date_from, date_to, time_from, time_to  -- time_from/time_to: "HH:mm" или null
+  status (RUNNING/COMPLETED/FAILED)
+  ok_count, warning_count, error_count, not_found_count
+  drop_threshold (default 10%), error_growth_threshold (default 30%)
+  started_at, completed_at
+
+zoomos_parsing_stats  -- одна строка из таблицы истории парсинга
+  id, check_run_id, site_name, city_name, server_name, client_name
+  start_time, finish_time, total_products, in_stock, error_count
+  completion_total, parsing_duration, check_type (API/ITEM), is_finished
+  parsing_id, category_count, completion_percent, parsing_duration_minutes
+
+zoomos_known_sites  -- справочник известных сайтов zoomos (V25)
+  id, site_name (UNIQUE), check_type (API/ITEM)
+```
+
+### Логика оценки (`ZoomosCheckService.evaluateGroup`)
+
+Сравниваются только **последние две** выкачки (newest vs prev) — текущее состояние:
+
+| Условие | Статус | Issue |
+| ------- | ------ | ----- |
+| Падение "В наличии" > `dropThreshold`% | **ERROR** | "Падение 'В наличии': N → M (−X%)" |
+| "В наличии": было >0, стало 0 | **ERROR** | "В наличии: N → 0 (−100%)" |
+| Рост ошибок парсинга > `errorGrowthThreshold`% | WARNING | "Рост ошибок: N → M (+X%)" |
+| Ошибок не было, появились > 10 | WARNING | "Ошибки парсинга: 0 → N" |
+| Падение числа товаров > `dropThreshold`% | WARNING | "Падение товаров: N → M (−X%)" |
+| 100% выкачка, но всегда 0 товаров | WARNING | "100% выкачка, нет товаров — нужна проверка" |
+| Всегда нули в "В наличии" (особенность сайта) | OK (игнор) | — |
+
+**Одиночная запись:** выкачка не завершена (completionPercent < 100) → WARNING. Завершена (100%), но 0 товаров → WARNING.
+
+**`canDeliver = false`** (нельзя отдавать отчёт) только при наличии ERROR или NOT_FOUND (нет данных за период).
+
+**Счётчики OK/Warn/Error** вычисляются **динамически** в контроллере из `siteCityStatuses` (не из `run.warningCount` в БД), чтобы всегда совпадать с отображаемыми issues. `run.warningCount` используется только внутри check-service и при сохранении в БД.
+
+### Страница результатов (`check-results.html`)
+
+Четыре блока:
+1. **Вердикт** — зелёный "Отчёт готов" / красный "Есть проблемы", период (с временем если задано), счётчики OK/Warn/Err
+2. **На что обратить внимание** — список issues с кнопками **Матчинг** и **История** (прямая ссылка на нужный город). Внизу — **текст для ИТ** с кнопкой копирования и ссылками на историю:
+   ```
+   site1.ru:
+     3612 - Нижний Новгород — В наличии: 500 → 0 (−100%)
+       История: {baseUrl}/shops-parser/site1.ru/parsing-history?...&cityId=3612
+   site2.ru:
+     Нет данных за указанный период
+   ```
+3. **Детали по сайтам** — все свёрнуты, кнопки "Раскрыть всё" / "Свернуть всё". Внутри каждого сайта — подгруппы по городам с таблицей выкачек DESC по времени. Стрелки ↑↓ для изменений.
+4. **Графики динамики** — Chart.js, lazy load при первом раскрытии. Три dataset: Товаров / В наличии / Ошибки.
+
+### Фильтрация по времени (timeFrom / timeTo)
+
+Позволяет проверить только выкачки, **завершённые** в указанном временном диапазоне:
+- `timeFrom` (необязательно) — нижняя граница по `startTime`, дефолт 00:00
+- `timeTo` (необязательно) — верхняя граница по `finishTime` (когда данные реально готовы), дефолт 23:59
+
+**Фильтр в `ZoomosCheckService.filterByTime()`:**
+- Нижняя граница: `startTime >= rangeStart`
+- Верхняя граница: `finishTime <= rangeEnd` (если `finishTime == null` — используется `startTime`)
+- Строки с обоими null — пропускаются через фильтр
+
+**Пример**: выкачка стартовала в 02:01, закончила в 11:51. При `timeTo=11:06` — отфильтрована (финиш 11:51 > 11:06).
+
+**localStorage**: `checkTimeFrom-{shopId}` / `checkTimeTo-{shopId}` — независимые для каждого магазина.
+
+### Ключевые файлы
+
+| Файл | Назначение |
+|------|-----------|
+| [ZoomosCheckService.java](src/main/java/com/java/service/ZoomosCheckService.java) | Playwright-парсинг, `evaluateGroup()`, `filterByTime()`, WebSocket прогресс |
+| [ZoomosAnalysisController.java](src/main/java/com/java/controller/ZoomosAnalysisController.java) | `/zoomos/*` роуты, группировка по сайту, `itText` с URL историй, `chartData` |
+| [ZoomosParserService.java](src/main/java/com/java/service/ZoomosParserService.java) | Управление магазинами и city_ids, двунаправленная синхронизация настроек |
+| [ZoomosCheckRun.java](src/main/java/com/java/model/entity/ZoomosCheckRun.java) | JPA entity проверки (включая timeFrom/timeTo) |
+| [ZoomosParsingStats.java](src/main/java/com/java/model/entity/ZoomosParsingStats.java) | JPA entity строки статистики |
+| [ZoomosKnownSite.java](src/main/java/com/java/model/entity/ZoomosKnownSite.java) | JPA entity справочника сайтов |
+| [check-results.html](src/main/resources/templates/zoomos/check-results.html) | Страница результатов (4 блока) |
+| [index.html](src/main/resources/templates/zoomos/index.html) | Список магазинов + запуск проверки (поля времени) |
+| [sites.html](src/main/resources/templates/zoomos/sites.html) | Справочник известных сайтов |
+| [V23__create_zoomos_check_tables.sql](src/main/resources/db/migration/V23__create_zoomos_check_tables.sql) | Flyway: базовые таблицы |
+| [V24__add_check_thresholds.sql](src/main/resources/db/migration/V24__add_check_thresholds.sql) | Flyway: пороги dropThreshold/errorGrowthThreshold |
+| [V25__zoomos_sites_and_parsing_stats_update.sql](src/main/resources/db/migration/V25__zoomos_sites_and_parsing_stats_update.sql) | Flyway: zoomos_known_sites + доп. поля parsing_stats |
+| [V26__add_time_range_to_check_runs.sql](src/main/resources/db/migration/V26__add_time_range_to_check_runs.sql) | Flyway: time_from, time_to в check_runs |
+
+### Технические детали
+
+**Парсинг** (Playwright headless Chrome):
+- URL формат: `{baseUrl}/shops-parser/{site}/parsing-history?upd={ts}&dateFrom=DD.MM.YYYY&dateTo=DD.MM.YYYY&launchDate=&shop={shopParam}&site=&cityId=&address=&accountId=&server=&onlyFinished=1`
+- API-тип: `shop=-` (глобальные выкачки) + фильтр: поле "Клиент" должно быть **пустым** (чужие выкачки игнорируются)
+- ITEM-тип: `shop={shopName}`
+- Авторизация через куки (`ZoomosSession`), автообновление при редиректе на `/login`
+
+**Ссылки на историю** (`Матчинг` / `История`):
+- URL: `/shops-parser/{site}/parsing-history?...&cityId={cityId}` — с параметром cityId для прямого перехода на нужный город
+- cityId извлекается из строки вида "3509 - Вологда" → "3509"
+- Те же ссылки текстом в "Текст для ИТ"
+
+**Inline JS данные для чартов**: передаются через `chartData` (List<Map>) — только примитивы, без JPA-объектов (иначе `LazyInitializationException`). `startTime` как epoch millis.
+
+**localStorage**: ключи `checkDateFrom-{shopId}`, `checkDateTo-{shopId}`, `checkTimeFrom-{shopId}`, `checkTimeTo-{shopId}` — независимые для каждого магазина. Проверки запускаются в фоне (без авторедиректа), чтобы параллельно запускать несколько клиентов.
+
+### Testing Status
+✅ Playwright-парсинг API и ITEM сайтов
+✅ Вердикт-блок (canDeliver логика)
+✅ Группировка по сайту → городу
+✅ Текст для ИТ с копированием и URL историй
+✅ Графики Chart.js (lazy)
+✅ Фоновые параллельные проверки (без авторедиректа)
+✅ Независимые даты и время по shopId
+✅ Фильтрация по временному диапазону (finishTime для верхней границы)
+✅ Ссылки на историю с cityId
+✅ API: фильтрация по пустому полю "Клиент"
+
+## Barcode Handbook (Справочник штрихкодов)
+
+### Purpose
+Централизованная база знаний о товарах: штрихкоды → наименования → ссылки на страницы товаров у ритейлеров. Позволяет обогащать рабочие файлы (список ID + ШК) готовыми URL из справочника.
+
+### Database Schema (Flyway V21)
+
+```sql
+bh_products  -- центральная сущность товара
+  id, barcode (UNIQUE nullable), brand, manufacturer_code, created_at, updated_at
+
+bh_names     -- наименования товара (один продукт = много имён)
+  id, product_id → bh_products, name, source
+  UNIQUE(product_id, name)
+
+bh_urls      -- ссылки товара (один продукт = много ссылок)
+  id, product_id → bh_products, url, domain, site_name, source
+  UNIQUE(product_id, url)
+
+bh_domains   -- реестр доменов с флагом активности
+  id, domain (UNIQUE), is_active, url_count, description
+```
+
+### Import Types
+
+Используется **существующая система импорта** (шаблоны + AsyncImportService). Создаёшь шаблон с EntityType и импортируешь файл как обычно.
+
+**`BH_BARCODE_NAME`** — файл `штрихкод | наименование | бренд`:
+- Поля: `barcode`, `name`, `brand`, `manufacturerCode`
+- Несколько ШК через запятую (`"A,B"`) → хранятся отдельно
+- UPSERT продуктов по barcode, INSERT имён (ON CONFLICT DO NOTHING)
+- Реализация: `BarcodeHandbookService.persistBarcodeNameBatch()` — JDBC batch
+
+**`BH_NAME_URL`** — файл `наименование | url | site_name`:
+- Поля: `name`, `brand`, `url`, `siteName`
+- Продукты находятся/создаются по имени; UPSERT доменов автоматически
+- Реализация: `BarcodeHandbookService.persistNameUrlBatch()` — JDBC batch
+
+### Import Performance
+
+Реализован через **JDBC batch** (не JPA per-row):
+- `batchUpdate` + `ON CONFLICT DO NOTHING/DO UPDATE`
+- Один `SELECT ... IN (...)` для поиска существующих продуктов
+- ~50-100x быстрее JPA подхода (1M строк за минуты, не часы)
+- `EntityPersistenceService` вызывает `saveBhBarcodeNameBatch` / `saveBhNameUrlBatch` с целым батчем
+
+### Barcode Normalization (`BarcodeUtils`)
+
+**Файл**: [BarcodeUtils.java](src/main/java/com/java/util/BarcodeUtils.java)
+
+- `parseAndNormalize(String raw)` — разбивает по запятой, нормализует каждый ШК
+- `normalize(String raw)` — убирает пробелы/NBSP/управляющие символы, удаляет ведущий 0 у 14-значных EAN-14 → EAN-13
+
+Используется при импорте (`persistBarcodeNameBatch`) и при поиске (`searchAndExport`, `searchForUi`).
+
+### Search & Export Flow
+
+**URL**: `GET /handbook/search` → загрузка файла → `GET /handbook/search/configure` → настройка → `POST /handbook/search/process` → скачать результат
+
+1. Загружается CSV/XLSX с рабочим файлом (ID + ШК/наименования)
+2. На странице configure выбираются колонки (idColumn, barcodeColumn, nameColumn) и фильтр доменов
+3. `searchAndExport()` (`@Transactional(readOnly=true)`):
+   - Нормализует все ШК из файла через `BarcodeUtils.parseAndNormalize()`
+   - Один batch `SELECT ... WHERE barcode IN (...)` → Map<barcode, BhProduct>
+   - Для строк без найденного ШК — поиск по имени (`nameRepo.findByNameIgnoreCase`)
+   - Один batch `SELECT urls WHERE product_id IN (...)` с опциональным фильтром по доменам
+   - Строки без совпадений **не включаются** в результат
+   - Результат: XLSX или CSV с колонками `ID | Штрихкод | Наименование | Бренд | Домен | URL`
+   - Одна входная строка → N выходных строк (по числу найденных URL)
+
+**CSV чтение**: OpenCSV с `CSVParserBuilder` (корректная обработка кавычек)
+
+### UI Lookup (AJAX поиск на главной странице)
+
+**URL**: `GET /handbook` — страница со встроенным поиском
+
+**Endpoint**: `GET /handbook/lookup?q=<запрос>` → JSON
+
+Поиск одновременно по трём полям:
+1. Точное совпадение по штрихкоду (после нормализации)
+2. LIKE `%запрос%` по наименованиям (`bh_names`)
+3. LIKE `%запрос%` по URL (`bh_urls`)
+
+Таблица результатов: Штрихкод | Бренд | Наименования | Домен/URL | Найдено по (бейдж ШК/Наим./URL)
+
+### Domain Management
+
+**URL**: `GET /handbook/domains`
+
+- Список всех доменов из `bh_domains`, отсортированных по `url_count DESC`
+- Toggle активности (отключённые домены не попадают в фильтр при поиске)
+- AJAX-поиск доменов: `GET /handbook/domains/search?q=`
+- Домены создаются автоматически при импорте `BH_NAME_URL`
+
+### Key Files
+
+| Файл | Назначение |
+|------|-----------|
+| [V21__create_barcode_handbook.sql](src/main/resources/db/migration/V21__create_barcode_handbook.sql) | Flyway миграция (4 таблицы) |
+| [BarcodeHandbookService.java](src/main/java/com/java/service/handbook/BarcodeHandbookService.java) | Весь бизнес-код: импорт, поиск, домены |
+| [BarcodeHandbookController.java](src/main/java/com/java/controller/BarcodeHandbookController.java) | REST/MVC контроллер `/handbook/*` |
+| [BarcodeUtils.java](src/main/java/com/java/util/BarcodeUtils.java) | Нормализация и разбивка штрихкодов |
+| [BhProduct.java](src/main/java/com/java/model/entity/BhProduct.java) | JPA entity продукта |
+| [BhName.java](src/main/java/com/java/model/entity/BhName.java) | JPA entity наименования |
+| [BhUrl.java](src/main/java/com/java/model/entity/BhUrl.java) | JPA entity ссылки |
+| [BhDomain.java](src/main/java/com/java/model/entity/BhDomain.java) | JPA entity домена |
+| [EntityType.java](src/main/java/com/java/model/enums/EntityType.java) | Добавлены BH_BARCODE_NAME, BH_NAME_URL |
+| [EntityFieldService.java](src/main/java/com/java/service/EntityFieldService.java) | Добавлены поля для BH типов (UI dropdown) |
+| [EntityPersistenceService.java](src/main/java/com/java/service/imports/handlers/EntityPersistenceService.java) | Switch cases для BH типов |
+| [handbook/index.html](src/main/resources/templates/handbook/index.html) | Главная + AJAX поиск |
+| [handbook/search-configure.html](src/main/resources/templates/handbook/search-configure.html) | Настройка поиска (маппинг колонок + домены) |
+
+### Testing Status
+✅ Импорт BH_BARCODE_NAME — работает, JDBC batch
+✅ Импорт BH_NAME_URL — работает, JDBC batch
+✅ Multi-barcode (запятая) — разбивка и нормализация
+✅ Поиск и экспорт в XLSX/CSV — работает
+✅ UI AJAX поиск по ШК/имени/URL
+✅ Управление доменами
 
 ## Code References
 

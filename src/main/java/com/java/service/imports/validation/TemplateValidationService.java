@@ -48,6 +48,16 @@ public class TemplateValidationService {
                 "handbookRetailNetworkCode", "handbookRetailNetwork", "handbookPhysicalAddress", "handbookPriceZoneCode", "handbookWebSite",
                 "handbookRegionCode", "handbookRegionName"
         ));
+
+        // Поля для справочника штрихкодов: тип "штрихкод+наименование"
+        ENTITY_FIELDS.put(EntityType.BH_BARCODE_NAME, Set.of(
+                "barcode", "name", "brand", "manufacturerCode"
+        ));
+
+        // Поля для справочника штрихкодов: тип "наименование+URL"
+        ENTITY_FIELDS.put(EntityType.BH_NAME_URL, Set.of(
+                "name", "brand", "url", "siteName"
+        ));
     }
 
     /**
@@ -182,6 +192,13 @@ public class TemplateValidationService {
                 requiredFields.add("handbookRetailNetworkCode");
                 requiredFields.add("handbookRetailNetwork");
                 requiredFields.add("handbookWebSite");
+                break;
+            case BH_BARCODE_NAME:
+                requiredFields.add("name");
+                break;
+            case BH_NAME_URL:
+                requiredFields.add("name");
+                requiredFields.add("url");
                 break;
         }
 

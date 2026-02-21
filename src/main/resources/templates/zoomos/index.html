@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Анализ выкачки',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Анализ выкачки',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Анализ выкачки</title></head>
+
+<th:block th:fragment="styles">
+    <style>
+        .city-ids-input {
+            font-size: 0.8em;
+            border: 1px solid transparent;
+            background: transparent;
+            width: 100%;
+            cursor: text;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .city-ids-input:focus {
+            border-color: #86b7fe;
+            background: #fff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
+            border-radius: 4px;
+            padding: 2px 4px;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: unset;
+        }
+        .city-ids-input:hover:not(:focus) {
+            background: #f8f9fa;
+            border-color: #dee2e6;
+            border-radius: 4px;
+        }
+        .addr-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            background: #dbeafe; color: #1e3a8a;
+            border: 1px solid #bfdbfe; border-radius: 5px;
+            padding: 1px 6px; font-size: 0.78em; font-weight: 500;
+        }
+        .addr-badge .btn-close { font-size: 0.45em; filter: invert(1) brightness(0.4); }
+        #addrModalBody {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 8px; max-height: 65vh; overflow-y: auto;
+        }
+        .addr-city-section {
+            display: flex; flex-direction: column; gap: 5px;
+            border: 1px solid #bfdbfe; border-radius: 8px;
+            padding: 7px; background: #f0f7ff;
+        }
+        .addr-city-id {
+            display: block; text-align: center;
+            background: linear-gradient(135deg, #1e3a5f, #2d5a8e);
+            color: #e0f0ff; border-radius: 5px;
+            font-size: 0.75em; font-weight: 700; letter-spacing: 0.04em;
+            padding: 3px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+            line-height: 1.4;
+        }
+        .addr-city-id .city-id-num { font-size: 1em; }
+        .addr-city-id .city-id-name { font-size: 0.85em; font-weight: 400; opacity: 0.85; display: block; }
+        .addr-list { display: flex; flex-wrap: wrap; gap: 3px; min-height: 18px; }
+        .addr-suggest-section { border-top: 1px dashed #bfdbfe; padding-top: 4px; }
+        .addr-suggest-label { font-size: 0.68em; color: #64748b; margin-bottom: 3px; }
+        .addr-suggest-list { display: flex; flex-wrap: wrap; gap: 3px; }
+        .addr-suggest-badge {
+            cursor: pointer; background: #f0fdf4; color: #166534;
+            border: 1px dashed #86efac; border-radius: 5px;
+            padding: 1px 6px; font-size: 0.78em; font-weight: 500;
+            display: inline-flex; align-items: center;
+        }
+        .addr-suggest-badge:hover { background: #dcfce7; border-color: #4ade80; }
+        .addr-row-add { display: flex; gap: 4px; align-items: center; margin-top: auto; padding-top: 4px; }
+        .addr-add-input { font-size: 0.8em; min-width: 0; flex: 1; }
+        .shop-card { margin-bottom: 1.5rem; }
+        .sync-status { font-size: 0.8em; }
+        .city-ids-col { min-width: 200px; }
+        .shop-card.hidden-by-search { display: none; }
+        .check-progress { font-size: 0.85em; }
+        .check-progress .progress { height: 18px; }
+        .btn-thresholds {
+            color: #6c757d;
+            padding: 2px 5px;
+            font-size: 0.8em;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: transparent;
+            line-height: 1.5;
+            cursor: pointer;
+        }
+        .btn-thresholds:hover {
+            background: #e9ecef;
+            color: #495057;
+        }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/zoomos/sites}" class="btn btn-sm btn-outline-secondary me-2">
+        <i class="fas fa-book me-1"></i>Справочник сайтов
+    </a>
+    <a th:href="@{/zoomos/city-names}" class="btn btn-sm btn-outline-secondary me-2">
+        <i class="fas fa-city me-1"></i>Справочник городов
+    </a>
+    <a th:href="@{/zoomos/check/history}" class="btn btn-sm btn-outline-info">
+        <i class="fas fa-history me-1"></i>История проверок
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- Уведомления -->
+    <div th:if="${success}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="fas fa-check-circle me-2"></i><span th:text="${success}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="fas fa-exclamation-circle me-2"></i><span th:text="${error}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <!-- Панель: добавление + поиск + период проверки -->
+    <div class="card mb-4">
+        <div class="card-header"><i class="fas fa-store me-2"></i>Управление магазинами</div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <!-- Форма добавления -->
+                <div class="col-md-4">
+                    <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
+                        <div class="col">
+                            <label class="form-label fw-semibold mb-1">Добавить магазин</label>
+                            <input type="text" name="shopName" class="form-control form-control-sm"
+                                   placeholder="vitaexpress.ru" required autocomplete="off">
+                        </div>
+                        <div class="col-auto">
+                            <button type="submit" class="btn btn-sm btn-primary">
+                                <i class="fas fa-plus me-1"></i>Добавить
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <!-- Поиск -->
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold mb-1">Поиск</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" id="shopSearch" class="form-control"
+                               placeholder="Имя магазина...">
+                        <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <span id="searchCount" class="text-muted small"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Список магазинов -->
+    <div th:if="${shops.empty}" class="text-muted text-center py-4">
+        <i class="fas fa-store fa-2x mb-2 d-block"></i>
+        Магазины не добавлены. Введите имя магазина выше.
+    </div>
+
+    <div th:each="shop : ${shops}" class="card shop-card"
+         th:data-shop-name="${shop.shopName}" th:data-shop-id="${shop.id}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <i class="fas fa-store me-2 text-primary"></i>
+                <strong th:text="${shop.shopName}">shop.ru</strong>
+                <span th:if="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
+                    <i class="fas fa-sync-alt me-1"></i>Обновлено:
+                    <span th:text="${#temporals.format(shop.lastSyncedAt, 'dd.MM.yyyy HH:mm')}"></span>
+                </span>
+                <span th:unless="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
+                    <i class="fas fa-clock me-1"></i>Не синхронизировано
+                </span>
+                <a th:href="@{'https://export.zoomos.by/shop/' + ${shop.shopName} + '/settings'}"
+                   target="_blank" class="ms-3 small text-decoration-none text-muted"
+                   title="Открыть настройки на export.zoomos.by">
+                    <i class="fas fa-external-link-alt"></i> настройки
+                </a>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <form th:action="@{'/zoomos/shops/' + ${shop.shopName} + '/sync'}" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-success"
+                            onclick="this.disabled=true; this.innerHTML='<i class=\'fas fa-spinner fa-spin me-1\'></i>Синхронизация...'; this.form.submit();">
+                        <i class="fas fa-sync-alt me-1"></i>Синхронизировать
+                    </button>
+                </form>
+                <form th:action="@{'/zoomos/shops/' + ${shop.shopName} + '/sync-from-matching'}"
+                      method="post" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-outline-info"
+                            onclick="this.disabled=true; this.innerHTML='<i class=\'fas fa-spinner fa-spin me-1\'></i>Загрузка...'; this.form.submit();"
+                            title="Загрузить список сайтов со страницы матчинга">
+                        <i class="fas fa-link me-1"></i>Из матчинга
+                    </button>
+                </form>
+                <form th:action="@{'/zoomos/shops/' + ${shop.id} + '/delete'}" method="post" class="d-inline"
+                      onsubmit="return confirm('Удалить магазин ' + this.dataset.name + '?')"
+                      th:data-name="${shop.shopName}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Панель проверки: даты + кнопка настроек + кнопка запуска -->
+        <div class="px-3 py-2 border-bottom d-flex align-items-center gap-2 bg-light flex-wrap">
+            <span class="small text-muted me-1"><i class="fas fa-calendar-alt me-1"></i>Проверка:</span>
+            <input type="date" class="form-control form-control-sm check-date-from"
+                   th:id="'dateFrom-' + ${shop.id}" style="width:140px;">
+            <input type="time" class="form-control form-control-sm check-time-from"
+                   th:id="'timeFrom-' + ${shop.id}" style="width:110px;"
+                   title="Время начала (необязательно, по умолчанию 00:00)">
+            <span class="small text-muted">—</span>
+            <input type="date" class="form-control form-control-sm check-date-to"
+                   th:id="'dateTo-' + ${shop.id}" style="width:140px;">
+            <input type="time" class="form-control form-control-sm check-time-to"
+                   th:id="'timeTo-' + ${shop.id}" style="width:110px;"
+                   title="Время окончания (необязательно, по умолчанию 23:59)">
+            <button type="button" class="btn-thresholds"
+                    data-bs-toggle="collapse"
+                    th:data-bs-target="'#thresholds-' + ${shop.id}"
+                    title="Настройки порогов">⚙</button>
+            <button type="button" class="btn btn-sm btn-outline-primary btn-run-check"
+                    th:data-shop-id="${shop.id}"
+                    title="Запустить проверку выкачки за выбранный период">
+                <i class="fas fa-search me-1"></i>Проверить
+            </button>
+        </div>
+        <!-- Скрытая панель с порогами -->
+        <div th:id="'thresholds-' + ${shop.id}" class="collapse border-bottom">
+            <div class="px-3 py-1 bg-light d-flex align-items-center gap-2 flex-wrap">
+                <span class="small text-muted" title="Порог падения 'В наличии' (%)">Падение%</span>
+                <input type="number" class="form-control form-control-sm check-drop-threshold"
+                       th:id="'dropThreshold-' + ${shop.id}" value="10" min="1" max="100" style="width:60px;">
+                <span class="small text-muted" title="Порог роста ошибок (%)">Ошибки%</span>
+                <input type="number" class="form-control form-control-sm check-err-threshold"
+                       th:id="'errThreshold-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
+                <span class="small text-muted ms-2" title="Горизонт сравнения с историей (0 = без анализа)">Baseline</span>
+                <input type="number" class="form-control form-control-sm check-baseline-days"
+                       th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30" style="width:55px;">
+            </div>
+        </div>
+
+        <!-- Мини-прогресс проверки (скрыт по умолчанию) -->
+        <div class="check-progress px-3 py-2 border-bottom" th:id="'check-progress-' + ${shop.id}" style="display:none;">
+            <div class="d-flex align-items-center gap-2">
+                <div class="flex-grow-1">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             th:id="'check-bar-' + ${shop.id}" style="width:0%">0%</div>
+                    </div>
+                </div>
+                <span class="text-muted small" th:id="'check-msg-' + ${shop.id}"></span>
+            </div>
+        </div>
+
+        <!-- Результат проверки (скрыт по умолчанию) -->
+        <div class="px-3 py-2 border-bottom bg-light" th:id="'check-result-' + ${shop.id}" style="display:none;">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <span class="fw-semibold small"><i class="fas fa-check-circle text-success me-1"></i>Проверка завершена</span>
+                <span class="badge bg-light text-dark border small" th:id="'result-period-' + ${shop.id}"></span>
+                <span class="badge bg-success" th:id="'result-ok-' + ${shop.id}">0 OK</span>
+                <span class="badge bg-warning text-dark" th:id="'result-warn-' + ${shop.id}">0 Warn</span>
+                <span class="badge bg-danger" th:id="'result-err-' + ${shop.id}">0 Error</span>
+                <span class="badge bg-secondary" th:id="'result-na-' + ${shop.id}">0 N/A</span>
+                <a href="#" class="btn btn-sm btn-outline-primary" th:id="'result-link-' + ${shop.id}">
+                    <i class="fas fa-table me-1"></i>Результаты
+                </a>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            <div th:with="entries=${cityIdsMap[shop.id]}">
+                <div th:if="${entries == null or entries.empty}" class="text-muted small p-3">
+                    Нет данных. Нажмите «Синхронизировать» для загрузки настроек.
+                </div>
+                <div th:unless="${entries == null or entries.empty}">
+                    <!-- Заголовок секции с кнопкой collapse -->
+                    <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold small text-secondary">
+                            <i class="fas fa-map-marker-alt me-1"></i>
+                            ID городов по сайтам-конкурентам
+                            <span class="badge bg-secondary ms-1" th:text="${#lists.size(entries)}">0</span>
+                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-success select-all-btn"
+                                    type="button"
+                                    th:data-shop-id="${shop.id}"
+                                    title="Выбрать все">
+                                <i class="fas fa-check-square"></i> Все
+                            </button>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-danger deselect-all-btn"
+                                    type="button"
+                                    th:data-shop-id="${shop.id}"
+                                    title="Снять все">
+                                <i class="fas fa-square"></i> Снять
+                            </button>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-secondary collapse-toggle"
+                                    type="button"
+                                    th:data-bs-target="'#cityTable-' + ${shop.id}"
+                                    data-bs-toggle="collapse"
+                                    aria-expanded="false">
+                                <i class="fas fa-chevron-down"></i> Показать
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Таблица скрыта по умолчанию -->
+                    <div th:id="'cityTable-' + ${shop.id}" class="collapse">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover table-bordered mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:40px" class="text-center">✓</th>
+                                        <th style="width:200px">Сайт-конкурент</th>
+                                        <th style="width:130px" class="text-center">Тип проверки</th>
+                                        <th class="city-ids-col">ID городов</th>
+                                        <th class="address-ids-col">ID адресов</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="entry : ${entries}"
+                                        th:id="'row-' + ${entry.id}"
+                                        th:classappend="${not entry.isActive} ? 'table-secondary text-muted' : ''">
+                                        <td class="text-center">
+                                            <input type="checkbox"
+                                                   class="form-check-input city-toggle"
+                                                   th:checked="${entry.isActive}"
+                                                   th:data-id="${entry.id}">
+                                        </td>
+                                        <td class="small align-middle" th:text="${entry.siteName}">site.ru</td>
+                                        <td class="text-center">
+                                            <select class="form-select form-select-sm check-type-select"
+                                                    th:data-id="${entry.id}"
+                                                    style="font-size:0.8em; padding:3px 24px 3px 8px;">
+                                                <option value="API" th:selected="${entry.checkType == 'API'}">API</option>
+                                                <option value="ITEM" th:selected="${entry.checkType == 'ITEM'}">ITEM</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="text"
+                                                   class="form-control-plaintext city-ids-input"
+                                                   th:value="${entry.cityIds}"
+                                                   th:data-id="${entry.id}"
+                                                   th:title="${entry.cityIds}"
+                                                   placeholder="ID не заданы">
+                                        </td>
+                                        <td class="text-center">
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-secondary btn-edit-addresses"
+                                                    th:data-id="${entry.id}"
+                                                    th:data-site="${entry.siteName}"
+                                                    th:data-cities="${entry.cityIds}"
+                                                    th:data-addresses="${entry.addressIds}">
+                                                <i class="fas fa-map-marker-alt me-1"></i>
+                                                <span class="addr-count-label">Адреса</span>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка редактирования адресов -->
+    <div class="modal fade" id="addressModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-map-marker-alt me-2"></i>Адреса: <span id="addrModalSite"></span></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="addrModalBody">
+                    <!-- JS заполняет секции по городам -->
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="addrModalSave">
+                        <i class="fas fa-save me-1"></i>Сохранить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    const cityNamesMap = /*[[${cityNamesMap}]]*/ {};
+    /*]]>*/
+</script>
+<script>
+    // ---- Дата: независимые даты для каждого магазина, ключ в localStorage по shopId ----
+    function localDateStr(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    }
+    const todayStr = localDateStr(new Date());
+
+    document.querySelectorAll('.shop-card').forEach(card => {
+        const shopId = card.dataset.shopId;
+        if (!shopId) return;
+        const fromEl = document.getElementById('dateFrom-' + shopId);
+        const toEl   = document.getElementById('dateTo-' + shopId);
+        const timeFromEl = document.getElementById('timeFrom-' + shopId);
+        const timeToEl   = document.getElementById('timeTo-' + shopId);
+        if (!fromEl || !toEl) return;
+
+        // Восстанавливаем сохранённые или ставим сегодня
+        fromEl.value = localStorage.getItem('checkDateFrom-' + shopId) || todayStr;
+        toEl.value   = localStorage.getItem('checkDateTo-' + shopId)   || todayStr;
+        if (timeFromEl) timeFromEl.value = localStorage.getItem('checkTimeFrom-' + shopId) || '';
+        if (timeToEl)   timeToEl.value   = localStorage.getItem('checkTimeTo-' + shopId)   || '';
+
+        fromEl.addEventListener('change', () => localStorage.setItem('checkDateFrom-' + shopId, fromEl.value));
+        toEl.addEventListener('change',   () => localStorage.setItem('checkDateTo-' + shopId,   toEl.value));
+        if (timeFromEl) timeFromEl.addEventListener('change', () => localStorage.setItem('checkTimeFrom-' + shopId, timeFromEl.value));
+        if (timeToEl)   timeToEl.addEventListener('change',   () => localStorage.setItem('checkTimeTo-' + shopId,   timeToEl.value));
+
+        const baselineDaysEl = document.getElementById('baselineDays-' + shopId);
+        if (baselineDaysEl) {
+            baselineDaysEl.value = localStorage.getItem('checkBaselineDays-' + shopId) || '7';
+            baselineDaysEl.addEventListener('change', () =>
+                localStorage.setItem('checkBaselineDays-' + shopId, baselineDaysEl.value));
+        }
+    });
+
+    // ---- Collapse кнопка: обновление текста ----
+    document.querySelectorAll('.collapse-toggle').forEach(btn => {
+        const targetId = btn.getAttribute('data-bs-target');
+        const collapseEl = document.querySelector(targetId);
+        if (!collapseEl) return;
+
+        collapseEl.addEventListener('show.bs.collapse', () => {
+            btn.innerHTML = '<i class="fas fa-chevron-up"></i> Скрыть';
+            btn.setAttribute('aria-expanded', 'true');
+        });
+        collapseEl.addEventListener('hide.bs.collapse', () => {
+            btn.innerHTML = '<i class="fas fa-chevron-down"></i> Показать';
+            btn.setAttribute('aria-expanded', 'false');
+        });
+    });
+
+    // ---- Поиск по имени магазина ----
+    const searchInput = document.getElementById('shopSearch');
+    const clearBtn = document.getElementById('clearSearch');
+    const countEl = document.getElementById('searchCount');
+    const shopCards = document.querySelectorAll('.shop-card');
+
+    function updateSearch() {
+        const q = searchInput.value.trim().toLowerCase();
+        let visible = 0;
+        shopCards.forEach(card => {
+            const name = (card.dataset.shopName || '').toLowerCase();
+            if (!q || name.includes(q)) {
+                card.classList.remove('hidden-by-search');
+                visible++;
+            } else {
+                card.classList.add('hidden-by-search');
+            }
+        });
+        countEl.textContent = q ? `Показано: ${visible} из ${shopCards.length}` : '';
+    }
+
+    searchInput.addEventListener('input', updateSearch);
+    clearBtn.addEventListener('click', () => { searchInput.value = ''; updateSearch(); searchInput.focus(); });
+
+    // ---- Переключение чекбокса is_active ----
+    document.querySelectorAll('.city-toggle').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const id = this.dataset.id;
+            fetch('/zoomos/city-ids/' + id + '/toggle', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                        this.checked = !this.checked;
+                    } else {
+                        const row = document.getElementById('row-' + id);
+                        if (data.isActive) {
+                            row.classList.remove('table-secondary', 'text-muted');
+                        } else {
+                            row.classList.add('table-secondary', 'text-muted');
+                        }
+                    }
+                })
+                .catch(() => { this.checked = !this.checked; });
+        });
+    });
+
+    // ---- Выбрать все / Снять все для одного магазина ----
+    function setCityIdsActive(shopId, active) {
+        const tableId = '#cityTable-' + shopId;
+        const checkboxes = document.querySelectorAll(tableId + ' .city-toggle');
+        checkboxes.forEach(cb => {
+            if (cb.checked !== active) {
+                cb.checked = active;
+                const id = cb.dataset.id;
+                fetch('/zoomos/city-ids/' + id + '/toggle', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        const row = document.getElementById('row-' + id);
+                        if (row) {
+                            if (data.isActive) {
+                                row.classList.remove('table-secondary', 'text-muted');
+                            } else {
+                                row.classList.add('table-secondary', 'text-muted');
+                            }
+                        }
+                    })
+                    .catch(() => {});
+            }
+        });
+    }
+
+    document.querySelectorAll('.select-all-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            setCityIdsActive(this.dataset.shopId, true);
+        });
+    });
+
+    document.querySelectorAll('.deselect-all-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            setCityIdsActive(this.dataset.shopId, false);
+        });
+    });
+
+    // ---- Переключение check_type (API/ITEM) ----
+    document.querySelectorAll('.check-type-select').forEach(sel => {
+        sel.addEventListener('change', function() {
+            const id = this.dataset.id;
+            const fd = new FormData();
+            fd.append('checkType', this.value);
+            fetch('/zoomos/city-ids/' + id + '/check-type', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    } else {
+                        this.style.borderColor = '#198754';
+                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+                    }
+                })
+                .catch(() => alert('Ошибка сети'));
+        });
+    });
+
+    // ---- Редактирование city_ids — сохранение по blur или Enter ----
+    document.querySelectorAll('.city-ids-input').forEach(input => {
+        let originalValue = input.value;
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+            if (e.key === 'Escape') { this.value = originalValue; this.blur(); }
+        });
+
+        input.addEventListener('focus', function() {
+            originalValue = this.value;
+        });
+
+        input.addEventListener('blur', function() {
+            if (this.value === originalValue) return;
+            const id = this.dataset.id;
+            const newValue = this.value;
+
+            const fd = new FormData();
+            fd.append('cityIds', newValue);
+
+            fetch('/zoomos/city-ids/' + id + '/update', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        originalValue = newValue;
+                        this.title = newValue;
+                        this.style.borderColor = '#198754';
+                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+                    } else {
+                        alert('Ошибка сохранения: ' + (data.error || ''));
+                        this.value = originalValue;
+                    }
+                })
+                .catch(() => { this.value = originalValue; });
+        });
+    });
+
+    // ---- Модалка адресов ----
+    let addrModalEntryId = null;
+    let addrModalData = {}; // cityId → [addressIds]
+    let knownAddresses = {}; // cityId → [{id, name}]  — справочник адресов
+    const addrModal = new bootstrap.Modal(document.getElementById('addressModal'));
+
+    // Парсинг addressIds: JSON {"3435":["18121"]} или плоский "18121,18122"
+    function parseAddrData(raw, cities) {
+        const result = {};
+        (cities || '').split(',').forEach(c => { c = c.trim(); if (c) result[c] = []; });
+        if (!raw || !raw.trim()) return result;
+        const trimmed = raw.trim();
+        if (trimmed.startsWith('{')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                Object.keys(parsed).forEach(k => {
+                    // Нормализуем: если элемент содержит запятую — дробим его на отдельные ID
+                    const raw2 = Array.isArray(parsed[k]) ? parsed[k] : [];
+                    result[k] = raw2.flatMap(id => String(id).split(',').map(s => s.trim()).filter(s => s));
+                });
+            } catch(e) {}
+        } else {
+            // Плоский формат — привязка неизвестна, покажем как "без города"
+            const flat = trimmed.split(',').map(s => s.trim()).filter(s => s);
+            if (flat.length > 0) {
+                // Если только один город — привяжем к нему
+                const cityKeys = Object.keys(result);
+                if (cityKeys.length === 1) {
+                    result[cityKeys[0]] = flat;
+                } else {
+                    result[''] = flat;
+                }
+            }
+        }
+        return result;
+    }
+
+    function renderAddrModal() {
+        const body = document.getElementById('addrModalBody');
+        body.innerHTML = '';
+        const cities = Object.keys(addrModalData);
+        if (cities.length === 0) {
+            body.innerHTML = '<p class="text-muted small">Нет городов. Сначала укажите ID городов.</p>';
+            return;
+        }
+        cities.forEach(cityId => {
+            const sec = document.createElement('div');
+            sec.className = 'addr-city-section';
+            sec.dataset.city = cityId;
+            const label = cityId || '—';
+            const addrBadges = (addrModalData[cityId] || []).map(aid =>
+                '<span class="badge bg-light text-dark border addr-badge" data-aid="' + escHtml(aid) + '">' +
+                escHtml(aid) +
+                ' <button type="button" class="btn-close btn-close-sm" data-city="' + escHtml(cityId) +
+                '" data-aid="' + escHtml(aid) + '"></button></span>'
+            ).join('');
+            const cityNameStr = cityNamesMap[cityId];
+            const cityIdHtml = cityNameStr
+                ? '<span class="addr-city-id"><span class="city-id-num">' + escHtml(label) + '</span><span class="city-id-name">' + escHtml(cityNameStr) + '</span></span>'
+                : '<span class="addr-city-id"><span class="city-id-num">' + escHtml(label) + '</span></span>';
+            sec.innerHTML =
+                cityIdHtml +
+                '<div class="addr-list" data-city="' + escHtml(cityId) + '">' + addrBadges + '</div>' +
+                '<div class="addr-row-add">' +
+                    '<input type="text" class="form-control form-control-sm addr-add-input" placeholder="ID" data-city="' + escHtml(cityId) + '">' +
+                    '<button type="button" class="btn btn-sm btn-outline-success addr-add-btn" data-city="' + escHtml(cityId) + '"><i class="fas fa-plus"></i></button>' +
+                '</div>';
+            body.appendChild(sec);
+        });
+        applySuggestions();
+        // Обработчики удаления
+        body.querySelectorAll('.btn-close-sm').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const city = this.dataset.city;
+                const aid = this.dataset.aid;
+                addrModalData[city] = (addrModalData[city] || []).filter(a => a !== aid);
+                renderAddrModal();
+            });
+        });
+        // Обработчики добавления
+        body.querySelectorAll('.addr-add-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const city = this.dataset.city;
+                const input = body.querySelector('.addr-add-input[data-city="' + city + '"]');
+                const val = (input.value || '').trim();
+                if (!val) return;
+                if (!addrModalData[city]) addrModalData[city] = [];
+                // Поддержка ввода через запятую — добавляем каждый ID отдельно
+                const newIds = val.split(',').map(s => s.trim()).filter(s => s);
+                let changed = false;
+                newIds.forEach(id => {
+                    if (!addrModalData[city].includes(id)) {
+                        addrModalData[city].push(id);
+                        changed = true;
+                    }
+                });
+                if (changed) renderAddrModal();
+                input.value = '';
+            });
+        });
+        // Enter для добавления
+        body.querySelectorAll('.addr-add-input').forEach(input => {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    body.querySelector('.addr-add-btn[data-city="' + this.dataset.city + '"]').click();
+                }
+            });
+        });
+    }
+
+    function applySuggestions() {
+        const body = document.getElementById('addrModalBody');
+        // Строим плоскую карту addressId → name по всем городам
+        const addrNameMap = {};
+        Object.values(knownAddresses).forEach(list =>
+            list.forEach(a => { if (a.name) addrNameMap[a.id] = a.name.replace(/^\[\d+\]\s*/, ''); })
+        );
+        // Обновляем tooltip выбранных адресов
+        body.querySelectorAll('.addr-badge[data-aid]').forEach(badge => {
+            const aid = badge.dataset.aid;
+            if (addrNameMap[aid]) badge.title = addrNameMap[aid];
+        });
+        Object.keys(knownAddresses).forEach(cityId => {
+            const sec = body.querySelector('.addr-city-section[data-city="' + cityId + '"]');
+            if (!sec) return;
+            const selected = addrModalData[cityId] || [];
+            const candidates = (knownAddresses[cityId] || []).filter(a => !selected.includes(a.id));
+            let suggestDiv = sec.querySelector('.addr-suggest-section');
+            if (candidates.length === 0) {
+                if (suggestDiv) suggestDiv.remove();
+                return;
+            }
+            if (!suggestDiv) {
+                suggestDiv = document.createElement('div');
+                suggestDiv.className = 'addr-suggest-section';
+                sec.querySelector('.addr-row-add').before(suggestDiv);
+            }
+            const badges = candidates.map(a => {
+                const shortName = a.name ? a.name.replace(/^\[\d+\]\s*/, '') : '';
+                return '<span class="addr-suggest-badge" data-city="' + escHtml(cityId) +
+                    '" data-aid="' + escHtml(a.id) +
+                    '" title="' + escHtml(shortName || a.id) + '">+ ' + escHtml(a.id) + '</span>';
+            }).join('');
+            suggestDiv.innerHTML =
+                '<div class="addr-suggest-label"><i class="fas fa-bookmark me-1"></i>Из справочника:</div>' +
+                '<div class="addr-suggest-list">' + badges + '</div>';
+            suggestDiv.querySelectorAll('.addr-suggest-badge').forEach(badge => {
+                badge.addEventListener('click', function() {
+                    const city = this.dataset.city;
+                    const aid = this.dataset.aid;
+                    if (!addrModalData[city]) addrModalData[city] = [];
+                    if (!addrModalData[city].includes(aid)) {
+                        addrModalData[city].push(aid);
+                        renderAddrModal();
+                    }
+                });
+            });
+        });
+    }
+
+    function loadSuggestions() {
+        const cityIds = Object.keys(addrModalData).filter(id => id);
+        if (!cityIds.length) return;
+        fetch('/zoomos/city-addresses?cityIds=' + encodeURIComponent(cityIds.join(',')))
+            .then(r => r.json())
+            .then(data => { knownAddresses = data; applySuggestions(); })
+            .catch(() => {});
+    }
+
+    function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // Инициализация бейджей на кнопках при загрузке
+    document.querySelectorAll('.btn-edit-addresses').forEach(btn => {
+        const raw = btn.dataset.addresses || '';
+        const cities = btn.dataset.cities || '';
+        const data = parseAddrData(raw, cities);
+        const total = Object.values(data).reduce((s, a) => s + a.length, 0);
+        const label = btn.querySelector('.addr-count-label');
+        if (total > 0) {
+            label.textContent = total;
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('btn-outline-primary');
+        }
+    });
+
+    // Открытие модалки
+    document.querySelectorAll('.btn-edit-addresses').forEach(btn => {
+        btn.addEventListener('click', function() {
+            addrModalEntryId = this.dataset.id;
+            document.getElementById('addrModalSite').textContent = this.dataset.site;
+            addrModalData = parseAddrData(this.dataset.addresses || '', this.dataset.cities || '');
+            knownAddresses = {};
+            renderAddrModal();
+            addrModal.show();
+            loadSuggestions();
+        });
+    });
+
+    // Сохранение
+    document.getElementById('addrModalSave').addEventListener('click', function() {
+        const mapping = {};
+        Object.keys(addrModalData).forEach(k => {
+            if (k) mapping[k] = addrModalData[k] || [];
+        });
+        // Адреса без привязки к городу — если есть
+        if (addrModalData[''] && addrModalData[''].length > 0) {
+            mapping[''] = addrModalData[''];
+        }
+
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Сохранение...';
+        const saveBtn = this;
+
+        fetch('/zoomos/city-ids/' + addrModalEntryId + '/update-addresses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(mapping)
+        })
+        .then(r => r.json())
+        .then(data => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
+            if (data.success) {
+                addrModal.hide();
+                // Обновить data-addresses на кнопке и бейдж
+                const btn = document.querySelector('.btn-edit-addresses[data-id="' + addrModalEntryId + '"]');
+                if (btn) {
+                    btn.dataset.addresses = JSON.stringify(mapping);
+                    const total = Object.values(mapping).reduce((s, a) => s + a.length, 0);
+                    const label = btn.querySelector('.addr-count-label');
+                    if (total > 0) {
+                        label.textContent = total;
+                        btn.classList.remove('btn-outline-secondary');
+                        btn.classList.add('btn-outline-primary');
+                    } else {
+                        label.textContent = 'Адреса';
+                        btn.classList.remove('btn-outline-primary');
+                        btn.classList.add('btn-outline-secondary');
+                    }
+                }
+            } else {
+                alert('Ошибка: ' + (data.error || 'неизвестная'));
+            }
+        })
+        .catch(err => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
+            alert('Ошибка сети: ' + err.message);
+        });
+    });
+
+    // ==================================================================
+    // Запуск проверки выкачки из карточки клиента
+    // ==================================================================
+
+    document.querySelectorAll('.btn-run-check').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const dateFrom = document.getElementById('dateFrom-' + shopId).value;
+            const dateTo = document.getElementById('dateTo-' + shopId).value;
+            const timeFrom = (document.getElementById('timeFrom-' + shopId) || {}).value || '';
+            const timeTo   = (document.getElementById('timeTo-' + shopId)   || {}).value || '';
+            const dropThreshold = document.getElementById('dropThreshold-' + shopId).value || '10';
+            const errThreshold = document.getElementById('errThreshold-' + shopId).value || '30';
+
+            if (!dateFrom || !dateTo) {
+                alert('Укажите период проверки');
+                return;
+            }
+
+            // Блокируем кнопку
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Запуск...';
+
+            // Показываем прогресс, скрываем старый результат
+            const progressEl = document.getElementById('check-progress-' + shopId);
+            const resultEl = document.getElementById('check-result-' + shopId);
+            const barEl = document.getElementById('check-bar-' + shopId);
+            const msgEl = document.getElementById('check-msg-' + shopId);
+            progressEl.style.display = 'block';
+            resultEl.style.display = 'none';
+            barEl.style.width = '0%';
+            barEl.textContent = '0%';
+            barEl.classList.remove('bg-success', 'bg-danger');
+            barEl.classList.add('progress-bar-animated');
+            msgEl.textContent = 'Запуск...';
+
+            const baselineDaysEl2 = document.getElementById('baselineDays-' + shopId);
+            const baselineDays = baselineDaysEl2 ? (baselineDaysEl2.value || '7') : '7';
+
+            const fd = new FormData();
+            fd.append('shopId', shopId);
+            fd.append('dateFrom', dateFrom);
+            fd.append('dateTo', dateTo);
+            if (timeFrom) fd.append('timeFrom', timeFrom);
+            if (timeTo)   fd.append('timeTo', timeTo);
+            fd.append('dropThreshold', dropThreshold);
+            fd.append('errorGrowthThreshold', errThreshold);
+            fd.append('baselineDays', baselineDays);
+
+            const btnRef = this;
+
+            fetch('/zoomos/check/run', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        subscribeToCheck(shopId, data.operationId, btnRef);
+                    } else {
+                        msgEl.textContent = 'Ошибка: ' + (data.error || 'неизвестная');
+                        barEl.classList.remove('progress-bar-animated');
+                        barEl.classList.add('bg-danger');
+                        resetCheckBtn(btnRef);
+                    }
+                })
+                .catch(err => {
+                    msgEl.textContent = 'Ошибка сети: ' + err.message;
+                    barEl.classList.remove('progress-bar-animated');
+                    barEl.classList.add('bg-danger');
+                    resetCheckBtn(btnRef);
+                });
+        });
+    });
+
+    function resetCheckBtn(btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-search me-1"></i>Проверить';
+    }
+
+    function subscribeToCheck(shopId, operationId, btn) {
+        const barEl = document.getElementById('check-bar-' + shopId);
+        const msgEl = document.getElementById('check-msg-' + shopId);
+        const progressEl = document.getElementById('check-progress-' + shopId);
+        const resultEl = document.getElementById('check-result-' + shopId);
+
+        const socket = new SockJS('/ws');
+        const stompClient = Stomp.over(socket);
+        stompClient.debug = null;
+
+        stompClient.connect({}, function() {
+            msgEl.textContent = 'Подключено...';
+
+            stompClient.subscribe('/topic/zoomos-check/' + operationId, function(msg) {
+                const data = JSON.parse(msg.body);
+                const pct = data.percent || 0;
+                barEl.style.width = pct + '%';
+                barEl.textContent = pct + '%';
+                msgEl.textContent = data.message || '';
+
+                // Завершено — показываем блок результата, без авторедиректа
+                if (data.message && data.message.includes('завершена')) {
+                    barEl.classList.remove('progress-bar-animated');
+                    barEl.classList.add('bg-success');
+                    barEl.style.width = '100%';
+                    barEl.textContent = '100%';
+                    msgEl.textContent = 'Завершено';
+                    stompClient.disconnect();
+
+                    setTimeout(() => {
+                        fetch('/zoomos/check/latest?shopId=' + shopId)
+                            .then(r => r.json())
+                            .then(d => {
+                                if (d.runId && d.runId > 0) {
+                                    showCheckResult(shopId, d);
+                                }
+                                resetCheckBtn(btn);
+                            })
+                            .catch(() => { resetCheckBtn(btn); });
+                    }, 800);
+                }
+
+                if (data.message && data.message.includes('Ошибка')) {
+                    barEl.classList.remove('progress-bar-animated');
+                    barEl.classList.add('bg-danger');
+                    resetCheckBtn(btn);
+                    stompClient.disconnect();
+                }
+            });
+        }, function() {
+            msgEl.textContent = 'Ошибка WebSocket';
+            resetCheckBtn(btn);
+        });
+    }
+
+    function fetchCheckResult(shopId, progressEl, resultEl) {
+        fetch('/zoomos/check/latest?shopId=' + shopId)
+            .then(r => r.json())
+            .then(data => {
+                if (data.runId && data.runId > 0) {
+                    showCheckResult(shopId, data);
+                    if (progressEl) progressEl.style.display = 'none';
+                    if (resultEl) resultEl.style.display = 'block';
+                }
+            })
+            .catch(() => {});
+    }
+
+    function fmtDate(iso) {
+        if (!iso) return '';
+        const [y, m, d] = iso.split('-');
+        return d + '.' + m;
+    }
+
+    function showCheckResult(shopId, data) {
+        document.getElementById('result-ok-' + shopId).textContent = (data.okCount || 0) + ' OK';
+        document.getElementById('result-warn-' + shopId).textContent = (data.warningCount || 0) + ' Warn';
+        document.getElementById('result-err-' + shopId).textContent = (data.errorCount || 0) + ' Error';
+        document.getElementById('result-na-' + shopId).textContent = (data.notFoundCount || 0) + ' N/A';
+        const periodEl = document.getElementById('result-period-' + shopId);
+        if (periodEl && data.dateFrom && data.dateTo) {
+            periodEl.textContent = fmtDate(data.dateFrom) + ' — ' + fmtDate(data.dateTo);
+            periodEl.style.display = '';
+        }
+        document.getElementById('result-link-' + shopId).href = '/zoomos/check/results/' + data.runId;
+        document.getElementById('check-result-' + shopId).style.display = 'block';
+    }
+
+    // ---- Загрузка сводки последней проверки при открытии страницы ----
+    document.querySelectorAll('.shop-card').forEach(card => {
+        const shopId = card.dataset.shopId;
+        if (!shopId) return;
+        fetch('/zoomos/check/latest?shopId=' + shopId)
+            .then(r => r.json())
+            .then(data => {
+                if (data.runId && data.runId > 0) {
+                    showCheckResult(shopId, data);
+                }
+            })
+            .catch(() => {});
+    });
+</script>
+</th:block>
+</html>

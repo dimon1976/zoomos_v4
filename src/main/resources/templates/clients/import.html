@@ -97,7 +97,8 @@
                             <div class="info-section__body">
                                 <ul class="list-with-icons">
                                     <li class="list-item--info">Вы можете загрузить несколько файлов одновременно</li>
-                                    <li class="list-item--info">Максимальный размер каждого файла: 600 МБ</li>
+                                    <li class="list-item--info">Максимальный размер одного файла: 600 МБ</li>
+                                    <li class="list-item--info">Суммарный размер всех файлов: до <span th:text="${maxRequestSizeBytes != null ? (maxRequestSizeBytes / 1048576) + ' МБ' : '1200 МБ'}">1200 МБ</span></li>
                                 </ul>
                             </div>
                         </div>
@@ -184,6 +185,7 @@
 
         // Создаем конфигурацию для импорта
         const config = UploadConfig.importFiles('fileUploadArea', 'files', 'selectedFiles', 'selectFilesBtn');
+        config.maxTotalSize = /*[[${maxRequestSizeBytes}]]*/ 1258291200; // из application.properties
 
         // Добавляем обработчики событий
         config.onFileSelect = function(files) {
@@ -208,26 +210,19 @@
         document.getElementById('uploadActions').style.display = 'none';
     }
 
-    // Валидация формы перед отправкой
+    // Проверка суммарного размера и индикатор загрузки при отправке формы
+    const maxTotalSizeBytes = /*[[${maxRequestSizeBytes}]]*/ 1258291200;
     document.getElementById('quickImportForm').addEventListener('submit', function(e) {
-        const files = fileInput.files;
-        if (files.length === 0) {
+        const selectedFiles = uploadManager.getSelectedFiles();
+        const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+        if (maxTotalSizeBytes && totalSize > maxTotalSizeBytes) {
             e.preventDefault();
-            alert('Пожалуйста, выберите файлы для загрузки');
+            uploadManager.showNotification(
+                `Суммарный размер файлов превышает лимит сервера. Уменьшите количество или размер файлов.`,
+                'warning'
+            );
             return;
         }
-
-        // Проверка размера файлов
-        const maxSize = 600 * 1024 * 1024; // 600MB
-        for (let i = 0; i < files.length; i++) {
-            if (files[i].size > maxSize) {
-                e.preventDefault();
-                alert(`Файл "${files[i].name}" превышает максимальный размер 600MB`);
-                return;
-            }
-        }
-
-        // Показываем индикатор загрузки
         const submitBtn = document.getElementById('uploadBtn');
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Загружаем...';

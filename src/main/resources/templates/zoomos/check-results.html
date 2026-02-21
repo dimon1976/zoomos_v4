@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Результаты проверки',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Результаты проверки',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Результаты проверки</title></head>
+
+<th:block th:fragment="styles">
+    <style>
+        .badge-api  { background-color: #0d6efd; color:#fff; }
+        .badge-item { background-color: #6f42c1; color:#fff; }
+        .verdict-ok   { background: #d1e7dd; border-left: 5px solid #198754; }
+        .verdict-fail { background: #f8d7da; border-left: 5px solid #dc3545; }
+        .issue-error        { border-left: 3px solid #dc3545; }
+        .issue-warning      { border-left: 3px solid #ffc107; }
+        .issue-notfound     { border-left: 3px solid #6c757d; }
+        .issue-trend        { border-left: 3px solid #0dcaf0; }
+        .group-header { cursor: pointer; user-select: none; }
+        .group-header:hover { filter: brightness(0.96); }
+        .group-header .chevron { transition: transform 0.2s; }
+        .group-header.collapsed .chevron { transform: rotate(-90deg); }
+        .delta-up   { color: #dc3545; font-weight: bold; }
+        .delta-down { color: #198754; font-weight: bold; }
+        .delta-drop { color: #dc3545; font-weight: bold; }
+        .verdict-icon { font-size: 2.5rem; }
+        .verdict-text { font-size: 1.4rem; font-weight: 700; }
+        .stat-badge { font-size: 0.95rem; padding: 0.4em 0.7em; }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/zoomos}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+    <a th:href="@{/zoomos/check/history}" class="btn btn-sm btn-outline-info">
+        <i class="fas fa-history me-1"></i>История
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- ═══════════════════════════════════════════════════════
+         БЛОК 1: ВЕРДИКТ — главный ответ на вопрос "можно ли отдавать?"
+    ═══════════════════════════════════════════════════════ -->
+    <div class="card mb-3">
+        <div class="card-body py-4" th:classappend="${canDeliver} ? 'verdict-ok' : 'verdict-fail'">
+            <div class="d-flex align-items-center gap-4">
+                <div class="verdict-icon">
+                    <i th:if="${canDeliver}" class="fas fa-check-circle text-success"></i>
+                    <i th:unless="${canDeliver}" class="fas fa-times-circle text-danger"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="verdict-text mb-1" th:if="${canDeliver}">Отчёт готов — можно отдавать клиенту</div>
+                    <div class="verdict-text mb-1" th:unless="${canDeliver}">Есть проблемы — проверьте перед отправкой</div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <span class="badge bg-secondary stat-badge">
+                            <i class="fas fa-store me-1"></i>
+                            <span th:text="${run.shop.shopName}"></span>
+                        </span>
+                        <span class="badge bg-light text-dark stat-badge border">
+                            <i class="fas fa-calendar me-1"></i>
+                            <span th:text="${#temporals.format(run.dateFrom,'dd.MM.yyyy')}"></span>
+                            <span th:if="${run.timeFrom != null}" th:text="' ' + ${run.timeFrom}"></span>
+                            &nbsp;—&nbsp;
+                            <span th:text="${#temporals.format(run.dateTo,'dd.MM.yyyy')}"></span>
+                            <span th:if="${run.timeTo != null}" th:text="' ' + ${run.timeTo}"></span>
+                        </span>
+                        <span class="badge bg-success stat-badge">
+                            <i class="fas fa-check me-1"></i>OK: <span th:text="${liveOkCount}">0</span>
+                        </span>
+                        <span th:if="${liveWarnCount > 0}" class="badge bg-warning text-dark stat-badge">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Warn: <span th:text="${liveWarnCount}">0</span>
+                        </span>
+                        <span th:if="${liveErrCount > 0}" class="badge bg-danger stat-badge">
+                            <i class="fas fa-times me-1"></i>Error: <span th:text="${liveErrCount}">0</span>
+                        </span>
+                        <span th:if="${liveNotFoundCount > 0}" class="badge bg-secondary stat-badge">
+                            <i class="fas fa-question me-1"></i>Нет данных: <span th:text="${liveNotFoundCount}">0</span>
+                        </span>
+                        <span class="text-muted small ms-2">
+                            Пороги: падение ≥<span th:text="${run.dropThreshold}">10</span>%,
+                            ошибки ≥<span th:text="${run.errorGrowthThreshold}">30</span>%
+                        </span>
+                        <span th:if="${baselineDays != null and baselineDays > 0}"
+                              class="badge bg-info bg-opacity-25 text-dark stat-badge ms-1"
+                              title="Исторический период для тренд-анализа">
+                            <i class="fas fa-chart-line me-1"></i>Baseline:
+                            <span th:text="${baselineFrom}"></span>–<span th:text="${baselineTo}"></span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         БЛОК 2: ЧТО СТОИТ ПРОВЕРИТЬ (только если есть проблемы)
+    ═══════════════════════════════════════════════════════ -->
+    <div th:if="${!issues.isEmpty()}" class="card mb-3 border-warning">
+        <div class="card-header bg-warning bg-opacity-10 group-header d-flex justify-content-between align-items-center py-2"
+             data-bs-toggle="collapse" data-bs-target="#issuesCollapse" aria-expanded="true">
+            <span>
+                <i class="fas fa-chevron-down chevron me-2"></i>
+                <i class="fas fa-clipboard-list me-1 text-warning"></i>
+                <strong>На что обратить внимание</strong>
+                <span class="badge bg-secondary ms-2" th:text="${issues.size()}">0</span>
+            </span>
+        </div>
+        <div id="issuesCollapse" class="collapse show">
+            <div class="list-group list-group-flush">
+                <div th:each="issue : ${issues}" class="list-group-item py-2 px-3"
+                     th:classappend="${issue['type'] == 'ERROR'} ? 'issue-error' :
+                                    (${issue['type'] == 'WARNING'} ? 'issue-warning' :
+                                    (${issue['type'] == 'IN_PROGRESS'} ? 'list-group-item-warning' :
+                                    (${issue['type'] == 'TREND_WARNING'} ? 'issue-trend' : 'issue-notfound')))">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="flex-grow-1">
+                            <span class="badge me-2"
+                                  th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger' :
+                                                 (${issue['type'] == 'WARNING'} ? 'bg-warning text-dark' :
+                                                 (${issue['type'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' :
+                                                 (${issue['type'] == 'TREND_WARNING'} ? 'bg-info text-dark' : 'bg-secondary')))"
+                                  th:text="${issue['type'] == 'IN_PROGRESS'} ? 'В процессе' :
+                                           (${issue['type'] == 'TREND_WARNING'} ? 'Тренд' : ${issue['type']})">
+                            </span>
+                            <i th:if="${issue['type'] == 'TREND_WARNING'}"
+                               class="fas fa-chart-line me-1 text-info" title="Отклонение от исторической нормы"></i>
+                            <strong th:text="${issue['site']}"></strong>
+                            <span th:if="${issue['city']}" class="text-muted ms-1 small"
+                                  th:text="'(' + ${issue['city']} + ')'"></span>
+                            <span th:if="${issue['addressId'] != null and issue['type'] != 'ERROR' and issue['type'] != 'WARNING'}"
+                                  class="badge bg-light text-secondary border ms-1 small"
+                                  th:text="'адрес ' + ${issue['addressId']}"></span>
+                            <span th:if="${issue['addressName'] != null and (issue['type'] == 'ERROR' or issue['type'] == 'WARNING')}"
+                                  class="badge bg-info text-dark ms-1 small"
+                                  th:text="${issue['addressName']}"></span>
+                            <span class="small text-muted ms-2" th:text="${issue['message']}"></span>
+                        </div>
+                        <div th:if="${issue['type'] != 'TREND_WARNING'}" class="d-flex gap-1 flex-shrink-0">
+                            <!-- Матчинг -->
+                            <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-primary py-0 px-2"
+                               style="font-size:0.78rem"
+                               title="Матчинг на export.zoomos.by">
+                                <i class="fas fa-link"></i> Матчинг
+                            </a>
+                            <!-- История (API) -->
+                            <a th:if="${issue['checkType'] == 'API'}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-secondary py-0 px-2"
+                               style="font-size:0.78rem"
+                               title="История парсинга (API)">
+                                <i class="fas fa-history"></i> История
+                            </a>
+                            <!-- История (ITEM) -->
+                            <a th:if="${issue['checkType'] == 'ITEM' or issue['checkType'] == null}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-secondary py-0 px-2"
+                               style="font-size:0.78rem"
+                               title="История парсинга (ITEM)">
+                                <i class="fas fa-history"></i> История
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Текст для ИТ -->
+            <div class="px-3 py-2 border-top bg-light">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <small class="text-muted fw-semibold"><i class="fas fa-terminal me-1"></i>Текст для ИТ</small>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="copyItText"
+                            title="Скопировать в буфер обмена">
+                        <i class="fas fa-copy me-1"></i>Скопировать
+                    </button>
+                </div>
+                <pre id="itTextBlock" class="mb-0 small bg-white border rounded p-2"
+                     style="white-space:pre-wrap; word-break:break-word; font-family:monospace; font-size:0.8rem;"
+                     th:text="${itText}"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         БЛОК 3: ДЕТАЛИ ПО САЙТАМ — все свёрнуты по умолчанию
+    ═══════════════════════════════════════════════════════ -->
+    <div th:unless="${groups.isEmpty()}" class="mb-2 d-flex align-items-center gap-2">
+        <small class="text-muted">Детали по сайтам:</small>
+        <button class="btn btn-sm btn-outline-secondary py-0" id="expandAll" type="button">
+            <i class="fas fa-expand-alt me-1"></i>Раскрыть всё
+        </button>
+        <button class="btn btn-sm btn-outline-secondary py-0" id="collapseAll" type="button">
+            <i class="fas fa-compress-alt me-1"></i>Свернуть всё
+        </button>
+    </div>
+
+    <div th:each="group, groupIter : ${groups}" class="card mb-2">
+        <!-- Заголовок -->
+        <div class="card-header py-2 group-header"
+             th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10' :
+                            (${group['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light')">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-1"
+                     style="cursor:pointer"
+                     data-bs-toggle="collapse"
+                     th:data-bs-target="'#grp-' + ${groupIter.index}"
+                     aria-expanded="false">
+                    <i class="fas fa-chevron-down chevron me-2"></i>
+                    <strong th:text="${group['siteName']}">site.ru</strong>
+                    <span class="badge ms-2"
+                          th:classappend="${group['checkType'] == 'API'} ? 'badge-api' : 'badge-item'"
+                          th:text="${group['checkType']}">API</span>
+                    <span class="text-muted ms-2 small" th:text="${group['count']} + ' выкач.'"></span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <!-- Ссылка на матчинг -->
+                    <a th:href="${baseUrl + '/shop/' + run.shop.shopName + '/sites-items-mapping?site=' + group['siteName'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
+                       target="_blank"
+                       class="btn btn-sm btn-outline-primary py-0 px-2"
+                       title="Матчинг на export.zoomos.by"
+                       onclick="event.stopPropagation()">
+                        <i class="fas fa-link"></i> Матчинг
+                    </a>
+                    <!-- Ссылка на историю выкачки (зависит от типа) -->
+                    <a th:if="${group['checkType'] == 'API'}"
+                       th:href="${baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=&address=&accountId=&server='}"
+                       target="_blank"
+                       class="btn btn-sm btn-outline-secondary py-0 px-2"
+                       title="История парсинга (API)"
+                       onclick="event.stopPropagation()">
+                        <i class="fas fa-history"></i> История
+                    </a>
+                    <a th:if="${group['checkType'] == 'ITEM'}"
+                       th:href="${baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + run.shop.shopName + '&site=&cityId=&address=&accountId=&server='}"
+                       target="_blank"
+                       class="btn btn-sm btn-outline-secondary py-0 px-2"
+                       title="История парсинга (ITEM)"
+                       onclick="event.stopPropagation()">
+                        <i class="fas fa-history"></i> История
+                    </a>
+                    <span class="badge"
+                          th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger' :
+                                         (${group['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
+                          th:text="${group['status']}">OK</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Тело: подгруппы по городам -->
+        <div th:id="'grp-' + ${groupIter.index}" class="collapse">
+            <div th:each="cg, cgIter : ${group['cityGroups']}">
+                <!-- Разделитель города (если > 1) -->
+                <div th:if="${group['cityGroups'].size() > 1}"
+                     class="px-3 py-1 small fw-semibold border-bottom"
+                     th:classappend="${cg['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10 text-danger' :
+                                    (${cg['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
+                    <i class="fas fa-map-marker-alt me-1"></i>
+                    <span th:text="${cg['cityName'] != null} ? ${cg['cityName']} : 'Без города'"></span>
+                    <span class="badge ms-1 small"
+                          th:classappend="${cg['status'] == 'ERROR'} ? 'bg-danger' : (${cg['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
+                          th:text="${cg['status']}"></span>
+                </div>
+                <!-- Подгруппы по адресу внутри города -->
+                <div th:each="ag : ${cg['addressGroups']}">
+                    <!-- Заголовок адреса (если для города настроены адреса) -->
+                    <div th:if="${ag['addressId'] != null}"
+                         class="px-3 py-1 small border-bottom d-flex align-items-center gap-2"
+                         th:classappend="${ag['status'] == 'ERROR' or ag['status'] == 'NOT_FOUND'} ? 'bg-danger bg-opacity-10 text-danger' :
+                                        (${ag['status'] == 'WARNING' or ag['status'] == 'IN_PROGRESS'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
+                        <i class="fas fa-map-pin"></i>
+                        <span th:text="${ag['addressName'] != null ? ag['addressName'] : ag['addressId']}"></span>
+                        <span class="badge ms-1"
+                              th:classappend="${ag['status'] == 'ERROR' or ag['status'] == 'NOT_FOUND'} ? 'bg-danger' :
+                                             (${ag['status'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' :
+                                             (${ag['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success'))"
+                              th:text="${ag['status'] == 'IN_PROGRESS'} ? 'В процессе' :
+                                       (${ag['status'] == 'NOT_FOUND'} ? 'Нет данных' : ${ag['status']})"></span>
+                    </div>
+                    <!-- Нет данных (NOT_FOUND / IN_PROGRESS) — строка-заглушка вместо таблицы -->
+                    <div th:if="${ag['stats'].isEmpty() and ag['issueMessage'] != null}"
+                         class="px-3 py-2 border-bottom text-muted small"
+                         th:classappend="${ag['status'] == 'NOT_FOUND'} ? 'bg-secondary bg-opacity-10' : 'bg-warning bg-opacity-10'">
+                        <i th:classappend="${ag['status'] == 'IN_PROGRESS'} ? 'fas fa-spinner me-1' : 'fas fa-ban me-1'"></i>
+                        <span th:text="${ag['issueMessage']}"></span>
+                    </div>
+                    <!-- Таблица выкачек (если данные есть) -->
+                    <div th:unless="${ag['stats'].isEmpty()}" class="table-responsive">
+                        <table class="table table-sm table-hover table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-center" style="width:110px">Старт</th>
+                                    <th class="text-center" style="width:110px">Финиш</th>
+                                    <th class="text-center">Сервер</th>
+                                    <th class="text-center">Клиент</th>
+                                    <th class="text-end">Товаров</th>
+                                    <th class="text-end">В наличии</th>
+                                    <th class="text-end">Ошибки</th>
+                                    <th class="text-center">Завершено</th>
+                                    <th class="text-center">Время</th>
+                                    <th class="text-center"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="stat, si : ${ag['stats']}"
+                                    th:with="nextStat=${si.index + 1 < ag['stats'].size() ? ag['stats'][si.index + 1] : null}"
+                                    th:classappend="${si.first ? (ag['status'] == 'ERROR' ? 'table-danger' : (ag['status'] == 'WARNING' ? 'table-warning' : 'table-active')) + ' fw-semibold' : ''}">
+                                    <td class="text-center small"
+                                        th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
+                                    <td class="text-center small"
+                                        th:text="${stat.finishTime != null} ? ${#temporals.format(stat.finishTime, 'dd.MM HH:mm')} : '—'"></td>
+                                    <td class="text-center small" th:text="${stat.serverName}"></td>
+                                    <td class="text-center small" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
+                                    <td class="text-end">
+                                        <span th:text="${stat.totalProducts != null} ? ${#numbers.formatInteger(stat.totalProducts, 1, 'COMMA')} : '—'"></span>
+                                        <span th:if="${nextStat != null and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"
+                                              th:with="pct=${(stat.totalProducts - nextStat.totalProducts) * 100 / nextStat.totalProducts}">
+                                            <small th:if="${pct < -10}" class="delta-drop"> &#9660;</small>
+                                            <small th:if="${pct > 10}"  class="delta-down"> &#9650;</small>
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span th:text="${stat.inStock != null} ? ${#numbers.formatInteger(stat.inStock, 1, 'COMMA')} : '—'"></span>
+                                        <span th:if="${nextStat != null and stat.inStock != null and nextStat.inStock != null and nextStat.inStock > 0}"
+                                              th:with="pct=${(stat.inStock - nextStat.inStock) * 100 / nextStat.inStock}">
+                                            <small th:if="${stat.inStock == 0}" class="delta-drop"> &#9660;0</small>
+                                            <small th:if="${stat.inStock > 0 and pct < -10}" class="delta-drop"> &#9660;</small>
+                                            <small th:if="${pct > 10}" class="delta-down"> &#9650;</small>
+                                        </span>
+                                        <small th:if="${nextStat != null and nextStat.inStock != null and nextStat.inStock > 0 and (stat.inStock == null or stat.inStock == 0)}"
+                                               class="delta-drop"> &#9660;0</small>
+                                    </td>
+                                    <td class="text-end"
+                                        th:classappend="${stat.errorCount != null and stat.errorCount > 0} ? 'text-danger' : ''">
+                                        <span th:text="${stat.errorCount != null} ? ${stat.errorCount} : '—'"></span>
+                                        <span th:if="${nextStat != null and stat.errorCount != null and nextStat.errorCount != null and nextStat.errorCount > 0}"
+                                              th:with="pct=${(stat.errorCount - nextStat.errorCount) * 100 / nextStat.errorCount}">
+                                            <small th:if="${pct > 30}" class="delta-up"> &#9650;</small>
+                                            <small th:if="${pct < -30}" class="delta-down"> &#9660;</small>
+                                        </span>
+                                    </td>
+                                    <td class="text-center small" th:text="${stat.completionTotal != null} ? ${stat.completionTotal} : '—'"></td>
+                                    <td class="text-center small" th:text="${stat.parsingDuration != null} ? ${stat.parsingDuration} : '—'"></td>
+                                    <td class="text-center"
+                                        th:with="cid=${stat.cityName != null and stat.cityName.contains(' - ') ? stat.cityName.substring(0, stat.cityName.indexOf(' - ')).trim() : (stat.cityName != null ? stat.cityName.trim() : '')}">
+                                        <a th:if="${baseUrl != null and stat.checkType == 'API'}"
+                                           th:href="${baseUrl + '/shops-parser/' + stat.siteName + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + cid + '&addressId=' + (stat.addressId != null ? stat.addressId : '') + '&accountId=&server='}"
+                                           target="_blank"
+                                           class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                           title="История парсинга">
+                                            <i class="fas fa-history"></i>
+                                        </a>
+                                        <a th:if="${baseUrl != null and (stat.checkType == 'ITEM' or stat.checkType == null)}"
+                                           th:href="${baseUrl + '/shops-parser/' + stat.siteName + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + run.shop.shopName + '&site=&cityId=' + cid + '&addressId=' + (stat.addressId != null ? stat.addressId : '') + '&accountId=&server='}"
+                                           target="_blank"
+                                           class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                           title="История парсинга">
+                                            <i class="fas fa-history"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div th:if="${groups.isEmpty()}" class="text-center text-muted py-4">
+        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+        Нет данных за указанный период
+    </div>
+
+
+</div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+    // Chevron rotation для всех collapsible
+    document.querySelectorAll('.group-header').forEach(header => {
+        const targetId = header.getAttribute('data-bs-target');
+        if (!targetId) return;
+        const el = document.querySelector(targetId);
+        if (!el) return;
+        // Начальное состояние: свёрнуто
+        header.classList.add('collapsed');
+        el.addEventListener('show.bs.collapse', () => header.classList.remove('collapsed'));
+        el.addEventListener('hide.bs.collapse', () => header.classList.add('collapsed'));
+    });
+
+    // Кнопки Раскрыть/Свернуть всё
+    document.getElementById('expandAll')?.addEventListener('click', () => {
+        document.querySelectorAll('[id^="grp-"]').forEach(el => {
+            if (!el.classList.contains('show')) bootstrap.Collapse.getOrCreateInstance(el).show();
+        });
+    });
+    document.getElementById('collapseAll')?.addEventListener('click', () => {
+        document.querySelectorAll('[id^="grp-"]').forEach(el => {
+            if (el.classList.contains('show')) bootstrap.Collapse.getOrCreateInstance(el).hide();
+        });
+    });
+
+    // Для IT-сводки — при загрузке уже open (show), иконка должна быть раскрыта
+    const issuesHeader = document.querySelector('[data-bs-target="#issuesCollapse"]');
+    if (issuesHeader) issuesHeader.classList.remove('collapsed');
+
+    // Кнопка "Скопировать" текст для ИТ
+    document.getElementById('copyItText')?.addEventListener('click', function() {
+        const text = document.getElementById('itTextBlock')?.textContent || '';
+        navigator.clipboard.writeText(text.trim()).then(() => {
+            this.innerHTML = '<i class="fas fa-check me-1"></i>Скопировано';
+            this.classList.replace('btn-outline-secondary', 'btn-success');
+            setTimeout(() => {
+                this.innerHTML = '<i class="fas fa-copy me-1"></i>Скопировать';
+                this.classList.replace('btn-success', 'btn-outline-secondary');
+            }, 2000);
+        });
+    });
+
+</script>
+</th:block>
+</html>

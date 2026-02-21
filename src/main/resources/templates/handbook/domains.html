@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Управление доменами',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Управление доменами справочника',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Управление доменами</title></head>
+
+<th:block th:fragment="styles">
+    <style>
+        .domain-badge { font-size: 0.75em; }
+        .toggle-btn { min-width: 80px; }
+    </style>
+</th:block>
+
+<th:block th:fragment="scripts"></th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/handbook}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- Flash сообщения -->
+    <div th:if="${success}" class="alert alert-success alert-dismissible fade show">
+        <i class="fas fa-check-circle me-2"></i><span th:text="${success}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show">
+        <i class="fas fa-exclamation-triangle me-2"></i><span th:text="${error}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <!-- Поиск -->
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" id="domainFilter" class="form-control"
+                       placeholder="Фильтр по домену...">
+                <button class="btn btn-outline-secondary" type="button" onclick="clearFilter()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица доменов -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-globe me-2"></i>Домены</span>
+            <span class="badge bg-secondary" th:text="${#lists.size(domains)} + ' доменов'">0 доменов</span>
+        </div>
+        <div class="card-body p-0">
+            <div th:if="${domains == null or domains.empty}" class="p-3 text-muted text-center">
+                <i class="fas fa-info-circle me-2"></i>Домены появятся автоматически при импорте файлов с URL.
+            </div>
+            <div class="table-responsive" th:if="${domains != null and not domains.empty}">
+                <table class="table table-sm table-hover mb-0" id="domainsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Домен</th>
+                            <th class="text-end">Ссылок</th>
+                            <th class="text-center">Статус</th>
+                            <th class="text-center">Действие</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="d : ${domains}" class="domain-row"
+                            th:data-domain="${d.domain}">
+                            <td>
+                                <span th:text="${d.domain}">example.com</span>
+                                <span th:if="${d.description}" class="text-muted small ms-2"
+                                      th:text="'— ' + ${d.description}"></span>
+                            </td>
+                            <td class="text-end">
+                                <span class="badge bg-light text-dark domain-badge"
+                                      th:text="${d.urlCount}">0</span>
+                            </td>
+                            <td class="text-center">
+                                <span th:if="${d.isActive}"
+                                      class="badge bg-success domain-badge">Активен</span>
+                                <span th:unless="${d.isActive}"
+                                      class="badge bg-secondary domain-badge">Отключён</span>
+                            </td>
+                            <td class="text-center">
+                                <form th:action="@{/handbook/domains/{id}/toggle(id=${d.id})}"
+                                      method="post" class="d-inline">
+                                    <button type="submit"
+                                            th:class="${d.isActive} ? 'btn btn-sm btn-outline-warning toggle-btn' : 'btn btn-sm btn-outline-success toggle-btn'"
+                                            th:text="${d.isActive} ? 'Отключить' : 'Включить'">
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const filterInput = document.getElementById('domainFilter');
+    filterInput.addEventListener('input', function() {
+        const q = this.value.toLowerCase().trim();
+        document.querySelectorAll('.domain-row').forEach(row => {
+            const domain = row.dataset.domain.toLowerCase();
+            row.style.display = domain.includes(q) ? '' : 'none';
+        });
+    });
+
+    function clearFilter() {
+        filterInput.value = '';
+        filterInput.dispatchEvent(new Event('input'));
+    }
+</script>
+</th:block>
+</html>
