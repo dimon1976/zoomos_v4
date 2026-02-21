@@ -197,6 +197,80 @@ public class ZoomosAnalysisController {
     }
 
     // =========================================================================
+    // AJAX: preview/apply синхронизации
+    // =========================================================================
+
+    @GetMapping("/shops/{shopName}/sync-from-matching/preview")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> previewSyncFromMatching(@PathVariable String shopName) {
+        try {
+            Map<String, Object> preview = parserService.previewSyncFromMatching(shopName);
+            preview = new java.util.LinkedHashMap<>(preview);
+            preview.put("success", true);
+            return ResponseEntity.ok(preview);
+        } catch (Exception e) {
+            log.error("Ошибка preview из матчинга {}", shopName, e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shops/{shopName}/sync-from-matching/apply")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> applySyncFromMatching(
+            @PathVariable String shopName,
+            @RequestBody Map<String, List<String>> body) {
+        try {
+            List<String> toAdd = body.getOrDefault("toAdd", List.of());
+            List<String> toDelete = body.getOrDefault("toDelete", List.of());
+            String result = parserService.applySyncFromMatching(shopName, toAdd, toDelete);
+            return ResponseEntity.ok(Map.of("success", true, "message", result));
+        } catch (Exception e) {
+            log.error("Ошибка apply из матчинга {}", shopName, e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/shops/{shopName}/sync/preview")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> previewSyncSettings(@PathVariable String shopName) {
+        try {
+            Map<String, Object> preview = parserService.previewSyncSettings(shopName);
+            preview = new java.util.LinkedHashMap<>(preview);
+            preview.put("success", true);
+            return ResponseEntity.ok(preview);
+        } catch (Exception e) {
+            log.error("Ошибка preview настроек {}", shopName, e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shops/{shopName}/sync/apply")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> applySyncSettings(
+            @PathVariable String shopName,
+            @RequestBody Map<Long, String> entryIdToCityIds) {
+        try {
+            String result = parserService.applySyncSettings(shopName, entryIdToCityIds);
+            return ResponseEntity.ok(Map.of("success", true, "message", result));
+        } catch (Exception e) {
+            log.error("Ошибка apply настроек {}", shopName, e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/city-ids/{id}/delete")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> deleteCityId(@PathVariable Long id) {
+        try {
+            parserService.deleteCityId(id);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            log.error("Ошибка удаления city-id {}", id, e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    // =========================================================================
     // AJAX: управление city_ids
     // =========================================================================
 
@@ -457,7 +531,10 @@ public class ZoomosAnalysisController {
                 if (ip == null && addrCity != null) {
                     ip = inProgressByCityKey.get(site + "|" + addrCity);
                 }
-                addIssueStatus(issue, ip);
+                ZoomosParsingStats lastKnownAddr = (ip == null && addrCity != null)
+                        ? parsingStatsRepository.findLatestFinishedBySiteAndCityId(site, addrCity).orElse(null)
+                        : null;
+                addIssueStatus(issue, ip, lastKnownAddr);
                 issues.add(issue);
             }
 
@@ -474,7 +551,10 @@ public class ZoomosAnalysisController {
                 issue.put("shopName", run.getShop().getShopName());
 
                 ZoomosParsingStats ip = inProgressByCityKey.get(site + "|" + cityId);
-                addIssueStatus(issue, ip);
+                ZoomosParsingStats lastKnownCity = (ip == null)
+                        ? parsingStatsRepository.findLatestFinishedBySiteAndCityId(site, cityId).orElse(null)
+                        : null;
+                addIssueStatus(issue, ip, lastKnownCity);
                 issues.add(issue);
             }
         }
@@ -894,9 +974,9 @@ public class ZoomosAnalysisController {
     /**
      * Устанавливает тип и сообщение для issue на основе in-progress статистики.
      * IN_PROGRESS: показывает старт, процент выполнения и время обновления.
-     * NOT_FOUND:   данных нет совсем.
+     * NOT_FOUND:   данных нет совсем. Если есть lastKnown — добавляет историческую информацию.
      */
-    private void addIssueStatus(Map<String, Object> issue, ZoomosParsingStats ip) {
+    private void addIssueStatus(Map<String, Object> issue, ZoomosParsingStats ip, ZoomosParsingStats lastKnown) {
         if (ip == null) {
             issue.put("type", "NOT_FOUND");
             String aid = (String) issue.get("addressId");
@@ -905,6 +985,11 @@ public class ZoomosAnalysisController {
                 issue.put("message", "Нет данных по адресу " + aid + " за указанный период");
             } else {
                 issue.put("message", "Нет данных по городу " + (cityId != null ? cityId : "") + " за указанный период");
+            }
+            if (lastKnown != null && lastKnown.getStartTime() != null) {
+                issue.put("lastKnownDate", lastKnown.getStartTime().format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
+                issue.put("lastKnownInStock", lastKnown.getInStock());
+                issue.put("lastKnownTotal", lastKnown.getTotalProducts());
             }
         } else {
             boolean frozen = ip.getUpdatedTime() != null &&
@@ -926,6 +1011,11 @@ public class ZoomosAnalysisController {
                         + (updStr != null ? ", обновл. " + updStr : ""));
             }
         }
+    }
+
+    /** Перегрузка без lastKnown — для обратной совместимости (IN_PROGRESS случай) */
+    private void addIssueStatus(Map<String, Object> issue, ZoomosParsingStats ip) {
+        addIssueStatus(issue, ip, null);
     }
 
     private static int statusPriority(String st) {

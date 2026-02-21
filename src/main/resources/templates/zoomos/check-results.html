@@ -141,6 +141,15 @@
                                   class="badge bg-info text-dark ms-1 small"
                                   th:text="${issue['addressName']}"></span>
                             <span class="small text-muted ms-2" th:text="${issue['message']}"></span>
+                            <!-- NOT_FOUND: историческая информация о последней известной выкачке -->
+                            <small th:if="${issue['type'] == 'NOT_FOUND' and issue['lastKnownDate'] != null}"
+                                   class="text-muted d-block mt-1">
+                                Последний раз: <strong th:text="${issue['lastKnownDate']}"></strong>
+                                &mdash; В наличии:
+                                <span th:text="${issue['lastKnownInStock'] != null ? issue['lastKnownInStock'] : 0}">0</span>
+                                /
+                                <span th:text="${issue['lastKnownTotal'] != null ? issue['lastKnownTotal'] : 0}">0</span>
+                            </small>
                         </div>
                         <div th:if="${issue['type'] != 'TREND_WARNING'}" class="d-flex gap-1 flex-shrink-0">
                             <!-- Матчинг -->

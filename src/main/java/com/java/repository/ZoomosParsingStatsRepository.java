@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsingStats, Long> {
@@ -40,4 +41,18 @@ public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsin
             @Param("cityName") String cityName,
             @Param("from") ZonedDateTime from,
             @Param("to") ZonedDateTime to);
+
+    /**
+     * Последняя завершённая выкачка для данного сайта+города (по любому прошлому check_run).
+     * Используется для отображения "Последний раз" в NOT_FOUND issue.
+     */
+    @Query(value = "SELECT * FROM zoomos_parsing_stats " +
+                   "WHERE site_name = :siteName " +
+                   "AND (city_name LIKE CONCAT(:cityId, ' %') OR city_name = :cityId) " +
+                   "AND is_finished = true AND completion_percent >= 100 " +
+                   "ORDER BY start_time DESC LIMIT 1",
+           nativeQuery = true)
+    Optional<ZoomosParsingStats> findLatestFinishedBySiteAndCityId(
+            @Param("siteName") String siteName,
+            @Param("cityId") String cityId);
 }

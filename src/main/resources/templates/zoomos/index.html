@@ -188,20 +188,16 @@
                 </a>
             </div>
             <div class="d-flex gap-2 align-items-center">
-                <form th:action="@{'/zoomos/shops/' + ${shop.shopName} + '/sync'}" method="post" class="d-inline">
-                    <button type="submit" class="btn btn-sm btn-success"
-                            onclick="this.disabled=true; this.innerHTML='<i class=\'fas fa-spinner fa-spin me-1\'></i>Синхронизация...'; this.form.submit();">
-                        <i class="fas fa-sync-alt me-1"></i>Синхронизировать
-                    </button>
-                </form>
-                <form th:action="@{'/zoomos/shops/' + ${shop.shopName} + '/sync-from-matching'}"
-                      method="post" class="d-inline">
-                    <button type="submit" class="btn btn-sm btn-outline-info"
-                            onclick="this.disabled=true; this.innerHTML='<i class=\'fas fa-spinner fa-spin me-1\'></i>Загрузка...'; this.form.submit();"
-                            title="Загрузить список сайтов со страницы матчинга">
-                        <i class="fas fa-link me-1"></i>Из матчинга
-                    </button>
-                </form>
+                <button type="button" class="btn btn-sm btn-success btn-sync-settings"
+                        th:data-shop-name="${shop.shopName}"
+                        title="Обновить city_ids для существующих сайтов (из настроек)">
+                    <i class="fas fa-sync-alt me-1"></i>Синхронизировать
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-info btn-sync-matching"
+                        th:data-shop-name="${shop.shopName}"
+                        title="Полная синхронизация списка сайтов из страницы матчинга">
+                    <i class="fas fa-link me-1"></i>Из матчинга
+                </button>
                 <form th:action="@{'/zoomos/shops/' + ${shop.id} + '/delete'}" method="post" class="d-inline"
                       onsubmit="return confirm('Удалить магазин ' + this.dataset.name + '?')"
                       th:data-name="${shop.shopName}">
@@ -355,21 +351,55 @@
                                                    placeholder="ID не заданы">
                                         </td>
                                         <td class="text-center">
-                                            <button type="button"
-                                                    class="btn btn-sm btn-outline-secondary btn-edit-addresses"
-                                                    th:data-id="${entry.id}"
-                                                    th:data-site="${entry.siteName}"
-                                                    th:data-cities="${entry.cityIds}"
-                                                    th:data-addresses="${entry.addressIds}">
-                                                <i class="fas fa-map-marker-alt me-1"></i>
-                                                <span class="addr-count-label">Адреса</span>
-                                            </button>
+                                            <div class="d-flex gap-1 justify-content-center">
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-secondary btn-edit-addresses"
+                                                        th:data-id="${entry.id}"
+                                                        th:data-site="${entry.siteName}"
+                                                        th:data-cities="${entry.cityIds}"
+                                                        th:data-addresses="${entry.addressIds}">
+                                                    <i class="fas fa-map-marker-alt me-1"></i>
+                                                    <span class="addr-count-label">Адреса</span>
+                                                </button>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-danger btn-delete-cityid"
+                                                        th:data-id="${entry.id}"
+                                                        th:data-site="${entry.siteName}"
+                                                        title="Удалить этот сайт из списка">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка preview синхронизации -->
+    <div class="modal fade" id="syncConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title" id="syncModalTitle"><i class="fas fa-sync-alt me-2"></i>Синхронизация</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="syncModalBody" style="max-height:65vh; overflow-y:auto;">
+                    <div class="text-center py-4" id="syncModalSpinner">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <div class="mt-2 text-muted small">Загрузка данных...</div>
+                    </div>
+                    <div id="syncModalContent" style="display:none;"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="syncApplyBtn" style="display:none;">
+                        <i class="fas fa-check me-1"></i>Применить
+                    </button>
                 </div>
             </div>
         </div>
@@ -1017,6 +1047,202 @@
         document.getElementById('result-link-' + shopId).href = '/zoomos/check/results/' + data.runId;
         document.getElementById('check-result-' + shopId).style.display = 'block';
     }
+
+    // ==================================================================
+    // Синхронизация: preview → modal → apply
+    // ==================================================================
+
+    let syncModal = null;
+    let syncApplyData = null;
+    let syncApplyType = null;
+    let syncApplyShopName = null;
+
+    function getSyncModal() {
+        if (!syncModal) syncModal = new bootstrap.Modal(document.getElementById('syncConfirmModal'));
+        return syncModal;
+    }
+
+    function previewSync(shopName, type) {
+        syncApplyShopName = shopName;
+        syncApplyType = type;
+        syncApplyData = null;
+
+        const titleEl = document.getElementById('syncModalTitle');
+        const spinnerEl = document.getElementById('syncModalSpinner');
+        const contentEl = document.getElementById('syncModalContent');
+        const applyBtn = document.getElementById('syncApplyBtn');
+
+        titleEl.innerHTML = '<i class="fas fa-sync-alt me-2"></i>' +
+            (type === 'matching' ? 'Из матчинга — ' + shopName : 'Синхронизировать city_ids — ' + shopName);
+        spinnerEl.style.display = 'block';
+        contentEl.style.display = 'none';
+        contentEl.innerHTML = '';
+        applyBtn.style.display = 'none';
+
+        getSyncModal().show();
+
+        const url = type === 'matching'
+            ? '/zoomos/shops/' + encodeURIComponent(shopName) + '/sync-from-matching/preview'
+            : '/zoomos/shops/' + encodeURIComponent(shopName) + '/sync/preview';
+
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                spinnerEl.style.display = 'none';
+                contentEl.style.display = 'block';
+
+                if (!data.success) {
+                    contentEl.innerHTML = '<div class="alert alert-danger mb-0">' +
+                        escHtml(data.error || 'Неизвестная ошибка') + '</div>';
+                    return;
+                }
+
+                syncApplyData = data;
+
+                if (type === 'matching') {
+                    renderMatchingPreview(data, contentEl, applyBtn);
+                } else {
+                    renderSettingsPreview(data, contentEl, applyBtn);
+                }
+            })
+            .catch(err => {
+                spinnerEl.style.display = 'none';
+                contentEl.style.display = 'block';
+                contentEl.innerHTML = '<div class="alert alert-danger mb-0">Ошибка сети: ' + escHtml(err.message) + '</div>';
+            });
+    }
+
+    function renderMatchingPreview(data, contentEl, applyBtn) {
+        const toAdd = data.toAdd || [];
+        const toDelete = data.toDelete || [];
+        const existing = data.existing || [];
+
+        if (toAdd.length === 0 && toDelete.length === 0) {
+            contentEl.innerHTML = '<div class="alert alert-success mb-0">' +
+                '<i class="fas fa-check-circle me-2"></i>Изменений нет. ' +
+                'Все ' + existing.length + ' сайтов уже актуальны.</div>';
+            return;
+        }
+
+        let html = '<div class="small mb-2 text-muted">Найдено на странице матчинга: <strong>' + data.total + '</strong></div>';
+
+        if (toAdd.length > 0) {
+            html += '<div class="mb-2"><strong class="text-success"><i class="fas fa-plus me-1"></i>Будут добавлены (' + toAdd.length + '):</strong><div class="d-flex flex-wrap gap-1 mt-1">';
+            toAdd.forEach(s => { html += '<span class="badge bg-success">' + escHtml(s) + '</span>'; });
+            html += '</div></div>';
+        }
+
+        if (toDelete.length > 0) {
+            html += '<div class="mb-2"><strong class="text-danger"><i class="fas fa-minus me-1"></i>Будут удалены (' + toDelete.length + '):</strong><div class="d-flex flex-wrap gap-1 mt-1">';
+            toDelete.forEach(s => { html += '<span class="badge bg-danger">' + escHtml(s) + '</span>'; });
+            html += '</div></div>';
+        }
+
+        if (existing.length > 0) {
+            html += '<div class="mb-0"><strong class="text-secondary"><i class="fas fa-equals me-1"></i>Без изменений (' + existing.length + ')</strong></div>';
+        }
+
+        contentEl.innerHTML = html;
+        applyBtn.style.display = '';
+    }
+
+    function renderSettingsPreview(data, contentEl, applyBtn) {
+        const updates = data.updates || [];
+
+        if (updates.length === 0) {
+            contentEl.innerHTML = '<div class="alert alert-success mb-0">' +
+                '<i class="fas fa-check-circle me-2"></i>Изменений нет. City IDs уже актуальны.</div>';
+            return;
+        }
+
+        let html = '<div class="small mb-2 text-muted">Изменений: <strong>' + updates.length + '</strong></div>';
+        html += '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr>' +
+            '<th>Сайт</th><th>Было</th><th>Стало</th></tr></thead><tbody>';
+        updates.forEach(u => {
+            html += '<tr><td class="small">' + escHtml(u.site) + '</td>' +
+                '<td class="small text-muted font-monospace">' + escHtml(u.oldCityIds || '—') + '</td>' +
+                '<td class="small text-success font-monospace">' + escHtml(u.newCityIds || '—') + '</td></tr>';
+        });
+        html += '</tbody></table>';
+
+        contentEl.innerHTML = html;
+        applyBtn.style.display = '';
+    }
+
+    document.getElementById('syncApplyBtn').addEventListener('click', function() {
+        if (!syncApplyData || !syncApplyShopName || !syncApplyType) return;
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Применение...';
+
+        let url, body;
+        if (syncApplyType === 'matching') {
+            url = '/zoomos/shops/' + encodeURIComponent(syncApplyShopName) + '/sync-from-matching/apply';
+            body = JSON.stringify({ toAdd: syncApplyData.toAdd || [], toDelete: syncApplyData.toDelete || [] });
+        } else {
+            url = '/zoomos/shops/' + encodeURIComponent(syncApplyShopName) + '/sync/apply';
+            const entryMap = {};
+            (syncApplyData.updates || []).forEach(u => { entryMap[u.entryId] = u.newCityIds; });
+            body = JSON.stringify(entryMap);
+        }
+
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                getSyncModal().hide();
+                location.reload();
+            } else {
+                alert('Ошибка: ' + (data.error || 'неизвестная'));
+                this.disabled = false;
+                this.innerHTML = '<i class="fas fa-check me-1"></i>Применить';
+            }
+        })
+        .catch(err => {
+            alert('Ошибка сети: ' + err.message);
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-check me-1"></i>Применить';
+        });
+    });
+
+    // Делегирование клика на кнопки синхронизации
+    document.querySelectorAll('.btn-sync-settings').forEach(btn => {
+        btn.addEventListener('click', function() {
+            previewSync(this.dataset.shopName, 'settings');
+        });
+    });
+    document.querySelectorAll('.btn-sync-matching').forEach(btn => {
+        btn.addEventListener('click', function() {
+            previewSync(this.dataset.shopName, 'matching');
+        });
+    });
+
+    // ==================================================================
+    // Удаление отдельного сайта (ZoomosCityId)
+    // ==================================================================
+
+    document.querySelectorAll('.btn-delete-cityid').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const site = this.dataset.site;
+            if (!confirm('Удалить сайт "' + site + '" из списка?')) return;
+
+            fetch('/zoomos/city-ids/' + id + '/delete', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const row = document.getElementById('row-' + id);
+                        if (row) row.remove();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(err => alert('Ошибка сети: ' + err.message));
+        });
+    });
 
     // ---- Загрузка сводки последней проверки при открытии страницы ----
     document.querySelectorAll('.shop-card').forEach(card => {
