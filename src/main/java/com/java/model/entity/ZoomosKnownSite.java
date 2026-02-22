@@ -30,6 +30,10 @@ public class ZoomosKnownSite {
     @Column(name = "description")
     private String description;
 
+    @Column(name = "is_priority", nullable = false)
+    @Builder.Default
+    private boolean isPriority = false;
+
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
 

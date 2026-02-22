@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -164,5 +165,19 @@ public class AsyncConfig {
         log.info("Инициализирован пул потоков для очистки данных: core=1, max=2, queue=10");
 
         return executor;
+    }
+
+    /**
+     * Планировщик задач для автоматических проверок Zoomos (cron-расписания)
+     */
+    @Bean(name = "zoomosSchedulerTaskScheduler")
+    public ThreadPoolTaskScheduler zoomosSchedulerTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(3);
+        scheduler.setThreadNamePrefix("zoomos-sched-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(60);
+        scheduler.initialize();
+        return scheduler;
     }
 }

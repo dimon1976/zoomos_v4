@@ -8,8 +8,10 @@ import com.java.repository.ZoomosCityNameRepository;
 import com.java.repository.ZoomosCheckRunRepository;
 import com.java.repository.ZoomosKnownSiteRepository;
 import com.java.repository.ZoomosParsingStatsRepository;
+import com.java.repository.ZoomosShopScheduleRepository;
 import com.java.service.ZoomosCheckService;
 import com.java.service.ZoomosParserService;
+import com.java.service.ZoomosSchedulerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Контроллер "Анализ выкачки" — парсинг данных с export.zoomos.by.
@@ -45,6 +48,8 @@ public class ZoomosAnalysisController {
     private final ZoomosCityNameRepository cityNameRepository;
     private final ZoomosCityAddressRepository cityAddressRepository;
     private final ZoomosConfig zoomosConfig;
+    private final ZoomosShopScheduleRepository scheduleRepository;
+    private final ZoomosSchedulerService schedulerService;
 
     @GetMapping({"", "/"})
     public String index(Model model) {
@@ -1120,6 +1125,168 @@ public class ZoomosAnalysisController {
         }
         knownSiteRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    // =========================================================================
+    // Расписания проверок /zoomos/schedule
+    // =========================================================================
+
+    @GetMapping("/schedule")
+    public String schedulePage(Model model) {
+        List<ZoomosShop> shops = parserService.getAllShops();
+        Map<Long, ZoomosShopSchedule> schedules = new LinkedHashMap<>();
+        for (ZoomosShop shop : shops) {
+            scheduleRepository.findByShopId(shop.getId()).ifPresent(s -> schedules.put(shop.getId(), s));
+        }
+        model.addAttribute("shops", shops);
+        model.addAttribute("schedules", schedules);
+        return "zoomos/schedule";
+    }
+
+    @PostMapping("/schedule/{shopId}")
+    public String saveSchedule(@PathVariable Long shopId,
+                               @RequestParam(defaultValue = "0 8 * * *") String cronExpression,
+                               @RequestParam(required = false) String timeFrom,
+                               @RequestParam(required = false) String timeTo,
+                               @RequestParam(defaultValue = "10") int dropThreshold,
+                               @RequestParam(defaultValue = "30") int errorGrowthThreshold,
+                               @RequestParam(defaultValue = "7") int baselineDays,
+                               @RequestParam(defaultValue = "-1") int dateOffsetFrom,
+                               @RequestParam(defaultValue = "0") int dateOffsetTo,
+                               RedirectAttributes ra) {
+        ZoomosShopSchedule schedule = scheduleRepository.findByShopId(shopId)
+                .orElse(ZoomosShopSchedule.builder().shopId(shopId).build());
+        schedule.setCronExpression(cronExpression.trim());
+        schedule.setTimeFrom(timeFrom != null && !timeFrom.isBlank() ? timeFrom : null);
+        schedule.setTimeTo(timeTo != null && !timeTo.isBlank() ? timeTo : null);
+        schedule.setDropThreshold(dropThreshold);
+        schedule.setErrorGrowthThreshold(errorGrowthThreshold);
+        schedule.setBaselineDays(baselineDays);
+        schedule.setDateOffsetFrom(dateOffsetFrom);
+        schedule.setDateOffsetTo(dateOffsetTo);
+        schedulerService.saveAndReschedule(schedule);
+        ra.addFlashAttribute("success", "Расписание сохранено");
+        return "redirect:/zoomos/schedule";
+    }
+
+    @PostMapping("/schedule/{shopId}/toggle")
+    public String toggleSchedule(@PathVariable Long shopId, RedirectAttributes ra) {
+        schedulerService.toggleEnabled(shopId);
+        ra.addFlashAttribute("success", "Статус расписания изменён");
+        return "redirect:/zoomos/schedule";
+    }
+
+    @PostMapping("/schedule/{shopId}/delete")
+    public String deleteSchedule(@PathVariable Long shopId, RedirectAttributes ra) {
+        schedulerService.deleteSchedule(shopId);
+        ra.addFlashAttribute("success", "Расписание удалено");
+        return "redirect:/zoomos/schedule";
+    }
+
+    // =========================================================================
+    // Priority alerts API
+    // =========================================================================
+
+    @GetMapping("/api/priority-alerts")
+    @ResponseBody
+    public ResponseEntity<List<Map<String, Object>>> priorityAlerts() {
+        try {
+            List<ZoomosKnownSite> prioritySites = knownSiteRepository.findAllByIsPriorityTrue();
+            if (prioritySites.isEmpty()) return ResponseEntity.ok(List.of());
+
+            Set<String> priorityNames = prioritySites.stream()
+                    .map(ZoomosKnownSite::getSiteName)
+                    .collect(Collectors.toSet());
+
+            ZonedDateTime startOfDay = java.time.LocalDate.now()
+                    .atStartOfDay(ZoneOffset.UTC);
+            List<ZoomosCheckRun> todayRuns = checkRunRepository.findCompletedToday(startOfDay);
+
+            // Берём последний run для каждого магазина
+            Map<Long, ZoomosCheckRun> latestByShop = new LinkedHashMap<>();
+            for (ZoomosCheckRun run : todayRuns) {
+                latestByShop.putIfAbsent(run.getShop().getId(), run);
+            }
+
+            // siteName → {severity, affectedShops, issueCount}
+            Map<String, Map<String, Object>> siteAlerts = new LinkedHashMap<>();
+
+            for (ZoomosCheckRun run : latestByShop.values()) {
+                List<ZoomosParsingStats> stats = parsingStatsRepository
+                        .findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(run.getId());
+
+                // Группируем по siteName + cityName
+                Map<String, List<ZoomosParsingStats>> bySiteCity = stats.stream()
+                        .filter(s -> priorityNames.contains(s.getSiteName()))
+                        .collect(Collectors.groupingBy(
+                                s -> s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")));
+
+                int drop = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
+                int errGrowth = run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30;
+
+                for (Map.Entry<String, List<ZoomosParsingStats>> entry : bySiteCity.entrySet()) {
+                    List<ZoomosParsingStats> group = new ArrayList<>(entry.getValue());
+                    group.sort(Comparator.comparing(
+                            s -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now(),
+                            Comparator.naturalOrder()));
+                    String status = checkService.evaluateGroup(group, drop, errGrowth);
+                    if ("OK".equals(status)) continue;
+
+                    String siteName = group.get(0).getSiteName();
+                    siteAlerts.compute(siteName, (k, existing) -> {
+                        if (existing == null) {
+                            Map<String, Object> alert = new LinkedHashMap<>();
+                            alert.put("siteName", siteName);
+                            alert.put("severity", status);
+                            alert.put("issueCount", 1);
+                            alert.put("affectedShops", 1);
+                            return alert;
+                        } else {
+                            existing.put("issueCount", (int) existing.get("issueCount") + 1);
+                            // ERROR приоритетнее WARNING
+                            if ("ERROR".equals(status)) existing.put("severity", "ERROR");
+                            return existing;
+                        }
+                    });
+                }
+            }
+
+            return ResponseEntity.ok(new ArrayList<>(siteAlerts.values()));
+        } catch (Exception e) {
+            log.error("Ошибка priority-alerts: {}", e.getMessage(), e);
+            return ResponseEntity.ok(List.of());
+        }
+    }
+
+    // =========================================================================
+    // Priority toggle для справочника сайтов
+    // =========================================================================
+
+    @PostMapping("/sites/{id}/priority")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> toggleSitePriority(@PathVariable Long id) {
+        return knownSiteRepository.findById(id).map(site -> {
+            site.setPriority(!site.isPriority());
+            knownSiteRepository.save(site);
+            return ResponseEntity.ok(Map.<String, Object>of("success", true, "isPriority", site.isPriority()));
+        }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден")));
+    }
+
+    @PostMapping("/sites/by-name/priority")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> toggleSitePriorityByName(@RequestParam String siteName) {
+        if (siteName == null || siteName.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Не указан siteName"));
+        }
+        ZoomosKnownSite site = knownSiteRepository.findBySiteName(siteName.trim().toLowerCase())
+                .orElseGet(() -> knownSiteRepository.save(
+                        ZoomosKnownSite.builder()
+                                .siteName(siteName.trim().toLowerCase())
+                                .checkType("ITEM")
+                                .build()));
+        site.setPriority(!site.isPriority());
+        knownSiteRepository.save(site);
+        return ResponseEntity.ok(Map.of("success", true, "isPriority", site.isPriority()));
     }
 
     /** CSV-экранирование: оборачивает значение в кавычки если содержит ; " или перевод строки. */

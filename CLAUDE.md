@@ -62,6 +62,7 @@ mvn flyway:info
 
 ### 2026-02
 
+- **Zoomos Check — Расписание + Приоритетные сайты** — Cron-расписания автопроверок per-shop (`ZoomosSchedulerService`, `ThreadPoolTaskScheduler`). Флаг `is_priority` в справочнике сайтов. Глобальный баннер в layout при проблемах приоритетных сайтов. Flyway V30. См. секцию ниже.
 - **Zoomos Check — Baseline тренд-анализ** — Исторический анализ метрик выкачек за N дней. TREND_WARNING issues (не влияют на canDeliver). Flyway V29, поле `baselineDays` на форме. См. секцию ниже.
 - **Zoomos Check — CSV для ИТ** — «Текст для ИТ» теперь в формате CSV с разделителем `;` (Сайт;Город;Тип;Сообщение;История).
 - **Zoomos Check** — Проверка выкачки export.zoomos.by: парсинг истории через Playwright, вердикт готовности отчёта, сводка ИТ с копированием. Flyway V23–V28, 2 новые таблицы. См. секцию ниже.
@@ -444,25 +445,35 @@ Utility for merging product data from two sources: source products with analogs 
 - **Главная**: `/zoomos` — список магазинов, запуск проверки
 - **Результаты**: `/zoomos/check/results/{runId}` — вердикт + детали
 - **История**: `/zoomos/check/history` — все прошлые проверки
-- **Справочник сайтов**: `/zoomos/sites` — список известных сайтов (zoomos_known_sites)
+- **Справочник сайтов**: `/zoomos/sites` — список известных сайтов + приоритет
+- **Расписание**: `/zoomos/schedule` — управление cron-расписаниями по магазинам
+- **Priority Alerts API**: `/zoomos/api/priority-alerts` — JSON-список проблем приоритетных сайтов
 
-### Database Schema (Flyway V23–V26)
+### Database Schema (Flyway V23–V30)
 ```sql
 zoomos_check_runs  -- запись о каждой проверке
   id, shop_id, date_from, date_to, time_from, time_to  -- time_from/time_to: "HH:mm" или null
   status (RUNNING/COMPLETED/FAILED)
   ok_count, warning_count, error_count, not_found_count
   drop_threshold (default 10%), error_growth_threshold (default 30%)
-  started_at, completed_at
+  baseline_days (V29), started_at, completed_at
 
 zoomos_parsing_stats  -- одна строка из таблицы истории парсинга
   id, check_run_id, site_name, city_name, server_name, client_name
   start_time, finish_time, total_products, in_stock, error_count
   completion_total, parsing_duration, check_type (API/ITEM), is_finished
   parsing_id, category_count, completion_percent, parsing_duration_minutes
+  is_baseline (V29)
 
-zoomos_known_sites  -- справочник известных сайтов zoomos (V25)
+zoomos_sites  -- справочник известных сайтов zoomos (V25, таблица zoomos_sites!)
   id, site_name (UNIQUE), check_type (API/ITEM)
+  is_priority BOOLEAN DEFAULT FALSE  (V30)
+
+zoomos_shop_schedules  -- расписания автопроверок (V30)
+  id, shop_id (UNIQUE FK → zoomos_shops), cron_expression, is_enabled
+  time_from, time_to, drop_threshold, error_growth_threshold, baseline_days
+  date_offset_from (default -1), date_offset_to (default 0)
+  last_run_at, created_at, updated_at
 ```
 
 ### Логика оценки (`ZoomosCheckService.evaluateGroup`)
@@ -515,23 +526,59 @@ zoomos_known_sites  -- справочник известных сайтов zoom
 
 **localStorage**: `checkTimeFrom-{shopId}` / `checkTimeTo-{shopId}` — независимые для каждого магазина.
 
+### Расписание автопроверок (`/zoomos/schedule`)
+
+`ZoomosSchedulerService` управляет динамическими cron-задачами через `ThreadPoolTaskScheduler` (bean `zoomosSchedulerTaskScheduler`, 3 потока).
+
+**Логика:**
+- `@PostConstruct init()` — загружает все enabled расписания при старте
+- `saveAndReschedule(schedule)` — сохраняет в БД, отменяет старую задачу, планирует новую
+- `toggleEnabled(shopId)` — переключает is_enabled и перепланирует
+- Cron: Unix-формат 5 полей (`мин час день мес нед`) → Spring 6 полей (добавляется `"0 "` в начало)
+- `runCheck(schedule)` — вычисляет dateFrom/dateTo через `today.plusDays(offset)`, запускает `checkService.runCheck(...)`, обновляет `lastRunAt`
+
+**Поля ZoomosShopSchedule:**
+- `dateOffsetFrom` (default -1) = вчера, `dateOffsetTo` (default 0) = сегодня
+- Один магазин — одно расписание (UNIQUE shop_id)
+
+### Приоритетные сайты и глобальный баннер
+
+**Флаг `is_priority`** в `zoomos_sites` (entity `ZoomosKnownSite`). Toggle через:
+- `POST /zoomos/sites/{id}/priority` — по id (из `/zoomos/sites`)
+- `POST /zoomos/sites/by-name/priority` — по siteName, создаёт запись если нет
+
+**API `GET /zoomos/api/priority-alerts`:**
+1. Загружает все priority-сайты (`findAllByIsPriorityTrue()`)
+2. Берёт последние COMPLETED run за сегодня (`findCompletedToday(startOfDay)`)
+3. Для каждого run — смотрит stats по priority-сайтам, оценивает `evaluateGroup()`
+4. Возвращает `[{siteName, severity, issueCount}]` (пустой массив при ошибке)
+
+**Баннер** в `layout/main.html` (между navbar и main): `d-none` по умолчанию, появляется только если API вернул непустой список. Inline JS fetch при загрузке каждой страницы, тихо игнорирует ошибки.
+
+**Важно:** Entity `ZoomosKnownSite` → таблица `zoomos_sites` (не `zoomos_known_sites`!).
+
 ### Ключевые файлы
 
 | Файл | Назначение |
 |------|-----------|
 | [ZoomosCheckService.java](src/main/java/com/java/service/ZoomosCheckService.java) | Playwright-парсинг, `evaluateGroup()`, `filterByTime()`, WebSocket прогресс |
-| [ZoomosAnalysisController.java](src/main/java/com/java/controller/ZoomosAnalysisController.java) | `/zoomos/*` роуты, группировка по сайту, `itText` с URL историй, `chartData` |
+| [ZoomosAnalysisController.java](src/main/java/com/java/controller/ZoomosAnalysisController.java) | `/zoomos/*` роуты, schedule CRUD, priority-alerts API, priority toggle |
 | [ZoomosParserService.java](src/main/java/com/java/service/ZoomosParserService.java) | Управление магазинами и city_ids, двунаправленная синхронизация настроек |
-| [ZoomosCheckRun.java](src/main/java/com/java/model/entity/ZoomosCheckRun.java) | JPA entity проверки (включая timeFrom/timeTo) |
+| [ZoomosSchedulerService.java](src/main/java/com/java/service/ZoomosSchedulerService.java) | Cron-расписания: @PostConstruct, saveAndReschedule, toggleEnabled |
+| [ZoomosCheckRun.java](src/main/java/com/java/model/entity/ZoomosCheckRun.java) | JPA entity проверки (включая timeFrom/timeTo, baselineDays) |
 | [ZoomosParsingStats.java](src/main/java/com/java/model/entity/ZoomosParsingStats.java) | JPA entity строки статистики |
-| [ZoomosKnownSite.java](src/main/java/com/java/model/entity/ZoomosKnownSite.java) | JPA entity справочника сайтов |
+| [ZoomosKnownSite.java](src/main/java/com/java/model/entity/ZoomosKnownSite.java) | JPA entity справочника сайтов (@Table zoomos_sites), поле isPriority |
+| [ZoomosShopSchedule.java](src/main/java/com/java/model/entity/ZoomosShopSchedule.java) | JPA entity расписания магазина |
 | [check-results.html](src/main/resources/templates/zoomos/check-results.html) | Страница результатов (4 блока) |
-| [index.html](src/main/resources/templates/zoomos/index.html) | Список магазинов + запуск проверки (поля времени) |
-| [sites.html](src/main/resources/templates/zoomos/sites.html) | Справочник известных сайтов |
+| [index.html](src/main/resources/templates/zoomos/index.html) | Список магазинов + кнопка "Расписание" |
+| [sites.html](src/main/resources/templates/zoomos/sites.html) | Справочник сайтов + кнопка приоритета (звёздочка) |
+| [schedule.html](src/main/resources/templates/zoomos/schedule.html) | Управление расписаниями, JS-based сохранение строк |
+| [layout/main.html](src/main/resources/templates/layout/main.html) | Глобальный priority-alerts баннер |
 | [V23__create_zoomos_check_tables.sql](src/main/resources/db/migration/V23__create_zoomos_check_tables.sql) | Flyway: базовые таблицы |
 | [V24__add_check_thresholds.sql](src/main/resources/db/migration/V24__add_check_thresholds.sql) | Flyway: пороги dropThreshold/errorGrowthThreshold |
-| [V25__zoomos_sites_and_parsing_stats_update.sql](src/main/resources/db/migration/V25__zoomos_sites_and_parsing_stats_update.sql) | Flyway: zoomos_known_sites + доп. поля parsing_stats |
+| [V25__zoomos_sites_and_parsing_stats_update.sql](src/main/resources/db/migration/V25__zoomos_sites_and_parsing_stats_update.sql) | Flyway: zoomos_sites + доп. поля parsing_stats |
 | [V26__add_time_range_to_check_runs.sql](src/main/resources/db/migration/V26__add_time_range_to_check_runs.sql) | Flyway: time_from, time_to в check_runs |
+| [V30__add_schedule_and_priority.sql](src/main/resources/db/migration/V30__add_schedule_and_priority.sql) | Flyway: is_priority в zoomos_sites, CREATE zoomos_shop_schedules |
 
 ### Технические детали
 
@@ -561,6 +608,9 @@ zoomos_known_sites  -- справочник известных сайтов zoom
 ✅ Фильтрация по временному диапазону (finishTime для верхней границы)
 ✅ Ссылки на историю с cityId
 ✅ API: фильтрация по пустому полю "Клиент"
+✅ Расписание автопроверок (cron per-shop, ZoomosSchedulerService)
+✅ Приоритетные сайты (isPriority toggle в /zoomos/sites)
+✅ Глобальный баннер приоритетных сайтов (layout/main.html)
 
 ## Barcode Handbook (Справочник штрихкодов)
 
