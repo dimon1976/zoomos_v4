@@ -61,10 +61,33 @@ public class ZoomosAnalysisController {
         Map<String, String> cityNamesMap = cityNameRepository.findAll().stream()
                 .collect(java.util.stream.Collectors.toMap(
                         ZoomosCityName::getCityId, ZoomosCityName::getCityName));
+
+        // Расписания для badge'ей вкл/выкл на каждой карточке
+        Map<Long, ZoomosShopSchedule> schedulesMap = new java.util.LinkedHashMap<>();
+        for (ZoomosShop shop : shops) {
+            scheduleRepository.findByShopId(shop.getId()).ifPresent(s -> schedulesMap.put(shop.getId(), s));
+        }
+
+        // Приоритетные сайты для иконок в таблице сайтов клиента
+        Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue().stream()
+                .map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+
         model.addAttribute("shops", shops);
         model.addAttribute("cityIdsMap", cityIdsMap);
         model.addAttribute("cityNamesMap", cityNamesMap);
+        model.addAttribute("schedulesMap", schedulesMap);
+        model.addAttribute("prioritySiteNames", prioritySiteNames);
         return "zoomos/index";
+    }
+
+    /** AJAX-toggle расписания (для index.html без перезагрузки) */
+    @PostMapping("/api/schedule/{shopId}/toggle")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> toggleScheduleAjax(@PathVariable Long shopId) {
+        schedulerService.toggleEnabled(shopId);
+        boolean isEnabled = scheduleRepository.findByShopId(shopId)
+                .map(ZoomosShopSchedule::isEnabled).orElse(false);
+        return ResponseEntity.ok(Map.of("success", true, "isEnabled", isEnabled));
     }
 
     // =========================================================================

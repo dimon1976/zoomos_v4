@@ -97,6 +97,13 @@
             background: #e9ecef;
             color: #495057;
         }
+        .priority-star-btn {
+            line-height: 1;
+            vertical-align: middle;
+            text-decoration: none;
+        }
+        .priority-star-btn:hover { opacity: 0.75; }
+        .sched-label { white-space: nowrap; }
     </style>
 </th:block>
 
@@ -191,6 +198,22 @@
                 </a>
             </div>
             <div class="d-flex gap-2 align-items-center">
+                <!-- Чекбокс расписания -->
+                <div th:with="sched=${schedulesMap != null ? schedulesMap[shop.id] : null}"
+                     class="d-flex align-items-center gap-1 border-end pe-2">
+                    <input type="checkbox" class="form-check-input schedule-enabled-cb"
+                           th:id="'sched-cb-' + ${shop.id}"
+                           th:data-shop-id="${shop.id}"
+                           th:data-shop-name="${shop.shopName}"
+                           th:checked="${sched != null and sched.enabled}"
+                           style="cursor:pointer;">
+                    <label th:for="'sched-cb-' + ${shop.id}"
+                           class="small mb-0 ms-1 sched-label"
+                           th:classappend="${sched != null and sched.enabled} ? 'text-success' : 'text-muted'"
+                           style="cursor:pointer;">
+                        <i class="fas fa-clock"></i> авто
+                    </label>
+                </div>
                 <button type="button" class="btn btn-sm btn-success btn-sync-settings"
                         th:data-shop-name="${shop.shopName}"
                         title="Обновить city_ids для существующих сайтов (из настроек)">
@@ -323,7 +346,8 @@
                                         <th style="width:200px">Сайт-конкурент</th>
                                         <th style="width:130px" class="text-center">Тип проверки</th>
                                         <th class="city-ids-col">ID городов</th>
-                                        <th class="address-ids-col">ID адресов</th>
+                                        <th style="width:100px" class="text-center">ID адресов</th>
+                                        <th style="width:44px"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -336,7 +360,15 @@
                                                    th:checked="${entry.isActive}"
                                                    th:data-id="${entry.id}">
                                         </td>
-                                        <td class="small align-middle" th:text="${entry.siteName}">site.ru</td>
+                                        <td class="small align-middle">
+                                            <span th:text="${entry.siteName}">site.ru</span>
+                                            <button type="button" class="btn btn-link priority-star-btn p-0 ms-1"
+                                                    th:data-site="${entry.siteName}"
+                                                    title="Приоритетный сайт — показывать глобальный баннер при проблемах">
+                                                <i th:class="${prioritySiteNames != null and #sets.contains(prioritySiteNames, entry.siteName)} ? 'fas fa-star text-warning' : 'far fa-star text-secondary'"
+                                                   style="font-size:0.85em;"></i>
+                                            </button>
+                                        </td>
                                         <td class="text-center">
                                             <select class="form-select form-select-sm check-type-select"
                                                     th:data-id="${entry.id}"
@@ -354,24 +386,24 @@
                                                    placeholder="ID не заданы">
                                         </td>
                                         <td class="text-center">
-                                            <div class="d-flex gap-1 justify-content-center">
-                                                <button type="button"
-                                                        class="btn btn-sm btn-outline-secondary btn-edit-addresses"
-                                                        th:data-id="${entry.id}"
-                                                        th:data-site="${entry.siteName}"
-                                                        th:data-cities="${entry.cityIds}"
-                                                        th:data-addresses="${entry.addressIds}">
-                                                    <i class="fas fa-map-marker-alt me-1"></i>
-                                                    <span class="addr-count-label">Адреса</span>
-                                                </button>
-                                                <button type="button"
-                                                        class="btn btn-sm btn-outline-danger btn-delete-cityid"
-                                                        th:data-id="${entry.id}"
-                                                        th:data-site="${entry.siteName}"
-                                                        title="Удалить этот сайт из списка">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-secondary btn-edit-addresses"
+                                                    th:data-id="${entry.id}"
+                                                    th:data-site="${entry.siteName}"
+                                                    th:data-cities="${entry.cityIds}"
+                                                    th:data-addresses="${entry.addressIds}">
+                                                <i class="fas fa-map-marker-alt me-1"></i>
+                                                <span class="addr-count-label">Адреса</span>
+                                            </button>
+                                        </td>
+                                        <td class="text-center">
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-danger btn-delete-cityid"
+                                                    th:data-id="${entry.id}"
+                                                    th:data-site="${entry.siteName}"
+                                                    title="Удалить этот сайт из списка">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -403,6 +435,25 @@
                     <button type="button" class="btn btn-sm btn-primary" id="syncApplyBtn" style="display:none;">
                         <i class="fas fa-check me-1"></i>Применить
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка подтверждения переключения расписания -->
+    <div class="modal fade" id="scheduleToggleModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-clock me-2"></i>Расписание</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body py-2" id="schedToggleBody">
+                    <p class="mb-0 small">Изменить расписание для <strong id="schedToggleShopName"></strong>?</p>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" id="schedToggleCancelBtn" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="schedToggleConfirmBtn">Подтвердить</button>
                 </div>
             </div>
         </div>
@@ -1245,6 +1296,98 @@
                 })
                 .catch(err => alert('Ошибка сети: ' + err.message));
         });
+    });
+
+    // ==================================================================
+    // Приоритетные звёздочки в таблице сайтов клиента
+    // ==================================================================
+
+    document.querySelectorAll('.priority-star-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const siteName = this.dataset.site;
+            const fd = new FormData();
+            fd.append('siteName', siteName);
+            fetch('/zoomos/sites/by-name/priority', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.isPriority !== undefined) {
+                        // Обновить все кнопки с этим сайтом на странице
+                        document.querySelectorAll('.priority-star-btn[data-site="' + CSS.escape(siteName) + '"]').forEach(b => {
+                            const icon = b.querySelector('i');
+                            if (data.isPriority) {
+                                icon.className = 'fas fa-star text-warning';
+                            } else {
+                                icon.className = 'far fa-star text-secondary';
+                            }
+                        });
+                    }
+                })
+                .catch(() => {});
+        });
+    });
+
+    // ==================================================================
+    // Чекбокс расписания с модальным подтверждением
+    // ==================================================================
+
+    let schedToggleModal = null;
+    let pendingSchedToggle = null;
+
+    function getSchedToggleModal() {
+        if (!schedToggleModal) schedToggleModal = new bootstrap.Modal(document.getElementById('scheduleToggleModal'));
+        return schedToggleModal;
+    }
+
+    document.querySelectorAll('.schedule-enabled-cb').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const willEnable = this.checked;
+            const shopId = this.dataset.shopId;
+            const shopName = this.dataset.shopName;
+            // Откатываем чекбокс — применим только после подтверждения
+            this.checked = !willEnable;
+            pendingSchedToggle = { cb: this, shopId, shopName, willEnable };
+            const action = willEnable ? 'Включить' : 'Выключить';
+            document.getElementById('schedToggleShopName').textContent = shopName;
+            document.getElementById('schedToggleBody').innerHTML =
+                '<p class="mb-0 small">' + escHtml(action) + ' автопроверку по расписанию для <strong>' + escHtml(shopName) + '</strong>?</p>';
+            getSchedToggleModal().show();
+        });
+    });
+
+    document.getElementById('schedToggleCancelBtn').addEventListener('click', function() {
+        pendingSchedToggle = null;
+    });
+
+    document.getElementById('schedToggleConfirmBtn').addEventListener('click', function() {
+        if (!pendingSchedToggle) return;
+        const { cb, shopId, shopName } = pendingSchedToggle;
+        pendingSchedToggle = null;
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        const btn = this;
+
+        fetch('/zoomos/api/schedule/' + shopId + '/toggle', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = 'Подтвердить';
+                getSchedToggleModal().hide();
+                if (data.success) {
+                    cb.checked = data.isEnabled;
+                    const label = document.querySelector('label[for="sched-cb-' + shopId + '"]');
+                    if (label) {
+                        label.className = 'small mb-0 ms-1 sched-label ' + (data.isEnabled ? 'text-success' : 'text-muted');
+                    }
+                } else {
+                    alert((data.error || 'Расписание не создано. Настройте его на странице расписаний.'));
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = 'Подтвердить';
+                getSchedToggleModal().hide();
+                alert('Ошибка сети: ' + err.message);
+            });
     });
 
     // ---- Загрузка сводки последней проверки при открытии страницы ----

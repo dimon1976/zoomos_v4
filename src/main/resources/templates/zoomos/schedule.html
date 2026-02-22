@@ -12,10 +12,15 @@
 
 <th:block th:fragment="styles">
 <style>
-    .cron-hint { font-size: 0.75em; color: #6c757d; margin-top: 1px; }
-    .offset-input { width: 60px; }
-    .sched-row td { vertical-align: middle; padding: 6px 4px; }
-    .sched-row input { font-size: 0.85em; }
+    .sched-row td { vertical-align: middle; padding: 5px 6px; }
+    .sched-row input[type=text], .sched-row input[type=number], .sched-row input[type=time] { font-size: 0.85em; }
+    .offset-input { width: 58px; }
+    .threshold-input { width: 58px; }
+    .baseline-input { width: 58px; margin: 0 auto; display: block; }
+    .enabled-cb { width: 18px; height: 18px; cursor: pointer; }
+    .cron-cheatsheet table { font-size: 0.85em; }
+    .cron-cheatsheet code { font-size: 0.9em; color: #d63384; }
+    .cat-toggle { cursor: pointer; user-select: none; }
 </style>
 </th:block>
 
@@ -47,7 +52,7 @@
     </div>
 
     <!-- Таблица расписаний -->
-    <div class="card">
+    <div class="card mb-3">
         <div class="card-header py-2">
             <i class="fas fa-clock me-2"></i>Расписания по магазинам
         </div>
@@ -59,20 +64,30 @@
             <table class="table table-sm table-bordered table-hover mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th style="width:150px">Магазин</th>
-                        <th style="width:130px">Cron <span class="text-muted fw-normal" style="font-size:0.8em">(мин час д м нед)</span></th>
-                        <th style="width:110px" class="text-center">Период (offset)</th>
-                        <th style="width:130px" class="text-center">Время</th>
-                        <th style="width:90px" class="text-center">Пороги %</th>
-                        <th style="width:65px" class="text-center">Base дней</th>
-                        <th style="width:130px" class="text-center">Последний запуск</th>
-                        <th style="width:120px" class="text-center">Действия</th>
+                        <th style="width:40px" class="text-center" title="Расписание включено">Вкл</th>
+                        <th style="min-width:130px">Магазин</th>
+                        <th style="min-width:140px">Cron <span class="text-muted fw-normal" style="font-size:0.78em">(мин час д м нед)</span></th>
+                        <th style="min-width:120px" class="text-center">Период (offset)</th>
+                        <th style="min-width:150px" class="text-center">Время выкачки</th>
+                        <th style="min-width:130px" class="text-center" title="Порог падения % / Порог роста ошибок %">Пороги % <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
+                        <th style="min-width:80px" class="text-center">Baseline дней</th>
+                        <th style="min-width:140px" class="text-center">Последний запуск</th>
+                        <th style="min-width:110px" class="text-center">Действия</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr th:each="shop : ${shops}" class="sched-row"
                         th:data-shop-id="${shop.id}"
                         th:data-shop-action="@{'/zoomos/schedule/' + ${shop.id}}">
+
+                        <!-- Чекбокс Вкл/Выкл -->
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input enabled-cb sched-enabled-cb"
+                                   th:checked="${schedules[shop.id] != null and schedules[shop.id].enabled}"
+                                   th:disabled="${schedules[shop.id] == null}"
+                                   th:title="${schedules[shop.id] != null and schedules[shop.id].enabled} ? 'Расписание включено — нажмите чтобы выключить' : 'Расписание выключено — нажмите чтобы включить'"
+                                   style="width:18px;height:18px;cursor:pointer;">
+                        </td>
 
                         <!-- Магазин -->
                         <td class="fw-semibold small" th:text="${shop.shopName}"></td>
@@ -89,11 +104,11 @@
                             <div class="d-flex align-items-center justify-content-center gap-1">
                                 <input type="number" class="form-control form-control-sm offset-input text-center sched-offset-from"
                                        th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].dateOffsetFrom} : -1"
-                                       min="-30" max="0" title="Смещение От (−1=вчера, 0=сегодня)">
+                                       min="-30" max="0" title="Смещение От: −1=вчера, 0=сегодня">
                                 <span class="small text-muted">…</span>
                                 <input type="number" class="form-control form-control-sm offset-input text-center sched-offset-to"
                                        th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].dateOffsetTo} : 0"
-                                       min="-30" max="0" title="Смещение До (0=сегодня)">
+                                       min="-30" max="0" title="Смещение До: 0=сегодня">
                             </div>
                         </td>
 
@@ -101,33 +116,36 @@
                         <td>
                             <div class="d-flex align-items-center gap-1">
                                 <input type="time" class="form-control form-control-sm sched-time-from"
-                                       th:value="${schedules[shop.id]?.timeFrom}">
+                                       th:value="${schedules[shop.id]?.timeFrom}" title="Фильтр: начало выкачки (необяз.)">
                                 <span class="small text-muted">—</span>
                                 <input type="time" class="form-control form-control-sm sched-time-to"
-                                       th:value="${schedules[shop.id]?.timeTo}">
+                                       th:value="${schedules[shop.id]?.timeTo}" title="Фильтр: конец выкачки (необяз.)">
                             </div>
                         </td>
 
                         <!-- Пороги -->
                         <td>
-                            <div class="d-flex gap-1">
-                                <input type="number" class="form-control form-control-sm text-center sched-drop"
-                                       style="width:44px"
-                                       th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].dropThreshold} : 10"
-                                       min="1" max="100" title="Порог падения (%)">
-                                <input type="number" class="form-control form-control-sm text-center sched-err"
-                                       style="width:44px"
-                                       th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].errorGrowthThreshold} : 30"
-                                       min="1" max="500" title="Порог роста ошибок (%)">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <div class="d-flex flex-column align-items-center">
+                                    <span class="text-muted" style="font-size:0.7em">пад%</span>
+                                    <input type="number" class="form-control form-control-sm text-center threshold-input sched-drop"
+                                           th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].dropThreshold} : 10"
+                                           min="1" max="100" title="Порог падения товаров/«в наличии» (%)">
+                                </div>
+                                <div class="d-flex flex-column align-items-center">
+                                    <span class="text-muted" style="font-size:0.7em">ош%</span>
+                                    <input type="number" class="form-control form-control-sm text-center threshold-input sched-err"
+                                           th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].errorGrowthThreshold} : 30"
+                                           min="1" max="500" title="Порог роста ошибок (%)">
+                                </div>
                             </div>
                         </td>
 
                         <!-- Baseline -->
                         <td class="text-center">
-                            <input type="number" class="form-control form-control-sm text-center sched-baseline"
-                                   style="width:55px; margin: 0 auto"
+                            <input type="number" class="form-control form-control-sm text-center baseline-input sched-baseline"
                                    th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].baselineDays} : 7"
-                                   min="0" max="90" title="Дней для baseline-анализа">
+                                   min="0" max="90" title="Дней для baseline-анализа (0 = отключено)">
                         </td>
 
                         <!-- Последний запуск -->
@@ -142,27 +160,19 @@
                             <div class="d-flex gap-1 justify-content-center">
                                 <!-- Сохранить -->
                                 <button type="button" class="btn btn-sm btn-primary py-0 px-2 btn-sched-save"
-                                        title="Сохранить расписание">
+                                        title="Сохранить настройки расписания">
                                     <i class="fas fa-save"></i>
                                 </button>
-                                <!-- Вкл/Выкл -->
-                                <form th:action="@{'/zoomos/schedule/' + ${shop.id} + '/toggle'}" method="post" class="d-inline">
-                                    <button type="submit"
-                                            th:class="${schedules[shop.id] != null and schedules[shop.id].enabled} ? 'btn btn-sm btn-success py-0 px-2' : 'btn btn-sm btn-outline-secondary py-0 px-2'"
-                                            th:title="${schedules[shop.id] != null and schedules[shop.id].enabled} ? 'Выключить расписание' : 'Включить расписание'">
-                                        <i th:class="${schedules[shop.id] != null and schedules[shop.id].enabled} ? 'fas fa-pause' : 'fas fa-play'"></i>
-                                    </button>
-                                </form>
                                 <!-- Запустить сейчас -->
                                 <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 btn-run-now"
-                                        title="Запустить сейчас">
+                                        title="Запустить проверку прямо сейчас">
                                     <i class="fas fa-bolt"></i>
                                 </button>
                                 <!-- Удалить -->
                                 <form th:if="${schedules[shop.id] != null}"
                                       th:action="@{'/zoomos/schedule/' + ${shop.id} + '/delete'}" method="post"
                                       class="d-inline"
-                                      onsubmit="return confirm('Удалить расписание для ' + this.closest('tr').querySelector('td').textContent + '?')">
+                                      onsubmit="return confirm('Удалить расписание для ' + this.closest('tr').querySelectorAll('td')[1].textContent.trim() + '?')">
                                     <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Удалить расписание">
                                         <i class="fas fa-trash"></i>
                                     </button>
@@ -177,23 +187,97 @@
     </div>
 
     <!-- Примеры cron -->
-    <div class="card mt-3">
-        <div class="card-header py-2"><i class="fas fa-question-circle me-2"></i>Примеры cron-выражений</div>
+    <div class="card cron-cheatsheet">
+        <div class="card-header py-2 cat-toggle d-flex justify-content-between align-items-center"
+             data-bs-toggle="collapse" data-bs-target="#cronExamples">
+            <span><i class="fas fa-question-circle me-2"></i>Справочник cron-выражений</span>
+            <i class="fas fa-chevron-down text-muted small"></i>
+        </div>
+        <div class="collapse" id="cronExamples">
         <div class="card-body py-2">
-            <table class="table table-sm table-bordered mb-0" style="max-width:480px">
-                <thead class="table-light"><tr><th>Выражение</th><th>Описание</th></tr></thead>
-                <tbody>
-                    <tr><td><code>0 8 * * *</code></td><td>Каждый день в 08:00</td></tr>
-                    <tr><td><code>30 7 * * 1-5</code></td><td>Пн–Пт в 07:30</td></tr>
-                    <tr><td><code>0 6,18 * * *</code></td><td>В 06:00 и 18:00</td></tr>
-                    <tr><td><code>0 9 * * 1</code></td><td>По понедельникам в 09:00</td></tr>
-                </tbody>
-            </table>
-            <div class="mt-2 small text-muted">
-                <strong>Смещение дат:</strong> <code>−1</code> = вчера, <code>0</code> = сегодня.
-                Обычно: From = −1, To = 0 (проверяем вчера–сегодня).
-                <br><strong>Пороги:</strong> первый — падение товаров/«в наличии» (%), второй — рост ошибок (%).
+            <div class="row g-3">
+                <!-- Каждый день -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Каждый день</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light"><tr><th>Выражение</th><th>Описание</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>0 8 * * *</code></td><td>В 08:00 каждый день</td></tr>
+                            <tr><td><code>30 7 * * *</code></td><td>В 07:30 каждый день</td></tr>
+                            <tr><td><code>0 0 * * *</code></td><td>В полночь (00:00)</td></tr>
+                            <tr><td><code>0 12 * * *</code></td><td>В полдень (12:00)</td></tr>
+                            <tr><td><code>0 6,18 * * *</code></td><td>В 06:00 и 18:00</td></tr>
+                            <tr><td><code>0 8,12,18 * * *</code></td><td>В 08:00, 12:00 и 18:00</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Определённые дни -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Определённые дни недели</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light"><tr><th>Выражение</th><th>Описание</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>30 7 * * 1-5</code></td><td>Пн–Пт в 07:30</td></tr>
+                            <tr><td><code>0 9 * * 1-5</code></td><td>Пн–Пт в 09:00</td></tr>
+                            <tr><td><code>0 9 * * 1</code></td><td>По понедельникам в 09:00</td></tr>
+                            <tr><td><code>0 9 * * 6,0</code></td><td>Сб и Вс в 09:00</td></tr>
+                            <tr><td><code>0 8 * * 1,3,5</code></td><td>Пн, Ср, Пт в 08:00</td></tr>
+                            <tr><td><code>0 10 * * 2,4</code></td><td>Вт и Чт в 10:00</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Периодически -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Периодически</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light"><tr><th>Выражение</th><th>Описание</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>*/15 * * * *</code></td><td>Каждые 15 минут</td></tr>
+                            <tr><td><code>*/30 * * * *</code></td><td>Каждые 30 минут</td></tr>
+                            <tr><td><code>0 */2 * * *</code></td><td>Каждые 2 часа</td></tr>
+                            <tr><td><code>0 */4 * * *</code></td><td>Каждые 4 часа</td></tr>
+                            <tr><td><code>0 */6 * * *</code></td><td>Каждые 6 часов</td></tr>
+                            <tr><td><code>0 9-18 * * 1-5</code></td><td>Каждый час с 09 до 18, Пн–Пт</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Определённые числа месяца -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Определённые числа месяца</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light"><tr><th>Выражение</th><th>Описание</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>0 8 1 * *</code></td><td>1-го числа каждого месяца в 08:00</td></tr>
+                            <tr><td><code>0 8 1,15 * *</code></td><td>1-го и 15-го в 08:00</td></tr>
+                            <tr><td><code>0 8 */7 * *</code></td><td>Каждые 7 дней в 08:00</td></tr>
+                            <tr><td><code>0 0 1 1 *</code></td><td>1 января в полночь</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
+
+            <!-- Справка по полям -->
+            <div class="mt-3 p-2 bg-light rounded border small">
+                <strong>Формат:</strong> <code>МИН ЧАС ДЕНЬ_МЕС МЕСЯЦ ДЕНЬ_НЕД</code><br>
+                <div class="row mt-1">
+                    <div class="col-auto"><code>МИН</code> — 0–59</div>
+                    <div class="col-auto"><code>ЧАС</code> — 0–23</div>
+                    <div class="col-auto"><code>ДЕНЬ_МЕС</code> — 1–31</div>
+                    <div class="col-auto"><code>МЕСЯЦ</code> — 1–12</div>
+                    <div class="col-auto"><code>ДЕНЬ_НЕД</code> — 0=Вс, 1=Пн, 2=Вт, 3=Ср, 4=Чт, 5=Пт, 6=Сб</div>
+                </div>
+                <div class="mt-1">
+                    <code>*</code> — любое &nbsp;|&nbsp;
+                    <code>*/N</code> — каждые N &nbsp;|&nbsp;
+                    <code>A,B</code> — несколько значений &nbsp;|&nbsp;
+                    <code>A-B</code> — диапазон
+                </div>
+                <hr class="my-2">
+                <strong>Смещение дат:</strong> <code>-1</code> = вчера, <code>0</code> = сегодня.
+                Обычно: From = −1, To = 0 (проверяем вчера–сегодня).<br>
+                <strong>Пороги:</strong> пад% — падение «в наличии» или товаров; ош% — рост ошибок парсинга.
+            </div>
+        </div>
         </div>
     </div>
 
@@ -202,11 +286,35 @@
 
 <th:block th:fragment="scripts">
 <script>
+    // ---- Чекбокс Вкл/Выкл (AJAX) ----
+    document.querySelectorAll('.sched-enabled-cb').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const shopId = row.dataset.shopId;
+            const wantEnabled = this.checked;
+            this.disabled = true;
+
+            fetch('/zoomos/schedule/' + shopId + '/toggle', { method: 'POST' })
+                .then(r => {
+                    // Сервер редиректит — это ок, обновляем UI вручную
+                    this.checked = wantEnabled;
+                    this.title = wantEnabled
+                        ? 'Расписание включено — нажмите чтобы выключить'
+                        : 'Расписание выключено — нажмите чтобы включить';
+                    this.disabled = false;
+                })
+                .catch(() => {
+                    this.checked = !wantEnabled; // откатить
+                    this.disabled = false;
+                    alert('Ошибка сети');
+                });
+        });
+    });
+
     // ---- Сохранить расписание ----
     document.querySelectorAll('.btn-sched-save').forEach(btn => {
         btn.addEventListener('click', function() {
             const row = this.closest('tr');
-            const shopId = row.dataset.shopId;
             const action = row.dataset.shopAction;
 
             const fd = new FormData();
@@ -215,9 +323,9 @@
             fd.append('dateOffsetTo',   row.querySelector('.sched-offset-to').value);
             fd.append('timeFrom', row.querySelector('.sched-time-from').value || '');
             fd.append('timeTo',   row.querySelector('.sched-time-to').value || '');
-            fd.append('dropThreshold',         row.querySelector('.sched-drop').value);
-            fd.append('errorGrowthThreshold',  row.querySelector('.sched-err').value);
-            fd.append('baselineDays',          row.querySelector('.sched-baseline').value);
+            fd.append('dropThreshold',        row.querySelector('.sched-drop').value);
+            fd.append('errorGrowthThreshold', row.querySelector('.sched-err').value);
+            fd.append('baselineDays',         row.querySelector('.sched-baseline').value);
 
             const orig = this.innerHTML;
             this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -225,9 +333,12 @@
 
             fetch(action, { method: 'POST', body: fd })
                 .then(r => {
-                    if (r.redirected || r.ok) {
+                    if (r.ok || r.redirected) {
                         this.innerHTML = '<i class="fas fa-check"></i>';
                         this.className = 'btn btn-sm btn-success py-0 px-2 btn-sched-save';
+                        // Разблокировать чекбокс если он был disabled (первое сохранение)
+                        const cb = row.querySelector('.sched-enabled-cb');
+                        if (cb) cb.disabled = false;
                         setTimeout(() => {
                             this.innerHTML = orig;
                             this.className = 'btn btn-sm btn-primary py-0 px-2 btn-sched-save';
