@@ -62,7 +62,7 @@ mvn flyway:info
 
 ### 2026-02
 
-- **Zoomos Check — Расписание + Приоритетные сайты** — Cron-расписания автопроверок per-shop (`ZoomosSchedulerService`, `ThreadPoolTaskScheduler`). Флаг `is_priority` в справочнике сайтов. Глобальный баннер в layout при проблемах приоритетных сайтов. Flyway V30. См. секцию ниже.
+- **Zoomos Check — Расписание + Приоритетные сайты** — Cron-расписания автопроверок per-shop (`ZoomosSchedulerService`, `ThreadPoolTaskScheduler`). Флаг `is_priority` в справочнике сайтов. Глобальный баннер в layout при проблемах приоритетных сайтов. Flyway V32. См. секцию ниже.
 - **Zoomos Check — Baseline тренд-анализ** — Исторический анализ метрик выкачек за N дней. TREND_WARNING issues (не влияют на canDeliver). Flyway V29, поле `baselineDays` на форме. См. секцию ниже.
 - **Zoomos Check — CSV для ИТ** — «Текст для ИТ» теперь в формате CSV с разделителем `;` (Сайт;Город;Тип;Сообщение;История).
 - **Zoomos Check** — Проверка выкачки export.zoomos.by: парсинг истории через Playwright, вердикт готовности отчёта, сводка ИТ с копированием. Flyway V23–V28, 2 новые таблицы. См. секцию ниже.
@@ -449,7 +449,7 @@ Utility for merging product data from two sources: source products with analogs 
 - **Расписание**: `/zoomos/schedule` — управление cron-расписаниями по магазинам
 - **Priority Alerts API**: `/zoomos/api/priority-alerts` — JSON-список проблем приоритетных сайтов
 
-### Database Schema (Flyway V23–V30)
+### Database Schema (Flyway V23–V32)
 ```sql
 zoomos_check_runs  -- запись о каждой проверке
   id, shop_id, date_from, date_to, time_from, time_to  -- time_from/time_to: "HH:mm" или null
@@ -578,7 +578,7 @@ zoomos_shop_schedules  -- расписания автопроверок (V30)
 | [V24__add_check_thresholds.sql](src/main/resources/db/migration/V24__add_check_thresholds.sql) | Flyway: пороги dropThreshold/errorGrowthThreshold |
 | [V25__zoomos_sites_and_parsing_stats_update.sql](src/main/resources/db/migration/V25__zoomos_sites_and_parsing_stats_update.sql) | Flyway: zoomos_sites + доп. поля parsing_stats |
 | [V26__add_time_range_to_check_runs.sql](src/main/resources/db/migration/V26__add_time_range_to_check_runs.sql) | Flyway: time_from, time_to в check_runs |
-| [V30__add_schedule_and_priority.sql](src/main/resources/db/migration/V30__add_schedule_and_priority.sql) | Flyway: is_priority в zoomos_sites, CREATE zoomos_shop_schedules |
+| [V32__add_schedule_and_priority.sql](src/main/resources/db/migration/V32__add_schedule_and_priority.sql) | Flyway: is_priority в zoomos_sites, CREATE zoomos_shop_schedules |
 
 ### Технические детали
 
