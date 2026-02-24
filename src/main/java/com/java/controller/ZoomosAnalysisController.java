@@ -8,6 +8,7 @@ import com.java.repository.ZoomosCityNameRepository;
 import com.java.repository.ZoomosCheckRunRepository;
 import com.java.repository.ZoomosKnownSiteRepository;
 import com.java.repository.ZoomosParsingStatsRepository;
+import com.java.repository.ZoomosShopRepository;
 import com.java.repository.ZoomosShopScheduleRepository;
 import com.java.service.ZoomosCheckService;
 import com.java.service.ZoomosParserService;
@@ -48,14 +49,18 @@ public class ZoomosAnalysisController {
     private final ZoomosCityNameRepository cityNameRepository;
     private final ZoomosCityAddressRepository cityAddressRepository;
     private final ZoomosConfig zoomosConfig;
+    private final ZoomosShopRepository shopRepository;
     private final ZoomosShopScheduleRepository scheduleRepository;
     private final ZoomosSchedulerService schedulerService;
 
     @GetMapping({"", "/"})
     public String index(Model model) {
-        List<ZoomosShop> shops = parserService.getAllShops();
+        List<ZoomosShop> allShops = parserService.getAllShops();
+        List<ZoomosShop> shops = allShops.stream().filter(ZoomosShop::isEnabled).collect(Collectors.toList());
+        List<ZoomosShop> disabledShops = allShops.stream().filter(s -> !s.isEnabled()).collect(Collectors.toList());
+
         Map<Long, List<ZoomosCityId>> cityIdsMap = new java.util.LinkedHashMap<>();
-        for (ZoomosShop shop : shops) {
+        for (ZoomosShop shop : allShops) {
             cityIdsMap.put(shop.getId(), parserService.getCityIds(shop.getId()));
         }
         Map<String, String> cityNamesMap = cityNameRepository.findAll().stream()
@@ -64,7 +69,7 @@ public class ZoomosAnalysisController {
 
         // Расписания для badge'ей вкл/выкл на каждой карточке
         Map<Long, ZoomosShopSchedule> schedulesMap = new java.util.LinkedHashMap<>();
-        for (ZoomosShop shop : shops) {
+        for (ZoomosShop shop : allShops) {
             scheduleRepository.findByShopId(shop.getId()).ifPresent(s -> schedulesMap.put(shop.getId(), s));
         }
 
@@ -73,10 +78,12 @@ public class ZoomosAnalysisController {
                 .map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
 
         model.addAttribute("shops", shops);
+        model.addAttribute("disabledShops", disabledShops);
         model.addAttribute("cityIdsMap", cityIdsMap);
         model.addAttribute("cityNamesMap", cityNamesMap);
         model.addAttribute("schedulesMap", schedulesMap);
         model.addAttribute("prioritySiteNames", prioritySiteNames);
+        model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
         return "zoomos/index";
     }
 
@@ -294,6 +301,33 @@ public class ZoomosAnalysisController {
             return ResponseEntity.ok(Map.of("success", true));
         } catch (Exception e) {
             log.error("Ошибка удаления city-id {}", id, e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shops/{shopId}/city-ids/delete-all")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> deleteAllCityIds(@PathVariable Long shopId) {
+        try {
+            cityIdRepository.deleteByShopId(shopId);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            log.error("Ошибка удаления всех city-ids для shopId={}", shopId, e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shops/{shopId}/toggle-enabled")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> toggleShopEnabled(@PathVariable Long shopId) {
+        try {
+            ZoomosShop shop = shopRepository.findById(shopId)
+                    .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopId));
+            shop.setEnabled(!shop.isEnabled());
+            shopRepository.save(shop);
+            return ResponseEntity.ok(Map.of("success", true, "isEnabled", shop.isEnabled()));
+        } catch (Exception e) {
+            log.error("Ошибка переключения enabled для shopId={}", shopId, e);
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
         }
     }

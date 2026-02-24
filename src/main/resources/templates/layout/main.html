@@ -88,10 +88,13 @@
         <strong>Проблемы в приоритетных сайтах:</strong>
         <span id="priority-alerts-text"></span>
         <a href="/zoomos" class="btn btn-sm btn-outline-danger ms-auto">Перейти к Zoomos Check →</a>
+        <button type="button" class="btn-close btn-close-white" id="priority-alerts-close" title="Закрыть до следующей загрузки страницы"></button>
     </div>
 </div>
 <script>
   (function() {
+    var DISMISS_KEY = 'priority-alerts-dismissed';
+    if (sessionStorage.getItem(DISMISS_KEY)) return;
     fetch('/zoomos/api/priority-alerts')
       .then(function(r) { return r.json(); })
       .then(function(data) {
@@ -103,6 +106,10 @@
           document.getElementById('priority-alerts-banner').classList.remove('d-none');
         }
       }).catch(function() {});
+    document.getElementById('priority-alerts-close').addEventListener('click', function() {
+      document.getElementById('priority-alerts-banner').classList.add('d-none');
+      sessionStorage.setItem(DISMISS_KEY, '1');
+    });
   })();
 </script>
 

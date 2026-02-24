@@ -473,27 +473,40 @@
             this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
             this.disabled = true;
 
+            const runBtn = this;
             fetch('/zoomos/check/run', { method: 'POST', body: fd })
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
-                        this.innerHTML = '<i class="fas fa-check"></i>';
-                        this.className = 'btn btn-sm btn-success py-0 px-2 btn-run-now';
-                        setTimeout(() => {
-                            this.innerHTML = orig;
-                            this.className = 'btn btn-sm btn-outline-info py-0 px-2 btn-run-now';
-                            this.disabled = false;
-                        }, 2500);
+                        runBtn.innerHTML = '<i class="fas fa-check"></i>';
+                        runBtn.className = 'btn btn-sm btn-success py-0 px-2 btn-run-now';
+                        // Показываем индикатор выполнения
+                        const indicator = row.querySelector('.sched-running-indicator');
+                        if (indicator) indicator.classList.remove('d-none');
+                        const poll = setInterval(() => {
+                            fetch('/zoomos/check/latest?shopId=' + shopId)
+                                .then(r2 => r2.json())
+                                .then(d => {
+                                    if (d.status !== 'RUNNING') {
+                                        clearInterval(poll);
+                                        if (indicator) indicator.classList.add('d-none');
+                                        runBtn.innerHTML = orig;
+                                        runBtn.className = 'btn btn-sm btn-outline-info py-0 px-2 btn-run-now';
+                                        runBtn.disabled = false;
+                                    }
+                                })
+                                .catch(() => clearInterval(poll));
+                        }, 5000);
                     } else {
                         alert('Ошибка: ' + (data.error || 'неизвестная'));
-                        this.innerHTML = orig;
-                        this.disabled = false;
+                        runBtn.innerHTML = orig;
+                        runBtn.disabled = false;
                     }
                 })
                 .catch(() => {
                     alert('Ошибка сети');
-                    this.innerHTML = orig;
-                    this.disabled = false;
+                    runBtn.innerHTML = orig;
+                    runBtn.disabled = false;
                 });
         });
     });
