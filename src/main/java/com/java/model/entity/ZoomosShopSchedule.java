@@ -25,7 +25,7 @@ public class ZoomosShopSchedule {
 
     @Column(name = "cron_expression", nullable = false)
     @Builder.Default
-    private String cronExpression = "0 8 * * *";
+    private String cronExpression = "0 0 8 * * *";
 
     @Column(name = "is_enabled", nullable = false)
     @Builder.Default

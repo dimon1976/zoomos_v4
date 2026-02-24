@@ -82,7 +82,7 @@
                     <tr>
                         <th style="width:40px" class="text-center" title="Расписание включено">Вкл</th>
                         <th style="min-width:130px">Магазин</th>
-                        <th style="min-width:140px">Cron <span class="text-muted fw-normal" style="font-size:0.78em">(мин час д м нед)</span></th>
+                        <th style="min-width:155px">Cron <span class="text-muted fw-normal" style="font-size:0.78em">(сек мин час д м нед)</span></th>
                         <th style="min-width:120px" class="text-center">Период (offset)</th>
                         <th style="min-width:150px" class="text-center">Время выкачки</th>
                         <th style="min-width:130px" class="text-center" title="Порог падения % / Порог роста ошибок %">Пороги % <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
@@ -112,8 +112,8 @@
                         <!-- Cron -->
                         <td>
                             <input type="text" class="form-control form-control-sm font-monospace sched-cron"
-                                   th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].cronExpression} : '0 8 * * *'"
-                                   placeholder="0 8 * * *">
+                                   th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].cronExpression} : '0 0 8 * * *'"
+                                   placeholder="0 0 8 * * *">
                         </td>
 
                         <!-- Период (offset) -->

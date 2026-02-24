@@ -1498,7 +1498,14 @@
     });
 
     // ---- Загрузка сводки последней проверки при открытии страницы ----
+
+    // Множество магазинов, для которых уже запущен индикатор (чтобы не дублировать)
+    const runningShops = new Set();
+
     function showRunningIndicator(shopId) {
+        if (runningShops.has(shopId)) return;
+        runningShops.add(shopId);
+
         const progressEl = document.getElementById('check-progress-' + shopId);
         const barEl = document.getElementById('check-bar-' + shopId);
         const msgEl = document.getElementById('check-msg-' + shopId);
@@ -1514,11 +1521,12 @@
                 .then(data => {
                     if (data.status !== 'RUNNING') {
                         clearInterval(poll);
+                        runningShops.delete(shopId);
                         if (progressEl) progressEl.style.display = 'none';
                         if (data.runId && data.runId > 0) showCheckResult(shopId, data);
                     }
                 })
-                .catch(() => clearInterval(poll));
+                .catch(() => { clearInterval(poll); runningShops.delete(shopId); });
         }, 5000);
     }
 
@@ -1536,6 +1544,20 @@
             })
             .catch(() => {});
     });
+
+    // Фоновый polling: раз в 30 сек проверяем магазины без активного индикатора
+    setInterval(() => {
+        document.querySelectorAll('.shop-card').forEach(card => {
+            const shopId = card.dataset.shopId;
+            if (!shopId || runningShops.has(shopId)) return;
+            fetch('/zoomos/check/latest?shopId=' + shopId)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'RUNNING') showRunningIndicator(shopId);
+                })
+                .catch(() => {});
+        });
+    }, 30000);
 </script>
 </th:block>
 </html>
