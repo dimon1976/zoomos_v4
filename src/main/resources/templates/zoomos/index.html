@@ -357,7 +357,7 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th style="width:40px" class="text-center">✓</th>
-                                        <th style="width:200px">Сайт-конкурент</th>
+                                        <th style="width:250px">Сайт-конкурент</th>
                                         <th style="width:130px" class="text-center">Тип проверки</th>
                                         <th class="city-ids-col">ID городов</th>
                                         <th style="width:100px" class="text-center">ID адресов</th>
@@ -379,11 +379,11 @@
                                             <a th:if="${baseUrl != null}"
                                                th:href="${baseUrl + '/shop/' + shop.shopName + '/sites-items-mapping?site=' + entry.siteName + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
                                                target="_blank"
-                                               class="ms-1 text-decoration-none"
+                                               class="ms-2 text-decoration-none"
                                                title="Матчинг (только связанные)">
                                                 <i class="fas fa-link text-muted" style="font-size:0.75em;"></i>
                                             </a>
-                                            <button type="button" class="btn btn-link priority-star-btn p-0 ms-1"
+                                            <button type="button" class="btn btn-link priority-star-btn p-0 ms-3"
                                                     th:data-site="${entry.siteName}"
                                                     title="Приоритетный сайт — показывать глобальный баннер при проблемах">
                                                 <i th:class="${prioritySiteNames != null and #sets.contains(prioritySiteNames, entry.siteName)} ? 'fas fa-star text-warning' : 'far fa-star text-secondary'"

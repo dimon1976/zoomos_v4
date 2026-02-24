@@ -249,7 +249,7 @@ public class ZoomosParserService {
      */
     @Transactional
     public String applySyncSettings(String shopName, Map<Long, String> entryIdToCityIds) {
-        shopRepository.findByShopName(shopName.trim().toLowerCase())
+        ZoomosShop shop = shopRepository.findByShopName(shopName.trim().toLowerCase())
                 .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopName));
 
         int updated = 0;
@@ -263,6 +263,8 @@ public class ZoomosParserService {
             }
         }
 
+        shop.setLastSyncedAt(ZonedDateTime.now());
+        shopRepository.save(shop);
         log.info("Apply настроек: обновлено {} записей для {}", updated, shopName);
         return "Обновлено city_ids для " + updated + " сайтов";
     }
@@ -366,6 +368,8 @@ public class ZoomosParserService {
             deleted++;
         }
 
+        shop.setLastSyncedAt(ZonedDateTime.now());
+        shopRepository.save(shop);
         log.info("Apply матчинга: добавлено={}, удалено={} для {}", added, deleted, shopName);
         return String.format("Добавлено: %d, удалено: %d", added, deleted);
     }

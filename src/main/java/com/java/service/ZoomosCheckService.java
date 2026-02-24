@@ -91,7 +91,13 @@ public class ZoomosCheckService {
         Map<String, List<ZoomosCityId>> byType = allCityIds.stream()
                 .collect(Collectors.groupingBy(c -> c.getCheckType() != null ? c.getCheckType() : "API"));
 
+        // Baseline совмещается с основным парсингом: запрашиваем расширенный диапазон дат,
+        // затем разделяем результаты по дате — записи до dateFrom помечаются is_baseline=true.
+        final boolean combineBaseline = (run.getBaselineDays() != null && run.getBaselineDays() > 0);
+        final LocalDate effectiveDateFrom = combineBaseline ? dateFrom.minusDays(run.getBaselineDays()) : dateFrom;
+
         List<ZoomosParsingStats> allStats = new ArrayList<>();
+        List<ZoomosParsingStats> allBaselineStats = new ArrayList<>();
 
         try (Playwright playwright = Playwright.create()) {
             Browser browser = playwright.chromium().launch(
@@ -133,14 +139,16 @@ public class ZoomosCheckService {
 
                 sendProgress(operationId, processed, total, "Проверяем " + siteName + " (API)...");
 
-                List<ZoomosParsingStats> stats = parseApiPage(page, siteName, dateFrom, dateTo, cityIdEntries, run);
+                // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
+                List<ZoomosParsingStats> stats = parseApiPage(page, siteName, effectiveDateFrom, dateTo, cityIdEntries, run);
+                List<ZoomosParsingStats> mainStats = splitBaseline(stats, dateFrom, combineBaseline, allBaselineStats);
                 if (hasTimeFilter) {
-                    stats = filterByTime(stats, rangeStart, rangeEnd);
+                    mainStats = filterByTime(mainStats, rangeStart, rangeEnd);
                 }
-                allStats.addAll(stats);
+                allStats.addAll(mainStats);
 
                 processed += cityIdEntries.size();
-                sendProgress(operationId, processed, total, siteName + " — " + stats.size() + " записей");
+                sendProgress(operationId, processed, total, siteName + " — " + mainStats.size() + " записей");
             }
 
             // --- Парсинг ITEM-сайтов (та же parsing-history + &shop=shopName) ---
@@ -155,15 +163,17 @@ public class ZoomosCheckService {
                 sendProgress(operationId, processed, total,
                         "Проверяем " + siteName + " (ITEM, shop=" + shop.getShopName() + ")...");
 
+                // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
                 List<ZoomosParsingStats> stats = parseItemPage(page, siteName, shop.getShopName(),
-                        dateFrom, dateTo, cityIdEntries, run);
+                        effectiveDateFrom, dateTo, cityIdEntries, run);
+                List<ZoomosParsingStats> mainStats = splitBaseline(stats, dateFrom, combineBaseline, allBaselineStats);
                 if (hasTimeFilter) {
-                    stats = filterByTime(stats, rangeStart, rangeEnd);
+                    mainStats = filterByTime(mainStats, rangeStart, rangeEnd);
                 }
-                allStats.addAll(stats);
+                allStats.addAll(mainStats);
 
                 processed += cityIdEntries.size();
-                sendProgress(operationId, processed, total, siteName + " — " + stats.size() + " записей");
+                sendProgress(operationId, processed, total, siteName + " — " + mainStats.size() + " записей");
             }
 
             // Дополнительный запрос in-progress для сайтов с неполными данными
@@ -219,13 +229,9 @@ public class ZoomosCheckService {
                 }
             }
 
-            // Загружаем baseline-данные (исторический период) если нужно
-            if (run.getBaselineDays() != null && run.getBaselineDays() > 0) {
-                try {
-                    fetchBaselineIfNeeded(page, run, allCityIds, dateFrom, shop.getShopName(), operationId);
-                } catch (Exception ex) {
-                    log.warn("Ошибка загрузки baseline: {}", ex.getMessage());
-                }
+            if (combineBaseline) {
+                log.info("Baseline совмещён с основным парсингом: {} baseline-записей для {}",
+                        allBaselineStats.size(), shop.getShopName());
             }
 
             page.close();
@@ -240,14 +246,19 @@ public class ZoomosCheckService {
             throw new RuntimeException("Ошибка проверки: " + e.getMessage(), e);
         }
 
-        // Сохраняем все результаты
+        // Сохраняем основные результаты
         if (!allStats.isEmpty()) {
             parsingStatsRepository.saveAll(allStats);
             upsertCityNames(allStats);
             upsertCityAddresses(allStats);
         }
 
-        // Подсчитываем итоги
+        // Сохраняем baseline-записи (совмещённые с основным парсингом)
+        if (!allBaselineStats.isEmpty()) {
+            parsingStatsRepository.saveAll(allBaselineStats);
+        }
+
+        // Подсчитываем итоги (только по основным записям, не baseline)
         updateRunSummary(run, allStats, allCityIds);
         run.setStatus("COMPLETED");
         run.setCompletedAt(ZonedDateTime.now());
@@ -255,6 +266,30 @@ public class ZoomosCheckService {
 
         sendProgress(operationId, run.getTotalSites(), run.getTotalSites(), "Проверка завершена");
         return run;
+    }
+
+    /**
+     * Разделяет список записей на основные и baseline.
+     * Записи с startTime до dateFrom (эксклюзивно) помечаются is_baseline=true
+     * и добавляются в baselineAccumulator. Возвращает основные записи.
+     */
+    private List<ZoomosParsingStats> splitBaseline(List<ZoomosParsingStats> stats,
+                                                    LocalDate mainDateFrom,
+                                                    boolean combineBaseline,
+                                                    List<ZoomosParsingStats> baselineAccumulator) {
+        if (!combineBaseline) {
+            return stats;
+        }
+        List<ZoomosParsingStats> main = new ArrayList<>();
+        for (ZoomosParsingStats s : stats) {
+            if (s.getStartTime() != null && s.getStartTime().toLocalDate().isBefore(mainDateFrom)) {
+                s.setIsBaseline(true);
+                baselineAccumulator.add(s);
+            } else {
+                main.add(s);
+            }
+        }
+        return main;
     }
 
     // =========================================================================

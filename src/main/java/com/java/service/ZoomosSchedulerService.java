@@ -66,8 +66,8 @@ public class ZoomosSchedulerService {
 
     private void scheduleCheck(ZoomosShopSchedule s) {
         try {
-            // Unix 5-field cron → Spring 6-field (добавляем "0" в начало для секунд)
-            String springCron = "0 " + s.getCronExpression();
+            // Spring 6-field cron (секунды минуты часы день-мес месяц день-нед; 1=Вс...7=Сб)
+            String springCron = s.getCronExpression();
             ScheduledFuture<?> future = taskScheduler.schedule(
                     () -> runCheck(s), new CronTrigger(springCron));
             scheduleMap.put(s.getShopId(), future);
