@@ -886,56 +886,63 @@ public class ZoomosAnalysisController {
         String dateToStr   = run.getDateTo().format(itDateFmt);
         long ts = System.currentTimeMillis();
 
-        StringBuilder itText = new StringBuilder();
-        itText.append("Сайт;Город;Тип;Описание проблемы;История\n");
+        // Блочный формат: группируем по типу проблемы
+        List<Map<String, Object>> itErrors    = new ArrayList<>();
+        List<Map<String, Object>> itNotFound  = new ArrayList<>();
+        List<Map<String, Object>> itWarnings  = new ArrayList<>();
         for (Map<String, Object> issue : issues) {
-            // TREND_WARNING — только информационный, не включаем в CSV для ИТ
-            if ("TREND_WARNING".equals(issue.get("type"))) continue;
-            String site      = (String) issue.get("site");
-            String city      = (String) issue.get("city");
-            String msg       = (String) issue.get("message");
-            String type      = (String) issue.get("type");
-            String checkType = (String) issue.get("checkType");
-            String shopName  = (String) issue.get("shopName");
-            String cityId    = (String) issue.get("cityId");
-            String addressId = (String) issue.get("addressId");
-            if (cityId == null) cityId = "";
+            String t = (String) issue.get("type");
+            if ("TREND_WARNING".equals(t)) continue;
+            if ("ERROR".equals(t))                          itErrors.add(issue);
+            else if ("NOT_FOUND".equals(t) || "IN_PROGRESS".equals(t)) itNotFound.add(issue);
+            else if ("WARNING".equals(t))                   itWarnings.add(issue);
+        }
 
-            String addrParam = (addressId != null && !addressId.isBlank()) ? addressId : "";
-            String historyUrl = zoomosConfig.getBaseUrl()
-                    + "/shops-parser/" + site + "/parsing-history"
-                    + "?upd=" + ts
-                    + "&dateFrom=" + dateFromStr
-                    + "&dateTo=" + dateToStr
-                    + "&launchDate=&shop=" + ("API".equals(checkType) ? "-" : shopName)
-                    + "&site=&cityId=" + cityId + "&addressId=" + addrParam + "&accountId=&server=";
+        StringBuilder itText = new StringBuilder();
+        for (Map.Entry<String, List<Map<String, Object>>> block : java.util.Arrays.asList(
+                Map.entry("ОШИБКИ", itErrors),
+                Map.entry("НЕТ ДАННЫХ", itNotFound),
+                Map.entry("ПРЕДУПРЕЖДЕНИЯ", itWarnings)
+        )) {
+            if (block.getValue().isEmpty()) continue;
+            if (itText.length() > 0) itText.append("\n");
+            itText.append(block.getKey()).append("\n");
 
-            String cityCell = (city != null && !city.isBlank()) ? city : "";
-            if (addrParam != null && !addrParam.isBlank()) cityCell += " (адрес " + addrParam + ")";
+            for (Map<String, Object> issue : block.getValue()) {
+                String site      = (String) issue.get("site");
+                String city      = (String) issue.get("city");
+                String msg       = (String) issue.get("message");
+                String type      = (String) issue.get("type");
+                String checkType = (String) issue.get("checkType");
+                String shopName  = (String) issue.get("shopName");
+                String cityId    = (String) issue.get("cityId");
+                String addressId = (String) issue.get("addressId");
+                if (cityId == null) cityId = "";
+                String addrParam = (addressId != null && !addressId.isBlank()) ? addressId : "";
 
-            // Тип на русском
-            String typeRu = switch (type != null ? type : "") {
-                case "ERROR"       -> "Ошибка";
-                case "WARNING"     -> "Предупреждение";
-                case "NOT_FOUND"   -> "Нет данных";
-                case "IN_PROGRESS" -> "В процессе";
-                default            -> type != null ? type : "";
-            };
+                String historyUrl = zoomosConfig.getBaseUrl()
+                        + "/shops-parser/" + site + "/parsing-history"
+                        + "?upd=" + ts
+                        + "&dateFrom=" + dateFromStr + "&dateTo=" + dateToStr
+                        + "&launchDate=&shop=" + ("API".equals(checkType) ? "-" : shopName)
+                        + "&site=&cityId=" + cityId + "&addressId=" + addrParam + "&accountId=&server=";
 
-            // Человечное описание проблемы
-            String detail;
-            if ("NOT_FOUND".equals(type) || "IN_PROGRESS".equals(type)) {
-                detail = (msg != null && !msg.isBlank()) ? msg : "Данных за указанный период нет";
-            } else {
-                detail = (msg != null && !msg.isBlank()) ? msg : typeRu;
+                // Только имя города, без числового префикса "3509 - "
+                String cityName = "";
+                if (city != null && !city.isBlank()) {
+                    int dash = city.indexOf(" - ");
+                    cityName = dash >= 0 ? city.substring(dash + 3).trim() : city.trim();
+                }
+
+                String shortMsg = buildShortItMessage(type, msg, addrParam);
+
+                // Строка: site — Город[ — проблема]
+                StringBuilder line = new StringBuilder(site != null ? site : "");
+                if (!cityName.isBlank()) line.append(" — ").append(cityName);
+                if (!shortMsg.isBlank()) line.append(" — ").append(shortMsg);
+                itText.append(line).append("\n");
+                itText.append("  ").append(historyUrl).append("\n");
             }
-
-            // Экранирование: если поле содержит ; или " — обернуть в кавычки
-            itText.append(csvEscape(site)).append(";")
-                  .append(csvEscape(cityCell)).append(";")
-                  .append(csvEscape(typeRu)).append(";")
-                  .append(csvEscape(detail)).append(";")
-                  .append(historyUrl).append("\n");
         }
 
         // Считаем счётчики динамически из текущей оценки, чтобы не зависеть от устаревших run.warningCount
@@ -1472,12 +1479,60 @@ public class ZoomosAnalysisController {
         return ResponseEntity.ok(Map.of("success", true, "isPriority", site.isPriority()));
     }
 
-    /** CSV-экранирование: оборачивает значение в кавычки если содержит ; " или перевод строки. */
-    private static String csvEscape(String value) {
-        if (value == null) return "";
-        if (value.contains(";") || value.contains("\"") || value.contains("\n")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
+    /**
+     * Краткое человечное описание проблемы для "Текст для ИТ".
+     * Убирает технические фразы ("всегда", "нужна проверка"), упрощает стрелки.
+     */
+    private static String buildShortItMessage(String type, String msg, String addrParam) {
+        if ("NOT_FOUND".equals(type)) {
+            return (!addrParam.isBlank()) ? "нет выкачки (адрес " + addrParam + ")" : "";
         }
-        return value;
+        if ("IN_PROGRESS".equals(type)) {
+            if (msg != null) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)%").matcher(msg);
+                if (m.find()) return "выкачка в процессе (" + m.group(1) + "%)";
+            }
+            return "выкачка в процессе";
+        }
+        if (msg == null || msg.isBlank()) return "";
+
+        // "В наличии: 500 → 0 (−100%)" → "в наличии 0 (было 500)"
+        java.util.regex.Matcher mStock = java.util.regex.Pattern
+                .compile("В наличии: (\\d+) → 0").matcher(msg);
+        if (mStock.find()) return "в наличии 0 (было " + mStock.group(1) + ")";
+
+        // "В наличии: 0 ..." → "в наличии 0"
+        if (msg.startsWith("В наличии: 0")) return "в наличии 0";
+
+        // "Падение 'В наличии': 500 → 300 (−40%)" → "в наличии: 500 → 300 (−40%)"
+        if (msg.startsWith("Падение 'В наличии':")) {
+            return "в наличии:" + msg.substring("Падение 'В наличии':".length());
+        }
+
+        // "Рост ошибок: 5 → 50 (+900%)" → "ошибки: 5 → 50"
+        if (msg.startsWith("Рост ошибок:")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+) → (\\d+)").matcher(msg);
+            if (m.find()) return "ошибки: " + m.group(1) + " → " + m.group(2);
+        }
+
+        // "Ошибки парсинга: 0 → N" → "ошибки: N"
+        if (msg.startsWith("Ошибки парсинга:")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("→ (\\d+)").matcher(msg);
+            if (m.find()) return "ошибки: " + m.group(1);
+        }
+
+        // "Падение товаров: 1000 → 500 (−50%)" → "товаров: 1000 → 500 (−50%)"
+        if (msg.startsWith("Падение товаров:")) {
+            return "товаров:" + msg.substring("Падение товаров:".length());
+        }
+
+        // "100% выкачка, нет товаров — нужна проверка" → "нет товаров"
+        if (msg.contains("нет товаров")) return "нет товаров";
+
+        // "В наличии: всегда 0 — нужна проверка" → "в наличии 0"
+        if (msg.contains("всегда 0")) return "в наличии 0";
+
+        // Прочее: отдаём как есть, строчная первая буква
+        return Character.toLowerCase(msg.charAt(0)) + msg.substring(1);
     }
 }
