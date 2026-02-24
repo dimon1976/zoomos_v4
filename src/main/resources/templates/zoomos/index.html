@@ -1545,7 +1545,7 @@
             .catch(() => {});
     });
 
-    // Фоновый polling: раз в 30 сек проверяем магазины без активного индикатора
+    // Фоновый polling: раз в 5 сек проверяем магазины без активного индикатора
     setInterval(() => {
         document.querySelectorAll('.shop-card').forEach(card => {
             const shopId = card.dataset.shopId;
@@ -1557,7 +1557,7 @@
                 })
                 .catch(() => {});
         });
-    }, 30000);
+    }, 5000);
 </script>
 </th:block>
 </html>
