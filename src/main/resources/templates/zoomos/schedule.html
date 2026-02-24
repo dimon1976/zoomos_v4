@@ -51,6 +51,22 @@
         <strong>Например:</strong> <code>0 8 * * *</code> — каждый день в 08:00.
     </div>
 
+    <!-- Фильтрация и поиск -->
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+        <div class="input-group input-group-sm" style="max-width:280px;">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="schedSearch" class="form-control" placeholder="Поиск по магазину...">
+            <button class="btn btn-outline-secondary" type="button" id="schedSearchClear">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="showEnabledOnly">
+            <label class="form-check-label small" for="showEnabledOnly">Только включённые</label>
+        </div>
+        <span id="schedFilterCount" class="text-muted small"></span>
+    </div>
+
     <!-- Таблица расписаний -->
     <div class="card mb-3">
         <div class="card-header py-2">
@@ -78,6 +94,7 @@
                 <tbody>
                     <tr th:each="shop : ${shops}" class="sched-row"
                         th:data-shop-id="${shop.id}"
+                        th:data-shop-name="${shop.shopName}"
                         th:data-shop-action="@{'/zoomos/schedule/' + ${shop.id}}">
 
                         <!-- Чекбокс Вкл/Выкл -->
@@ -150,9 +167,19 @@
 
                         <!-- Последний запуск -->
                         <td class="text-center small text-muted">
-                            <span th:if="${schedules[shop.id]?.lastRunAt != null}"
-                                  th:text="${#temporals.format(schedules[shop.id].lastRunAt, 'dd.MM.yyyy HH:mm')}"></span>
+                            <span th:if="${schedules[shop.id]?.lastRunAt != null}">
+                                <a th:if="${lastRunIds[shop.id] != null}"
+                                   th:href="@{'/zoomos/check/results/' + ${lastRunIds[shop.id]}}"
+                                   class="text-decoration-none"
+                                   th:text="${lastRunFormatted[shop.id]}"></a>
+                                <span th:unless="${lastRunIds[shop.id] != null}"
+                                      th:text="${lastRunFormatted[shop.id]}"></span>
+                            </span>
                             <span th:if="${schedules[shop.id] == null or schedules[shop.id].lastRunAt == null}">—</span>
+                            <span class="sched-running-indicator d-none ms-1">
+                                <i class="fas fa-spinner fa-spin text-primary"></i>
+                                <span class="text-primary">Идёт...</span>
+                            </span>
                         </td>
 
                         <!-- Действия -->
@@ -286,6 +313,38 @@
 
 <th:block th:fragment="scripts">
 <script>
+    // ---- Фильтрация строк ----
+    const schedSearchEl = document.getElementById('schedSearch');
+    const schedSearchClearEl = document.getElementById('schedSearchClear');
+    const showEnabledOnlyEl = document.getElementById('showEnabledOnly');
+    const schedFilterCountEl = document.getElementById('schedFilterCount');
+
+    function filterSchedRows() {
+        const q = schedSearchEl ? schedSearchEl.value.trim().toLowerCase() : '';
+        const onlyEnabled = showEnabledOnlyEl ? showEnabledOnlyEl.checked : false;
+        const rows = document.querySelectorAll('tr.sched-row');
+        let visible = 0;
+        rows.forEach(row => {
+            const name = (row.dataset.shopName || '').toLowerCase();
+            const enabledCb = row.querySelector('.sched-enabled-cb');
+            const isEnabled = enabledCb ? enabledCb.checked : false;
+            const show = (!q || name.includes(q)) && (!onlyEnabled || isEnabled);
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        if (schedFilterCountEl) {
+            schedFilterCountEl.textContent = (q || onlyEnabled)
+                ? 'Показано: ' + visible + ' из ' + rows.length
+                : '';
+        }
+    }
+
+    if (schedSearchEl) {
+        schedSearchEl.addEventListener('input', filterSchedRows);
+        schedSearchClearEl.addEventListener('click', () => { schedSearchEl.value = ''; filterSchedRows(); });
+    }
+    if (showEnabledOnlyEl) showEnabledOnlyEl.addEventListener('change', filterSchedRows);
+
     // ---- Чекбокс Вкл/Выкл (AJAX) ----
     document.querySelectorAll('.sched-enabled-cb').forEach(cb => {
         cb.addEventListener('change', function() {
@@ -302,6 +361,7 @@
                         ? 'Расписание включено — нажмите чтобы выключить'
                         : 'Расписание выключено — нажмите чтобы включить';
                     this.disabled = false;
+                    filterSchedRows();
                 })
                 .catch(() => {
                     this.checked = !wantEnabled; // откатить
@@ -356,6 +416,32 @@
                     this.disabled = false;
                 });
         });
+    });
+
+    // ---- Индикатор текущей проверки (page load) ----
+    document.querySelectorAll('tr.sched-row').forEach(row => {
+        const shopId = row.dataset.shopId;
+        if (!shopId) return;
+        fetch('/zoomos/check/latest?shopId=' + shopId)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'RUNNING') {
+                    const indicator = row.querySelector('.sched-running-indicator');
+                    if (indicator) indicator.classList.remove('d-none');
+                    const poll = setInterval(() => {
+                        fetch('/zoomos/check/latest?shopId=' + shopId)
+                            .then(r2 => r2.json())
+                            .then(d => {
+                                if (d.status !== 'RUNNING') {
+                                    clearInterval(poll);
+                                    if (indicator) indicator.classList.add('d-none');
+                                }
+                            })
+                            .catch(() => clearInterval(poll));
+                    }, 5000);
+                }
+            })
+            .catch(() => {});
     });
 
     // ---- Запустить сейчас ----

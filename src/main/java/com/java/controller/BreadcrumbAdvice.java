@@ -38,6 +38,11 @@ public class BreadcrumbAdvice {
         SEGMENT_NAMES.put("status", "Статус");
         SEGMENT_NAMES.put("setup", "Настройка");
         SEGMENT_NAMES.put("results", "Результаты");
+        SEGMENT_NAMES.put("zoomos", "Анализ выкачки");
+        SEGMENT_NAMES.put("check", "Проверки");
+        SEGMENT_NAMES.put("history", "История");
+        SEGMENT_NAMES.put("schedule", "Расписание");
+        SEGMENT_NAMES.put("sites", "Справочник сайтов");
     }
 
     private final ClientService clientService;

@@ -290,6 +290,7 @@
         <div class="px-3 py-2 border-bottom bg-light" th:id="'check-result-' + ${shop.id}" style="display:none;">
             <div class="d-flex align-items-center gap-3 flex-wrap">
                 <span class="fw-semibold small"><i class="fas fa-check-circle text-success me-1"></i>Проверка завершена</span>
+                <span class="text-muted small" th:id="'result-started-' + ${shop.id}" style="display:none;"></span>
                 <span class="badge bg-light text-dark border small" th:id="'result-period-' + ${shop.id}"></span>
                 <span class="badge bg-success" th:id="'result-ok-' + ${shop.id}">0 OK</span>
                 <span class="badge bg-warning text-dark" th:id="'result-warn-' + ${shop.id}">0 Warn</span>
@@ -1098,6 +1099,11 @@
             periodEl.textContent = fmtDate(data.dateFrom) + ' — ' + fmtDate(data.dateTo);
             periodEl.style.display = '';
         }
+        const startedEl = document.getElementById('result-started-' + shopId);
+        if (startedEl && data.startedAt) {
+            startedEl.textContent = data.startedAt;
+            startedEl.style.display = '';
+        }
         document.getElementById('result-link-' + shopId).href = '/zoomos/check/results/' + data.runId;
         document.getElementById('check-result-' + shopId).style.display = 'block';
     }
@@ -1391,13 +1397,39 @@
     });
 
     // ---- Загрузка сводки последней проверки при открытии страницы ----
+    function showRunningIndicator(shopId) {
+        const progressEl = document.getElementById('check-progress-' + shopId);
+        const barEl = document.getElementById('check-bar-' + shopId);
+        const msgEl = document.getElementById('check-msg-' + shopId);
+        if (progressEl) {
+            progressEl.style.display = 'block';
+            barEl.style.width = '60%';
+            barEl.textContent = 'Идёт проверка...';
+            msgEl.textContent = 'Проверка запущена';
+        }
+        const poll = setInterval(() => {
+            fetch('/zoomos/check/latest?shopId=' + shopId)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status !== 'RUNNING') {
+                        clearInterval(poll);
+                        if (progressEl) progressEl.style.display = 'none';
+                        if (data.runId && data.runId > 0) showCheckResult(shopId, data);
+                    }
+                })
+                .catch(() => clearInterval(poll));
+        }, 5000);
+    }
+
     document.querySelectorAll('.shop-card').forEach(card => {
         const shopId = card.dataset.shopId;
         if (!shopId) return;
         fetch('/zoomos/check/latest?shopId=' + shopId)
             .then(r => r.json())
             .then(data => {
-                if (data.runId && data.runId > 0) {
+                if (data.status === 'RUNNING') {
+                    showRunningIndicator(shopId);
+                } else if (data.runId && data.runId > 0) {
                     showCheckResult(shopId, data);
                 }
             })

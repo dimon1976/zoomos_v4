@@ -11,7 +11,6 @@ import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.UUID;
@@ -79,18 +78,21 @@ public class ZoomosSchedulerService {
     }
 
     private void runCheck(ZoomosShopSchedule s) {
+        // Перезагружаем из БД, чтобы всегда использовать актуальные настройки
+        ZoomosShopSchedule latest = scheduleRepo.findByShopId(s.getShopId()).orElse(s);
         LocalDate today = LocalDate.now();
-        LocalDate dateFrom = today.plusDays(s.getDateOffsetFrom());
-        LocalDate dateTo   = today.plusDays(s.getDateOffsetTo());
+        LocalDate dateFrom = today.plusDays(latest.getDateOffsetFrom());
+        LocalDate dateTo   = today.plusDays(latest.getDateOffsetTo());
         String operationId = UUID.randomUUID().toString();
-        log.info("Автопроверка shopId={}: {} — {}", s.getShopId(), dateFrom, dateTo);
+        log.info("Автопроверка shopId={}: {} — {} (offset {} .. {})",
+                s.getShopId(), dateFrom, dateTo, latest.getDateOffsetFrom(), latest.getDateOffsetTo());
         try {
-            checkService.runCheck(s.getShopId(), dateFrom, dateTo,
-                    s.getTimeFrom(), s.getTimeTo(),
-                    s.getDropThreshold(), s.getErrorGrowthThreshold(),
-                    s.getBaselineDays(), operationId);
+            checkService.runCheck(latest.getShopId(), dateFrom, dateTo,
+                    latest.getTimeFrom(), latest.getTimeTo(),
+                    latest.getDropThreshold(), latest.getErrorGrowthThreshold(),
+                    latest.getBaselineDays(), operationId);
             scheduleRepo.findByShopId(s.getShopId()).ifPresent(schedule -> {
-                schedule.setLastRunAt(ZonedDateTime.now(ZoneOffset.UTC));
+                schedule.setLastRunAt(ZonedDateTime.now());
                 scheduleRepo.save(schedule);
             });
         } catch (Exception e) {

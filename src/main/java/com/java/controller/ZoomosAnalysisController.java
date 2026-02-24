@@ -363,10 +363,10 @@ public class ZoomosAnalysisController {
     // Проверка выкачки
     // =========================================================================
 
+    /** Редирект со старого URL /zoomos/check → /zoomos (убрана страница запуска) */
     @GetMapping("/check")
-    public String checkPage(Model model) {
-        model.addAttribute("shops", parserService.getAllShops());
-        return "zoomos/check";
+    public String checkRedirect() {
+        return "redirect:/zoomos";
     }
 
     @PostMapping("/check/run")
@@ -1058,11 +1058,11 @@ public class ZoomosAnalysisController {
     @GetMapping("/check/latest")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> getLatestRun(@RequestParam Long shopId) {
-        List<ZoomosCheckRun> runs = checkRunRepository.findByShopIdOrderByStartedAtDesc(shopId);
-        if (runs.isEmpty()) {
+        Optional<ZoomosCheckRun> latestOpt = checkRunRepository.findFirstByShopIdOrderByStartedAtDesc(shopId);
+        if (latestOpt.isEmpty()) {
             return ResponseEntity.ok(Map.of("runId", 0));
         }
-        ZoomosCheckRun run = runs.get(0);
+        ZoomosCheckRun run = latestOpt.get();
         Map<String, Object> result = new HashMap<>();
         result.put("runId", run.getId());
         result.put("totalSites", run.getTotalSites());
@@ -1073,6 +1073,11 @@ public class ZoomosAnalysisController {
         result.put("status", run.getStatus());
         result.put("dateFrom", run.getDateFrom() != null ? run.getDateFrom().toString() : null);
         result.put("dateTo", run.getDateTo() != null ? run.getDateTo().toString() : null);
+        if (run.getStartedAt() != null) {
+            result.put("startedAt", run.getStartedAt()
+                    .withZoneSameInstant(java.time.ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")));
+        }
         return ResponseEntity.ok(result);
     }
 
@@ -1158,11 +1163,24 @@ public class ZoomosAnalysisController {
     public String schedulePage(Model model) {
         List<ZoomosShop> shops = parserService.getAllShops();
         Map<Long, ZoomosShopSchedule> schedules = new LinkedHashMap<>();
+        Map<Long, String> lastRunFormatted = new LinkedHashMap<>();
+        Map<Long, Long> lastRunIds = new LinkedHashMap<>();
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
         for (ZoomosShop shop : shops) {
-            scheduleRepository.findByShopId(shop.getId()).ifPresent(s -> schedules.put(shop.getId(), s));
+            scheduleRepository.findByShopId(shop.getId()).ifPresent(s -> {
+                schedules.put(shop.getId(), s);
+                if (s.getLastRunAt() != null) {
+                    lastRunFormatted.put(shop.getId(),
+                            s.getLastRunAt().withZoneSameInstant(java.time.ZoneId.systemDefault()).format(fmt));
+                }
+            });
+            checkRunRepository.findFirstByShopIdOrderByStartedAtDesc(shop.getId())
+                    .ifPresent(run -> lastRunIds.put(shop.getId(), run.getId()));
         }
         model.addAttribute("shops", shops);
         model.addAttribute("schedules", schedules);
+        model.addAttribute("lastRunFormatted", lastRunFormatted);
+        model.addAttribute("lastRunIds", lastRunIds);
         return "zoomos/schedule";
     }
 
@@ -1217,12 +1235,15 @@ public class ZoomosAnalysisController {
             List<ZoomosKnownSite> prioritySites = knownSiteRepository.findAllByIsPriorityTrue();
             if (prioritySites.isEmpty()) return ResponseEntity.ok(List.of());
 
-            Set<String> priorityNames = prioritySites.stream()
-                    .map(ZoomosKnownSite::getSiteName)
-                    .collect(Collectors.toSet());
+            // Регистронезависимый словарь: lowercase → canonical ZoomosKnownSite
+            Map<String, ZoomosKnownSite> priorityByNameLower = prioritySites.stream()
+                    .collect(Collectors.toMap(
+                            s -> s.getSiteName().toLowerCase(),
+                            s -> s,
+                            (a, b) -> a));
+            Set<String> priorityNamesLower = priorityByNameLower.keySet();
 
-            ZonedDateTime startOfDay = java.time.LocalDate.now()
-                    .atStartOfDay(ZoneOffset.UTC);
+            ZonedDateTime startOfDay = java.time.LocalDate.now().atStartOfDay(ZoneOffset.UTC);
             List<ZoomosCheckRun> todayRuns = checkRunRepository.findCompletedToday(startOfDay);
 
             // Берём последний run для каждого магазина
@@ -1231,22 +1252,26 @@ public class ZoomosAnalysisController {
                 latestByShop.putIfAbsent(run.getShop().getId(), run);
             }
 
-            // siteName → {severity, affectedShops, issueCount}
+            // siteName (canonical) → alert map
             Map<String, Map<String, Object>> siteAlerts = new LinkedHashMap<>();
 
             for (ZoomosCheckRun run : latestByShop.values()) {
                 List<ZoomosParsingStats> stats = parsingStatsRepository
                         .findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(run.getId());
 
-                // Группируем по siteName + cityName
-                Map<String, List<ZoomosParsingStats>> bySiteCity = stats.stream()
-                        .filter(s -> priorityNames.contains(s.getSiteName()))
-                        .collect(Collectors.groupingBy(
-                                s -> s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")));
+                // Регистронезависимая группировка по siteName+cityName (только приоритетные)
+                Map<String, List<ZoomosParsingStats>> bySiteCity = new LinkedHashMap<>();
+                for (ZoomosParsingStats s : stats) {
+                    if (s.getSiteName() == null) continue;
+                    if (!priorityNamesLower.contains(s.getSiteName().toLowerCase())) continue;
+                    String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
+                    bySiteCity.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
+                }
 
                 int drop = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
                 int errGrowth = run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30;
 
+                // Оцениваем группы с данными
                 for (Map.Entry<String, List<ZoomosParsingStats>> entry : bySiteCity.entrySet()) {
                     List<ZoomosParsingStats> group = new ArrayList<>(entry.getValue());
                     group.sort(Comparator.comparing(
@@ -1255,22 +1280,29 @@ public class ZoomosAnalysisController {
                     String status = checkService.evaluateGroup(group, drop, errGrowth);
                     if ("OK".equals(status)) continue;
 
-                    String siteName = group.get(0).getSiteName();
-                    siteAlerts.compute(siteName, (k, existing) -> {
-                        if (existing == null) {
-                            Map<String, Object> alert = new LinkedHashMap<>();
-                            alert.put("siteName", siteName);
-                            alert.put("severity", status);
-                            alert.put("issueCount", 1);
-                            alert.put("affectedShops", 1);
-                            return alert;
-                        } else {
-                            existing.put("issueCount", (int) existing.get("issueCount") + 1);
-                            // ERROR приоритетнее WARNING
-                            if ("ERROR".equals(status)) existing.put("severity", "ERROR");
-                            return existing;
-                        }
-                    });
+                    String rawName = group.get(0).getSiteName();
+                    ZoomosKnownSite ks = priorityByNameLower.get(rawName.toLowerCase());
+                    String canonical = ks != null ? ks.getSiteName() : rawName;
+                    mergePriorityAlert(siteAlerts, canonical, status);
+                }
+
+                // NOT_FOUND: ожидаемые приоритетные сайты без данных в этом run
+                Set<String> sitesWithStatsLower = stats.stream()
+                        .filter(s -> s.getSiteName() != null)
+                        .map(s -> s.getSiteName().toLowerCase())
+                        .collect(Collectors.toSet());
+
+                List<ZoomosCityId> shopCityIds = parserService.getCityIds(run.getShop().getId());
+                for (ZoomosCityId cid : shopCityIds) {
+                    if (!Boolean.TRUE.equals(cid.getIsActive())) continue;
+                    if (cid.getSiteName() == null) continue;
+                    String nameLower = cid.getSiteName().toLowerCase();
+                    if (!priorityNamesLower.contains(nameLower)) continue;
+                    if (sitesWithStatsLower.contains(nameLower)) continue; // данные есть
+
+                    ZoomosKnownSite ks = priorityByNameLower.get(nameLower);
+                    String canonical = ks != null ? ks.getSiteName() : cid.getSiteName();
+                    mergePriorityAlert(siteAlerts, canonical, "NOT_FOUND");
                 }
             }
 
@@ -1279,6 +1311,29 @@ public class ZoomosAnalysisController {
             log.error("Ошибка priority-alerts: {}", e.getMessage(), e);
             return ResponseEntity.ok(List.of());
         }
+    }
+
+    private void mergePriorityAlert(Map<String, Map<String, Object>> siteAlerts,
+                                    String siteName, String status) {
+        siteAlerts.compute(siteName, (k, existing) -> {
+            if (existing == null) {
+                Map<String, Object> alert = new LinkedHashMap<>();
+                alert.put("siteName", siteName);
+                alert.put("severity", status);
+                alert.put("issueCount", 1);
+                return alert;
+            } else {
+                existing.put("issueCount", (int) existing.get("issueCount") + 1);
+                // Приоритет тяжести: ERROR > NOT_FOUND > WARNING
+                String cur = (String) existing.get("severity");
+                if ("ERROR".equals(status)
+                        || ("NOT_FOUND".equals(status) && !"ERROR".equals(cur))
+                        || ("WARNING".equals(status) && "OK".equals(cur))) {
+                    existing.put("severity", status);
+                }
+                return existing;
+            }
+        });
     }
 
     // =========================================================================
