@@ -49,6 +49,10 @@ public class ZoomosShopSchedule {
     @Builder.Default
     private int baselineDays = 7;
 
+    @Column(name = "min_absolute_errors", nullable = false)
+    @Builder.Default
+    private int minAbsoluteErrors = 5;
+
     /** Смещение дня "от" относительно сегодня: -1 = вчера */
     @Column(name = "date_offset_from", nullable = false)
     @Builder.Default

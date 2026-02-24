@@ -37,6 +37,7 @@ public class ZoomosCheckService {
     private final ZoomosParsingStatsRepository parsingStatsRepository;
     private final ZoomosCityNameRepository cityNameRepository;
     private final ZoomosCityAddressRepository cityAddressRepository;
+    private final ZoomosKnownSiteRepository knownSiteRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -51,7 +52,7 @@ public class ZoomosCheckService {
     public ZoomosCheckRun runCheck(Long shopId, LocalDate dateFrom, LocalDate dateTo,
                                     String timeFrom, String timeTo,
                                     int dropThreshold, int errorGrowthThreshold,
-                                    int baselineDays, String operationId) {
+                                    int baselineDays, int minAbsoluteErrors, String operationId) {
         ZoomosShop shop = shopRepository.findById(shopId)
                 .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopId));
 
@@ -84,6 +85,7 @@ public class ZoomosCheckService {
                 .dropThreshold(dropThreshold)
                 .errorGrowthThreshold(errorGrowthThreshold)
                 .baselineDays(Math.max(0, baselineDays))
+                .minAbsoluteErrors(Math.max(0, minAbsoluteErrors))
                 .build();
         run = checkRunRepository.save(run);
 
@@ -1014,6 +1016,11 @@ public class ZoomosCheckService {
             }
         }
 
+        // Загружаем сайты с ignoreStock один раз перед циклом оценки
+        Set<String> ignoreStockSites = knownSiteRepository.findAllByIgnoreStockTrue()
+                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+        int minAbsErrors = run.getMinAbsoluteErrors() != null ? run.getMinAbsoluteErrors() : 5;
+
         // Оцениваем каждую группу site+city
         for (Map.Entry<String, List<ZoomosParsingStats>> entry : grouped.entrySet()) {
             List<ZoomosParsingStats> group = entry.getValue();
@@ -1022,7 +1029,10 @@ public class ZoomosCheckService {
                     s -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now(),
                     Comparator.naturalOrder()));
 
-            String status = evaluateGroup(group, run.getDropThreshold(), run.getErrorGrowthThreshold());
+            boolean ignoreStock = group.get(0).getSiteName() != null
+                    && ignoreStockSites.contains(group.get(0).getSiteName());
+            String status = evaluateGroup(group, run.getDropThreshold(), run.getErrorGrowthThreshold(),
+                    minAbsErrors, ignoreStock);
             switch (status) {
                 case "ERROR": error++; break;
                 case "WARNING": warning++; break;
@@ -1039,14 +1049,13 @@ public class ZoomosCheckService {
     /**
      * Оценивает группу выкачек (один site+city за весь период).
      * Сортировка: ASC по startTime (от старых к новым).
-     * Сравнивает последовательные выкачки: рост ошибок, падение "В наличии".
      *
-     * Ключевая логика inStock:
-     * - Если ВО ВСЕХ записях inStock == 0 или null — OK (особенность сайта, всегда нули)
-     * - Если было > 0, а стало 0 — ERROR (явная проблема)
-     * - Падение > dropThreshold% — WARNING, > dropThreshold*3% — ERROR
+     * @param ignoreStock если true — весь inStock-анализ пропускается (сайт без данных о наличии)
+     * @param minAbsoluteErrors минимальное абсолютное число ошибок для срабатывания варнинга
      */
-    public String evaluateGroup(List<ZoomosParsingStats> sortedGroup, int dropThreshold, int errorGrowthThreshold) {
+    public String evaluateGroup(List<ZoomosParsingStats> sortedGroup,
+                                 int dropThreshold, int errorGrowthThreshold,
+                                 int minAbsoluteErrors, boolean ignoreStock) {
         // sortedGroup отсортирован ASC (от старых к новым)
         ZoomosParsingStats newest = sortedGroup.get(sortedGroup.size() - 1);
 
@@ -1066,10 +1075,6 @@ public class ZoomosCheckService {
         // Сравниваем только ПОСЛЕДНЮЮ выкачку с ПРЕДПОСЛЕДНЕЙ — текущее состояние
         ZoomosParsingStats prev = sortedGroup.get(sortedGroup.size() - 2);
 
-        // Проверяем, всегда ли inStock == 0/null во всей истории (особенность сайта)
-        boolean alwaysZeroStock = sortedGroup.stream()
-                .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
-
         boolean hasWarning = false;
         boolean hasError = false;
 
@@ -1085,32 +1090,47 @@ public class ZoomosCheckService {
         double dropThresholdFraction = dropThreshold / 100.0;
         double errGrowthFraction = errorGrowthThreshold / 100.0;
 
-        // --- ERROR только: падение "В наличии" (только если не всегда нули) ---
-        if (!alwaysZeroStock) {
-            Integer prevStock = prev.getInStock();
-            Integer newStock = newest.getInStock();
-            if (prevStock != null && prevStock > 0) {
+        // --- inStock-анализ (пропускается для сайтов с ignoreStock) ---
+        if (!ignoreStock) {
+            boolean alwaysZeroStock = sortedGroup.stream()
+                    .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
+
+            if (!alwaysZeroStock) {
+                // Проверяем текущее значение: если 0 — ERROR (охватывает [500,0,0] и [500,0])
+                Integer newStock = newest.getInStock();
                 if (newStock != null && newStock == 0) {
                     hasError = true;
                 } else if (newStock != null) {
-                    double drop = (double)(prevStock - newStock) / prevStock;
-                    if (drop > dropThresholdFraction) {
-                        hasError = true;
+                    Integer prevStock = prev.getInStock();
+                    if (prevStock != null && prevStock > 0) {
+                        double drop = (double)(prevStock - newStock) / prevStock;
+                        if (drop > dropThresholdFraction) {
+                            hasError = true;
+                        }
                     }
+                }
+            } else {
+                // alwaysZeroStock: предупреждаем если в сайте есть товары (сломан давно)
+                boolean hasAnyProducts = sortedGroup.stream()
+                        .anyMatch(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0);
+                if (hasAnyProducts) {
+                    hasWarning = true;
                 }
             }
         }
 
-        // --- WARNING: рост ошибок ---
+        // --- WARNING: рост ошибок (только если достигнут минимальный порог) ---
         int prevErrors = prev.getErrorCount() != null ? prev.getErrorCount() : 0;
         int newErrors = newest.getErrorCount() != null ? newest.getErrorCount() : 0;
-        if (prevErrors > 0 && newErrors > prevErrors) {
-            double growth = (double)(newErrors - prevErrors) / prevErrors;
-            if (growth > errGrowthFraction) {
+        if (newErrors >= minAbsoluteErrors) {
+            if (prevErrors > 0 && newErrors > prevErrors) {
+                double growth = (double)(newErrors - prevErrors) / prevErrors;
+                if (growth > errGrowthFraction) {
+                    hasWarning = true;
+                }
+            } else if (prevErrors == 0) {
                 hasWarning = true;
             }
-        } else if (prevErrors == 0 && newErrors > 10) {
-            hasWarning = true;
         }
 
         // --- WARNING: падение товаров ---

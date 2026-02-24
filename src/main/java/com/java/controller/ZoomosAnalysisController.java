@@ -413,9 +413,10 @@ public class ZoomosAnalysisController {
             @RequestParam(required = false) String timeTo,
             @RequestParam(defaultValue = "10") int dropThreshold,
             @RequestParam(defaultValue = "30") int errorGrowthThreshold,
-            @RequestParam(defaultValue = "7") int baselineDays) {
-        log.info("runCheck: shopId={} dateFrom='{}' dateTo='{}' timeFrom='{}' timeTo='{}' baselineDays={}",
-                shopId, dateFrom, dateTo, timeFrom, timeTo, baselineDays);
+            @RequestParam(defaultValue = "7") int baselineDays,
+            @RequestParam(defaultValue = "5") int minAbsoluteErrors) {
+        log.info("runCheck: shopId={} dateFrom='{}' dateTo='{}' timeFrom='{}' timeTo='{}' baselineDays={} minAbsoluteErrors={}",
+                shopId, dateFrom, dateTo, timeFrom, timeTo, baselineDays, minAbsoluteErrors);
         if (dateFrom == null || dateFrom.isBlank() || dateTo == null || dateTo.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Не указаны даты проверки"));
         }
@@ -429,14 +430,15 @@ public class ZoomosAnalysisController {
         }
         final String tf = (timeFrom != null && !timeFrom.isBlank()) ? timeFrom : null;
         final String tt = (timeTo   != null && !timeTo.isBlank())   ? timeTo   : null;
-        final int bl = Math.max(0, baselineDays);
+        final int bl  = Math.max(0, baselineDays);
+        final int mae = Math.max(0, minAbsoluteErrors);
         try {
             String operationId = UUID.randomUUID().toString();
 
             // Запускаем в фоне, чтобы не блокировать HTTP
             CompletableFuture.runAsync(() -> {
                 try {
-                    checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, operationId);
+                    checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, mae, operationId);
                 } catch (Exception e) {
                     log.error("Ошибка фоновой проверки: {}", e.getMessage(), e);
                 }
@@ -479,6 +481,10 @@ public class ZoomosAnalysisController {
 
         int dropThreshold = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
         int errorGrowthThreshold = run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30;
+        int minAbsoluteErrors = run.getMinAbsoluteErrors() != null ? run.getMinAbsoluteErrors() : 5;
+
+        Set<String> ignoreStockSites = knownSiteRepository.findAllByIgnoreStockTrue()
+                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
 
         // Группируем по site+city+address для оценки динамики.
         // Строки с addressId → отдельная группа внутри города (address-level проверка).
@@ -500,10 +506,14 @@ public class ZoomosAnalysisController {
             group.sort(Comparator.comparing(
                     s -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now(),
                     Comparator.naturalOrder()));
-            String status = checkService.evaluateGroup(group, dropThreshold, errorGrowthThreshold);
+            boolean ignoreStock = group.get(0).getSiteName() != null
+                    && ignoreStockSites.contains(group.get(0).getSiteName());
+            String status = checkService.evaluateGroup(group, dropThreshold, errorGrowthThreshold,
+                    minAbsoluteErrors, ignoreStock);
             siteCityStatuses.put(entry.getKey(), status);
             if (!"OK".equals(status)) {
-                buildGroupIssues(group, status, dropThreshold, errorGrowthThreshold, issues, run.getShop().getShopName());
+                buildGroupIssues(group, status, dropThreshold, errorGrowthThreshold,
+                        minAbsoluteErrors, ignoreStock, issues, run.getShop().getShopName());
             }
         }
 
@@ -930,6 +940,7 @@ public class ZoomosAnalysisController {
 
     private void buildGroupIssues(List<ZoomosParsingStats> sortedAsc, String groupStatus,
                                     int dropThreshold, int errorGrowthThreshold,
+                                    int minAbsoluteErrors, boolean ignoreStock,
                                     List<Map<String, Object>> issues, String shopName) {
         ZoomosParsingStats newest = sortedAsc.get(sortedAsc.size() - 1);
 
@@ -961,59 +972,79 @@ public class ZoomosAnalysisController {
         if (sortedAsc.size() < 2) return;
         // Оцениваем только последнюю пару (текущее состояние)
         ZoomosParsingStats prev = sortedAsc.get(sortedAsc.size() - 2);
-        boolean alwaysZeroStock = sortedAsc.stream()
-                .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
 
-        // ERROR только: падение "В наличии"
-        if (!alwaysZeroStock) {
+        // --- inStock-анализ (пропускается для сайтов с ignoreStock) ---
+        if (!ignoreStock) {
+            boolean alwaysZeroStock = sortedAsc.stream()
+                    .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
             Integer prevStock = prev.getInStock();
             Integer newStock = newest.getInStock();
-            if (prevStock != null && prevStock > 0) {
-                if (newStock != null && newStock == 0) {
+
+            if (!alwaysZeroStock && newStock != null && newStock == 0) {
+                // Ищем последнее ненулевое значение в истории
+                int lastNonZero = sortedAsc.subList(0, sortedAsc.size() - 1).stream()
+                        .filter(s -> s.getInStock() != null && s.getInStock() > 0)
+                        .mapToInt(ZoomosParsingStats::getInStock).max().orElse(0);
+                String msg = lastNonZero > 0
+                        ? String.format("В наличии: %d → 0 (−100%%)", lastNonZero)
+                        : "В наличии: 0 (нет товаров в наличии)";
+                Map<String, Object> issue = new LinkedHashMap<>();
+                issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                issue.put("addressId", addressId); issue.put("addressName", addressName);
+                issue.put("checkType", checkType); issue.put("shopName", shopName);
+                issue.put("type", "ERROR");
+                issue.put("message", msg);
+                issues.add(issue);
+            } else if (!alwaysZeroStock && prevStock != null && prevStock > 0 && newStock != null) {
+                double drop = (double)(prevStock - newStock) / prevStock * 100;
+                if (drop > dropThreshold) {
                     Map<String, Object> issue = new LinkedHashMap<>();
                     issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
                     issue.put("addressId", addressId); issue.put("addressName", addressName);
                     issue.put("checkType", checkType); issue.put("shopName", shopName);
                     issue.put("type", "ERROR");
-                    issue.put("message", String.format("В наличии: %d → 0 (−100%%)", prevStock));
+                    issue.put("message", String.format("Падение 'В наличии': %d → %d (−%.0f%%)", prevStock, newStock, drop));
                     issues.add(issue);
-                } else if (newStock != null) {
-                    double drop = (double)(prevStock - newStock) / prevStock * 100;
-                    if (drop > dropThreshold) {
-                        Map<String, Object> issue = new LinkedHashMap<>();
-                        issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                        issue.put("addressId", addressId); issue.put("addressName", addressName);
-                        issue.put("checkType", checkType); issue.put("shopName", shopName);
-                        issue.put("type", "ERROR");
-                        issue.put("message", String.format("Падение 'В наличии': %d → %d (−%.0f%%)", prevStock, newStock, drop));
-                        issues.add(issue);
-                    }
+                }
+            } else if (alwaysZeroStock) {
+                boolean hasAnyProducts = sortedAsc.stream()
+                        .anyMatch(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0);
+                if (hasAnyProducts) {
+                    Map<String, Object> issue = new LinkedHashMap<>();
+                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                    issue.put("addressId", addressId); issue.put("addressName", addressName);
+                    issue.put("checkType", checkType); issue.put("shopName", shopName);
+                    issue.put("type", "WARNING");
+                    issue.put("message", "В наличии: всегда 0 — нужна проверка");
+                    issues.add(issue);
                 }
             }
         }
 
-        // WARNING: рост ошибок
+        // WARNING: рост ошибок (только если достигнут минимальный абсолютный порог)
         int prevErr = prev.getErrorCount() != null ? prev.getErrorCount() : 0;
         int newErr = newest.getErrorCount() != null ? newest.getErrorCount() : 0;
-        if (prevErr > 0 && newErr > prevErr) {
-            double growth = (double)(newErr - prevErr) / prevErr * 100;
-            if (growth > errorGrowthThreshold) {
+        if (newErr >= minAbsoluteErrors) {
+            if (prevErr > 0 && newErr > prevErr) {
+                double growth = (double)(newErr - prevErr) / prevErr * 100;
+                if (growth > errorGrowthThreshold) {
+                    Map<String, Object> issue = new LinkedHashMap<>();
+                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                    issue.put("addressId", addressId); issue.put("addressName", addressName);
+                    issue.put("checkType", checkType); issue.put("shopName", shopName);
+                    issue.put("type", "WARNING");
+                    issue.put("message", String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErr, newErr, growth));
+                    issues.add(issue);
+                }
+            } else if (prevErr == 0) {
                 Map<String, Object> issue = new LinkedHashMap<>();
                 issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
                 issue.put("addressId", addressId); issue.put("addressName", addressName);
                 issue.put("checkType", checkType); issue.put("shopName", shopName);
                 issue.put("type", "WARNING");
-                issue.put("message", String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErr, newErr, growth));
+                issue.put("message", String.format("Ошибки парсинга: 0 → %d", newErr));
                 issues.add(issue);
             }
-        } else if (prevErr == 0 && newErr > 10) {
-            Map<String, Object> issue = new LinkedHashMap<>();
-            issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-            issue.put("addressId", addressId); issue.put("addressName", addressName);
-            issue.put("checkType", checkType); issue.put("shopName", shopName);
-            issue.put("type", "WARNING");
-            issue.put("message", String.format("Ошибки парсинга: 0 → %d", newErr));
-            issues.add(issue);
         }
 
         // WARNING: падение товаров
@@ -1226,6 +1257,7 @@ public class ZoomosAnalysisController {
                                @RequestParam(defaultValue = "10") int dropThreshold,
                                @RequestParam(defaultValue = "30") int errorGrowthThreshold,
                                @RequestParam(defaultValue = "7") int baselineDays,
+                               @RequestParam(defaultValue = "5") int minAbsoluteErrors,
                                @RequestParam(defaultValue = "-1") int dateOffsetFrom,
                                @RequestParam(defaultValue = "0") int dateOffsetTo,
                                RedirectAttributes ra) {
@@ -1237,6 +1269,7 @@ public class ZoomosAnalysisController {
         schedule.setDropThreshold(dropThreshold);
         schedule.setErrorGrowthThreshold(errorGrowthThreshold);
         schedule.setBaselineDays(baselineDays);
+        schedule.setMinAbsoluteErrors(Math.max(0, minAbsoluteErrors));
         schedule.setDateOffsetFrom(dateOffsetFrom);
         schedule.setDateOffsetTo(dateOffsetTo);
         schedulerService.saveAndReschedule(schedule);
@@ -1304,6 +1337,11 @@ public class ZoomosAnalysisController {
 
                 int drop = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
                 int errGrowth = run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30;
+                int minAbsErr = run.getMinAbsoluteErrors() != null ? run.getMinAbsoluteErrors() : 5;
+
+                // Загружаем ignoreStockSites для этого run
+                Set<String> ignoreStockSitesAlert = knownSiteRepository.findAllByIgnoreStockTrue()
+                        .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
 
                 // Оцениваем группы с данными
                 for (Map.Entry<String, List<ZoomosParsingStats>> entry : bySiteCity.entrySet()) {
@@ -1311,7 +1349,9 @@ public class ZoomosAnalysisController {
                     group.sort(Comparator.comparing(
                             s -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now(),
                             Comparator.naturalOrder()));
-                    String status = checkService.evaluateGroup(group, drop, errGrowth);
+                    boolean ignoreStk = group.get(0).getSiteName() != null
+                            && ignoreStockSitesAlert.contains(group.get(0).getSiteName());
+                    String status = checkService.evaluateGroup(group, drop, errGrowth, minAbsErr, ignoreStk);
                     if ("OK".equals(status)) continue;
 
                     String rawName = group.get(0).getSiteName();
@@ -1381,6 +1421,16 @@ public class ZoomosAnalysisController {
             site.setPriority(!site.isPriority());
             knownSiteRepository.save(site);
             return ResponseEntity.ok(Map.<String, Object>of("success", true, "isPriority", site.isPriority()));
+        }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден")));
+    }
+
+    @PostMapping("/sites/{id}/ignore-stock")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> toggleIgnoreStock(@PathVariable Long id) {
+        return knownSiteRepository.findById(id).map(site -> {
+            site.setIgnoreStock(!site.isIgnoreStock());
+            knownSiteRepository.save(site);
+            return ResponseEntity.ok(Map.<String, Object>of("success", true, "ignoreStock", site.isIgnoreStock()));
         }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден")));
     }
 

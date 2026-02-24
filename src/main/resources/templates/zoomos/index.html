@@ -276,6 +276,9 @@
                 <span class="small text-muted ms-2" title="Горизонт сравнения с историей (0 = без анализа)">Baseline</span>
                 <input type="number" class="form-control form-control-sm check-baseline-days"
                        th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30" style="width:55px;">
+                <span class="small text-muted ms-2" title="Мин. абсолютное число ошибок для срабатывания варнинга">Мин.ошибок</span>
+                <input type="number" class="form-control form-control-sm check-min-abs-errors"
+                       th:id="'minAbsErrors-' + ${shop.id}" value="5" min="0" max="1000" style="width:60px;">
             </div>
         </div>
 
@@ -576,6 +579,13 @@
             baselineDaysEl.value = localStorage.getItem('checkBaselineDays-' + shopId) || '7';
             baselineDaysEl.addEventListener('change', () =>
                 localStorage.setItem('checkBaselineDays-' + shopId, baselineDaysEl.value));
+        }
+
+        const minAbsErrorsEl = document.getElementById('minAbsErrors-' + shopId);
+        if (minAbsErrorsEl) {
+            minAbsErrorsEl.value = localStorage.getItem('checkMinAbsErrors-' + shopId) || '5';
+            minAbsErrorsEl.addEventListener('change', () =>
+                localStorage.setItem('checkMinAbsErrors-' + shopId, minAbsErrorsEl.value));
         }
     });
 
@@ -1027,6 +1037,8 @@
 
             const baselineDaysEl2 = document.getElementById('baselineDays-' + shopId);
             const baselineDays = baselineDaysEl2 ? (baselineDaysEl2.value || '7') : '7';
+            const minAbsErrorsEl2 = document.getElementById('minAbsErrors-' + shopId);
+            const minAbsErrors = minAbsErrorsEl2 ? (minAbsErrorsEl2.value || '5') : '5';
 
             const fd = new FormData();
             fd.append('shopId', shopId);
@@ -1037,6 +1049,7 @@
             fd.append('dropThreshold', dropThreshold);
             fd.append('errorGrowthThreshold', errThreshold);
             fd.append('baselineDays', baselineDays);
+            fd.append('minAbsoluteErrors', minAbsErrors);
 
             const btnRef = this;
 

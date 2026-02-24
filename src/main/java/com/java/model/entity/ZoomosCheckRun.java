@@ -69,6 +69,10 @@ public class ZoomosCheckRun {
     @Builder.Default
     private Integer baselineDays = 7;
 
+    @Column(name = "min_absolute_errors")
+    @Builder.Default
+    private Integer minAbsoluteErrors = 5;
+
     @Column(name = "status")
     @Builder.Default
     private String status = "RUNNING";

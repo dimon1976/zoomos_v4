@@ -92,7 +92,7 @@ public class ZoomosSchedulerService {
             checkService.runCheck(latest.getShopId(), dateFrom, dateTo,
                     latest.getTimeFrom(), latest.getTimeTo(),
                     latest.getDropThreshold(), latest.getErrorGrowthThreshold(),
-                    latest.getBaselineDays(), operationId);
+                    latest.getBaselineDays(), latest.getMinAbsoluteErrors(), operationId);
             scheduleRepo.findByShopId(s.getShopId()).ifPresent(schedule -> {
                 schedule.setLastRunAt(ZonedDateTime.now());
                 scheduleRepo.save(schedule);
