@@ -11,8 +11,11 @@ import com.microsoft.playwright.options.LoadState;
 import com.microsoft.playwright.options.SameSiteAttribute;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -40,6 +43,19 @@ public class ZoomosCheckService {
     private final ZoomosKnownSiteRepository knownSiteRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
+
+    // Self-injection для REQUIRES_NEW транзакций (немедленный коммит run-записи)
+    @Autowired @Lazy
+    private ZoomosCheckService self;
+
+    /**
+     * Сохраняет ZoomosCheckRun в отдельной транзакции (REQUIRES_NEW) — коммитится немедленно,
+     * чтобы запись с status=RUNNING была видна другим транзакциям во время проверки.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public ZoomosCheckRun saveRunImmediate(ZoomosCheckRun run) {
+        return checkRunRepository.save(run);
+    }
 
     private static final DateTimeFormatter DATE_PARAM_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     private static final DateTimeFormatter DATETIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yy H:mm");
@@ -87,7 +103,8 @@ public class ZoomosCheckService {
                 .baselineDays(Math.max(0, baselineDays))
                 .minAbsoluteErrors(Math.max(0, minAbsoluteErrors))
                 .build();
-        run = checkRunRepository.save(run);
+        // Сохраняем в REQUIRES_NEW транзакции → немедленный коммит → status=RUNNING виден в БД
+        run = self.saveRunImmediate(run);
 
         // Группируем по типу проверки
         Map<String, List<ZoomosCityId>> byType = allCityIds.stream()
@@ -243,7 +260,8 @@ public class ZoomosCheckService {
             log.error("Ошибка проверки выкачки для {}: {}", shop.getShopName(), e.getMessage(), e);
             run.setStatus("FAILED");
             run.setCompletedAt(ZonedDateTime.now());
-            checkRunRepository.save(run);
+            // REQUIRES_NEW — коммит FAILED не откатится при re-throw исключения
+            self.saveRunImmediate(run);
             sendProgress(operationId, 0, 0, "Ошибка: " + e.getMessage());
             throw new RuntimeException("Ошибка проверки: " + e.getMessage(), e);
         }
