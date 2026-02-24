@@ -439,6 +439,11 @@ public class ZoomosAnalysisController {
             CompletableFuture.runAsync(() -> {
                 try {
                     checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, mae, operationId);
+                    // Обновляем lastRunAt в расписании (если оно существует)
+                    scheduleRepository.findByShopId(shopId).ifPresent(schedule -> {
+                        schedule.setLastRunAt(java.time.ZonedDateTime.now());
+                        scheduleRepository.save(schedule);
+                    });
                 } catch (Exception e) {
                     log.error("Ошибка фоновой проверки: {}", e.getMessage(), e);
                 }
@@ -882,7 +887,7 @@ public class ZoomosAnalysisController {
         long ts = System.currentTimeMillis();
 
         StringBuilder itText = new StringBuilder();
-        itText.append("Сайт;Город;Тип;Сообщение;История\n");
+        itText.append("Сайт;Город;Тип;Описание проблемы;История\n");
         for (Map<String, Object> issue : issues) {
             // TREND_WARNING — только информационный, не включаем в CSV для ИТ
             if ("TREND_WARNING".equals(issue.get("type"))) continue;
@@ -907,12 +912,28 @@ public class ZoomosAnalysisController {
 
             String cityCell = (city != null && !city.isBlank()) ? city : "";
             if (addrParam != null && !addrParam.isBlank()) cityCell += " (адрес " + addrParam + ")";
-            String detail = (msg != null && !msg.isBlank()) ? msg : type;
+
+            // Тип на русском
+            String typeRu = switch (type != null ? type : "") {
+                case "ERROR"       -> "Ошибка";
+                case "WARNING"     -> "Предупреждение";
+                case "NOT_FOUND"   -> "Нет данных";
+                case "IN_PROGRESS" -> "В процессе";
+                default            -> type != null ? type : "";
+            };
+
+            // Человечное описание проблемы
+            String detail;
+            if ("NOT_FOUND".equals(type) || "IN_PROGRESS".equals(type)) {
+                detail = (msg != null && !msg.isBlank()) ? msg : "Данных за указанный период нет";
+            } else {
+                detail = (msg != null && !msg.isBlank()) ? msg : typeRu;
+            }
 
             // Экранирование: если поле содержит ; или " — обернуть в кавычки
             itText.append(csvEscape(site)).append(";")
                   .append(csvEscape(cityCell)).append(";")
-                  .append(csvEscape(type)).append(";")
+                  .append(csvEscape(typeRu)).append(";")
                   .append(csvEscape(detail)).append(";")
                   .append(historyUrl).append("\n");
         }

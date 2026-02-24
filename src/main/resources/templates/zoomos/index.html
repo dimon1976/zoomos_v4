@@ -276,7 +276,7 @@
                 <span class="small text-muted ms-2" title="Горизонт сравнения с историей (0 = без анализа)">Baseline</span>
                 <input type="number" class="form-control form-control-sm check-baseline-days"
                        th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30" style="width:55px;">
-                <span class="small text-muted ms-2" title="Мин. абсолютное число ошибок для срабатывания варнинга">Мин.ошибок</span>
+                <span class="small text-muted ms-2" title="Минимальное абсолютное число ошибок парсинга для варнинга. При значении 5: рост 1→2 — не варнинг, рост 5→15 — варнинг. Убирает шум на крупных сайтах.">Мин.ошибок <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
                 <input type="number" class="form-control form-control-sm check-min-abs-errors"
                        th:id="'minAbsErrors-' + ${shop.id}" value="5" min="0" max="1000" style="width:60px;">
             </div>

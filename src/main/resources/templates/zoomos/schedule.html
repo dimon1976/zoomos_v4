@@ -61,7 +61,7 @@
             </button>
         </div>
         <div class="form-check form-switch mb-0">
-            <input class="form-check-input" type="checkbox" id="showEnabledOnly">
+            <input class="form-check-input" type="checkbox" id="showEnabledOnly" checked>
             <label class="form-check-label small" for="showEnabledOnly">Только включённые</label>
         </div>
         <span id="schedFilterCount" class="text-muted small"></span>
@@ -87,7 +87,8 @@
                         <th style="min-width:150px" class="text-center">Время выкачки</th>
                         <th style="min-width:130px" class="text-center" title="Порог падения % / Порог роста ошибок %">Пороги % <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
                         <th style="min-width:80px" class="text-center">Baseline дней</th>
-                        <th style="min-width:75px" class="text-center" title="Мин. абсолютное число ошибок для варнинга">Мин.ошибок</th>
+                        <th style="min-width:75px" class="text-center"
+                            title="Минимальное абсолютное число ошибок парсинга для срабатывания предупреждения. Например, при значении 5: рост с 1 до 2 ошибок — не варнинг, а рост с 5 до 15 — варнинг. Помогает избежать ложных срабатываний на крупных сайтах.">Мин.ошибок <i class="fas fa-info-circle text-muted" style="font-size:0.75em"></i></th>
                         <th style="min-width:140px" class="text-center">Последний запуск</th>
                         <th style="min-width:110px" class="text-center">Действия</th>
                     </tr>
@@ -353,6 +354,9 @@
         schedSearchClearEl.addEventListener('click', () => { schedSearchEl.value = ''; filterSchedRows(); });
     }
     if (showEnabledOnlyEl) showEnabledOnlyEl.addEventListener('change', filterSchedRows);
+
+    // Применяем фильтр сразу при загрузке (чекбокс checked по умолчанию)
+    filterSchedRows();
 
     // ---- Чекбокс Вкл/Выкл (AJAX) ----
     document.querySelectorAll('.sched-enabled-cb').forEach(cb => {
