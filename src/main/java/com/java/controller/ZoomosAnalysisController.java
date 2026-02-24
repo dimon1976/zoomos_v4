@@ -927,18 +927,15 @@ public class ZoomosAnalysisController {
                         + "&launchDate=&shop=" + ("API".equals(checkType) ? "-" : shopName)
                         + "&site=&cityId=" + cityId + "&addressId=" + addrParam + "&accountId=&server=";
 
-                // Только имя города, без числового префикса "3509 - "
-                String cityName = "";
-                if (city != null && !city.isBlank()) {
-                    int dash = city.indexOf(" - ");
-                    cityName = dash >= 0 ? city.substring(dash + 3).trim() : city.trim();
-                }
+                // Город с ID (например "3509 - Вологда") + адрес если задан
+                String cityDisplay = (city != null && !city.isBlank()) ? city.trim() : "";
+                if (!addrParam.isBlank()) cityDisplay += " (адрес " + addrParam + ")";
 
                 String shortMsg = buildShortItMessage(type, msg, addrParam);
 
-                // Строка: site — Город[ — проблема]
+                // Строка: site — Город (ID)[ — проблема]
                 StringBuilder line = new StringBuilder(site != null ? site : "");
-                if (!cityName.isBlank()) line.append(" — ").append(cityName);
+                if (!cityDisplay.isBlank()) line.append(" — ").append(cityDisplay);
                 if (!shortMsg.isBlank()) line.append(" — ").append(shortMsg);
                 itText.append(line).append("\n");
                 itText.append("  ").append(historyUrl).append("\n");
@@ -1485,7 +1482,7 @@ public class ZoomosAnalysisController {
      */
     private static String buildShortItMessage(String type, String msg, String addrParam) {
         if ("NOT_FOUND".equals(type)) {
-            return (!addrParam.isBlank()) ? "нет выкачки (адрес " + addrParam + ")" : "";
+            return ""; // адрес уже в части "город (адрес X)" выше
         }
         if ("IN_PROGRESS".equals(type)) {
             if (msg != null) {
