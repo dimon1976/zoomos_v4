@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -1294,12 +1295,15 @@ public class ZoomosAnalysisController {
 
     @PostMapping("/sites/{id}/delete")
     @ResponseBody
+    @Transactional
     public ResponseEntity<Map<String, Object>> deleteKnownSite(@PathVariable Long id) {
-        if (!knownSiteRepository.existsById(id)) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден"));
-        }
-        knownSiteRepository.deleteById(id);
-        return ResponseEntity.ok(Map.of("success", true));
+        return knownSiteRepository.findById(id).map(site -> {
+            String siteName = site.getSiteName();
+            List<ZoomosCityId> cityIds = cityIdRepository.findAllBySiteName(siteName);
+            cityIdRepository.deleteAll(cityIds);
+            knownSiteRepository.delete(site);
+            return ResponseEntity.ok(Map.<String, Object>of("success", true, "deletedCityIds", cityIds.size()));
+        }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден")));
     }
 
     // =========================================================================
