@@ -626,9 +626,9 @@ public class ZoomosCheckService {
         if (config == null) return true;
         String pd = s.getParserDescription() != null ? s.getParserDescription().toLowerCase() : "";
 
-        // include: пустой = всё разрешено
+        // include: пустой = всё разрешено. Разделитель — точка с запятой (паттерны сами содержат запятые)
         if (config.getParserInclude() != null && !config.getParserInclude().isBlank()) {
-            List<String> parts = Arrays.stream(config.getParserInclude().split(","))
+            List<String> parts = Arrays.stream(config.getParserInclude().split(";"))
                     .map(String::trim).filter(p -> !p.isEmpty())
                     .map(String::toLowerCase).collect(Collectors.toList());
             boolean andMode = "AND".equalsIgnoreCase(config.getParserIncludeMode());
@@ -640,7 +640,7 @@ public class ZoomosCheckService {
 
         // exclude: всегда OR — если хотя бы одна подстрока совпала, исключаем
         if (config.getParserExclude() != null && !config.getParserExclude().isBlank()) {
-            boolean excluded = Arrays.stream(config.getParserExclude().split(","))
+            boolean excluded = Arrays.stream(config.getParserExclude().split(";"))
                     .map(String::trim).filter(p -> !p.isEmpty())
                     .anyMatch(p -> pd.contains(p.toLowerCase()));
             if (excluded) return false;

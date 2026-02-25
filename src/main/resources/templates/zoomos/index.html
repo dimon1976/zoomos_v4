@@ -552,9 +552,9 @@
                     </div>
                     <div class="row g-2 mt-1">
                         <div class="col-8">
-                            <label class="form-label small mb-1">Включить (через запятую, строка должна содержать):</label>
+                            <label class="form-label small mb-1">Включить (через <strong>;</strong>, строка должна содержать):</label>
                             <textarea class="form-control form-control-sm" id="parserIncludeInput" rows="2"
-                                      placeholder="categories = [], техника для кухни"></textarea>
+                                      placeholder="categories = []; техника для кухни"></textarea>
                         </div>
                         <div class="col-4 d-flex flex-column justify-content-end">
                             <label class="form-label small mb-1">Режим включения:</label>
@@ -565,9 +565,9 @@
                         </div>
                     </div>
                     <div class="mt-2">
-                        <label class="form-label small mb-1">Исключить (через запятую, OR-логика):</label>
+                        <label class="form-label small mb-1">Исключить (через <strong>;</strong>, OR-логика):</label>
                         <textarea class="form-control form-control-sm" id="parserExcludeInput" rows="2"
-                                  placeholder="stock = null, brands = polaris"></textarea>
+                                  placeholder="stock = null; brands = polaris"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer py-2">
@@ -830,34 +830,34 @@
                     container.innerHTML = '<span class="text-muted small fst-italic">Паттернов пока нет — появятся после первой проверки</span>';
                     return;
                 }
-                const include = (document.getElementById('parserIncludeInput').value || '').split(',').map(s => s.trim()).filter(s => s);
-                const exclude = (document.getElementById('parserExcludeInput').value || '').split(',').map(s => s.trim()).filter(s => s);
+                const include = (document.getElementById('parserIncludeInput').value || '').split(';').map(s => s.trim()).filter(s => s);
+                const exclude = (document.getElementById('parserExcludeInput').value || '').split(';').map(s => s.trim()).filter(s => s);
                 container.innerHTML = '';
                 patterns.forEach(p => {
                     const el = document.createElement('span');
                     el.className = 'parser-pattern-item';
                     el.textContent = p;
-                    if (include.some(s => p.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(p.toLowerCase()))) {
+                    if (include.some(s => s === p)) {
                         el.classList.add('include');
-                    } else if (exclude.some(s => p.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(p.toLowerCase()))) {
+                    } else if (exclude.some(s => s === p)) {
                         el.classList.add('exclude');
                     }
                     el.addEventListener('click', function() {
                         const incInput = document.getElementById('parserIncludeInput');
                         const excInput = document.getElementById('parserExcludeInput');
-                        const incParts = (incInput.value || '').split(',').map(s => s.trim()).filter(s => s);
-                        const excParts = (excInput.value || '').split(',').map(s => s.trim()).filter(s => s);
+                        const incParts = (incInput.value || '').split(';').map(s => s.trim()).filter(s => s);
+                        const excParts = (excInput.value || '').split(';').map(s => s.trim()).filter(s => s);
                         if (this.classList.contains('include')) {
                             // убрать из include
-                            incInput.value = incParts.filter(s => s !== p).join(', ');
+                            incInput.value = incParts.filter(s => s !== p).join('; ');
                             this.classList.remove('include');
                         } else if (this.classList.contains('exclude')) {
                             // убрать из exclude
-                            excInput.value = excParts.filter(s => s !== p).join(', ');
+                            excInput.value = excParts.filter(s => s !== p).join('; ');
                             this.classList.remove('exclude');
                         } else {
                             // добавить в include
-                            if (!incParts.includes(p)) { incParts.push(p); incInput.value = incParts.join(', '); }
+                            if (!incParts.includes(p)) { incParts.push(p); incInput.value = incParts.join('; '); }
                             this.classList.add('include');
                         }
                     });
