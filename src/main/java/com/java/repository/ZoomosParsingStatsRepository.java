@@ -44,12 +44,14 @@ public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsin
 
     /**
      * Последняя завершённая выкачка для данного сайта+города (по любому прошлому check_run).
+     * Ищет по completion_percent >= 100 без ограничения is_finished —
+     * overnight-парсинги сохраняются с is_finished=false но фактически завершены.
      * Используется для отображения "Последний раз на 100%" в NOT_FOUND issue.
      */
     @Query(value = "SELECT * FROM zoomos_parsing_stats " +
                    "WHERE site_name = :siteName " +
                    "AND (city_name LIKE CONCAT(:cityId, ' %') OR city_name = :cityId) " +
-                   "AND is_finished = true AND completion_percent >= 100 " +
+                   "AND completion_percent >= 100 " +
                    "ORDER BY start_time DESC LIMIT 1",
            nativeQuery = true)
     Optional<ZoomosParsingStats> findLatestFinishedBySiteAndCityId(
@@ -57,14 +59,15 @@ public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsin
             @Param("cityId") String cityId);
 
     /**
-     * Текущая in-progress выкачка для данного сайта+города (вне проверяемого периода).
+     * Текущая in-progress выкачка для данного сайта+города.
+     * Возвращает последнюю сохранённую запись (ORDER BY id DESC) независимо от start_time.
      * Используется для отображения "Сейчас идёт" в NOT_FOUND issue.
      */
     @Query(value = "SELECT * FROM zoomos_parsing_stats " +
                    "WHERE site_name = :siteName " +
                    "AND (city_name LIKE CONCAT(:cityId, ' %') OR city_name = :cityId) " +
                    "AND is_finished = false " +
-                   "ORDER BY start_time DESC LIMIT 1",
+                   "ORDER BY id DESC LIMIT 1",
            nativeQuery = true)
     Optional<ZoomosParsingStats> findLatestInProgressBySiteAndCityId(
             @Param("siteName") String siteName,

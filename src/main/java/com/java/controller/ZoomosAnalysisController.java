@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -503,12 +504,25 @@ public class ZoomosAnalysisController {
 
         // Записи с completionPercent >= 100 фактически завершены — сервер просто не показывает
         // их на глобальной onlyFinished=1 странице когда внутренний % < 100.
-        // Промоутируем в stats: появятся в деталях и участвуют в оценке динамики.
+        // Промоутируем только те, что попадают в эффективное окно проверки (дата+время).
+        // Overnight-парсинги (старт до timeFrom или до dateFrom) НЕ промоутируем.
+        LocalTime tFromTime = (run.getTimeFrom() != null && !run.getTimeFrom().isBlank())
+                ? LocalTime.parse(run.getTimeFrom()) : LocalTime.MIDNIGHT;
+        ZonedDateTime effectiveRangeStart = run.getDateFrom().atTime(tFromTime).atZone(ZoneOffset.UTC);
+        LocalDate checkDateTo = run.getDateTo();
         inProgressStats.stream()
-                .filter(ip -> ip.getCompletionPercent() != null && ip.getCompletionPercent() >= 100)
+                .filter(ip -> ip.getCompletionPercent() != null && ip.getCompletionPercent() >= 100
+                        && ip.getStartTime() != null
+                        && !ip.getStartTime().isBefore(effectiveRangeStart)
+                        && !ip.getStartTime().toLocalDate().isAfter(checkDateTo))
                 .forEach(stats::add);
+        // Оставляем в inProgressStats только реально незавершённые записи текущего окна.
+        // 100% записи и overnight-записи (старт до effectiveRangeStart) убираем:
+        // они сохранены в БД для "Сейчас идёт" через findLatestInProgressBySiteAndCityId,
+        // но не участвуют в оценке динамики.
         inProgressStats = inProgressStats.stream()
-                .filter(ip -> ip.getCompletionPercent() == null || ip.getCompletionPercent() < 100)
+                .filter(ip -> (ip.getCompletionPercent() == null || ip.getCompletionPercent() < 100)
+                        && (ip.getStartTime() == null || !ip.getStartTime().isBefore(effectiveRangeStart)))
                 .collect(Collectors.toList());
 
         int dropThreshold = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
@@ -643,6 +657,7 @@ public class ZoomosAnalysisController {
                 addIssueStatus(issue, ip, lastKnownAddr);
                 if (ip == null && addrCity != null) {
                     parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, addrCity)
+                            .filter(curIp -> curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)
                             .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
                 }
                 issues.add(issue);
@@ -667,6 +682,7 @@ public class ZoomosAnalysisController {
                 addIssueStatus(issue, ip, lastKnownCity);
                 if (ip == null) {
                     parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, cityId)
+                            .filter(curIp -> curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)
                             .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
                 }
                 issues.add(issue);
@@ -1161,8 +1177,7 @@ public class ZoomosAnalysisController {
     }
 
     /**
-     * Добавляет поля currentIpPct/currentIpStart/currentIpUpd/currentIpCheckedAt в NOT_FOUND issue.
-     * Данные сохранены в момент проверки — могут быть устаревшими.
+     * Добавляет поля currentIpPct/currentIpStart/currentIpUpd в NOT_FOUND issue.
      */
     private void putCurrentInProgress(Map<String, Object> issue, ZoomosParsingStats curIp) {
         issue.put("currentIpPct", curIp.getCompletionTotal() != null ? curIp.getCompletionTotal() : "?");
@@ -1170,9 +1185,6 @@ public class ZoomosAnalysisController {
                 ? curIp.getStartTime().format(DateTimeFormatter.ofPattern("dd.MM HH:mm")) : "?");
         if (curIp.getUpdatedTime() != null) {
             issue.put("currentIpUpd", curIp.getUpdatedTime().format(DateTimeFormatter.ofPattern("dd.MM HH:mm")));
-        }
-        if (curIp.getCheckedAt() != null) {
-            issue.put("currentIpCheckedAt", curIp.getCheckedAt().format(DateTimeFormatter.ofPattern("dd.MM HH:mm")));
         }
     }
 

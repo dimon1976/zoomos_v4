@@ -239,9 +239,10 @@ public class ZoomosCheckService {
                     try {
                         List<ZoomosParsingStats> inProgressStats = parseInProgressPage(
                                 page, cid, shop.getShopName(), dateFrom, dateTo, run);
-                        if (hasTimeFilter) {
-                            inProgressStats = filterByTime(inProgressStats, rangeStart, rangeEnd);
-                        }
+                        // Time-фильтр НЕ применяем к in-progress записям:
+                        // overnight-парсинги (старт до timeFrom) нужно сохранить для
+                        // отображения "Сейчас идёт" в NOT_FOUND issue.
+                        // Промоушен в evaluated-stats контролируется в контроллере по rangeStart.
                         allStats.addAll(inProgressStats);
                     } catch (Exception ex) {
                         log.warn("Ошибка проверки in-progress для {}: {}", cid.getSiteName(), ex.getMessage());
@@ -405,9 +406,11 @@ public class ZoomosCheckService {
         String checkType = cid.getCheckType() != null ? cid.getCheckType() : "ITEM";
 
         String shopParam = "ITEM".equals(checkType) ? shopName : "-";
+        // Смотрим на 1 день назад от dateFrom: overnight-парсинги стартуют накануне,
+        // а после завершения переходят на страницу своей даты старта (не текущего дня)
         String url = config.getBaseUrl() + "/shops-parser/" + siteName + "/parsing-history"
                 + "?upd=" + System.currentTimeMillis()
-                + "&dateFrom=" + dateFrom.format(DATE_PARAM_FORMAT)
+                + "&dateFrom=" + dateFrom.minusDays(1).format(DATE_PARAM_FORMAT)
                 + "&dateTo=" + dateTo.format(DATE_PARAM_FORMAT)
                 + "&launchDate=&shop=" + shopParam + "&site=&cityId=&address=&accountId=&server=";
 
