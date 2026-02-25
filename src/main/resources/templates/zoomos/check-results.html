@@ -142,10 +142,19 @@
                                   class="badge bg-info text-dark ms-1 small"
                                   th:text="${issue['addressName']}"></span>
                             <span class="small text-muted ms-2" th:text="${issue['message']}"></span>
-                            <!-- NOT_FOUND: историческая информация о последней известной выкачке -->
+                            <!-- NOT_FOUND: текущая выкачка если идёт прямо сейчас -->
+                            <small th:if="${issue['type'] == 'NOT_FOUND' and issue['currentIpPct'] != null}"
+                                   class="text-info d-block mt-1">
+                                <i class="fas fa-spinner fa-spin me-1"></i>Сейчас идёт:
+                                <strong th:text="${issue['currentIpPct']}">?</strong>,
+                                старт <span th:text="${issue['currentIpStart']}">?</span>
+                                <span th:if="${issue['currentIpUpd'] != null}">,
+                                    обновл. <span th:text="${issue['currentIpUpd']}"></span></span>
+                            </small>
+                            <!-- NOT_FOUND: последняя завершённая на 100% выкачка -->
                             <small th:if="${issue['type'] == 'NOT_FOUND' and issue['lastKnownDate'] != null}"
                                    class="text-muted d-block mt-1">
-                                Последний раз: <strong th:text="${issue['lastKnownDate']}"></strong>
+                                Последний раз на 100%: <strong th:text="${issue['lastKnownDate']}"></strong>
                                 &mdash; В наличии:
                                 <span th:text="${issue['lastKnownInStock'] != null ? issue['lastKnownInStock'] : 0}">0</span>
                                 /

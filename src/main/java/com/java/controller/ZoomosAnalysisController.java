@@ -614,6 +614,10 @@ public class ZoomosAnalysisController {
                         ? parsingStatsRepository.findLatestFinishedBySiteAndCityId(site, addrCity).orElse(null)
                         : null;
                 addIssueStatus(issue, ip, lastKnownAddr);
+                if (ip == null && addrCity != null) {
+                    parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, addrCity)
+                            .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
+                }
                 issues.add(issue);
             }
 
@@ -634,6 +638,10 @@ public class ZoomosAnalysisController {
                         ? parsingStatsRepository.findLatestFinishedBySiteAndCityId(site, cityId).orElse(null)
                         : null;
                 addIssueStatus(issue, ip, lastKnownCity);
+                if (ip == null) {
+                    parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, cityId)
+                            .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
+                }
                 issues.add(issue);
             }
         }
@@ -1017,7 +1025,7 @@ public class ZoomosAnalysisController {
             issues.add(issue);
         }
 
-        // WARNING: одиночная запись, есть товары, но inStock=0
+        // ERROR: одиночная запись, есть товары, но в наличии 0
         if (!ignoreStock && sortedAsc.size() < 2
                 && newest.getInStock() != null && newest.getInStock() == 0
                 && newest.getTotalProducts() != null && newest.getTotalProducts() > 0) {
@@ -1025,8 +1033,8 @@ public class ZoomosAnalysisController {
             issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
             issue.put("addressId", addressId); issue.put("addressName", addressName);
             issue.put("checkType", checkType); issue.put("shopName", shopName);
-            issue.put("type", "WARNING");
-            issue.put("message", "В наличии: 0 из " + newest.getTotalProducts() + " товаров — нужна проверка");
+            issue.put("type", "ERROR");
+            issue.put("message", "В наличии: 0 из " + newest.getTotalProducts() + " товаров");
             issues.add(issue);
         }
 
@@ -1122,6 +1130,19 @@ public class ZoomosAnalysisController {
                 issue.put("message", String.format("Падение товаров: %d → %d (−%.0f%%)", prevTotal, newTotal, drop));
                 issues.add(issue);
             }
+        }
+    }
+
+    /**
+     * Добавляет поля currentIpPct/currentIpStart/currentIpUpd в NOT_FOUND issue
+     * если для сайта+города прямо сейчас идёт выкачка (вне проверяемого периода).
+     */
+    private void putCurrentInProgress(Map<String, Object> issue, ZoomosParsingStats curIp) {
+        issue.put("currentIpPct", curIp.getCompletionTotal() != null ? curIp.getCompletionTotal() : "?");
+        issue.put("currentIpStart", curIp.getStartTime() != null
+                ? curIp.getStartTime().format(DateTimeFormatter.ofPattern("dd.MM HH:mm")) : "?");
+        if (curIp.getUpdatedTime() != null) {
+            issue.put("currentIpUpd", curIp.getUpdatedTime().format(DateTimeFormatter.ofPattern("dd.MM HH:mm")));
         }
     }
 

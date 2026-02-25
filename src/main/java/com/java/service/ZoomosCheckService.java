@@ -1087,11 +1087,11 @@ public class ZoomosCheckService {
                     && newest.getCompletionPercent() != null && newest.getCompletionPercent() >= 100) {
                 return "WARNING";
             }
-            // Одиночная запись: товары есть, но в наличии 0 — нужна проверка
+            // Одиночная запись: товары есть, но в наличии 0 — явная ошибка
             if (!ignoreStock
                     && newest.getInStock() != null && newest.getInStock() == 0
                     && newest.getTotalProducts() != null && newest.getTotalProducts() > 0) {
-                return "WARNING";
+                return "ERROR";
             }
             return "OK";
         }
