@@ -490,6 +490,8 @@ public class ZoomosAnalysisController {
 
         Set<String> ignoreStockSites = knownSiteRepository.findAllByIgnoreStockTrue()
                 .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+        Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue()
+                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
 
         // Группируем по site+city+address для оценки динамики.
         // Строки с addressId → отдельная группа внутри города (address-level проверка).
@@ -727,11 +729,13 @@ public class ZoomosAnalysisController {
             g.put("status", worstStatus);
             g.put("count", siteStats.size());
             g.put("cityGroups", cityGroups);
+            g.put("isPriority", prioritySiteNames.contains(siteName));
             groups.add(g);
         });
 
-        // Сортируем группы: ERROR первые, потом WARNING, потом OK, внутри — по имени сайта
-        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> statusPriority((String) g.get("status")))
+        // Сортируем группы: приоритетные первые, затем ERROR → WARNING → OK, внутри — по имени сайта
+        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> Boolean.TRUE.equals(g.get("isPriority")) ? 0 : 1)
+                .thenComparingInt(g -> statusPriority((String) g.get("status")))
                 .thenComparing(g -> (String) g.get("siteName")));
 
         // Добавляем NOT_FOUND/IN_PROGRESS пары в groups для отображения в Блоке 3
@@ -818,7 +822,8 @@ public class ZoomosAnalysisController {
                     .orElse((String) g.get("status"));
             g.put("status", worstSiteStatus);
         }
-        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> statusPriority((String) g.get("status")))
+        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> Boolean.TRUE.equals(g.get("isPriority")) ? 0 : 1)
+                .thenComparingInt(g -> statusPriority((String) g.get("status")))
                 .thenComparing(g -> (String) g.get("siteName")));
 
         boolean canDeliver = issues.stream()
@@ -950,9 +955,27 @@ public class ZoomosAnalysisController {
                 .filter(i -> "NOT_FOUND".equals(i.get("type")) || "IN_PROGRESS".equals(i.get("type")))
                 .count();
 
+        // Помечаем приоритетные сайты в issues
+        for (Map<String, Object> issue : issues) {
+            String site = (String) issue.get("site");
+            issue.put("isPriority", site != null && prioritySiteNames.contains(site));
+        }
+
+        // Сортируем issues: приоритетные первые, затем ERROR → WARNING → IN_PROGRESS → NOT_FOUND → TREND_WARNING
+        issues.sort(Comparator.comparingInt((Map<?, ?> issue) -> Boolean.TRUE.equals(issue.get("isPriority")) ? 0 : 1)
+                .thenComparingInt(issue -> {
+                    String t = (String) issue.get("type");
+                    if ("ERROR".equals(t)) return 0;
+                    if ("WARNING".equals(t)) return 1;
+                    if ("IN_PROGRESS".equals(t)) return 2;
+                    if ("NOT_FOUND".equals(t)) return 3;
+                    return 4; // TREND_WARNING
+                }));
+
         model.addAttribute("run", run);
         model.addAttribute("groups", groups);
         model.addAttribute("issues", issues);
+        model.addAttribute("prioritySiteNames", prioritySiteNames);
         model.addAttribute("canDeliver", canDeliver);
         model.addAttribute("itText", itText.toString().trim());
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
@@ -991,6 +1014,19 @@ public class ZoomosAnalysisController {
             issue.put("checkType", checkType); issue.put("shopName", shopName);
             issue.put("type", "WARNING");
             issue.put("message", "100% выкачка, нет товаров — нужна проверка");
+            issues.add(issue);
+        }
+
+        // WARNING: одиночная запись, есть товары, но inStock=0
+        if (!ignoreStock && sortedAsc.size() < 2
+                && newest.getInStock() != null && newest.getInStock() == 0
+                && newest.getTotalProducts() != null && newest.getTotalProducts() > 0) {
+            Map<String, Object> issue = new LinkedHashMap<>();
+            issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+            issue.put("addressId", addressId); issue.put("addressName", addressName);
+            issue.put("checkType", checkType); issue.put("shopName", shopName);
+            issue.put("type", "WARNING");
+            issue.put("message", "В наличии: 0 из " + newest.getTotalProducts() + " товаров — нужна проверка");
             issues.add(issue);
         }
 

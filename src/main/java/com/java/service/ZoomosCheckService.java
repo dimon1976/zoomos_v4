@@ -156,7 +156,7 @@ public class ZoomosCheckService {
                 String siteName = entry.getKey();
                 List<ZoomosCityId> cityIdEntries = entry.getValue();
 
-                sendProgress(operationId, processed, total, "Проверяем " + siteName + " (API)...");
+                sendProgress(shopId, operationId, processed, total, "Проверяем " + siteName + " (API)...");
 
                 // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
                 List<ZoomosParsingStats> stats = parseApiPage(page, siteName, effectiveDateFrom, dateTo, cityIdEntries, run);
@@ -167,7 +167,7 @@ public class ZoomosCheckService {
                 allStats.addAll(mainStats);
 
                 processed += cityIdEntries.size();
-                sendProgress(operationId, processed, total, siteName + " — " + mainStats.size() + " записей");
+                sendProgress(shopId, operationId, processed, total, siteName + " — " + mainStats.size() + " записей");
             }
 
             // --- Парсинг ITEM-сайтов (та же parsing-history + &shop=shopName) ---
@@ -179,7 +179,7 @@ public class ZoomosCheckService {
                 String siteName = entry.getKey();
                 List<ZoomosCityId> cityIdEntries = entry.getValue();
 
-                sendProgress(operationId, processed, total,
+                sendProgress(shopId, operationId, processed, total,
                         "Проверяем " + siteName + " (ITEM, shop=" + shop.getShopName() + ")...");
 
                 // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
@@ -192,7 +192,7 @@ public class ZoomosCheckService {
                 allStats.addAll(mainStats);
 
                 processed += cityIdEntries.size();
-                sendProgress(operationId, processed, total, siteName + " — " + mainStats.size() + " записей");
+                sendProgress(shopId, operationId, processed, total, siteName + " — " + mainStats.size() + " записей");
             }
 
             // Дополнительный запрос in-progress для сайтов с неполными данными
@@ -228,7 +228,7 @@ public class ZoomosCheckService {
             }).collect(Collectors.toList());
 
             if (!needsInProgress.isEmpty()) {
-                sendProgress(operationId, processed, total, "Проверка незавершённых выкачек (" + needsInProgress.size() + ")...");
+                sendProgress(shopId, operationId, processed, total, "Проверка незавершённых выкачек (" + needsInProgress.size() + ")...");
                 // Дедуплицируем по siteName — один запрос на сайт
                 Map<String, ZoomosCityId> inProgressBySite = new LinkedHashMap<>();
                 for (ZoomosCityId cid : needsInProgress) {
@@ -262,7 +262,7 @@ public class ZoomosCheckService {
             run.setCompletedAt(ZonedDateTime.now());
             // REQUIRES_NEW — коммит FAILED не откатится при re-throw исключения
             self.saveRunImmediate(run);
-            sendProgress(operationId, 0, 0, "Ошибка: " + e.getMessage());
+            sendProgress(shopId, operationId, 0, 0, "Ошибка: " + e.getMessage());
             throw new RuntimeException("Ошибка проверки: " + e.getMessage(), e);
         }
 
@@ -284,7 +284,7 @@ public class ZoomosCheckService {
         run.setCompletedAt(ZonedDateTime.now());
         run = checkRunRepository.save(run);
 
-        sendProgress(operationId, run.getTotalSites(), run.getTotalSites(), "Проверка завершена");
+        sendProgress(shopId, operationId, run.getTotalSites(), run.getTotalSites(), "Проверка завершена");
         return run;
     }
 
@@ -855,7 +855,7 @@ public class ZoomosCheckService {
 
             log.info("Baseline для {}: только {} записей в БД — парсим последний день baseline ({})",
                     site, existing.size(), baselineTo);
-            sendProgress(operationId, 0, 0, "Загрузка baseline " + site + "...");
+            sendProgress(run.getShop().getId(), operationId, 0, 0, "Загрузка baseline " + site + "...");
 
             try {
                 List<ZoomosCityId> cityIdEntries = entry.getValue();
@@ -1082,9 +1082,15 @@ public class ZoomosCheckService {
             if (newest.getCompletionPercent() != null && newest.getCompletionPercent() < 100) {
                 return "WARNING";
             }
-            // 100% выкачка, но нет товаров — нужна проверка
+            // 100% выкачка, но нет товаров совсем — нужна проверка
             if ((newest.getTotalProducts() == null || newest.getTotalProducts() == 0)
                     && newest.getCompletionPercent() != null && newest.getCompletionPercent() >= 100) {
+                return "WARNING";
+            }
+            // Одиночная запись: товары есть, но в наличии 0 — нужна проверка
+            if (!ignoreStock
+                    && newest.getInStock() != null && newest.getInStock() == 0
+                    && newest.getTotalProducts() != null && newest.getTotalProducts() > 0) {
                 return "WARNING";
             }
             return "OK";
@@ -1170,15 +1176,19 @@ public class ZoomosCheckService {
     // WebSocket прогресс
     // =========================================================================
 
-    private void sendProgress(String operationId, int current, int total, String message) {
-        if (operationId == null) return;
+    private void sendProgress(Long shopId, String operationId, int current, int total, String message) {
         Map<String, Object> progress = Map.of(
                 "current", current,
                 "total", total,
                 "message", message,
                 "percent", total > 0 ? (current * 100 / total) : 0
         );
-        messagingTemplate.convertAndSend("/topic/zoomos-check/" + operationId, progress);
+        if (operationId != null) {
+            messagingTemplate.convertAndSend("/topic/zoomos-check/" + operationId, progress);
+        }
+        if (shopId != null) {
+            messagingTemplate.convertAndSend("/topic/zoomos-check/shop/" + shopId, progress);
+        }
     }
 
     // =========================================================================

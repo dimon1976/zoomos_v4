@@ -354,10 +354,15 @@ public class ZoomosParserService {
 
         int added = 0;
         for (String siteName : toAdd) {
-            String checkType = knownSiteRepository.findBySiteName(siteName)
-                    .map(ZoomosKnownSite::getCheckType).orElse("ITEM");
+            Optional<ZoomosKnownSite> known = knownSiteRepository.findBySiteName(siteName);
+            String checkType = known.map(ZoomosKnownSite::getCheckType).orElse("ITEM");
             cityIdRepository.save(ZoomosCityId.builder()
                     .shop(shop).siteName(siteName).checkType(checkType).build());
+            // Добавляем в справочник если ещё нет
+            if (known.isEmpty()) {
+                knownSiteRepository.save(ZoomosKnownSite.builder()
+                        .siteName(siteName.trim().toLowerCase()).checkType(checkType).build());
+            }
             added++;
         }
 
@@ -427,10 +432,15 @@ public class ZoomosParserService {
             int added = 0;
             for (String siteName : siteNames) {
                 if (!existing.containsKey(siteName)) {
-                    String checkType = knownSiteRepository.findBySiteName(siteName)
-                            .map(ZoomosKnownSite::getCheckType).orElse("ITEM");
+                    Optional<ZoomosKnownSite> known = knownSiteRepository.findBySiteName(siteName);
+                    String checkType = known.map(ZoomosKnownSite::getCheckType).orElse("ITEM");
                     cityIdRepository.save(ZoomosCityId.builder()
                             .shop(shop).siteName(siteName).checkType(checkType).build());
+                    // Добавляем в справочник если ещё нет
+                    if (known.isEmpty()) {
+                        knownSiteRepository.save(ZoomosKnownSite.builder()
+                                .siteName(siteName.trim().toLowerCase()).checkType(checkType).build());
+                    }
                     added++;
                 }
             }

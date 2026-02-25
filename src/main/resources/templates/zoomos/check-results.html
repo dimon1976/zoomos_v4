@@ -131,6 +131,7 @@
                             </span>
                             <i th:if="${issue['type'] == 'TREND_WARNING'}"
                                class="fas fa-chart-line me-1 text-info" title="Отклонение от исторической нормы"></i>
+                            <i th:if="${issue['isPriority']}" class="fas fa-star text-warning me-1" title="Приоритетный сайт" style="font-size:0.8em;"></i>
                             <strong th:text="${issue['site']}"></strong>
                             <span th:if="${issue['city']}" class="text-muted ms-1 small"
                                   th:text="'(' + ${issue['city']} + ')'"></span>
@@ -223,6 +224,7 @@
                      th:data-bs-target="'#grp-' + ${groupIter.index}"
                      aria-expanded="false">
                     <i class="fas fa-chevron-down chevron me-2"></i>
+                    <i th:if="${group['isPriority']}" class="fas fa-star text-warning me-1" title="Приоритетный сайт" style="font-size:0.8em;"></i>
                     <strong th:text="${group['siteName']}">site.ru</strong>
                     <span class="badge ms-2"
                           th:classappend="${group['checkType'] == 'API'} ? 'badge-api' : 'badge-item'"

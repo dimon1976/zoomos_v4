@@ -187,7 +187,7 @@
                             <span th:if="${schedules[shop.id] == null or schedules[shop.id].lastRunAt == null}">—</span>
                             <span class="sched-running-indicator d-none ms-1">
                                 <i class="fas fa-spinner fa-spin text-primary"></i>
-                                <span class="text-primary">Идёт...</span>
+                                <span class="text-primary sched-progress-msg">Идёт...</span>
                             </span>
                         </td>
 
@@ -441,22 +441,43 @@
             .then(data => {
                 if (data.status === 'RUNNING') {
                     const indicator = row.querySelector('.sched-running-indicator');
+                    const msgEl = indicator ? indicator.querySelector('.sched-progress-msg') : null;
                     if (indicator) indicator.classList.remove('d-none');
-                    const poll = setInterval(() => {
-                        fetch('/zoomos/check/latest?shopId=' + shopId)
-                            .then(r2 => r2.json())
-                            .then(d => {
-                                if (d.status !== 'RUNNING') {
-                                    clearInterval(poll);
-                                    if (indicator) indicator.classList.add('d-none');
-                                }
-                            })
-                            .catch(() => clearInterval(poll));
-                    }, 5000);
+                    // Подписываемся на shop-топик (работает и для cron, и для ручного запуска)
+                    subscribeToShopProgress(shopId, indicator, msgEl);
                 }
             })
             .catch(() => {});
     });
+
+    function subscribeToShopProgress(shopId, indicator, msgEl) {
+        function finish() {
+            if (indicator) indicator.classList.add('d-none');
+        }
+        function startPolling() {
+            const poll = setInterval(() => {
+                fetch('/zoomos/check/latest?shopId=' + shopId)
+                    .then(r => r.json())
+                    .then(d => { if (d.status !== 'RUNNING') { clearInterval(poll); finish(); } })
+                    .catch(() => clearInterval(poll));
+            }, 5000);
+        }
+        try {
+            const socket = new SockJS('/ws');
+            const stompClient = Stomp.over(socket);
+            stompClient.debug = null;
+            stompClient.connect({}, function() {
+                stompClient.subscribe('/topic/zoomos-check/shop/' + shopId, function(msg) {
+                    const data = JSON.parse(msg.body);
+                    if (msgEl) msgEl.textContent = data.message || 'Идёт...';
+                    if (data.message && (data.message.includes('завершена') || data.message.includes('Ошибка'))) {
+                        stompClient.disconnect();
+                        finish();
+                    }
+                });
+            }, function() { startPolling(); });
+        } catch (e) { startPolling(); }
+    }
 
     // ---- Запустить сейчас ----
     document.querySelectorAll('.btn-run-now').forEach(btn => {
@@ -467,7 +488,12 @@
             const offsetTo   = parseInt(row.querySelector('.sched-offset-to').value   || '0');
 
             const today = new Date();
-            const fmt = d => d.toISOString().slice(0, 10);
+            const fmt = d => {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return y + '-' + m + '-' + day;
+            };
             const dateFrom = fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + offsetFrom));
             const dateTo   = fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + offsetTo));
 
@@ -495,23 +521,10 @@
                     if (data.success) {
                         runBtn.innerHTML = '<i class="fas fa-check"></i>';
                         runBtn.className = 'btn btn-sm btn-success py-0 px-2 btn-run-now';
-                        // Показываем индикатор выполнения
                         const indicator = row.querySelector('.sched-running-indicator');
+                        const msgEl = indicator ? indicator.querySelector('.sched-progress-msg') : null;
                         if (indicator) indicator.classList.remove('d-none');
-                        const poll = setInterval(() => {
-                            fetch('/zoomos/check/latest?shopId=' + shopId)
-                                .then(r2 => r2.json())
-                                .then(d => {
-                                    if (d.status !== 'RUNNING') {
-                                        clearInterval(poll);
-                                        if (indicator) indicator.classList.add('d-none');
-                                        runBtn.innerHTML = orig;
-                                        runBtn.className = 'btn btn-sm btn-outline-info py-0 px-2 btn-run-now';
-                                        runBtn.disabled = false;
-                                    }
-                                })
-                                .catch(() => clearInterval(poll));
-                        }, 5000);
+                        subscribeToScheduleCheck(shopId, data.operationId, runBtn, orig, indicator, msgEl);
                     } else {
                         alert('Ошибка: ' + (data.error || 'неизвестная'));
                         runBtn.innerHTML = orig;
@@ -525,6 +538,38 @@
                 });
         });
     });
+    function subscribeToScheduleCheck(shopId, operationId, btn, origHtml, indicator, msgEl) {
+        function finish() {
+            if (indicator) indicator.classList.add('d-none');
+            btn.innerHTML = origHtml;
+            btn.className = 'btn btn-sm btn-outline-info py-0 px-2 btn-run-now';
+            btn.disabled = false;
+        }
+        function startPolling() {
+            const poll = setInterval(() => {
+                fetch('/zoomos/check/latest?shopId=' + shopId)
+                    .then(r => r.json())
+                    .then(d => { if (d.status !== 'RUNNING') { clearInterval(poll); finish(); } })
+                    .catch(() => clearInterval(poll));
+            }, 5000);
+        }
+        try {
+            const socket = new SockJS('/ws');
+            const stompClient = Stomp.over(socket);
+            stompClient.debug = null;
+            stompClient.connect({}, function() {
+                // Подписываемся на shop-топик (доступен всегда — и для cron, и для run-now)
+                stompClient.subscribe('/topic/zoomos-check/shop/' + shopId, function(msg) {
+                    const data = JSON.parse(msg.body);
+                    if (msgEl) msgEl.textContent = data.message || 'Идёт...';
+                    if (data.message && (data.message.includes('завершена') || data.message.includes('Ошибка'))) {
+                        stompClient.disconnect();
+                        finish();
+                    }
+                });
+            }, function() { startPolling(); });
+        } catch (e) { startPolling(); }
+    }
 </script>
 </th:block>
 
