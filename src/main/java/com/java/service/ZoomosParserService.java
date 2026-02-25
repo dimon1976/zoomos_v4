@@ -123,6 +123,19 @@ public class ZoomosParserService {
         cityIdRepository.deleteById(id);
     }
 
+    /**
+     * Обновить фильтры парсера для строки (include, includeMode, exclude)
+     */
+    @Transactional
+    public ZoomosCityId updateParserFilters(Long id, String include, String includeMode, String exclude) {
+        ZoomosCityId entry = cityIdRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Запись не найдена: " + id));
+        entry.setParserInclude(include != null && !include.isBlank() ? include.trim() : null);
+        entry.setParserIncludeMode(includeMode != null && !includeMode.isBlank() ? includeMode.trim().toUpperCase() : "OR");
+        entry.setParserExclude(exclude != null && !exclude.isBlank() ? exclude.trim() : null);
+        return cityIdRepository.save(entry);
+    }
+
     // =========================================================================
     // Синхронизация настроек (только city_ids для существующих сайтов)
     // =========================================================================

@@ -41,6 +41,7 @@ public class ZoomosCheckService {
     private final ZoomosCityNameRepository cityNameRepository;
     private final ZoomosCityAddressRepository cityAddressRepository;
     private final ZoomosKnownSiteRepository knownSiteRepository;
+    private final ZoomosParserPatternRepository parserPatternRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -533,6 +534,7 @@ public class ZoomosCheckService {
                 String updatedStr = getCellValue(cells, colIndex, "обновлено");
                 String completionStr = getCellValue(cells, colIndex, "завершено (всего)");
                 String timeStr = getCellValue(cells, colIndex, "время");
+                String parserDesc = getCellValue(cells, colIndex, "парсер");
 
                 String siteName = (site != null && !site.isEmpty()) ? site : defaultSiteName;
                 if (siteName == null) continue;
@@ -570,6 +572,7 @@ public class ZoomosCheckService {
                         .completionPercent(extractPercent(completionStr))
                         .parsingDuration(timeStr)
                         .parsingDurationMinutes(parseDurationMinutes(timeStr))
+                        .parserDescription(parserDesc)
                         .parsingDate(parsingDate)
                         .checkType(checkType)
                         .isFinished(true)
@@ -581,6 +584,9 @@ public class ZoomosCheckService {
                 log.warn("Ошибка парсинга строки таблицы: {}", e.getMessage());
             }
         }
+
+        // Сохраняем все уникальные паттерны парсера ДО фильтрации (чтобы не потерять паттерны других городов)
+        upsertParserPatterns(defaultSiteName, results);
 
         // Применяем комбинированный фильтр: address-покрытые города → только по addressId,
         // остальные города → по cityId
@@ -604,8 +610,60 @@ public class ZoomosCheckService {
             }).collect(Collectors.toList());
         }
 
+        // Применяем фильтр парсера (по parserDescription через config cityIdMap)
+        results = results.stream()
+                .filter(s -> matchesParserFilter(s, cityIdMap.get(extractCityId(s.getCityName()))))
+                .collect(Collectors.toList());
+
         log.info("Распарсено {} записей (checkType={}) со страницы: {}", results.size(), checkType, page.url());
         return results;
+    }
+
+    /**
+     * Проверяет, проходит ли строка статистики фильтр парсера, заданный в конфиге cityId.
+     */
+    private boolean matchesParserFilter(ZoomosParsingStats s, ZoomosCityId config) {
+        if (config == null) return true;
+        String pd = s.getParserDescription() != null ? s.getParserDescription().toLowerCase() : "";
+
+        // include: пустой = всё разрешено
+        if (config.getParserInclude() != null && !config.getParserInclude().isBlank()) {
+            List<String> parts = Arrays.stream(config.getParserInclude().split(","))
+                    .map(String::trim).filter(p -> !p.isEmpty())
+                    .map(String::toLowerCase).collect(Collectors.toList());
+            boolean andMode = "AND".equalsIgnoreCase(config.getParserIncludeMode());
+            boolean match = andMode
+                    ? parts.stream().allMatch(pd::contains)
+                    : parts.stream().anyMatch(pd::contains);
+            if (!match) return false;
+        }
+
+        // exclude: всегда OR — если хотя бы одна подстрока совпала, исключаем
+        if (config.getParserExclude() != null && !config.getParserExclude().isBlank()) {
+            boolean excluded = Arrays.stream(config.getParserExclude().split(","))
+                    .map(String::trim).filter(p -> !p.isEmpty())
+                    .anyMatch(p -> pd.contains(p.toLowerCase()));
+            if (excluded) return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Batch upsert уникальных (siteName, parserDescription) в справочник паттернов.
+     */
+    private void upsertParserPatterns(String siteName, List<ZoomosParsingStats> stats) {
+        stats.stream()
+                .map(ZoomosParsingStats::getParserDescription)
+                .filter(pd -> pd != null && !pd.isBlank())
+                .distinct()
+                .forEach(pd -> {
+                    try {
+                        parserPatternRepository.upsert(siteName, pd);
+                    } catch (Exception e) {
+                        log.warn("Не удалось сохранить паттерн парсера '{}': {}", pd, e.getMessage());
+                    }
+                });
     }
 
     // =========================================================================

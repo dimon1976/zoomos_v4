@@ -42,6 +42,16 @@ public class ZoomosCityId {
     @Builder.Default
     private Boolean isActive = true;
 
+    @Column(name = "parser_include", columnDefinition = "TEXT")
+    private String parserInclude;
+
+    @Column(name = "parser_include_mode", length = 3)
+    @Builder.Default
+    private String parserIncludeMode = "OR";
+
+    @Column(name = "parser_exclude", columnDefinition = "TEXT")
+    private String parserExclude;
+
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
 

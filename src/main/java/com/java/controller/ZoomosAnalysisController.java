@@ -7,6 +7,7 @@ import com.java.repository.ZoomosCityIdRepository;
 import com.java.repository.ZoomosCityNameRepository;
 import com.java.repository.ZoomosCheckRunRepository;
 import com.java.repository.ZoomosKnownSiteRepository;
+import com.java.repository.ZoomosParserPatternRepository;
 import com.java.repository.ZoomosParsingStatsRepository;
 import com.java.repository.ZoomosShopRepository;
 import com.java.repository.ZoomosShopScheduleRepository;
@@ -53,6 +54,7 @@ public class ZoomosAnalysisController {
     private final ZoomosShopRepository shopRepository;
     private final ZoomosShopScheduleRepository scheduleRepository;
     private final ZoomosSchedulerService schedulerService;
+    private final ZoomosParserPatternRepository parserPatternRepository;
 
     @GetMapping({"", "/"})
     public String index(Model model) {
@@ -392,6 +394,30 @@ public class ZoomosAnalysisController {
             cityIdRepository.save(entry);
             return ResponseEntity.ok(Map.<String, Object>of("success", true));
         }).orElse(ResponseEntity.notFound().<Map<String, Object>>build());
+    }
+
+    @PostMapping("/city-ids/{id}/parser-filter")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> updateParserFilter(
+            @PathVariable Long id,
+            @RequestParam(required = false) String include,
+            @RequestParam(required = false, defaultValue = "OR") String includeMode,
+            @RequestParam(required = false) String exclude) {
+        try {
+            parserService.updateParserFilters(id, include, includeMode, exclude);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            log.error("Ошибка обновления фильтра парсера для id={}", id, e);
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/parser-patterns")
+    @ResponseBody
+    public ResponseEntity<List<String>> getParserPatterns(@RequestParam String siteName) {
+        List<String> patterns = parserPatternRepository.findBySiteNameOrderByPatternAsc(siteName)
+                .stream().map(ZoomosParserPattern::getPattern).collect(Collectors.toList());
+        return ResponseEntity.ok(patterns);
     }
 
     // =========================================================================

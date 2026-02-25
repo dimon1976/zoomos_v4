@@ -45,6 +45,12 @@
             padding: 1px 6px; font-size: 0.78em; font-weight: 500;
         }
         .addr-badge .btn-close { font-size: 0.45em; filter: invert(1) brightness(0.4); }
+        .btn-parser-filter.filter-active { border-color: #0d6efd; color: #0d6efd; }
+        .parser-pattern-item { cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 0.8em;
+            border: 1px solid #dee2e6; background: #f8f9fa; transition: all 0.15s; }
+        .parser-pattern-item.include { background: #d1e7dd; border-color: #a3cfbb; color: #0a3622; }
+        .parser-pattern-item.exclude { background: #f8d7da; border-color: #f1aeb5; color: #58151c; }
+        .parser-pattern-item:hover { filter: brightness(0.95); }
         #addrModalBody {
             display: grid; grid-template-columns: repeat(4, 1fr);
             gap: 8px; max-height: 65vh; overflow-y: auto;
@@ -360,6 +366,7 @@
                                         <th style="width:130px" class="text-center">Тип проверки</th>
                                         <th class="city-ids-col">ID городов</th>
                                         <th style="width:100px" class="text-center">ID адресов</th>
+                                        <th style="width:90px" class="text-center">Парсер</th>
                                         <th style="width:44px"></th>
                                     </tr>
                                 </thead>
@@ -414,6 +421,19 @@
                                                     th:data-addresses="${entry.addressIds}">
                                                 <i class="fas fa-map-marker-alt me-1"></i>
                                                 <span class="addr-count-label">Адреса</span>
+                                            </button>
+                                        </td>
+                                        <td class="text-center">
+                                            <button type="button"
+                                                    th:classappend="${(entry.parserInclude != null and !entry.parserInclude.blank) or (entry.parserExclude != null and !entry.parserExclude.blank)} ? 'filter-active' : ''"
+                                                    class="btn btn-sm btn-outline-secondary btn-parser-filter"
+                                                    th:data-id="${entry.id}"
+                                                    th:data-site="${entry.siteName}"
+                                                    th:data-include="${entry.parserInclude}"
+                                                    th:data-include-mode="${entry.parserIncludeMode}"
+                                                    th:data-exclude="${entry.parserExclude}"
+                                                    title="Фильтр по типу парсера">
+                                                <i class="fas fa-filter"></i>
                                             </button>
                                         </td>
                                         <td class="text-center">
@@ -505,6 +525,59 @@
                 <div class="modal-footer py-2">
                     <button type="button" class="btn btn-sm btn-secondary" id="schedToggleCancelBtn" data-bs-dismiss="modal">Отмена</button>
                     <button type="button" class="btn btn-sm btn-primary" id="schedToggleConfirmBtn">Подтвердить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка фильтра парсера -->
+    <div class="modal fade" id="parserFilterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-filter me-2"></i>Фильтр парсера: <span id="parserModalSite"></span></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <div class="text-muted small mb-1">Известные паттерны для этого сайта:</div>
+                        <div id="parserPatternsList" class="d-flex flex-wrap gap-1 mb-2 p-2 border rounded bg-light" style="min-height:36px;">
+                            <span class="text-muted small fst-italic">Загрузка...</span>
+                        </div>
+                        <div class="text-muted" style="font-size:0.75em;">
+                            Клик: <span class="badge bg-success">зелёный</span> — добавить в "Включить",
+                            <span class="badge bg-danger">красный</span> — добавить в "Исключить",
+                            ещё клик — убрать из правил
+                        </div>
+                    </div>
+                    <div class="row g-2 mt-1">
+                        <div class="col-8">
+                            <label class="form-label small mb-1">Включить (через запятую, строка должна содержать):</label>
+                            <textarea class="form-control form-control-sm" id="parserIncludeInput" rows="2"
+                                      placeholder="categories = [], техника для кухни"></textarea>
+                        </div>
+                        <div class="col-4 d-flex flex-column justify-content-end">
+                            <label class="form-label small mb-1">Режим включения:</label>
+                            <select class="form-select form-select-sm" id="parserIncludeModeSelect">
+                                <option value="OR">OR — любая подстрока</option>
+                                <option value="AND">AND — все подстроки</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <label class="form-label small mb-1">Исключить (через запятую, OR-логика):</label>
+                        <textarea class="form-control form-control-sm" id="parserExcludeInput" rows="2"
+                                  placeholder="stock = null, brands = polaris"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-auto" id="parserFilterClear">
+                        <i class="fas fa-times me-1"></i>Очистить фильтр
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="parserFilterSave">
+                        <i class="fas fa-save me-1"></i>Сохранить
+                    </button>
                 </div>
             </div>
         </div>
@@ -740,6 +813,121 @@
                     }
                 })
                 .catch(() => { this.value = originalValue; });
+        });
+    });
+
+    // ---- Модалка фильтра парсера ----
+    let parserFilterEntryId = null;
+    const parserFilterModal = new bootstrap.Modal(document.getElementById('parserFilterModal'));
+
+    function loadParserPatterns(siteName) {
+        const container = document.getElementById('parserPatternsList');
+        container.innerHTML = '<span class="text-muted small fst-italic">Загрузка...</span>';
+        fetch('/zoomos/parser-patterns?siteName=' + encodeURIComponent(siteName))
+            .then(r => r.json())
+            .then(patterns => {
+                if (!patterns.length) {
+                    container.innerHTML = '<span class="text-muted small fst-italic">Паттернов пока нет — появятся после первой проверки</span>';
+                    return;
+                }
+                const include = (document.getElementById('parserIncludeInput').value || '').split(',').map(s => s.trim()).filter(s => s);
+                const exclude = (document.getElementById('parserExcludeInput').value || '').split(',').map(s => s.trim()).filter(s => s);
+                container.innerHTML = '';
+                patterns.forEach(p => {
+                    const el = document.createElement('span');
+                    el.className = 'parser-pattern-item';
+                    el.textContent = p;
+                    if (include.some(s => p.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(p.toLowerCase()))) {
+                        el.classList.add('include');
+                    } else if (exclude.some(s => p.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(p.toLowerCase()))) {
+                        el.classList.add('exclude');
+                    }
+                    el.addEventListener('click', function() {
+                        const incInput = document.getElementById('parserIncludeInput');
+                        const excInput = document.getElementById('parserExcludeInput');
+                        const incParts = (incInput.value || '').split(',').map(s => s.trim()).filter(s => s);
+                        const excParts = (excInput.value || '').split(',').map(s => s.trim()).filter(s => s);
+                        if (this.classList.contains('include')) {
+                            // убрать из include
+                            incInput.value = incParts.filter(s => s !== p).join(', ');
+                            this.classList.remove('include');
+                        } else if (this.classList.contains('exclude')) {
+                            // убрать из exclude
+                            excInput.value = excParts.filter(s => s !== p).join(', ');
+                            this.classList.remove('exclude');
+                        } else {
+                            // добавить в include
+                            if (!incParts.includes(p)) { incParts.push(p); incInput.value = incParts.join(', '); }
+                            this.classList.add('include');
+                        }
+                    });
+                    container.appendChild(el);
+                });
+            })
+            .catch(() => {
+                container.innerHTML = '<span class="text-muted small fst-italic">Ошибка загрузки паттернов</span>';
+            });
+    }
+
+    document.querySelectorAll('.btn-parser-filter').forEach(btn => {
+        btn.addEventListener('click', function() {
+            parserFilterEntryId = this.dataset.id;
+            document.getElementById('parserModalSite').textContent = this.dataset.site || '';
+            document.getElementById('parserIncludeInput').value = this.dataset.include || '';
+            document.getElementById('parserIncludeModeSelect').value = this.dataset.includeMode || 'OR';
+            document.getElementById('parserExcludeInput').value = this.dataset.exclude || '';
+            parserFilterModal.show();
+            loadParserPatterns(this.dataset.site || '');
+        });
+    });
+
+    document.getElementById('parserFilterClear').addEventListener('click', function() {
+        document.getElementById('parserIncludeInput').value = '';
+        document.getElementById('parserIncludeModeSelect').value = 'OR';
+        document.getElementById('parserExcludeInput').value = '';
+    });
+
+    document.getElementById('parserFilterSave').addEventListener('click', function() {
+        const include = (document.getElementById('parserIncludeInput').value || '').trim();
+        const includeMode = document.getElementById('parserIncludeModeSelect').value;
+        const exclude = (document.getElementById('parserExcludeInput').value || '').trim();
+        const saveBtn = this;
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Сохранение...';
+
+        const params = new URLSearchParams();
+        if (include) params.append('include', include);
+        params.append('includeMode', includeMode);
+        if (exclude) params.append('exclude', exclude);
+
+        fetch('/zoomos/city-ids/' + parserFilterEntryId + '/parser-filter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+        })
+        .then(r => r.json())
+        .then(data => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
+            if (data.success) {
+                parserFilterModal.hide();
+                // Обновить data-* и подсветку на кнопке
+                const btn = document.querySelector('.btn-parser-filter[data-id="' + parserFilterEntryId + '"]');
+                if (btn) {
+                    btn.dataset.include = include;
+                    btn.dataset.includeMode = includeMode;
+                    btn.dataset.exclude = exclude;
+                    const isActive = include || exclude;
+                    btn.classList.toggle('filter-active', !!isActive);
+                }
+            } else {
+                alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+            }
+        })
+        .catch(() => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
+            alert('Ошибка при сохранении фильтра парсера');
         });
     });
 

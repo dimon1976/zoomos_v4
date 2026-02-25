@@ -95,6 +95,9 @@ public class ZoomosParsingStats {
     @Builder.Default
     private Boolean isBaseline = false;
 
+    @Column(name = "parser_description", columnDefinition = "TEXT")
+    private String parserDescription;
+
     // Мета
     @Column(name = "parsing_date", nullable = false)
     private LocalDate parsingDate;
