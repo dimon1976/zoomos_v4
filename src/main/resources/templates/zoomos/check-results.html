@@ -142,14 +142,16 @@
                                   class="badge bg-info text-dark ms-1 small"
                                   th:text="${issue['addressName']}"></span>
                             <span class="small text-muted ms-2" th:text="${issue['message']}"></span>
-                            <!-- NOT_FOUND: текущая выкачка если идёт прямо сейчас -->
+                            <!-- NOT_FOUND: выкачка шла в момент проверки (данные могут устареть) -->
                             <small th:if="${issue['type'] == 'NOT_FOUND' and issue['currentIpPct'] != null}"
-                                   class="text-info d-block mt-1">
-                                <i class="fas fa-spinner fa-spin me-1"></i>Сейчас идёт:
+                                   class="text-secondary d-block mt-1">
+                                <i class="fas fa-clock me-1"></i>На момент проверки шло:
                                 <strong th:text="${issue['currentIpPct']}">?</strong>,
                                 старт <span th:text="${issue['currentIpStart']}">?</span>
                                 <span th:if="${issue['currentIpUpd'] != null}">,
                                     обновл. <span th:text="${issue['currentIpUpd']}"></span></span>
+                                <span th:if="${issue['currentIpCheckedAt'] != null}"
+                                      class="text-muted ms-1">(данные от <span th:text="${issue['currentIpCheckedAt']}"></span>)</span>
                             </small>
                             <!-- NOT_FOUND: последняя завершённая на 100% выкачка -->
                             <small th:if="${issue['type'] == 'NOT_FOUND' and issue['lastKnownDate'] != null}"

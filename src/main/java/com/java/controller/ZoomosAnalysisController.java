@@ -1161,8 +1161,8 @@ public class ZoomosAnalysisController {
     }
 
     /**
-     * Добавляет поля currentIpPct/currentIpStart/currentIpUpd в NOT_FOUND issue
-     * если для сайта+города прямо сейчас идёт выкачка (вне проверяемого периода).
+     * Добавляет поля currentIpPct/currentIpStart/currentIpUpd/currentIpCheckedAt в NOT_FOUND issue.
+     * Данные сохранены в момент проверки — могут быть устаревшими.
      */
     private void putCurrentInProgress(Map<String, Object> issue, ZoomosParsingStats curIp) {
         issue.put("currentIpPct", curIp.getCompletionTotal() != null ? curIp.getCompletionTotal() : "?");
@@ -1170,6 +1170,9 @@ public class ZoomosAnalysisController {
                 ? curIp.getStartTime().format(DateTimeFormatter.ofPattern("dd.MM HH:mm")) : "?");
         if (curIp.getUpdatedTime() != null) {
             issue.put("currentIpUpd", curIp.getUpdatedTime().format(DateTimeFormatter.ofPattern("dd.MM HH:mm")));
+        }
+        if (curIp.getCheckedAt() != null) {
+            issue.put("currentIpCheckedAt", curIp.getCheckedAt().format(DateTimeFormatter.ofPattern("dd.MM HH:mm")));
         }
     }
 
