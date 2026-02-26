@@ -7,10 +7,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.UUID;
@@ -32,8 +34,33 @@ public class ZoomosSchedulerService {
 
     @PostConstruct
     public void init() {
-        scheduleRepo.findAllByIsEnabledTrue().forEach(this::scheduleCheck);
+        scheduleRepo.findAllByIsEnabledTrue().forEach(schedule -> {
+            scheduleCheck(schedule);
+            checkAndRunMissedSchedule(schedule);
+        });
         log.info("ZoomosSchedulerService: загружено {} активных расписаний", scheduleMap.size());
+    }
+
+    /**
+     * Если JVM была приостановлена (sleep/hibernate) и cron-задача не сработала,
+     * обнаруживаем пропущенный запуск и выполняем его немедленно при старте.
+     */
+    private void checkAndRunMissedSchedule(ZoomosShopSchedule s) {
+        if (s.getLastRunAt() == null) return; // никогда не запускалось — пусть cron сам запустит
+        try {
+            String raw = s.getCronExpression().trim();
+            String springCron = raw.split("\\s+").length == 5 ? "0 " + raw : raw;
+            CronExpression cron = CronExpression.parse(springCron);
+            LocalDateTime lastRun = s.getLastRunAt().toLocalDateTime();
+            LocalDateTime nextExpected = cron.next(lastRun);
+            if (nextExpected != null && nextExpected.isBefore(LocalDateTime.now())) {
+                log.info("Пропущен запуск расписания shopId={} (ожидался {}), запускаем немедленно",
+                        s.getShopId(), nextExpected);
+                taskScheduler.execute(() -> runCheck(s));
+            }
+        } catch (Exception e) {
+            log.warn("Не удалось проверить пропущенное расписание shopId={}: {}", s.getShopId(), e.getMessage());
+        }
     }
 
     public void saveAndReschedule(ZoomosShopSchedule schedule) {

@@ -516,13 +516,15 @@ public class ZoomosAnalysisController {
                         && !ip.getStartTime().isBefore(effectiveRangeStart)
                         && !ip.getStartTime().toLocalDate().isAfter(checkDateTo))
                 .forEach(stats::add);
-        // Оставляем в inProgressStats только реально незавершённые записи текущего окна.
-        // 100% записи и overnight-записи (старт до effectiveRangeStart) убираем:
-        // они сохранены в БД для "Сейчас идёт" через findLatestInProgressBySiteAndCityId,
-        // но не участвуют в оценке динамики.
+        // Оставляем в inProgressStats только реально незавершённые записи в пределах дат проверки.
+        // 100% записи убираем (они промоутированы в stats выше).
+        // Overnight-парсинги (старт до timeFrom) НЕ убираем из inProgressStats — пользователь
+        // должен видеть "Сейчас идёт" для любой выкачки начавшейся в день проверки,
+        // независимо от timeFrom. Поэтому сравниваем только по дате, без учёта времени.
         inProgressStats = inProgressStats.stream()
                 .filter(ip -> (ip.getCompletionPercent() == null || ip.getCompletionPercent() < 100)
-                        && (ip.getStartTime() == null || !ip.getStartTime().isBefore(effectiveRangeStart)))
+                        && (ip.getStartTime() == null
+                            || !ip.getStartTime().toLocalDate().isBefore(run.getDateFrom())))
                 .collect(Collectors.toList());
 
         int dropThreshold = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
