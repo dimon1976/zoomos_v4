@@ -20,8 +20,11 @@ public class ZoomosShopSchedule {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "shop_id", nullable = false, unique = true)
+    @Column(name = "shop_id", nullable = false)
     private Long shopId;
+
+    @Column(name = "label", length = 50)
+    private String label;
 
     @Column(name = "cron_expression", nullable = false)
     @Builder.Default

@@ -10,7 +10,10 @@ import java.util.Optional;
 @Repository
 public interface ZoomosShopScheduleRepository extends JpaRepository<ZoomosShopSchedule, Long> {
 
-    Optional<ZoomosShopSchedule> findByShopId(Long shopId);
+    /** Возвращает первое расписание магазина (для обратной совместимости с index.html и одиночных операций) */
+    Optional<ZoomosShopSchedule> findFirstByShopId(Long shopId);
+
+    List<ZoomosShopSchedule> findAllByShopId(Long shopId);
 
     List<ZoomosShopSchedule> findAllByIsEnabledTrue();
 }

@@ -71,10 +71,17 @@ public class ZoomosAnalysisController {
                 .collect(java.util.stream.Collectors.toMap(
                         ZoomosCityName::getCityId, ZoomosCityName::getCityName));
 
-        // Расписания для badge'ей вкл/выкл на каждой карточке
+        // Расписания для badge'ей вкл/выкл на каждой карточке.
+        // Если у магазина несколько расписаний, берём включённое (если есть), иначе любое первое.
         Map<Long, ZoomosShopSchedule> schedulesMap = new java.util.LinkedHashMap<>();
         for (ZoomosShop shop : allShops) {
-            scheduleRepository.findByShopId(shop.getId()).ifPresent(s -> schedulesMap.put(shop.getId(), s));
+            List<ZoomosShopSchedule> shopScheds = scheduleRepository.findAllByShopId(shop.getId());
+            if (!shopScheds.isEmpty()) {
+                ZoomosShopSchedule representative = shopScheds.stream()
+                        .filter(ZoomosShopSchedule::isEnabled).findFirst()
+                        .orElse(shopScheds.get(0));
+                schedulesMap.put(shop.getId(), representative);
+            }
         }
 
         // Приоритетные сайты для иконок в таблице сайтов клиента
@@ -91,13 +98,13 @@ public class ZoomosAnalysisController {
         return "zoomos/index";
     }
 
-    /** AJAX-toggle расписания (для index.html без перезагрузки) */
+    /** AJAX-toggle расписания (для index.html без перезагрузки) — переключает ВСЕ расписания магазина */
     @PostMapping("/api/schedule/{shopId}/toggle")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> toggleScheduleAjax(@PathVariable Long shopId) {
-        schedulerService.toggleEnabled(shopId);
-        boolean isEnabled = scheduleRepository.findByShopId(shopId)
-                .map(ZoomosShopSchedule::isEnabled).orElse(false);
+        schedulerService.toggleAllByShopId(shopId);
+        boolean isEnabled = scheduleRepository.findAllByShopId(shopId).stream()
+                .anyMatch(ZoomosShopSchedule::isEnabled);
         return ResponseEntity.ok(Map.of("success", true, "isEnabled", isEnabled));
     }
 
@@ -471,9 +478,10 @@ public class ZoomosAnalysisController {
             CompletableFuture.runAsync(() -> {
                 try {
                     checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, mae, tdt, tet, operationId);
-                    // Обновляем lastRunAt в расписании (если оно существует)
-                    scheduleRepository.findByShopId(shopId).ifPresent(schedule -> {
-                        schedule.setLastRunAt(java.time.ZonedDateTime.now());
+                    // Обновляем lastRunAt во всех расписаниях магазина
+                    java.time.ZonedDateTime now = java.time.ZonedDateTime.now();
+                    scheduleRepository.findAllByShopId(shopId).forEach(schedule -> {
+                        schedule.setLastRunAt(now);
                         scheduleRepository.save(schedule);
                     });
                 } catch (Exception e) {
@@ -1387,20 +1395,26 @@ public class ZoomosAnalysisController {
     @GetMapping("/schedule")
     public String schedulePage(Model model) {
         List<ZoomosShop> shops = parserService.getAllShops();
-        Map<Long, ZoomosShopSchedule> schedules = new LinkedHashMap<>();
+        // Ключ — scheduleId, для lastRunFormatted и lastRunIds
         Map<Long, String> lastRunFormatted = new LinkedHashMap<>();
         Map<Long, Long> lastRunIds = new LinkedHashMap<>();
+        // Ключ — shopId → список расписаний
+        Map<Long, List<ZoomosShopSchedule>> schedules = new LinkedHashMap<>();
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
         for (ZoomosShop shop : shops) {
-            scheduleRepository.findByShopId(shop.getId()).ifPresent(s -> {
-                schedules.put(shop.getId(), s);
+            List<ZoomosShopSchedule> list = scheduleRepository.findAllByShopId(shop.getId());
+            schedules.put(shop.getId(), list);
+            for (ZoomosShopSchedule s : list) {
                 if (s.getLastRunAt() != null) {
-                    lastRunFormatted.put(shop.getId(),
+                    lastRunFormatted.put(s.getId(),
                             s.getLastRunAt().withZoneSameInstant(java.time.ZoneId.systemDefault()).format(fmt));
                 }
-            });
+            }
             checkRunRepository.findFirstByShopIdOrderByStartedAtDesc(shop.getId())
-                    .ifPresent(run -> lastRunIds.put(shop.getId(), run.getId()));
+                    .ifPresent(run -> {
+                        // Последний run связываем со всеми расписаниями магазина
+                        list.forEach(s -> lastRunIds.put(s.getId(), run.getId()));
+                    });
         }
         model.addAttribute("shops", shops);
         model.addAttribute("schedules", schedules);
@@ -1409,50 +1423,66 @@ public class ZoomosAnalysisController {
         return "zoomos/schedule";
     }
 
-    @PostMapping("/schedule/{shopId}")
-    public String saveSchedule(@PathVariable Long shopId,
-                               @RequestParam(defaultValue = "0 8 * * *") String cronExpression,
-                               @RequestParam(required = false) String timeFrom,
-                               @RequestParam(required = false) String timeTo,
-                               @RequestParam(defaultValue = "10") int dropThreshold,
-                               @RequestParam(defaultValue = "30") int errorGrowthThreshold,
-                               @RequestParam(defaultValue = "7") int baselineDays,
-                               @RequestParam(defaultValue = "5") int minAbsoluteErrors,
-                               @RequestParam(defaultValue = "-1") int dateOffsetFrom,
-                               @RequestParam(defaultValue = "0") int dateOffsetTo,
-                               @RequestParam(defaultValue = "30") int trendDropThreshold,
-                               @RequestParam(defaultValue = "100") int trendErrorThreshold,
-                               RedirectAttributes ra) {
-        ZoomosShopSchedule schedule = scheduleRepository.findByShopId(shopId)
-                .orElse(ZoomosShopSchedule.builder().shopId(shopId).build());
-        schedule.setCronExpression(cronExpression.trim());
-        schedule.setTimeFrom(timeFrom != null && !timeFrom.isBlank() ? timeFrom : null);
-        schedule.setTimeTo(timeTo != null && !timeTo.isBlank() ? timeTo : null);
-        schedule.setDropThreshold(dropThreshold);
-        schedule.setErrorGrowthThreshold(errorGrowthThreshold);
-        schedule.setBaselineDays(baselineDays);
-        schedule.setMinAbsoluteErrors(Math.max(0, minAbsoluteErrors));
-        schedule.setDateOffsetFrom(dateOffsetFrom);
-        schedule.setDateOffsetTo(dateOffsetTo);
-        schedule.setTrendDropThreshold(Math.max(1, trendDropThreshold));
-        schedule.setTrendErrorThreshold(Math.max(1, trendErrorThreshold));
-        schedulerService.saveAndReschedule(schedule);
-        ra.addFlashAttribute("success", "Расписание сохранено");
-        return "redirect:/zoomos/schedule";
+    /** Создать новое расписание для магазина с дефолтными значениями */
+    @PostMapping("/schedule/{shopId}/new")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> createSchedule(@PathVariable Long shopId) {
+        ZoomosShopSchedule s = ZoomosShopSchedule.builder().shopId(shopId).build();
+        schedulerService.saveAndReschedule(s);
+        return ResponseEntity.ok(Map.of("success", true, "scheduleId", s.getId()));
     }
 
-    @PostMapping("/schedule/{shopId}/toggle")
-    public String toggleSchedule(@PathVariable Long shopId, RedirectAttributes ra) {
-        schedulerService.toggleEnabled(shopId);
-        ra.addFlashAttribute("success", "Статус расписания изменён");
-        return "redirect:/zoomos/schedule";
+    /** Сохранить расписание по scheduleId */
+    @PostMapping("/schedule/item/{scheduleId}")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> saveScheduleItem(
+            @PathVariable Long scheduleId,
+            @RequestParam(defaultValue = "0 0 8 * * *") String cronExpression,
+            @RequestParam(required = false) String label,
+            @RequestParam(required = false) String timeFrom,
+            @RequestParam(required = false) String timeTo,
+            @RequestParam(defaultValue = "10") int dropThreshold,
+            @RequestParam(defaultValue = "30") int errorGrowthThreshold,
+            @RequestParam(defaultValue = "7") int baselineDays,
+            @RequestParam(defaultValue = "5") int minAbsoluteErrors,
+            @RequestParam(defaultValue = "-1") int dateOffsetFrom,
+            @RequestParam(defaultValue = "0") int dateOffsetTo,
+            @RequestParam(defaultValue = "30") int trendDropThreshold,
+            @RequestParam(defaultValue = "100") int trendErrorThreshold) {
+        return scheduleRepository.findById(scheduleId).map(schedule -> {
+            schedule.setLabel(label != null && !label.isBlank() ? label.trim() : null);
+            schedule.setCronExpression(cronExpression.trim());
+            schedule.setTimeFrom(timeFrom != null && !timeFrom.isBlank() ? timeFrom : null);
+            schedule.setTimeTo(timeTo != null && !timeTo.isBlank() ? timeTo : null);
+            schedule.setDropThreshold(dropThreshold);
+            schedule.setErrorGrowthThreshold(errorGrowthThreshold);
+            schedule.setBaselineDays(baselineDays);
+            schedule.setMinAbsoluteErrors(Math.max(0, minAbsoluteErrors));
+            schedule.setDateOffsetFrom(dateOffsetFrom);
+            schedule.setDateOffsetTo(dateOffsetTo);
+            schedule.setTrendDropThreshold(Math.max(1, trendDropThreshold));
+            schedule.setTrendErrorThreshold(Math.max(1, trendErrorThreshold));
+            schedulerService.saveAndReschedule(schedule);
+            return ResponseEntity.ok(Map.<String, Object>of("success", true));
+        }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Расписание не найдено")));
     }
 
-    @PostMapping("/schedule/{shopId}/delete")
-    public String deleteSchedule(@PathVariable Long shopId, RedirectAttributes ra) {
-        schedulerService.deleteSchedule(shopId);
-        ra.addFlashAttribute("success", "Расписание удалено");
-        return "redirect:/zoomos/schedule";
+    /** Переключить включение одного расписания по scheduleId */
+    @PostMapping("/schedule/item/{scheduleId}/toggle")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> toggleScheduleItem(@PathVariable Long scheduleId) {
+        schedulerService.toggleEnabledById(scheduleId);
+        boolean isEnabled = scheduleRepository.findById(scheduleId)
+                .map(ZoomosShopSchedule::isEnabled).orElse(false);
+        return ResponseEntity.ok(Map.of("success", true, "isEnabled", isEnabled));
+    }
+
+    /** Удалить одно расписание по scheduleId */
+    @PostMapping("/schedule/item/{scheduleId}/delete")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> deleteScheduleItem(@PathVariable Long scheduleId) {
+        schedulerService.deleteScheduleById(scheduleId);
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
     // =========================================================================

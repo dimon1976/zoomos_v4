@@ -21,6 +21,9 @@
     .cron-cheatsheet table { font-size: 0.85em; }
     .cron-cheatsheet code { font-size: 0.9em; color: #d63384; }
     .cat-toggle { cursor: pointer; user-select: none; }
+    .shop-header-row td { background-color: #f1f3f5; font-size: 0.88em; }
+    .label-input { min-width: 90px; max-width: 120px; }
+    .btn-xs { font-size: 0.72rem; padding: 0.1rem 0.35rem; }
 </style>
 </th:block>
 
@@ -49,6 +52,7 @@
         Расписание запускает проверку автоматически по cron-выражению (Spring-формат, 6 полей: сек мин час день-мес месяц день-нед).
         Дата проверки вычисляется от текущего дня с заданным смещением.
         <strong>Например:</strong> <code>0 0 8 * * *</code> — каждый день в 08:00. День недели: 1=Вс, 2=Пн … 7=Сб.
+        Один магазин может иметь несколько расписаний — нажмите <i class="fas fa-plus"></i> чтобы добавить.
     </div>
 
     <!-- Фильтрация и поиск -->
@@ -81,42 +85,68 @@
                 <thead class="table-light">
                     <tr>
                         <th style="width:40px" class="text-center" title="Расписание включено">Вкл</th>
-                        <th style="min-width:130px">Магазин</th>
+                        <th style="min-width:90px">Метка</th>
                         <th style="min-width:155px">Cron <span class="text-muted fw-normal" style="font-size:0.78em">(сек мин час д м нед)</span></th>
                         <th style="min-width:120px" class="text-center d-none d-md-table-cell">Период (offset)</th>
                         <th style="min-width:150px" class="text-center d-none d-md-table-cell">Время выкачки</th>
                         <th style="min-width:130px" class="text-center d-none d-xl-table-cell" title="Порог падения % / Порог роста ошибок %">Пороги % <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
                         <th style="min-width:80px" class="text-center d-none d-xxl-table-cell">Baseline дней</th>
                         <th style="min-width:75px" class="text-center d-none d-xxl-table-cell"
-                            title="Минимальное абсолютное число ошибок парсинга для срабатывания предупреждения. Например, при значении 5: рост с 1 до 2 ошибок — не варнинг, а рост с 5 до 15 — варнинг. Помогает избежать ложных срабатываний на крупных сайтах.">Мин.ошибок <i class="fas fa-info-circle text-muted" style="font-size:0.75em"></i></th>
+                            title="Минимальное абсолютное число ошибок парсинга для срабатывания предупреждения.">Мин.ошибок <i class="fas fa-info-circle text-muted" style="font-size:0.75em"></i></th>
                         <th style="min-width:130px" class="text-center d-none d-xxl-table-cell"
-                            title="Пороги для TREND_WARNING: отдельно от основных порогов. Ошибки и скорость нормализованы по числу товаров. Рекомендуемые значения: пад=30%, ош=100%.">Тренд % <i class="fas fa-chart-line text-muted" style="font-size:0.75em"></i> <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
+                            title="Пороги для TREND_WARNING: отдельно от основных порогов.">Тренд % <i class="fas fa-chart-line text-muted" style="font-size:0.75em"></i> <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
                         <th style="min-width:140px" class="text-center">Последний запуск</th>
                         <th style="min-width:110px" class="text-center">Действия</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr th:each="shop : ${shops}" class="sched-row"
+                <th:block th:each="shop : ${shops}">
+
+                    <!-- Строка-заголовок магазина -->
+                    <tr class="shop-header-row"
+                        th:data-shop-id="${shop.id}"
+                        th:data-shop-name="${shop.shopName}">
+                        <td colspan="11" class="fw-semibold py-1 ps-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>
+                                    <i class="fas fa-store me-1 text-muted"></i>
+                                    <span th:text="${shop.shopName}"></span>
+                                </span>
+                                <button class="btn btn-xs btn-outline-primary btn-add-schedule py-0 px-2 me-1"
+                                        th:data-shop-id="${shop.id}"
+                                        title="Добавить расписание для этого магазина">
+                                    <i class="fas fa-plus me-1"></i>Добавить
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Строки расписаний этого магазина -->
+                    <tr th:each="sched : ${schedules[shop.id]}"
+                        class="sched-row"
+                        th:data-schedule-id="${sched.id}"
                         th:data-shop-id="${shop.id}"
                         th:data-shop-name="${shop.shopName}"
-                        th:data-shop-action="@{'/zoomos/schedule/' + ${shop.id}}">
+                        th:data-shop-action="@{'/zoomos/schedule/item/' + ${sched.id}}">
 
                         <!-- Чекбокс Вкл/Выкл -->
                         <td class="text-center">
                             <input type="checkbox" class="form-check-input enabled-cb sched-enabled-cb"
-                                   th:checked="${schedules[shop.id] != null and schedules[shop.id].enabled}"
-                                   th:disabled="${schedules[shop.id] == null}"
-                                   th:title="${schedules[shop.id] != null and schedules[shop.id].enabled} ? 'Расписание включено — нажмите чтобы выключить' : 'Расписание выключено — нажмите чтобы включить'"
+                                   th:checked="${sched.enabled}"
+                                   th:title="${sched.enabled} ? 'Расписание включено — нажмите чтобы выключить' : 'Расписание выключено — нажмите чтобы включить'"
                                    style="width:18px;height:18px;cursor:pointer;">
                         </td>
 
-                        <!-- Магазин -->
-                        <td class="fw-semibold small" th:text="${shop.shopName}"></td>
+                        <!-- Метка -->
+                        <td>
+                            <input type="text" class="form-control form-control-sm label-input sched-label"
+                                   th:value="${sched.label}" placeholder="метка...">
+                        </td>
 
                         <!-- Cron -->
                         <td>
                             <input type="text" class="form-control form-control-sm font-monospace sched-cron"
-                                   th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].cronExpression} : '0 0 8 * * *'"
+                                   th:value="${sched.cronExpression}"
                                    placeholder="0 0 8 * * *">
                         </td>
 
@@ -124,11 +154,11 @@
                         <td class="text-center d-none d-md-table-cell">
                             <div class="d-flex align-items-center justify-content-center gap-1">
                                 <input type="number" class="form-control form-control-sm offset-input text-center sched-offset-from"
-                                       th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].dateOffsetFrom} : -1"
+                                       th:value="${sched.dateOffsetFrom}"
                                        min="-30" max="0" title="Смещение От: −1=вчера, 0=сегодня">
                                 <span class="small text-muted">…</span>
                                 <input type="number" class="form-control form-control-sm offset-input text-center sched-offset-to"
-                                       th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].dateOffsetTo} : 0"
+                                       th:value="${sched.dateOffsetTo}"
                                        min="-30" max="0" title="Смещение До: 0=сегодня">
                             </div>
                         </td>
@@ -137,10 +167,10 @@
                         <td class="d-none d-md-table-cell">
                             <div class="d-flex align-items-center gap-1">
                                 <input type="time" class="form-control form-control-sm sched-time-from"
-                                       th:value="${schedules[shop.id]?.timeFrom}" title="Фильтр: начало выкачки (необяз.)">
+                                       th:value="${sched.timeFrom}" title="Фильтр: начало выкачки (необяз.)">
                                 <span class="small text-muted">—</span>
                                 <input type="time" class="form-control form-control-sm sched-time-to"
-                                       th:value="${schedules[shop.id]?.timeTo}" title="Фильтр: конец выкачки (необяз.)">
+                                       th:value="${sched.timeTo}" title="Фильтр: конец выкачки (необяз.)">
                             </div>
                         </td>
 
@@ -150,13 +180,13 @@
                                 <div class="d-flex flex-column align-items-center">
                                     <span class="text-muted" style="font-size:0.7em">пад%</span>
                                     <input type="number" class="form-control form-control-sm text-center threshold-input sched-drop"
-                                           th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].dropThreshold} : 10"
+                                           th:value="${sched.dropThreshold}"
                                            min="1" max="100" title="Порог падения товаров/«в наличии» (%)">
                                 </div>
                                 <div class="d-flex flex-column align-items-center">
                                     <span class="text-muted" style="font-size:0.7em">ош%</span>
                                     <input type="number" class="form-control form-control-sm text-center threshold-input sched-err"
-                                           th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].errorGrowthThreshold} : 30"
+                                           th:value="${sched.errorGrowthThreshold}"
                                            min="1" max="500" title="Порог роста ошибок (%)">
                                 </div>
                             </div>
@@ -165,14 +195,14 @@
                         <!-- Baseline -->
                         <td class="text-center d-none d-xxl-table-cell">
                             <input type="number" class="form-control form-control-sm text-center baseline-input sched-baseline"
-                                   th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].baselineDays} : 7"
+                                   th:value="${sched.baselineDays}"
                                    min="0" max="90" title="Дней для baseline-анализа (0 = отключено)">
                         </td>
 
                         <!-- Мин. ошибок -->
                         <td class="text-center d-none d-xxl-table-cell">
                             <input type="number" class="form-control form-control-sm text-center baseline-input sched-min-abs-errors"
-                                   th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].minAbsoluteErrors} : 5"
+                                   th:value="${sched.minAbsoluteErrors}"
                                    min="0" max="1000" title="Мин. абсолютное число ошибок для срабатывания варнинга">
                         </td>
 
@@ -182,13 +212,13 @@
                                 <div class="d-flex flex-column align-items-center">
                                     <span class="text-muted" style="font-size:0.7em">пад%</span>
                                     <input type="number" class="form-control form-control-sm text-center threshold-input sched-trend-drop"
-                                           th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].trendDropThreshold} : 30"
+                                           th:value="${sched.trendDropThreshold}"
                                            min="1" max="500" title="Порог замедления выкачки и падения доли «В наличии» для TREND_WARNING (%)">
                                 </div>
                                 <div class="d-flex flex-column align-items-center">
                                     <span class="text-muted" style="font-size:0.7em">ош%</span>
                                     <input type="number" class="form-control form-control-sm text-center threshold-input sched-trend-err"
-                                           th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].trendErrorThreshold} : 100"
+                                           th:value="${sched.trendErrorThreshold}"
                                            min="1" max="1000" title="Порог роста доли ошибок от товаров для TREND_WARNING (%)">
                                 </div>
                             </div>
@@ -196,15 +226,15 @@
 
                         <!-- Последний запуск -->
                         <td class="text-center small text-muted">
-                            <span th:if="${schedules[shop.id]?.lastRunAt != null}">
-                                <a th:if="${lastRunIds[shop.id] != null}"
-                                   th:href="@{'/zoomos/check/results/' + ${lastRunIds[shop.id]}}"
+                            <span th:if="${sched.lastRunAt != null}">
+                                <a th:if="${lastRunIds[sched.id] != null}"
+                                   th:href="@{'/zoomos/check/results/' + ${lastRunIds[sched.id]}}"
                                    class="text-decoration-none"
-                                   th:text="${lastRunFormatted[shop.id]}"></a>
-                                <span th:unless="${lastRunIds[shop.id] != null}"
-                                      th:text="${lastRunFormatted[shop.id]}"></span>
+                                   th:text="${lastRunFormatted[sched.id]}"></a>
+                                <span th:unless="${lastRunIds[sched.id] != null}"
+                                      th:text="${lastRunFormatted[sched.id]}"></span>
                             </span>
-                            <span th:if="${schedules[shop.id] == null or schedules[shop.id].lastRunAt == null}">—</span>
+                            <span th:if="${sched.lastRunAt == null}">—</span>
                             <span class="sched-running-indicator d-none ms-1">
                                 <i class="fas fa-spinner fa-spin text-primary"></i>
                                 <span class="text-primary sched-progress-msg">Идёт...</span>
@@ -225,17 +255,25 @@
                                     <i class="fas fa-bolt"></i>
                                 </button>
                                 <!-- Удалить -->
-                                <form th:if="${schedules[shop.id] != null}"
-                                      th:action="@{'/zoomos/schedule/' + ${shop.id} + '/delete'}" method="post"
-                                      class="d-inline"
-                                      onsubmit="return confirm('Удалить расписание для ' + this.closest('tr').querySelectorAll('td')[1].textContent.trim() + '?')">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Удалить расписание">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 btn-sched-delete"
+                                        th:data-schedule-id="${sched.id}"
+                                        th:data-shop-name="${shop.shopName}"
+                                        title="Удалить расписание">
+                                    <i class="fas fa-trash"></i>
+                                </button>
                             </div>
                         </td>
                     </tr>
+
+                    <!-- Пустая строка если нет расписаний -->
+                    <tr th:if="${schedules[shop.id].empty}" class="shop-empty-row"
+                        th:data-shop-name="${shop.shopName}">
+                        <td colspan="11" class="text-muted text-center py-1 small fst-italic">
+                            Нет расписания — нажмите <i class="fas fa-plus"></i> чтобы добавить
+                        </td>
+                    </tr>
+
+                </th:block>
                 </tbody>
             </table>
             </div>
@@ -352,19 +390,54 @@
     function filterSchedRows() {
         const q = schedSearchEl ? schedSearchEl.value.trim().toLowerCase() : '';
         const onlyEnabled = showEnabledOnlyEl ? showEnabledOnlyEl.checked : false;
-        const rows = document.querySelectorAll('tr.sched-row');
-        let visible = 0;
-        rows.forEach(row => {
+        const schedRows = document.querySelectorAll('tr.sched-row');
+        const emptyRows = document.querySelectorAll('tr.shop-empty-row');
+        const headerRows = document.querySelectorAll('tr.shop-header-row');
+
+        // Шаг 1: фильтруем строки расписаний
+        let visibleSchedRows = 0;
+        schedRows.forEach(row => {
             const name = (row.dataset.shopName || '').toLowerCase();
             const enabledCb = row.querySelector('.sched-enabled-cb');
             const isEnabled = enabledCb ? enabledCb.checked : false;
             const show = (!q || name.includes(q)) && (!onlyEnabled || isEnabled);
             row.style.display = show ? '' : 'none';
-            if (show) visible++;
+            if (show) visibleSchedRows++;
         });
+
+        // Шаг 2: показываем/скрываем заголовок магазина —
+        // скрываем если не совпадает поиск ИЛИ если onlyEnabled и ни одна строка расписания не видна
+        headerRows.forEach(hRow => {
+            const shopName = (hRow.dataset.shopName || '').toLowerCase();
+            const shopId = hRow.dataset.shopId;
+            if (q && !shopName.includes(q)) {
+                hRow.style.display = 'none';
+                return;
+            }
+            if (onlyEnabled) {
+                // Есть ли хоть одна видимая sched-row у этого магазина?
+                const hasVisible = [...schedRows].some(r =>
+                    r.dataset.shopId === shopId && r.style.display !== 'none');
+                hRow.style.display = hasVisible ? '' : 'none';
+            } else {
+                hRow.style.display = '';
+            }
+        });
+
+        // Шаг 3: пустые строки (магазины без расписания)
+        // При onlyEnabled скрываем — раз нет расписаний, нечего «включать»
+        emptyRows.forEach(eRow => {
+            const shopName = (eRow.dataset.shopName || '').toLowerCase();
+            if (q && !shopName.includes(q)) {
+                eRow.style.display = 'none';
+                return;
+            }
+            eRow.style.display = onlyEnabled ? 'none' : '';
+        });
+
         if (schedFilterCountEl) {
             schedFilterCountEl.textContent = (q || onlyEnabled)
-                ? 'Показано: ' + visible + ' из ' + rows.length
+                ? 'Показано: ' + visibleSchedRows + ' расписаний'
                 : '';
         }
     }
@@ -378,19 +451,45 @@
     // Применяем фильтр сразу при загрузке (чекбокс checked по умолчанию)
     filterSchedRows();
 
+    // ---- Добавить расписание ----
+    document.querySelectorAll('.btn-add-schedule').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const orig = this.innerHTML;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            this.disabled = true;
+            fetch('/zoomos/schedule/' + shopId + '/new', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                        this.innerHTML = orig;
+                        this.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    alert('Ошибка сети');
+                    this.innerHTML = orig;
+                    this.disabled = false;
+                });
+        });
+    });
+
     // ---- Чекбокс Вкл/Выкл (AJAX) ----
     document.querySelectorAll('.sched-enabled-cb').forEach(cb => {
         cb.addEventListener('change', function() {
             const row = this.closest('tr');
-            const shopId = row.dataset.shopId;
+            const scheduleId = row.dataset.scheduleId;
             const wantEnabled = this.checked;
             this.disabled = true;
 
-            fetch('/zoomos/schedule/' + shopId + '/toggle', { method: 'POST' })
-                .then(r => {
-                    // Сервер редиректит — это ок, обновляем UI вручную
-                    this.checked = wantEnabled;
-                    this.title = wantEnabled
+            fetch('/zoomos/schedule/item/' + scheduleId + '/toggle', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    this.checked = data.isEnabled !== undefined ? data.isEnabled : wantEnabled;
+                    this.title = this.checked
                         ? 'Расписание включено — нажмите чтобы выключить'
                         : 'Расписание выключено — нажмите чтобы включить';
                     this.disabled = false;
@@ -408,14 +507,15 @@
     document.querySelectorAll('.btn-sched-save').forEach(btn => {
         btn.addEventListener('click', function() {
             const row = this.closest('tr');
-            const action = row.dataset.shopAction;
+            const action = row.dataset.shopAction; // /zoomos/schedule/item/{scheduleId}
 
             const fd = new FormData();
-            fd.append('cronExpression', row.querySelector('.sched-cron').value.trim());
-            fd.append('dateOffsetFrom', row.querySelector('.sched-offset-from').value);
-            fd.append('dateOffsetTo',   row.querySelector('.sched-offset-to').value);
-            fd.append('timeFrom', row.querySelector('.sched-time-from').value || '');
-            fd.append('timeTo',   row.querySelector('.sched-time-to').value || '');
+            fd.append('label',            row.querySelector('.sched-label')?.value?.trim() || '');
+            fd.append('cronExpression',   row.querySelector('.sched-cron').value.trim());
+            fd.append('dateOffsetFrom',   row.querySelector('.sched-offset-from').value);
+            fd.append('dateOffsetTo',     row.querySelector('.sched-offset-to').value);
+            fd.append('timeFrom',  row.querySelector('.sched-time-from').value || '');
+            fd.append('timeTo',    row.querySelector('.sched-time-to').value || '');
             fd.append('dropThreshold',        row.querySelector('.sched-drop').value);
             fd.append('errorGrowthThreshold', row.querySelector('.sched-err').value);
             fd.append('baselineDays',         row.querySelector('.sched-baseline').value);
@@ -428,20 +528,18 @@
             this.disabled = true;
 
             fetch(action, { method: 'POST', body: fd })
-                .then(r => {
-                    if (r.ok || r.redirected) {
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
                         this.innerHTML = '<i class="fas fa-check"></i>';
                         this.className = 'btn btn-sm btn-success py-0 px-2 btn-sched-save';
-                        // Разблокировать чекбокс если он был disabled (первое сохранение)
-                        const cb = row.querySelector('.sched-enabled-cb');
-                        if (cb) cb.disabled = false;
                         setTimeout(() => {
                             this.innerHTML = orig;
                             this.className = 'btn btn-sm btn-primary py-0 px-2 btn-sched-save';
                             this.disabled = false;
                         }, 1500);
                     } else {
-                        alert('Ошибка сохранения');
+                        alert('Ошибка: ' + (data.error || 'не удалось сохранить'));
                         this.innerHTML = orig;
                         this.disabled = false;
                     }
@@ -449,6 +547,30 @@
                 .catch(() => {
                     alert('Ошибка сети');
                     this.innerHTML = orig;
+                    this.disabled = false;
+                });
+        });
+    });
+
+    // ---- Удалить расписание ----
+    document.querySelectorAll('.btn-sched-delete').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const scheduleId = this.dataset.scheduleId;
+            const shopName = this.dataset.shopName;
+            if (!confirm('Удалить расписание для ' + shopName + '?')) return;
+            this.disabled = true;
+            fetch('/zoomos/schedule/item/' + scheduleId + '/delete', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Ошибка удаления');
+                        this.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    alert('Ошибка сети');
                     this.disabled = false;
                 });
         });
@@ -465,7 +587,6 @@
                     const indicator = row.querySelector('.sched-running-indicator');
                     const msgEl = indicator ? indicator.querySelector('.sched-progress-msg') : null;
                     if (indicator) indicator.classList.remove('d-none');
-                    // Подписываемся на shop-топик (работает и для cron, и для ручного запуска)
                     subscribeToShopProgress(shopId, indicator, msgEl);
                 }
             })
@@ -562,6 +683,7 @@
                 });
         });
     });
+
     function subscribeToScheduleCheck(shopId, operationId, btn, origHtml, indicator, msgEl) {
         function finish() {
             if (indicator) indicator.classList.add('d-none');
@@ -582,7 +704,6 @@
             const stompClient = Stomp.over(socket);
             stompClient.debug = null;
             stompClient.connect({}, function() {
-                // Подписываемся на shop-топик (доступен всегда — и для cron, и для run-now)
                 stompClient.subscribe('/topic/zoomos-check/shop/' + shopId, function(msg) {
                     const data = JSON.parse(msg.body);
                     if (msgEl) msgEl.textContent = data.message || 'Идёт...';

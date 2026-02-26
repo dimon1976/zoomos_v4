@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +31,7 @@ public class ZoomosSchedulerService {
     @Qualifier("zoomosSchedulerTaskScheduler")
     private final ThreadPoolTaskScheduler taskScheduler;
 
+    /** Ключ — scheduleId (не shopId), чтобы поддерживать несколько расписаний на магазин */
     private final Map<Long, ScheduledFuture<?>> scheduleMap = new ConcurrentHashMap<>();
 
     @PostConstruct
@@ -54,38 +56,61 @@ public class ZoomosSchedulerService {
             LocalDateTime lastRun = s.getLastRunAt().toLocalDateTime();
             LocalDateTime nextExpected = cron.next(lastRun);
             if (nextExpected != null && nextExpected.isBefore(LocalDateTime.now())) {
-                log.info("Пропущен запуск расписания shopId={} (ожидался {}), запускаем немедленно",
-                        s.getShopId(), nextExpected);
+                log.info("Пропущен запуск расписания id={} shopId={} (ожидался {}), запускаем немедленно",
+                        s.getId(), s.getShopId(), nextExpected);
                 taskScheduler.execute(() -> runCheck(s));
             }
         } catch (Exception e) {
-            log.warn("Не удалось проверить пропущенное расписание shopId={}: {}", s.getShopId(), e.getMessage());
+            log.warn("Не удалось проверить пропущенное расписание id={} shopId={}: {}", s.getId(), s.getShopId(), e.getMessage());
         }
     }
 
     public void saveAndReschedule(ZoomosShopSchedule schedule) {
         scheduleRepo.save(schedule);
-        unschedule(schedule.getShopId());
+        unschedule(schedule.getId());
         if (schedule.isEnabled()) {
             scheduleCheck(schedule);
         }
     }
 
-    public void deleteSchedule(Long shopId) {
-        unschedule(shopId);
-        scheduleRepo.findByShopId(shopId).ifPresent(scheduleRepo::delete);
+    public void deleteScheduleById(Long scheduleId) {
+        unschedule(scheduleId);
+        scheduleRepo.findById(scheduleId).ifPresent(scheduleRepo::delete);
     }
 
-    public void toggleEnabled(Long shopId) {
-        scheduleRepo.findByShopId(shopId).ifPresent(schedule -> {
+    /** @deprecated используется только для обратной совместимости с index.html */
+    public void deleteSchedule(Long shopId) {
+        scheduleRepo.findFirstByShopId(shopId).ifPresent(s -> deleteScheduleById(s.getId()));
+    }
+
+    /** Переключает одно конкретное расписание по scheduleId */
+    public void toggleEnabledById(Long scheduleId) {
+        scheduleRepo.findById(scheduleId).ifPresent(schedule -> {
             schedule.setEnabled(!schedule.isEnabled());
             saveAndReschedule(schedule);
-            log.info("Расписание shopId={} — isEnabled={}", shopId, schedule.isEnabled());
+            log.info("Расписание id={} shopId={} — isEnabled={}", scheduleId, schedule.getShopId(), schedule.isEnabled());
         });
     }
 
-    private void unschedule(Long shopId) {
-        ScheduledFuture<?> existing = scheduleMap.remove(shopId);
+    /** Переключает ВСЕ расписания магазина (для index.html).
+     *  Если хоть одно включено — выключает все; иначе — включает все. */
+    public void toggleAllByShopId(Long shopId) {
+        List<ZoomosShopSchedule> all = scheduleRepo.findAllByShopId(shopId);
+        boolean anyEnabled = all.stream().anyMatch(ZoomosShopSchedule::isEnabled);
+        for (ZoomosShopSchedule s : all) {
+            s.setEnabled(!anyEnabled);
+            saveAndReschedule(s);
+        }
+        log.info("toggleAllByShopId shopId={}: anyWasEnabled={}, теперь={}", shopId, anyEnabled, !anyEnabled);
+    }
+
+    /** @deprecated используется для обратной совместимости с index.html */
+    public void toggleEnabled(Long shopId) {
+        toggleAllByShopId(shopId);
+    }
+
+    private void unschedule(Long scheduleId) {
+        ScheduledFuture<?> existing = scheduleMap.remove(scheduleId);
         if (existing != null) {
             existing.cancel(false);
         }
@@ -99,22 +124,22 @@ public class ZoomosSchedulerService {
             String springCron = raw.split("\\s+").length == 5 ? "0 " + raw : raw;
             ScheduledFuture<?> future = taskScheduler.schedule(
                     () -> runCheck(s), new CronTrigger(springCron));
-            scheduleMap.put(s.getShopId(), future);
-            log.info("Запланирована проверка для shopId={} по cron='{}'", s.getShopId(), springCron);
+            scheduleMap.put(s.getId(), future);
+            log.info("Запланирована проверка для id={} shopId={} по cron='{}'", s.getId(), s.getShopId(), springCron);
         } catch (Exception e) {
-            log.error("Ошибка при планировании shopId={}: {}", s.getShopId(), e.getMessage());
+            log.error("Ошибка при планировании id={} shopId={}: {}", s.getId(), s.getShopId(), e.getMessage());
         }
     }
 
     private void runCheck(ZoomosShopSchedule s) {
-        // Перезагружаем из БД, чтобы всегда использовать актуальные настройки
-        ZoomosShopSchedule latest = scheduleRepo.findByShopId(s.getShopId()).orElse(s);
+        // Перезагружаем из БД по scheduleId, чтобы всегда использовать актуальные настройки
+        ZoomosShopSchedule latest = scheduleRepo.findById(s.getId()).orElse(s);
         LocalDate today = LocalDate.now();
         LocalDate dateFrom = today.plusDays(latest.getDateOffsetFrom());
         LocalDate dateTo   = today.plusDays(latest.getDateOffsetTo());
         String operationId = UUID.randomUUID().toString();
-        log.info("Автопроверка shopId={}: {} — {} (offset {} .. {})",
-                s.getShopId(), dateFrom, dateTo, latest.getDateOffsetFrom(), latest.getDateOffsetTo());
+        log.info("Автопроверка id={} shopId={}: {} — {} (offset {} .. {})",
+                s.getId(), s.getShopId(), dateFrom, dateTo, latest.getDateOffsetFrom(), latest.getDateOffsetTo());
         try {
             checkService.runCheck(latest.getShopId(), dateFrom, dateTo,
                     latest.getTimeFrom(), latest.getTimeTo(),
@@ -122,17 +147,18 @@ public class ZoomosSchedulerService {
                     latest.getBaselineDays(), latest.getMinAbsoluteErrors(),
                     latest.getTrendDropThreshold(), latest.getTrendErrorThreshold(),
                     operationId);
-            scheduleRepo.findByShopId(s.getShopId()).ifPresent(schedule -> {
+            scheduleRepo.findById(s.getId()).ifPresent(schedule -> {
                 schedule.setLastRunAt(ZonedDateTime.now());
                 scheduleRepo.save(schedule);
             });
         } catch (Exception e) {
-            log.error("Ошибка автопроверки shopId={}: {}", s.getShopId(), e.getMessage(), e);
+            log.error("Ошибка автопроверки id={} shopId={}: {}", s.getId(), s.getShopId(), e.getMessage(), e);
         }
     }
 
-    /** Возвращает true если для shopId есть активное расписание в памяти */
+    /** Возвращает true если для shopId есть хотя бы одно активное расписание в памяти */
     public boolean isScheduled(Long shopId) {
-        return scheduleMap.containsKey(shopId);
+        return scheduleRepo.findAllByShopId(shopId).stream()
+                .anyMatch(s -> s.getId() != null && scheduleMap.containsKey(s.getId()));
     }
 }
