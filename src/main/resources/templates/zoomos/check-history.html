@@ -28,7 +28,11 @@
 
     <div th:unless="${runs.empty}" class="mb-3 d-flex align-items-center gap-2">
         <input type="text" id="historySearch" class="form-control form-control-sm w-auto"
-               placeholder="Фильтр по магазину..." style="min-width:220px">
+               placeholder="Фильтр по магазину..." style="min-width:220px"
+               th:value="${shopFilter}">
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="historySearchClear" title="Сбросить фильтр">
+            <i class="fas fa-times"></i>
+        </button>
         <span id="historyCount" class="text-muted small"></span>
     </div>
 
@@ -92,16 +96,28 @@
 <script>
     const histSearch = document.getElementById('historySearch');
     const histCount  = document.getElementById('historyCount');
+    const histClear  = document.getElementById('historySearchClear');
+
+    function filterHistory() {
+        const q = histSearch ? histSearch.value.trim().toLowerCase() : '';
+        const rows = document.querySelectorAll('tbody tr');
+        rows.forEach(r => {
+            const name = r.cells[1]?.textContent.toLowerCase() || '';
+            r.style.display = (!q || name.includes(q)) ? '' : 'none';
+        });
+        const total = rows.length;
+        const visible = Array.from(rows).filter(r => r.style.display !== 'none').length;
+        if (histCount) histCount.textContent = q ? `Показано: ${visible} из ${total}` : '';
+    }
+
     if (histSearch) {
-        histSearch.addEventListener('input', function() {
-            const q = this.value.trim().toLowerCase();
-            const rows = document.querySelectorAll('tbody tr');
-            rows.forEach(r => {
-                const name = r.cells[1]?.textContent.toLowerCase() || '';
-                r.style.display = (!q || name.includes(q)) ? '' : 'none';
-            });
-            const visible = Array.from(rows).filter(r => r.style.display !== 'none').length;
-            histCount.textContent = q ? `Показано: ${visible} из ${rows.length}` : '';
+        histSearch.addEventListener('input', filterHistory);
+        // Применяем фильтр сразу (если пришли с ?shop=...)
+        if (histSearch.value.trim()) filterHistory();
+    }
+    if (histClear) {
+        histClear.addEventListener('click', () => {
+            if (histSearch) { histSearch.value = ''; filterHistory(); }
         });
     }
 </script>

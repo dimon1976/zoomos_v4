@@ -561,28 +561,95 @@ public class ZoomosAnalysisController {
 
         List<Map<String, Object>> issues = new ArrayList<>();
 
-        // Статус каждой связки site+city (для оценки динамики)
+        // Загружаем конфигурацию city_ids (нужна и для парсер-фильтра, и для NOT_FOUND проверки)
+        List<ZoomosCityId> allCityIds = parserService.getCityIds(run.getShop().getId())
+                .stream().filter(c -> Boolean.TRUE.equals(c.getIsActive()))
+                .collect(Collectors.toList());
+
+        // Карта siteName → cityId config для сайтов с парсер-фильтром
+        Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
+                .filter(c -> c.getParserInclude() != null && !c.getParserInclude().isBlank())
+                .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
+
+        // Статус каждой связки site+city
         Map<String, String> siteCityStatuses = new LinkedHashMap<>();
         for (Map.Entry<String, List<ZoomosParsingStats>> entry : bySiteCity.entrySet()) {
             List<ZoomosParsingStats> group = new ArrayList<>(entry.getValue());
             group.sort(Comparator.comparing(
                     s -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now(),
                     Comparator.naturalOrder()));
-            boolean ignoreStock = group.get(0).getSiteName() != null
-                    && ignoreStockSites.contains(group.get(0).getSiteName());
-            String status = checkService.evaluateGroup(group, dropThreshold, errorGrowthThreshold,
-                    minAbsoluteErrors, ignoreStock);
-            siteCityStatuses.put(entry.getKey(), status);
-            if (!"OK".equals(status)) {
-                buildGroupIssues(group, status, dropThreshold, errorGrowthThreshold,
-                        minAbsoluteErrors, ignoreStock, issues, run.getShop().getShopName());
-            }
-        }
 
-        // Ожидаемые города/адреса — проверяем ненайденные на уровне каждого города и адреса
-        List<ZoomosCityId> allCityIds = parserService.getCityIds(run.getShop().getId())
-                .stream().filter(c -> Boolean.TRUE.equals(c.getIsActive()))
-                .collect(Collectors.toList());
+            String groupKey = entry.getKey();
+            String siteName = groupKey.split("\\|")[0];
+            ZoomosCityId cidConfig = cityIdBySite.get(siteName);
+
+            String status;
+            if (cidConfig != null) {
+                // Парсер-фильтр задан: completeness-check ВМЕСТО evaluateGroup.
+                // Добавляем in-progress stats с тем же siteName, чтобы видеть прогресс незавершённых парсеров.
+                List<ZoomosParsingStats> groupExt = new ArrayList<>(group);
+                final String siteNameForFilter = siteName;
+                inProgressStats.stream()
+                        .filter(ip -> siteNameForFilter.equals(ip.getSiteName()))
+                        .forEach(groupExt::add);
+                List<Map<String, Object>> incomplete = checkService.checkParserCompleteness(
+                        groupExt, cidConfig.getParserInclude(), cidConfig.getParserIncludeMode());
+                if (incomplete == null || incomplete.isEmpty()) {
+                    status = "OK";
+                } else {
+                    status = "ERROR"; // и OR, и AND: незавершённые парсеры = ERROR
+                    String cityPart = groupKey.contains("|") ? groupKey.split("\\|", 2)[1] : "";
+                    String cityId = ZoomosCheckService.extractCityId(cityPart);
+                    for (Map<String, Object> info : incomplete) {
+                        Map<String, Object> iss = new LinkedHashMap<>();
+                        iss.put("site", siteName);
+                        iss.put("city", cityPart);
+                        iss.put("cityId", cityId != null ? cityId : cityPart);
+                        iss.put("checkType", cidConfig.getCheckType());
+                        iss.put("shopName", run.getShop().getShopName());
+                        iss.put("isPriority", prioritySiteNames.contains(siteName));
+                        iss.put("type", status);
+                        String pattern = (String) info.get("pattern");
+                        StringBuilder msg = new StringBuilder();
+                        if (Boolean.TRUE.equals(info.get("orMode"))) {
+                            msg.append("Ни один парсер '").append(pattern).append("' не завершён");
+                        } else {
+                            msg.append("Парсер '").append(pattern).append("' не завершён");
+                        }
+                        if (Boolean.TRUE.equals(info.get("noData"))) {
+                            msg.append(" (нет данных)");
+                        } else {
+                            Object completion = info.get("completion");
+                            Object total = info.get("total");
+                            Object inStock = info.get("inStock");
+                            Object errors = info.get("errors");
+                            Object desc = info.get("description");
+                            Object updatedTime = info.get("updatedTime");
+                            if (completion != null) msg.append(": ").append(completion);
+                            if (total != null) msg.append(", товаров: ").append(total);
+                            if (inStock != null) msg.append(", в наличии: ").append(inStock);
+                            if (errors != null && !Integer.valueOf(0).equals(errors)) msg.append(", ошибок: ").append(errors);
+                            if (updatedTime instanceof ZonedDateTime) msg.append(", обновлено: ")
+                                    .append(((ZonedDateTime) updatedTime).format(DateTimeFormatter.ofPattern("HH:mm")));
+                            if (desc != null) msg.append(" [").append(desc).append("]");
+                        }
+                        iss.put("message", msg.toString());
+                        issues.add(iss);
+                    }
+                }
+            } else {
+                // Без фильтра: стандартный evaluateGroup
+                boolean ignoreStock = group.get(0).getSiteName() != null
+                        && ignoreStockSites.contains(group.get(0).getSiteName());
+                status = checkService.evaluateGroup(group, dropThreshold, errorGrowthThreshold,
+                        minAbsoluteErrors, ignoreStock);
+                if (!"OK".equals(status)) {
+                    buildGroupIssues(group, status, dropThreshold, errorGrowthThreshold,
+                            minAbsoluteErrors, ignoreStock, issues, run.getShop().getShopName());
+                }
+            }
+            siteCityStatuses.put(groupKey, status);
+        }
 
         // Множества найденных городов и адресов из реальных данных
         Set<String> foundCityKeys = new HashSet<>();    // "siteName|cityId"
@@ -1064,9 +1131,14 @@ public class ZoomosAnalysisController {
                     return 4; // TREND_WARNING
                 }));
 
+        // Карта siteName → parserInclude для отображения в колонке "Парсер" (только фильтр, не полный parserDescription)
+        Map<String, String> parserIncludeBysite = new HashMap<>();
+        cityIdBySite.forEach((site, cid) -> parserIncludeBysite.put(site, cid.getParserInclude()));
+
         model.addAttribute("run", run);
         model.addAttribute("groups", groups);
         model.addAttribute("issues", issues);
+        model.addAttribute("parserIncludeBysite", parserIncludeBysite);
         model.addAttribute("prioritySiteNames", prioritySiteNames);
         model.addAttribute("canDeliver", canDeliver);
         model.addAttribute("itText", itText.toString().trim());
@@ -1312,11 +1384,12 @@ public class ZoomosAnalysisController {
     }
 
     @GetMapping("/check/history")
-    public String checkHistory(Model model) {
+    public String checkHistory(@RequestParam(required = false) String shop, Model model) {
         List<ZoomosCheckRun> runs = checkRunRepository.findAll(
                 org.springframework.data.domain.Sort.by(
                         org.springframework.data.domain.Sort.Direction.DESC, "startedAt"));
         model.addAttribute("runs", runs);
+        model.addAttribute("shopFilter", shop != null ? shop : "");
         return "zoomos/check-history";
     }
 

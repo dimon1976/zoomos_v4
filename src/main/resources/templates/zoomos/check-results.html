@@ -31,6 +31,7 @@
         .verdict-text { font-size: 1.4rem; font-weight: 700; }
         .verdict-stat-tile { min-width: 56px; }
         .table-responsive thead th { position: sticky; top: 0; z-index: 1; background-color: #f8f9fa; }
+        .parser-col { display: none; }
     </style>
 </th:block>
 
@@ -38,7 +39,7 @@
     <a th:href="@{/zoomos}" class="btn btn-sm btn-outline-secondary">
         <i class="fas fa-arrow-left me-1"></i>Назад
     </a>
-    <a th:href="@{/zoomos/check/history}" class="btn btn-sm btn-outline-info">
+    <a th:href="@{'/zoomos/check/history?shop=' + ${run.shop.shopName}}" class="btn btn-sm btn-outline-info">
         <i class="fas fa-history me-1"></i>История
     </a>
 </th:block>
@@ -230,6 +231,9 @@
         <button class="btn btn-sm btn-outline-secondary py-0" id="collapseAll" type="button">
             <i class="fas fa-compress-alt me-1"></i>Свернуть всё
         </button>
+        <button class="btn btn-sm btn-outline-secondary py-0" id="toggleParser" type="button" title="Показать/скрыть колонку Парсер">
+            <i class="fas fa-tag me-1"></i>Парсер
+        </button>
     </div>
 
     <div th:each="group, groupIter : ${groups}" class="card mb-2">
@@ -328,6 +332,7 @@
                                     <th class="text-center" style="width:110px">Финиш</th>
                                     <th class="text-center d-none d-md-table-cell">Сервер</th>
                                     <th class="text-center d-none d-md-table-cell">Клиент</th>
+                                    <th class="parser-col" style="max-width:200px">Парсер</th>
                                     <th class="text-end">Товаров</th>
                                     <th class="text-end">В наличии</th>
                                     <th class="text-end">Ошибки</th>
@@ -346,6 +351,11 @@
                                         th:text="${stat.finishTime != null} ? ${#temporals.format(stat.finishTime, 'dd.MM HH:mm')} : '—'"></td>
                                     <td class="text-center small d-none d-md-table-cell" th:text="${stat.serverName}"></td>
                                     <td class="text-center small d-none d-md-table-cell" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
+                                    <td class="parser-col small"
+                                        th:with="raw=${parserIncludeBysite[stat.siteName] != null ? parserIncludeBysite[stat.siteName] : stat.parserDescription},
+                                                 val=${raw != null and #strings.contains(raw, 'urls: - ') ? #strings.substringAfter(raw, 'urls: - ') : raw}"
+                                        th:title="${stat.parserDescription}"
+                                        th:text="${val != null ? val : '—'}"></td>
                                     <td class="text-end">
                                         <span th:text="${stat.totalProducts != null} ? ${#numbers.formatInteger(stat.totalProducts, 1, 'COMMA')} : '—'"></span>
                                         <span th:if="${nextStat != null and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"
@@ -435,6 +445,16 @@
         document.querySelectorAll('[id^="grp-"]').forEach(el => {
             if (el.classList.contains('show')) bootstrap.Collapse.getOrCreateInstance(el).hide();
         });
+    });
+
+    // Кнопка показа/скрытия колонки "Парсер"
+    let parserColVisible = false;
+    document.getElementById('toggleParser')?.addEventListener('click', function() {
+        parserColVisible = !parserColVisible;
+        document.querySelectorAll('.parser-col').forEach(el => {
+            el.style.display = parserColVisible ? 'table-cell' : 'none';
+        });
+        this.classList.toggle('active', parserColVisible);
     });
 
     // Для IT-сводки — при загрузке уже open (show), иконка должна быть раскрыта

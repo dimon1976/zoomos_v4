@@ -639,15 +639,12 @@ public class ZoomosCheckService {
         String pd = s.getParserDescription() != null ? s.getParserDescription().toLowerCase() : "";
 
         // include: пустой = всё разрешено. Разделитель — точка с запятой (паттерны сами содержат запятые)
+        // AND и OR — одинаковая фильтрация (include ANY), различие только в оценке завершённости.
         if (config.getParserInclude() != null && !config.getParserInclude().isBlank()) {
             List<String> parts = Arrays.stream(config.getParserInclude().split(";"))
                     .map(String::trim).filter(p -> !p.isEmpty())
                     .map(String::toLowerCase).collect(Collectors.toList());
-            boolean andMode = "AND".equalsIgnoreCase(config.getParserIncludeMode());
-            boolean match = andMode
-                    ? parts.stream().allMatch(pd::contains)
-                    : parts.stream().anyMatch(pd::contains);
-            if (!match) return false;
+            if (!parts.stream().anyMatch(pd::contains)) return false;
         }
 
         // exclude: всегда OR — если хотя бы одна подстрока совпала, исключаем
@@ -1065,9 +1062,29 @@ public class ZoomosCheckService {
 
     private void updateRunSummary(ZoomosCheckRun run, List<ZoomosParsingStats> stats,
                                    List<ZoomosCityId> allCityIds) {
+        log.info("updateRunSummary: runId={}, allStats={}", run.getId(), stats.size());
+        // Debug: первые 5 записей
+        stats.stream().limit(5).forEach(s -> log.info("  stat: site={}, city={}, isFinished={}, completionPercent={}, completionTotal={}",
+                s.getSiteName(), s.getCityName(), s.getIsFinished(), s.getCompletionPercent(), s.getCompletionTotal()));
+
+        // Разделяем stats на "готовые для группировки" и "реально in-progress".
+        // "Готовые" = isFinished != false (завершённые из finished-страницы)
+        //           ИЛИ isFinished=false но completionPercent >= 100 (100%-ные in-progress, как в контроллере).
+        // Это важно когда finished-страница (onlyFinished=1) вернула 0 записей, а все данные —
+        // в in-progress (как для ITEM-сайтов, где onlyFinished не показывает текущее состояние).
+        List<ZoomosParsingStats> finishedStats = stats.stream()
+                .filter(s -> !Boolean.FALSE.equals(s.getIsFinished())
+                        || (s.getCompletionPercent() != null && s.getCompletionPercent() >= 100))
+                .collect(Collectors.toList());
+        log.info("updateRunSummary: finishedStats={}, inProgressCandidates={}", finishedStats.size(), stats.size() - finishedStats.size());
+        // Только реально незавершённые (<100%) — для расширения групп при checkParserCompleteness
+        Map<String, List<ZoomosParsingStats>> inProgressBySite = stats.stream()
+                .filter(s -> Boolean.FALSE.equals(s.getIsFinished())
+                        && (s.getCompletionPercent() == null || s.getCompletionPercent() < 100))
+                .collect(Collectors.groupingBy(s -> s.getSiteName() != null ? s.getSiteName() : ""));
+
         // Группируем данные по site+city+address (уникальная группа = одна "линия выкачки")
-        // Если addressId задан — это отдельная группа внутри города
-        Map<String, List<ZoomosParsingStats>> grouped = stats.stream()
+        Map<String, List<ZoomosParsingStats>> grouped = finishedStats.stream()
                 .collect(Collectors.groupingBy(s -> {
                     String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
                     if (s.getAddressId() != null && !s.getAddressId().isBlank()) {
@@ -1129,7 +1146,12 @@ public class ZoomosCheckService {
                 .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
         int minAbsErrors = run.getMinAbsoluteErrors() != null ? run.getMinAbsoluteErrors() : 5;
 
-        // Оцениваем каждую группу site+city
+        // Карта siteName → cityId config для сайтов с парсер-фильтром
+        Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
+                .filter(c -> c.getParserInclude() != null && !c.getParserInclude().isBlank())
+                .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
+
+        // Оцениваем каждую группу site+city (только завершённые группы из grouped)
         for (Map.Entry<String, List<ZoomosParsingStats>> entry : grouped.entrySet()) {
             List<ZoomosParsingStats> group = entry.getValue();
             // Сортируем по startTime (хронологически)
@@ -1137,10 +1159,25 @@ public class ZoomosCheckService {
                     s -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now(),
                     Comparator.naturalOrder()));
 
-            boolean ignoreStock = group.get(0).getSiteName() != null
-                    && ignoreStockSites.contains(group.get(0).getSiteName());
-            String status = evaluateGroup(group, run.getDropThreshold(), run.getErrorGrowthThreshold(),
-                    minAbsErrors, ignoreStock);
+            String groupKey = entry.getKey();
+            String siteName = groupKey.split("\\|")[0];
+            ZoomosCityId cidConfig = cityIdBySite.get(siteName);
+
+            String status;
+            if (cidConfig != null) {
+                // Парсер-фильтр: completeness-check, как в контроллере.
+                // Расширяем группу in-progress stats того же сайта — зеркалируем логику checkResults.
+                List<ZoomosParsingStats> groupExt = new ArrayList<>(group);
+                groupExt.addAll(inProgressBySite.getOrDefault(siteName, Collections.emptyList()));
+                List<Map<String, Object>> incomplete = checkParserCompleteness(
+                        groupExt, cidConfig.getParserInclude(), cidConfig.getParserIncludeMode());
+                status = (incomplete == null || incomplete.isEmpty()) ? "OK" : "ERROR";
+            } else {
+                boolean ignoreStock = group.get(0).getSiteName() != null
+                        && ignoreStockSites.contains(group.get(0).getSiteName());
+                status = evaluateGroup(group, run.getDropThreshold(), run.getErrorGrowthThreshold(),
+                        minAbsErrors, ignoreStock);
+            }
             switch (status) {
                 case "ERROR": error++; break;
                 case "WARNING": warning++; break;
@@ -1347,6 +1384,89 @@ public class ZoomosCheckService {
             );
         } catch (Exception e) {
             log.warn("Не удалось сохранить куки: {}", e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // Проверка завершённости парсеров по фильтру (AND/OR)
+    // =========================================================================
+
+    /**
+     * Проверяет, завершены ли все обязательные парсеры в группе.
+     * <ul>
+     *   <li>OR-режим: хотя бы один из перечисленных паттернов имеет row с completionPercent&ge;100.</li>
+     *   <li>AND-режим: каждый паттерн обязан иметь хотя бы одну row с completionPercent&ge;100.</li>
+     * </ul>
+     * @return null — фильтр не задан; пустой список — всё OK; непустой — незавершённые паттерны с метриками.
+     */
+    public List<Map<String, Object>> checkParserCompleteness(
+            List<ZoomosParsingStats> group, String parserInclude, String parserIncludeMode) {
+
+        if (parserInclude == null || parserInclude.isBlank()) return null;
+
+        List<String> patterns = Arrays.stream(parserInclude.split(";"))
+                .map(String::trim).filter(p -> !p.isEmpty())
+                .map(String::toLowerCase)
+                .collect(Collectors.toList());
+        if (patterns.isEmpty()) return null;
+
+        boolean andMode = "AND".equalsIgnoreCase(parserIncludeMode);
+
+        if (andMode) {
+            // AND: каждый паттерн должен дать хотя бы одну завершённую row
+            List<Map<String, Object>> incomplete = new ArrayList<>();
+            for (String pattern : patterns) {
+                List<ZoomosParsingStats> matching = group.stream()
+                        .filter(s -> s.getParserDescription() != null
+                                && s.getParserDescription().toLowerCase().contains(pattern))
+                        .collect(Collectors.toList());
+                boolean anyComplete = matching.stream()
+                        .anyMatch(s -> s.getCompletionPercent() != null && s.getCompletionPercent() >= 100);
+                if (!anyComplete) {
+                    Map<String, Object> info = new LinkedHashMap<>();
+                    info.put("pattern", pattern);
+                    if (matching.isEmpty()) {
+                        info.put("noData", true);
+                    } else {
+                        matching.stream()
+                                .max(Comparator.comparing(s -> s.getCompletionPercent() != null ? s.getCompletionPercent() : 0))
+                                .ifPresent(best -> {
+                                    info.put("completion", best.getCompletionTotal());
+                                    info.put("total", best.getTotalProducts());
+                                    info.put("inStock", best.getInStock());
+                                    info.put("errors", best.getErrorCount());
+                                    info.put("description", best.getParserDescription());
+                                    info.put("updatedTime", best.getUpdatedTime());
+                                });
+                    }
+                    incomplete.add(info);
+                }
+            }
+            return incomplete;
+        } else {
+            // OR: хотя бы одна row из любого паттерна завершена на 100%
+            boolean anyComplete = group.stream()
+                    .filter(s -> s.getParserDescription() != null
+                            && patterns.stream().anyMatch(p -> s.getParserDescription().toLowerCase().contains(p)))
+                    .anyMatch(s -> s.getCompletionPercent() != null && s.getCompletionPercent() >= 100);
+            if (anyComplete) return Collections.emptyList();
+
+            Map<String, Object> info = new LinkedHashMap<>();
+            info.put("pattern", String.join(", ", patterns));
+            info.put("orMode", true);
+            group.stream()
+                    .filter(s -> s.getParserDescription() != null
+                            && patterns.stream().anyMatch(p -> s.getParserDescription().toLowerCase().contains(p)))
+                    .max(Comparator.comparing(s -> s.getCompletionPercent() != null ? s.getCompletionPercent() : 0))
+                    .ifPresentOrElse(best -> {
+                        info.put("completion", best.getCompletionTotal());
+                        info.put("total", best.getTotalProducts());
+                        info.put("inStock", best.getInStock());
+                        info.put("errors", best.getErrorCount());
+                        info.put("description", best.getParserDescription());
+                        info.put("updatedTime", best.getUpdatedTime());
+                    }, () -> info.put("noData", true));
+            return List.of(info);
         }
     }
 }

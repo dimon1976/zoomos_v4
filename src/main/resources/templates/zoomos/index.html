@@ -202,6 +202,11 @@
                    title="Открыть настройки на export.zoomos.by">
                     <i class="fas fa-external-link-alt"></i> настройки
                 </a>
+                <a th:href="@{'/zoomos/check/history?shop=' + ${shop.shopName}}"
+                   class="ms-2 small text-decoration-none text-muted"
+                   title="История проверок этого магазина">
+                    <i class="fas fa-history"></i> история
+                </a>
             </div>
             <div class="d-flex gap-2 align-items-center">
                 <!-- Чекбокс расписания -->
