@@ -164,7 +164,7 @@
                                 <span th:text="${issue['lastKnownTotal'] != null ? issue['lastKnownTotal'] : 0}">0</span>
                             </small>
                         </div>
-                        <div th:if="${issue['type'] != 'TREND_WARNING'}" class="d-flex gap-1 flex-shrink-0">
+                        <div class="d-flex gap-1 flex-shrink-0">
                             <!-- Матчинг -->
                             <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
                                target="_blank"
