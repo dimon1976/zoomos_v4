@@ -292,7 +292,7 @@
                        th:id="'trendDrop-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
                 <span class="small text-muted"
                       data-bs-toggle="tooltip" data-bs-placement="top"
-                      title="Тренд: порог роста доли ошибок от числа товаров. При trendОш%=100: «Рост ошибок» — только если ошибок стало больше чем вдвое; «Появились ошибки» — только если errorRate > 10% товаров. Дефолт 100%. Выше = меньше трендовых предупреждений.">Тренд ош% <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
+                      title="Тренд: порог роста доли ошибок от числа товаров. Дефолт 100%. Выше = меньше трендовых предупреждений.">Тренд ош% <i class="fas fa-info-circle" style="font-size:0.8em"></i></span><button type="button" class="btn btn-link p-0 ms-1 text-info align-baseline" style="font-size:0.8em; line-height:1;" data-bs-toggle="modal" data-bs-target="#trendErrHelpModal" title="Подробное объяснение с примерами"><i class="fas fa-question-circle"></i></button>
                 <input type="number" class="form-control form-control-sm check-trend-err"
                        th:id="'trendErr-' + ${shop.id}" value="100" min="1" max="1000" style="width:65px;">
             </div>
@@ -535,6 +535,151 @@
                 <div class="modal-footer py-2">
                     <button type="button" class="btn btn-sm btn-secondary" id="schedToggleCancelBtn" data-bs-dismiss="modal">Отмена</button>
                     <button type="button" class="btn btn-sm btn-primary" id="schedToggleConfirmBtn">Подтвердить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка: подробное объяснение "Тренд ош%" -->
+    <div class="modal fade" id="trendErrHelpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-chart-line me-2 text-info"></i>Тренд ош% — как работает параметр</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body small">
+                    <p class="text-muted mb-2">
+                        Вместо абсолютного числа ошибок система сравнивает
+                        <strong>errorRate = ошибки&nbsp;/&nbsp;число&nbsp;товаров&nbsp;×&nbsp;100%</strong>.
+                        Это устраняет ложные тревоги: рост числа товаров автоматически допускает пропорциональный рост ошибок.
+                    </p>
+
+                    <h6 class="fw-semibold mt-3 mb-1">Ситуация 1: ошибки в истории были (baseRate &gt; 0)</h6>
+                    <p class="text-muted mb-1">
+                        Тренд срабатывает если выполнены <strong>оба</strong> условия:<br>
+                        &bull; <code>curRate &gt; baseRate × (1 + Тренд&nbsp;ош% &div; 100)</code><br>
+                        &bull; Абсолютная дельта <code>curRate &minus; baseRate &gt; 0.5%</code> (фильтр мелкого шума)
+                    </p>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light text-center">
+                            <tr>
+                                <th>Товаров</th>
+                                <th>Норма (baseRate)</th>
+                                <th>Сейчас (curRate)</th>
+                                <th>Тренд&nbsp;ош%</th>
+                                <th>Результат</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>10 шт → <strong>0.20%</strong></td>
+                                <td>15 шт → 0.30%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-success">✓ Тихо — рост +50%, порог 100% не превышен</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>10 шт → <strong>0.20%</strong></td>
+                                <td>30 шт → 0.60%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-success">✓ Тихо — рост +200%, но дельта 0.40% &lt; 0.5%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>10 шт → <strong>0.20%</strong></td>
+                                <td>50 шт → 1.00%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-warning fw-semibold">⚠ Тренд — рост +400% &gt; 100%, дельта 0.80% &gt; 0.5%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>10 шт → <strong>0.20%</strong></td>
+                                <td>50 шт → 1.00%</td>
+                                <td class="text-center">500</td>
+                                <td class="text-success">✓ Тихо — рост +400% &lt; порог 500%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">50 000</td>
+                                <td>100 шт → <strong>0.20%</strong></td>
+                                <td>500 шт → 1.00%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-warning fw-semibold">⚠ Тренд — тот же результат, что у сайта с 5 000 товаров</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h6 class="fw-semibold mt-4 mb-1">Ситуация 2: ошибок в истории не было (baseRate = 0)</h6>
+                    <p class="text-muted mb-1">
+                        Сравнивать не с чем — порог появления вычисляется как
+                        <code>max(1%, Тренд&nbsp;ош% &div; 10)</code>:
+                    </p>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light text-center">
+                            <tr>
+                                <th>Товаров</th>
+                                <th>Текущие ошибки</th>
+                                <th>Тренд&nbsp;ош%</th>
+                                <th>Порог "Появились"</th>
+                                <th>Результат</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>100 шт → 2.00%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-center">max(1%, 10%) = <strong>10%</strong></td>
+                                <td class="text-success">✓ Тихо — 2% &lt; 10%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>600 шт → 12.00%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-center">max(1%, 10%) = <strong>10%</strong></td>
+                                <td class="text-warning fw-semibold">⚠ Тренд — 12% &gt; 10%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>200 шт → 4.00%</td>
+                                <td class="text-center">30</td>
+                                <td class="text-center">max(1%, 3%) = <strong>3%</strong></td>
+                                <td class="text-warning fw-semibold">⚠ Тренд — 4% &gt; 3%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>200 шт → 4.00%</td>
+                                <td class="text-center">50</td>
+                                <td class="text-center">max(1%, 5%) = <strong>5%</strong></td>
+                                <td class="text-success">✓ Тихо — 4% &lt; 5%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h6 class="fw-semibold mt-4 mb-1">Рекомендуемые значения</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr><th>Тренд ош%</th><th>Поведение</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>30</strong></td>
+                                <td>Чувствительный — предупреждение при росте baseRate более чем на 30%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>100</strong> <span class="badge bg-secondary ms-1">по умолчанию</span></td>
+                                <td>Умеренный — только существенный двукратный рост; «Появились ошибки» при &gt;10% товаров</td>
+                            </tr>
+                            <tr>
+                                <td><strong>200</strong></td>
+                                <td>Мягкий — трёхкратный рост; «Появились ошибки» при &gt;20% товаров</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Закрыть</button>
                 </div>
             </div>
         </div>
