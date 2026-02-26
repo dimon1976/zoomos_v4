@@ -285,10 +285,14 @@
                 <span class="small text-muted ms-2" title="Минимальное абсолютное число ошибок парсинга для варнинга. При значении 5: рост 1→2 — не варнинг, рост 5→15 — варнинг. Убирает шум на крупных сайтах.">Мин.ошибок <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
                 <input type="number" class="form-control form-control-sm check-min-abs-errors"
                        th:id="'minAbsErrors-' + ${shop.id}" value="5" min="0" max="1000" style="width:60px;">
-                <span class="small text-muted ms-3 border-start ps-3" title="Порог замедления выкачки (мин/1000 тов.) и падения доли «В наличии» для TREND_WARNING. Выше = меньше трендовых предупреждений.">Тренд пад% <i class="fas fa-chart-line" style="font-size:0.8em"></i></span>
+                <span class="small text-muted ms-3 border-start ps-3"
+                      data-bs-toggle="tooltip" data-bs-placement="top"
+                      title="Тренд: порог замедления скорости выкачки (мин/1000 тов.) и падения доли «В наличии». Метрики нормализованы по числу товаров — рост ассортимента не вызывает ложных тревог. Дефолт 30%. Выше = меньше трендовых предупреждений.">Тренд пад% <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
                 <input type="number" class="form-control form-control-sm check-trend-drop"
                        th:id="'trendDrop-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
-                <span class="small text-muted" title="Порог роста доли ошибок от числа товаров для TREND_WARNING. Выше = меньше трендовых предупреждений.">Тренд ош%</span>
+                <span class="small text-muted"
+                      data-bs-toggle="tooltip" data-bs-placement="top"
+                      title="Тренд: порог роста доли ошибок от числа товаров. При trendОш%=100: «Рост ошибок» — только если ошибок стало больше чем вдвое; «Появились ошибки» — только если errorRate > 10% товаров. Дефолт 100%. Выше = меньше трендовых предупреждений.">Тренд ош% <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
                 <input type="number" class="form-control form-control-sm check-trend-err"
                        th:id="'trendErr-' + ${shop.id}" value="100" min="1" max="1000" style="width:65px;">
             </div>

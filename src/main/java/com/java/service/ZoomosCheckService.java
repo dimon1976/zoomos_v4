@@ -1023,10 +1023,14 @@ public class ZoomosCheckService {
                 warnings.add(String.format(
                         "Рост ошибок: было %.2f%% → стало %.2f%% от товаров (+%.0f%%) [норма %s]",
                         baseRate, curRate, deltaRate / baseRate * 100, period));
-            } else if (baseRate == 0 && curRate > 1.0) {
-                // Появились ошибки там где их раньше не было (> 1% товаров)
-                warnings.add(String.format(
-                        "Появились ошибки: %.2f%% товаров [норма %s]", curRate, period));
+            } else if (baseRate == 0) {
+                // Появились ошибки там где их раньше не было.
+                // Порог масштабируется с errFrac: при trendErrorThreshold=30% → >3%, при 100% → >10%
+                double appearedThreshold = Math.max(1.0, errFrac * 10);
+                if (curRate > appearedThreshold) {
+                    warnings.add(String.format(
+                            "Появились ошибки: %.2f%% товаров [норма %s]", curRate, period));
+                }
             }
         }
 
