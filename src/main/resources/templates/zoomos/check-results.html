@@ -89,7 +89,8 @@
                         </span>
                         <span th:if="${baselineDays != null and baselineDays > 0}"
                               class="badge bg-info bg-opacity-25 text-dark stat-badge ms-1"
-                              title="Исторический период для тренд-анализа">
+                              data-bs-toggle="tooltip" data-bs-placement="bottom"
+                              title="Тренд-анализ: сравнение с исторической нормой. Метрики нормализованы по числу товаров — рост ассортимента учитывается автоматически. Ошибки: % от total_products. Скорость: мин/1000 товаров. Уменьшение времени выкачки — всегда OK.">
                             <i class="fas fa-chart-line me-1"></i>Baseline:
                             <span th:text="${baselineFrom}"></span>–<span th:text="${baselineTo}"></span>
                         </span>
@@ -130,7 +131,9 @@
                                            (${issue['type'] == 'TREND_WARNING'} ? 'Тренд' : ${issue['type']})">
                             </span>
                             <i th:if="${issue['type'] == 'TREND_WARNING'}"
-                               class="fas fa-chart-line me-1 text-info" title="Отклонение от исторической нормы"></i>
+                               class="fas fa-chart-line me-1 text-info"
+                               data-bs-toggle="tooltip"
+                               title="Отклонение от нормы. Ошибки и скорость выкачки нормализованы по числу товаров — рост ассортимента не вызывает ложных тревог. Уменьшение времени выкачки тренд не генерирует."></i>
                             <i th:if="${issue['isPriority']}" class="fas fa-star text-warning me-1" title="Приоритетный сайт" style="font-size:0.8em;"></i>
                             <strong th:text="${issue['site']}"></strong>
                             <span th:if="${issue['city']}" class="text-muted ms-1 small"

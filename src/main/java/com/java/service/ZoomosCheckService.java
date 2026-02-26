@@ -943,7 +943,10 @@ public class ZoomosCheckService {
 
     /**
      * Вычисляет медианные значения метрик по списку исторических выкачек.
-     * Возвращает Map: "stockRatio", "errorCount", "durationMinutes".
+     * Метрики нормализованы по числу товаров — устойчивы к росту ассортимента:
+     *   "stockRatio"    — inStock / totalProducts (доля наличия)
+     *   "errorRate"     — errorCount / totalProducts × 100 (% ошибок от товаров)
+     *   "durationRate"  — durationMinutes / totalProducts × 1000 (мин на 1000 товаров)
      */
     public Map<String, Double> computeMedianBaseline(List<ZoomosParsingStats> historicalStats) {
         Map<String, Double> result = new HashMap<>();
@@ -954,17 +957,20 @@ public class ZoomosCheckService {
                 .sorted().collect(Collectors.toList());
         if (!stockRatios.isEmpty()) result.put("stockRatio", computeMedian(stockRatios));
 
-        List<Double> errors = historicalStats.stream()
-                .filter(s -> s.getErrorCount() != null)
-                .map(s -> (double) s.getErrorCount())
+        // errorRate = % ошибок от числа товаров (масштабируется с размером сайта)
+        List<Double> errorRates = historicalStats.stream()
+                .filter(s -> s.getErrorCount() != null && s.getTotalProducts() != null && s.getTotalProducts() > 0)
+                .map(s -> s.getErrorCount() * 100.0 / s.getTotalProducts())
                 .sorted().collect(Collectors.toList());
-        if (!errors.isEmpty()) result.put("errorCount", computeMedian(errors));
+        if (!errorRates.isEmpty()) result.put("errorRate", computeMedian(errorRates));
 
-        List<Double> durations = historicalStats.stream()
-                .filter(s -> s.getParsingDurationMinutes() != null && s.getParsingDurationMinutes() > 0)
-                .map(s -> (double) s.getParsingDurationMinutes())
+        // durationRate = мин/1000 товаров (рост ассортимента = допустимо дольше)
+        List<Double> durationRates = historicalStats.stream()
+                .filter(s -> s.getParsingDurationMinutes() != null && s.getParsingDurationMinutes() > 0
+                          && s.getTotalProducts() != null && s.getTotalProducts() > 0)
+                .map(s -> s.getParsingDurationMinutes() * 1000.0 / s.getTotalProducts())
                 .sorted().collect(Collectors.toList());
-        if (!durations.isEmpty()) result.put("durationMinutes", computeMedian(durations));
+        if (!durationRates.isEmpty()) result.put("durationRate", computeMedian(durationRates));
 
         return result;
     }
@@ -1002,28 +1008,38 @@ public class ZoomosCheckService {
             }
         }
 
-        // Error count
-        if (baseline.containsKey("errorCount") && current.getErrorCount() != null) {
-            double cur  = current.getErrorCount();
-            double base = baseline.get("errorCount");
-            if (base > 0 && (cur - base) / base > errFrac) {
+        // Error rate (% от числа товаров — масштабируется с размером сайта)
+        if (baseline.containsKey("errorRate") && current.getErrorCount() != null
+                && current.getTotalProducts() != null && current.getTotalProducts() > 0) {
+            double curRate  = current.getErrorCount() * 100.0 / current.getTotalProducts();
+            double baseRate = baseline.get("errorRate");
+            double deltaRate = curRate - baseRate;
+            if (baseRate > 0 && deltaRate / baseRate > errFrac && deltaRate > 0.5) {
+                // Предупреждаем только если рост > порога И абсолютная дельта rate > 0.5%
                 warnings.add(String.format(
-                        "Рост ошибок: было %.0f → стало %.0f (+%.0f%%) [норма %s]",
-                        base, cur, (cur - base) / base * 100, period));
-            } else if (base == 0 && cur > 10) {
+                        "Рост ошибок: было %.2f%% → стало %.2f%% от товаров (+%.0f%%) [норма %s]",
+                        baseRate, curRate, deltaRate / baseRate * 100, period));
+            } else if (baseRate == 0 && curRate > 1.0) {
+                // Появились ошибки там где их раньше не было (> 1% товаров)
                 warnings.add(String.format(
-                        "Появились ошибки: было 0 → стало %.0f [норма %s]", cur, period));
+                        "Появились ошибки: %.2f%% товаров [норма %s]", curRate, period));
             }
         }
 
-        // Duration
-        if (baseline.containsKey("durationMinutes") && current.getParsingDurationMinutes() != null) {
-            double cur  = current.getParsingDurationMinutes();
-            double base = baseline.get("durationMinutes");
-            if (base > 0 && (cur - base) / base > dropFrac) {
-                warnings.add(String.format(
-                        "Время выкачки выросло: было %.0f мин → стало %.0f мин (+%.0f%%) [норма %s]",
-                        base, cur, (cur - base) / base * 100, period));
+        // Duration rate (мин/1000 товаров — рост ассортимента учитывается автоматически)
+        // Уменьшение скорости выкачки — всегда OK, предупреждаем только при замедлении
+        if (baseline.containsKey("durationRate") && current.getParsingDurationMinutes() != null
+                && current.getTotalProducts() != null && current.getTotalProducts() > 0) {
+            double curRate  = current.getParsingDurationMinutes() * 1000.0 / current.getTotalProducts();
+            double baseRate = baseline.get("durationRate");
+            if (baseRate > 0 && curRate > baseRate) {
+                double pct = (curRate - baseRate) / baseRate;
+                // Предупреждаем если замедление > порога И дельта rate > 0.1 мин/1000 тов.
+                if (pct > dropFrac && (curRate - baseRate) > 0.1) {
+                    warnings.add(String.format(
+                            "Скорость выкачки снизилась: было %.2f → стало %.2f мин/1000 тов. (+%.0f%%) [норма %s]",
+                            baseRate, curRate, pct * 100, period));
+                }
             }
         }
 
