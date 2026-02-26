@@ -1404,16 +1404,16 @@ public class ZoomosAnalysisController {
         for (ZoomosShop shop : shops) {
             List<ZoomosShopSchedule> list = scheduleRepository.findAllByShopId(shop.getId());
             schedules.put(shop.getId(), list);
-            for (ZoomosShopSchedule s : list) {
-                if (s.getLastRunAt() != null) {
-                    lastRunFormatted.put(s.getId(),
-                            s.getLastRunAt().withZoneSameInstant(java.time.ZoneId.systemDefault()).format(fmt));
-                }
-            }
             checkRunRepository.findFirstByShopIdOrderByStartedAtDesc(shop.getId())
                     .ifPresent(run -> {
-                        // Последний run связываем со всеми расписаниями магазина
-                        list.forEach(s -> lastRunIds.put(s.getId(), run.getId()));
+                        // Последний run: дату берём из run.startedAt (не из sched.lastRunAt)
+                        String formatted = run.getStartedAt() != null
+                                ? run.getStartedAt().withZoneSameInstant(java.time.ZoneId.systemDefault()).format(fmt)
+                                : "";
+                        list.forEach(s -> {
+                            lastRunIds.put(s.getId(), run.getId());
+                            lastRunFormatted.put(s.getId(), formatted);
+                        });
                     });
         }
         model.addAttribute("shops", shops);

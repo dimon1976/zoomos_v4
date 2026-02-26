@@ -14,6 +14,8 @@
 <style>
     .sched-row td { vertical-align: middle; padding: 5px 6px; }
     .sched-row input[type=text], .sched-row input[type=number], .sched-row input[type=time] { font-size: 0.85em; }
+    /* Фиксируем ширину time-input: без этого браузер растягивает их шире min-width колонки → горизонтальный скролл */
+    .sched-time-from, .sched-time-to { width: 68px; max-width: 68px; }
     .offset-input { width: 58px; }
     .threshold-input { width: 58px; }
     .baseline-input { width: 58px; margin: 0 auto; display: block; }
@@ -226,15 +228,12 @@
 
                         <!-- Последний запуск -->
                         <td class="text-center small text-muted">
-                            <span th:if="${sched.lastRunAt != null}">
-                                <a th:if="${lastRunIds[sched.id] != null}"
-                                   th:href="@{'/zoomos/check/results/' + ${lastRunIds[sched.id]}}"
+                            <span th:if="${lastRunIds[sched.id] != null}">
+                                <a th:href="@{'/zoomos/check/results/' + ${lastRunIds[sched.id]}}"
                                    class="text-decoration-none"
                                    th:text="${lastRunFormatted[sched.id]}"></a>
-                                <span th:unless="${lastRunIds[sched.id] != null}"
-                                      th:text="${lastRunFormatted[sched.id]}"></span>
                             </span>
-                            <span th:if="${sched.lastRunAt == null}">—</span>
+                            <span th:if="${lastRunIds[sched.id] == null}">—</span>
                             <span class="sched-running-indicator d-none ms-1">
                                 <i class="fas fa-spinner fa-spin text-primary"></i>
                                 <span class="text-primary sched-progress-msg">Идёт...</span>
