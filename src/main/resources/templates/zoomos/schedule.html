@@ -85,11 +85,11 @@
                         <th style="min-width:155px">Cron <span class="text-muted fw-normal" style="font-size:0.78em">(сек мин час д м нед)</span></th>
                         <th style="min-width:120px" class="text-center d-none d-md-table-cell">Период (offset)</th>
                         <th style="min-width:150px" class="text-center d-none d-md-table-cell">Время выкачки</th>
-                        <th style="min-width:130px" class="text-center d-none d-lg-table-cell" title="Порог падения % / Порог роста ошибок %">Пороги % <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
-                        <th style="min-width:80px" class="text-center d-none d-xl-table-cell">Baseline дней</th>
-                        <th style="min-width:75px" class="text-center d-none d-xl-table-cell"
+                        <th style="min-width:130px" class="text-center d-none d-xl-table-cell" title="Порог падения % / Порог роста ошибок %">Пороги % <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
+                        <th style="min-width:80px" class="text-center d-none d-xxl-table-cell">Baseline дней</th>
+                        <th style="min-width:75px" class="text-center d-none d-xxl-table-cell"
                             title="Минимальное абсолютное число ошибок парсинга для срабатывания предупреждения. Например, при значении 5: рост с 1 до 2 ошибок — не варнинг, а рост с 5 до 15 — варнинг. Помогает избежать ложных срабатываний на крупных сайтах.">Мин.ошибок <i class="fas fa-info-circle text-muted" style="font-size:0.75em"></i></th>
-                        <th style="min-width:130px" class="text-center d-none d-xl-table-cell"
+                        <th style="min-width:130px" class="text-center d-none d-xxl-table-cell"
                             title="Пороги для TREND_WARNING: отдельно от основных порогов. Ошибки и скорость нормализованы по числу товаров. Рекомендуемые значения: пад=30%, ош=100%.">Тренд % <i class="fas fa-chart-line text-muted" style="font-size:0.75em"></i> <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
                         <th style="min-width:140px" class="text-center">Последний запуск</th>
                         <th style="min-width:110px" class="text-center">Действия</th>
@@ -145,7 +145,7 @@
                         </td>
 
                         <!-- Пороги -->
-                        <td class="d-none d-lg-table-cell">
+                        <td class="d-none d-xl-table-cell">
                             <div class="d-flex gap-1 justify-content-center">
                                 <div class="d-flex flex-column align-items-center">
                                     <span class="text-muted" style="font-size:0.7em">пад%</span>
@@ -163,21 +163,21 @@
                         </td>
 
                         <!-- Baseline -->
-                        <td class="text-center d-none d-xl-table-cell">
+                        <td class="text-center d-none d-xxl-table-cell">
                             <input type="number" class="form-control form-control-sm text-center baseline-input sched-baseline"
                                    th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].baselineDays} : 7"
                                    min="0" max="90" title="Дней для baseline-анализа (0 = отключено)">
                         </td>
 
                         <!-- Мин. ошибок -->
-                        <td class="text-center d-none d-xl-table-cell">
+                        <td class="text-center d-none d-xxl-table-cell">
                             <input type="number" class="form-control form-control-sm text-center baseline-input sched-min-abs-errors"
                                    th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].minAbsoluteErrors} : 5"
                                    min="0" max="1000" title="Мин. абсолютное число ошибок для срабатывания варнинга">
                         </td>
 
                         <!-- Тренд пороги -->
-                        <td class="text-center d-none d-xl-table-cell">
+                        <td class="text-center d-none d-xxl-table-cell">
                             <div class="d-flex gap-1 justify-content-center">
                                 <div class="d-flex flex-column align-items-center">
                                     <span class="text-muted" style="font-size:0.7em">пад%</span>
