@@ -442,9 +442,11 @@ public class ZoomosAnalysisController {
             @RequestParam(defaultValue = "10") int dropThreshold,
             @RequestParam(defaultValue = "30") int errorGrowthThreshold,
             @RequestParam(defaultValue = "7") int baselineDays,
-            @RequestParam(defaultValue = "5") int minAbsoluteErrors) {
-        log.info("runCheck: shopId={} dateFrom='{}' dateTo='{}' timeFrom='{}' timeTo='{}' baselineDays={} minAbsoluteErrors={}",
-                shopId, dateFrom, dateTo, timeFrom, timeTo, baselineDays, minAbsoluteErrors);
+            @RequestParam(defaultValue = "5") int minAbsoluteErrors,
+            @RequestParam(defaultValue = "30") int trendDropThreshold,
+            @RequestParam(defaultValue = "100") int trendErrorThreshold) {
+        log.info("runCheck: shopId={} dateFrom='{}' dateTo='{}' timeFrom='{}' timeTo='{}' baselineDays={} minAbsoluteErrors={} trendDrop={} trendErr={}",
+                shopId, dateFrom, dateTo, timeFrom, timeTo, baselineDays, minAbsoluteErrors, trendDropThreshold, trendErrorThreshold);
         if (dateFrom == null || dateFrom.isBlank() || dateTo == null || dateTo.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Не указаны даты проверки"));
         }
@@ -458,15 +460,17 @@ public class ZoomosAnalysisController {
         }
         final String tf = (timeFrom != null && !timeFrom.isBlank()) ? timeFrom : null;
         final String tt = (timeTo   != null && !timeTo.isBlank())   ? timeTo   : null;
-        final int bl  = Math.max(0, baselineDays);
-        final int mae = Math.max(0, minAbsoluteErrors);
+        final int bl   = Math.max(0, baselineDays);
+        final int mae  = Math.max(0, minAbsoluteErrors);
+        final int tdt  = Math.max(1, trendDropThreshold);
+        final int tet  = Math.max(1, trendErrorThreshold);
         try {
             String operationId = UUID.randomUUID().toString();
 
             // Запускаем в фоне, чтобы не блокировать HTTP
             CompletableFuture.runAsync(() -> {
                 try {
-                    checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, mae, operationId);
+                    checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, mae, tdt, tet, operationId);
                     // Обновляем lastRunAt в расписании (если оно существует)
                     scheduleRepository.findByShopId(shopId).ifPresent(schedule -> {
                         schedule.setLastRunAt(java.time.ZonedDateTime.now());
@@ -919,8 +923,8 @@ public class ZoomosAnalysisController {
                 Map<String, Double> baseline = checkService.computeMedianBaseline(historical);
                 List<String> trendWarnings = checkService.evaluateTrend(
                         current, baseline,
-                        run.getDropThreshold() != null ? run.getDropThreshold() : 10,
-                        run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30,
+                        run.getTrendDropThreshold() != null ? run.getTrendDropThreshold() : 30,
+                        run.getTrendErrorThreshold() != null ? run.getTrendErrorThreshold() : 100,
                         baselineFrom, baselineTo);
 
                 for (String msg : trendWarnings) {
@@ -1389,6 +1393,8 @@ public class ZoomosAnalysisController {
                                @RequestParam(defaultValue = "5") int minAbsoluteErrors,
                                @RequestParam(defaultValue = "-1") int dateOffsetFrom,
                                @RequestParam(defaultValue = "0") int dateOffsetTo,
+                               @RequestParam(defaultValue = "30") int trendDropThreshold,
+                               @RequestParam(defaultValue = "100") int trendErrorThreshold,
                                RedirectAttributes ra) {
         ZoomosShopSchedule schedule = scheduleRepository.findByShopId(shopId)
                 .orElse(ZoomosShopSchedule.builder().shopId(shopId).build());
@@ -1401,6 +1407,8 @@ public class ZoomosAnalysisController {
         schedule.setMinAbsoluteErrors(Math.max(0, minAbsoluteErrors));
         schedule.setDateOffsetFrom(dateOffsetFrom);
         schedule.setDateOffsetTo(dateOffsetTo);
+        schedule.setTrendDropThreshold(Math.max(1, trendDropThreshold));
+        schedule.setTrendErrorThreshold(Math.max(1, trendErrorThreshold));
         schedulerService.saveAndReschedule(schedule);
         ra.addFlashAttribute("success", "Расписание сохранено");
         return "redirect:/zoomos/schedule";

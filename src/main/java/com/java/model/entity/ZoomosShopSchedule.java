@@ -53,6 +53,16 @@ public class ZoomosShopSchedule {
     @Builder.Default
     private int minAbsoluteErrors = 5;
 
+    /** Порог замедления выкачки и падения доли «В наличии» для TREND_WARNING (%) */
+    @Column(name = "trend_drop_threshold", nullable = false)
+    @Builder.Default
+    private int trendDropThreshold = 30;
+
+    /** Порог роста доли ошибок от товаров для TREND_WARNING (%) */
+    @Column(name = "trend_error_threshold", nullable = false)
+    @Builder.Default
+    private int trendErrorThreshold = 100;
+
     /** Смещение дня "от" относительно сегодня: -1 = вчера */
     @Column(name = "date_offset_from", nullable = false)
     @Builder.Default

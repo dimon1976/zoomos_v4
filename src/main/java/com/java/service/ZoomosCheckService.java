@@ -69,7 +69,9 @@ public class ZoomosCheckService {
     public ZoomosCheckRun runCheck(Long shopId, LocalDate dateFrom, LocalDate dateTo,
                                     String timeFrom, String timeTo,
                                     int dropThreshold, int errorGrowthThreshold,
-                                    int baselineDays, int minAbsoluteErrors, String operationId) {
+                                    int baselineDays, int minAbsoluteErrors,
+                                    int trendDropThreshold, int trendErrorThreshold,
+                                    String operationId) {
         ZoomosShop shop = shopRepository.findById(shopId)
                 .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopId));
 
@@ -103,6 +105,8 @@ public class ZoomosCheckService {
                 .errorGrowthThreshold(errorGrowthThreshold)
                 .baselineDays(Math.max(0, baselineDays))
                 .minAbsoluteErrors(Math.max(0, minAbsoluteErrors))
+                .trendDropThreshold(Math.max(1, trendDropThreshold))
+                .trendErrorThreshold(Math.max(1, trendErrorThreshold))
                 .build();
         // Сохраняем в REQUIRES_NEW транзакции → немедленный коммит → status=RUNNING виден в БД
         run = self.saveRunImmediate(run);

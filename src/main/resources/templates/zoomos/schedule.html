@@ -89,6 +89,8 @@
                         <th style="min-width:80px" class="text-center">Baseline дней</th>
                         <th style="min-width:75px" class="text-center"
                             title="Минимальное абсолютное число ошибок парсинга для срабатывания предупреждения. Например, при значении 5: рост с 1 до 2 ошибок — не варнинг, а рост с 5 до 15 — варнинг. Помогает избежать ложных срабатываний на крупных сайтах.">Мин.ошибок <i class="fas fa-info-circle text-muted" style="font-size:0.75em"></i></th>
+                        <th style="min-width:130px" class="text-center"
+                            title="Пороги для TREND_WARNING: отдельно от основных порогов. Ошибки и скорость нормализованы по числу товаров. Рекомендуемые значения: пад=30%, ош=100%.">Тренд % <i class="fas fa-chart-line text-muted" style="font-size:0.75em"></i> <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
                         <th style="min-width:140px" class="text-center">Последний запуск</th>
                         <th style="min-width:110px" class="text-center">Действия</th>
                     </tr>
@@ -172,6 +174,24 @@
                             <input type="number" class="form-control form-control-sm text-center baseline-input sched-min-abs-errors"
                                    th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].minAbsoluteErrors} : 5"
                                    min="0" max="1000" title="Мин. абсолютное число ошибок для срабатывания варнинга">
+                        </td>
+
+                        <!-- Тренд пороги -->
+                        <td class="text-center">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <div class="d-flex flex-column align-items-center">
+                                    <span class="text-muted" style="font-size:0.7em">пад%</span>
+                                    <input type="number" class="form-control form-control-sm text-center threshold-input sched-trend-drop"
+                                           th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].trendDropThreshold} : 30"
+                                           min="1" max="500" title="Порог замедления выкачки и падения доли «В наличии» для TREND_WARNING (%)">
+                                </div>
+                                <div class="d-flex flex-column align-items-center">
+                                    <span class="text-muted" style="font-size:0.7em">ош%</span>
+                                    <input type="number" class="form-control form-control-sm text-center threshold-input sched-trend-err"
+                                           th:value="${schedules[shop.id] != null} ? ${schedules[shop.id].trendErrorThreshold} : 100"
+                                           min="1" max="1000" title="Порог роста доли ошибок от товаров для TREND_WARNING (%)">
+                                </div>
+                            </div>
                         </td>
 
                         <!-- Последний запуск -->
@@ -400,6 +420,8 @@
             fd.append('errorGrowthThreshold', row.querySelector('.sched-err').value);
             fd.append('baselineDays',         row.querySelector('.sched-baseline').value);
             fd.append('minAbsoluteErrors',    row.querySelector('.sched-min-abs-errors').value || '5');
+            fd.append('trendDropThreshold',   row.querySelector('.sched-trend-drop').value || '30');
+            fd.append('trendErrorThreshold',  row.querySelector('.sched-trend-err').value || '100');
 
             const orig = this.innerHTML;
             this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -509,6 +531,8 @@
             fd.append('errorGrowthThreshold', row.querySelector('.sched-err').value  || '30');
             fd.append('baselineDays',         row.querySelector('.sched-baseline').value || '7');
             fd.append('minAbsoluteErrors',    row.querySelector('.sched-min-abs-errors').value || '5');
+            fd.append('trendDropThreshold',   row.querySelector('.sched-trend-drop').value || '30');
+            fd.append('trendErrorThreshold',  row.querySelector('.sched-trend-err').value || '100');
 
             const orig = this.innerHTML;
             this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';

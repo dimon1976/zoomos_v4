@@ -285,6 +285,12 @@
                 <span class="small text-muted ms-2" title="Минимальное абсолютное число ошибок парсинга для варнинга. При значении 5: рост 1→2 — не варнинг, рост 5→15 — варнинг. Убирает шум на крупных сайтах.">Мин.ошибок <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
                 <input type="number" class="form-control form-control-sm check-min-abs-errors"
                        th:id="'minAbsErrors-' + ${shop.id}" value="5" min="0" max="1000" style="width:60px;">
+                <span class="small text-muted ms-3 border-start ps-3" title="Порог замедления выкачки (мин/1000 тов.) и падения доли «В наличии» для TREND_WARNING. Выше = меньше трендовых предупреждений.">Тренд пад% <i class="fas fa-chart-line" style="font-size:0.8em"></i></span>
+                <input type="number" class="form-control form-control-sm check-trend-drop"
+                       th:id="'trendDrop-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
+                <span class="small text-muted" title="Порог роста доли ошибок от числа товаров для TREND_WARNING. Выше = меньше трендовых предупреждений.">Тренд ош%</span>
+                <input type="number" class="form-control form-control-sm check-trend-err"
+                       th:id="'trendErr-' + ${shop.id}" value="100" min="1" max="1000" style="width:65px;">
             </div>
         </div>
 
@@ -655,6 +661,20 @@
             minAbsErrorsEl.value = localStorage.getItem('checkMinAbsErrors-' + shopId) || '5';
             minAbsErrorsEl.addEventListener('change', () =>
                 localStorage.setItem('checkMinAbsErrors-' + shopId, minAbsErrorsEl.value));
+        }
+
+        const trendDropEl = document.getElementById('trendDrop-' + shopId);
+        if (trendDropEl) {
+            trendDropEl.value = localStorage.getItem('checkTrendDrop-' + shopId) || '30';
+            trendDropEl.addEventListener('change', () =>
+                localStorage.setItem('checkTrendDrop-' + shopId, trendDropEl.value));
+        }
+
+        const trendErrEl = document.getElementById('trendErr-' + shopId);
+        if (trendErrEl) {
+            trendErrEl.value = localStorage.getItem('checkTrendErr-' + shopId) || '100';
+            trendErrEl.addEventListener('change', () =>
+                localStorage.setItem('checkTrendErr-' + shopId, trendErrEl.value));
         }
     });
 
@@ -1223,6 +1243,10 @@
             const baselineDays = baselineDaysEl2 ? (baselineDaysEl2.value || '7') : '7';
             const minAbsErrorsEl2 = document.getElementById('minAbsErrors-' + shopId);
             const minAbsErrors = minAbsErrorsEl2 ? (minAbsErrorsEl2.value || '5') : '5';
+            const trendDropEl2 = document.getElementById('trendDrop-' + shopId);
+            const trendDrop = trendDropEl2 ? (trendDropEl2.value || '30') : '30';
+            const trendErrEl2 = document.getElementById('trendErr-' + shopId);
+            const trendErr = trendErrEl2 ? (trendErrEl2.value || '100') : '100';
 
             const fd = new FormData();
             fd.append('shopId', shopId);
@@ -1234,6 +1258,8 @@
             fd.append('errorGrowthThreshold', errThreshold);
             fd.append('baselineDays', baselineDays);
             fd.append('minAbsoluteErrors', minAbsErrors);
+            fd.append('trendDropThreshold', trendDrop);
+            fd.append('trendErrorThreshold', trendErr);
 
             const btnRef = this;
 

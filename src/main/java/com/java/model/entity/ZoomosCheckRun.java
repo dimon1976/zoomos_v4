@@ -73,6 +73,16 @@ public class ZoomosCheckRun {
     @Builder.Default
     private Integer minAbsoluteErrors = 5;
 
+    /** Порог замедления выкачки и падения доли «В наличии» для TREND_WARNING (%) */
+    @Column(name = "trend_drop_threshold")
+    @Builder.Default
+    private Integer trendDropThreshold = 30;
+
+    /** Порог роста доли ошибок от товаров для TREND_WARNING (%) */
+    @Column(name = "trend_error_threshold")
+    @Builder.Default
+    private Integer trendErrorThreshold = 100;
+
     @Column(name = "status")
     @Builder.Default
     private String status = "RUNNING";
