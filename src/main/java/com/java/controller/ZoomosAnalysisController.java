@@ -695,6 +695,33 @@ public class ZoomosAnalysisController {
             }
         }
 
+        // Сайты без настроенных городов/адресов (глобальные выкачки без city_ids):
+        // генерируем IN_PROGRESS/NOT_FOUND issue по факту наличия данных
+        final List<ZoomosParsingStats> inProgressStatsFinal = inProgressStats;
+        for (ZoomosCityId cid : allCityIds) {
+            String site = cid.getSiteName();
+            Set<String> expCities = ZoomosCheckService.parseCommaSeparated(cid.getCityIds());
+            Map<String, Set<String>> addrMap2 = ZoomosCheckService.parseAddressMapping(cid.getAddressIds());
+            if (!expCities.isEmpty() || !ZoomosCheckService.flattenAddressIds(addrMap2).isEmpty()) continue;
+            // Есть завершённые данные — уже оценены в bySiteCity
+            if (stats.stream().anyMatch(s -> site.equals(s.getSiteName()))) continue;
+            // Ищем самую свежую in-progress запись по этому сайту
+            ZoomosParsingStats ip = inProgressStatsFinal.stream()
+                    .filter(s -> site.equals(s.getSiteName()) && s.getStartTime() != null)
+                    .max(Comparator.comparing(ZoomosParsingStats::getStartTime))
+                    .orElseGet(() -> inProgressStatsFinal.stream()
+                            .filter(s -> site.equals(s.getSiteName()))
+                            .findFirst().orElse(null));
+            Map<String, Object> issue = new LinkedHashMap<>();
+            issue.put("site", site);
+            issue.put("city", "");
+            issue.put("cityId", "");
+            issue.put("checkType", cid.getCheckType());
+            issue.put("shopName", run.getShop().getShopName());
+            addIssueStatus(issue, ip, null);
+            issues.add(issue);
+        }
+
         // Группируем по сайту (верхний уровень)
         // Внутри каждой группы — по городу (для правильного отображения стрелок динамики)
         Map<String, List<ZoomosParsingStats>> bySite = stats.stream()

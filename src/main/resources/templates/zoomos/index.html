@@ -220,29 +220,46 @@
                         <i class="fas fa-clock"></i> авто
                     </label>
                 </div>
-                <button type="button" class="btn btn-sm btn-success btn-sync-settings"
-                        th:data-shop-name="${shop.shopName}"
-                        title="Обновить city_ids для существующих сайтов (из настроек)">
-                    <i class="fas fa-sync-alt me-1"></i>Синхронизировать
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-info btn-sync-matching"
-                        th:data-shop-name="${shop.shopName}"
-                        title="Полная синхронизация списка сайтов из страницы матчинга">
-                    <i class="fas fa-link me-1"></i>Из матчинга
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary btn-toggle-shop-enabled"
-                        th:data-shop-id="${shop.id}"
-                        th:data-shop-name="${shop.shopName}"
-                        title="Выключить магазин (скрыть из основного списка)">
-                    <i class="fas fa-power-off"></i>
-                </button>
-                <form th:action="@{'/zoomos/shops/' + ${shop.id} + '/delete'}" method="post" class="d-inline"
-                      onsubmit="return confirm('Удалить магазин ' + this.dataset.name + '?')"
-                      th:data-name="${shop.shopName}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                        <i class="fas fa-trash"></i>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-ellipsis-v"></i>
                     </button>
-                </form>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <button class="dropdown-item btn-sync-settings" type="button"
+                                    th:data-shop-name="${shop.shopName}"
+                                    title="Обновить city_ids для существующих сайтов (из настроек)">
+                                <i class="fas fa-sync-alt me-2 text-success"></i>Синхронизировать
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item btn-sync-matching" type="button"
+                                    th:data-shop-name="${shop.shopName}"
+                                    title="Полная синхронизация списка сайтов из страницы матчинга">
+                                <i class="fas fa-link me-2 text-info"></i>Из матчинга
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item btn-toggle-shop-enabled" type="button"
+                                    th:data-shop-id="${shop.id}"
+                                    th:data-shop-name="${shop.shopName}"
+                                    title="Выключить магазин (скрыть из основного списка)">
+                                <i class="fas fa-power-off me-2 text-secondary"></i>Выключить
+                            </button>
+                        </li>
+                        <li>
+                            <form th:action="@{'/zoomos/shops/' + ${shop.id} + '/delete'}" method="post"
+                                  onsubmit="return confirm('Удалить магазин ' + this.dataset.name + '?')"
+                                  th:data-name="${shop.shopName}">
+                                <button type="submit" class="dropdown-item text-danger">
+                                    <i class="fas fa-trash me-2"></i>Удалить
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
 

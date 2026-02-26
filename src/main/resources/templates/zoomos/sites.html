@@ -68,7 +68,7 @@
                         <th style="width:150px" class="text-center">Тип выкачки</th>
                         <th style="width:80px" class="text-center">Приоритет</th>
                         <th style="width:80px" class="text-center" title="Не отслеживать «В наличии» для этого сайта">Без наличия</th>
-                        <th style="width:150px" class="text-center">Добавлен</th>
+                        <th style="width:150px" class="text-center d-none d-lg-table-cell">Добавлен</th>
                         <th style="width:80px" class="text-center">Действия</th>
                     </tr>
                 </thead>
@@ -100,7 +100,7 @@
                                 <i th:class="${site.ignoreStock} ? 'fas fa-eye-slash' : 'far fa-eye'"></i>
                             </button>
                         </td>
-                        <td class="text-center small text-muted"
+                        <td class="text-center small text-muted d-none d-lg-table-cell"
                             th:text="${site.createdAt != null} ? ${#temporals.format(site.createdAt, 'dd.MM.yyyy')} : '—'"></td>
                         <td class="text-center">
                             <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 delete-site-btn"

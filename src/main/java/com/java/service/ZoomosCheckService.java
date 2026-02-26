@@ -217,6 +217,11 @@ public class ZoomosCheckService {
                 Set<String> expectedCities = parseCommaSeparated(cid.getCityIds());
                 Map<String, Set<String>> addrMapping = parseAddressMapping(cid.getAddressIds());
                 Set<String> allAddrs = flattenAddressIds(addrMapping);
+                // Сайт без настроенных городов/адресов (глобальная API-выкачка):
+                // нужен in-progress запрос если нет завершённых данных за этот период
+                if (expectedCities.isEmpty() && allAddrs.isEmpty()) {
+                    return allStats.stream().noneMatch(s -> site.equals(s.getSiteName()));
+                }
                 // Если хотя бы один адрес или один город без покрытия адресами не найден — нужен in-progress
                 for (String aid : allAddrs) {
                     if (!foundAddressKeysCheck.contains(site + "|" + aid)) return true;
