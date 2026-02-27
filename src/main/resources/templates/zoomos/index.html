@@ -141,41 +141,35 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 
-    <!-- Панель: добавление + поиск + период проверки -->
-    <div class="card mb-4">
+    <!-- Панель добавления магазина -->
+    <div class="card mb-3">
         <div class="card-header"><i class="fas fa-store me-2"></i>Управление магазинами</div>
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
-                <!-- Форма добавления -->
-                <div class="col-md-4">
-                    <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
-                        <div class="col">
-                            <label class="form-label fw-semibold mb-1">Добавить магазин</label>
-                            <input type="text" name="shopName" class="form-control form-control-sm"
-                                   placeholder="vitaexpress.ru" required autocomplete="off">
-                        </div>
-                        <div class="col-auto">
-                            <button type="submit" class="btn btn-sm btn-primary">
-                                <i class="fas fa-plus me-1"></i>Добавить
-                            </button>
-                        </div>
-                    </form>
+        <div class="card-body py-2">
+            <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
+                <div class="col-md-4 col-sm-8 col-9">
+                    <label class="form-label fw-semibold mb-1">Добавить магазин</label>
+                    <input type="text" name="shopName" class="form-control form-control-sm"
+                           placeholder="vitaexpress.ru" required autocomplete="off">
                 </div>
-                <!-- Поиск -->
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold mb-1">Поиск</label>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text"><i class="fas fa-search"></i></span>
-                        <input type="text" id="shopSearch" class="form-control"
-                               placeholder="Имя магазина...">
-                        <button class="btn btn-outline-secondary" type="button" id="clearSearch">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    <span id="searchCount" class="text-muted small"></span>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus me-1"></i>Добавить
+                    </button>
                 </div>
-            </div>
+            </form>
         </div>
+    </div>
+
+    <!-- Строка поиска -->
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+        <div class="input-group input-group-sm" style="max-width:260px;">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="shopSearch" class="form-control" placeholder="Поиск магазина...">
+            <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <span id="searchCount" class="text-muted small"></span>
     </div>
 
     <!-- Список магазинов -->

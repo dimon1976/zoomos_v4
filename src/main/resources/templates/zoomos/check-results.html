@@ -352,9 +352,9 @@
                                     <td class="text-center small d-none d-md-table-cell" th:text="${stat.serverName}"></td>
                                     <td class="text-center small d-none d-md-table-cell" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
                                     <td class="parser-col small"
-                                        th:with="raw=${parserIncludeBysite[stat.siteName] != null ? parserIncludeBysite[stat.siteName] : stat.parserDescription},
+                                        th:with="raw=${stat.parserDescription},
                                                  val=${raw != null and #strings.contains(raw, 'urls: - ') ? #strings.substringAfter(raw, 'urls: - ') : raw}"
-                                        th:title="${stat.parserDescription}"
+                                        th:title="${parserIncludeBysite[stat.siteName]}"
                                         th:text="${val != null ? val : '—'}"></td>
                                     <td class="text-end">
                                         <span th:text="${stat.totalProducts != null} ? ${#numbers.formatInteger(stat.totalProducts, 1, 'COMMA')} : '—'"></span>

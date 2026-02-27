@@ -801,6 +801,15 @@ public class ZoomosAnalysisController {
         // Внутри каждой группы — по городу (для правильного отображения стрелок динамики)
         Map<String, List<ZoomosParsingStats>> bySite = stats.stream()
                 .collect(Collectors.groupingBy(ZoomosParsingStats::getSiteName));
+        // Для сайтов с парсер-фильтром: добавляем незавершённые выкачки в таблицу,
+        // только если для сайта уже есть завершённые данные (чтобы не создавать дублей)
+        for (ZoomosParsingStats ip : inProgressStats) {
+            if (ip.getSiteName() != null
+                    && cityIdBySite.containsKey(ip.getSiteName())
+                    && bySite.containsKey(ip.getSiteName())) {
+                bySite.get(ip.getSiteName()).add(ip);
+            }
+        }
 
         List<Map<String, Object>> groups = new ArrayList<>();
 
@@ -1477,17 +1486,16 @@ public class ZoomosAnalysisController {
         for (ZoomosShop shop : shops) {
             List<ZoomosShopSchedule> list = scheduleRepository.findAllByShopId(shop.getId());
             schedules.put(shop.getId(), list);
+            // lastRunIds: последний run магазина для ссылки на результаты (общий для всех расписаний)
             checkRunRepository.findFirstByShopIdOrderByStartedAtDesc(shop.getId())
-                    .ifPresent(run -> {
-                        // Последний run: дату берём из run.startedAt (не из sched.lastRunAt)
-                        String formatted = run.getStartedAt() != null
-                                ? run.getStartedAt().withZoneSameInstant(java.time.ZoneId.systemDefault()).format(fmt)
-                                : "";
-                        list.forEach(s -> {
-                            lastRunIds.put(s.getId(), run.getId());
-                            lastRunFormatted.put(s.getId(), formatted);
-                        });
-                    });
+                    .ifPresent(run -> list.forEach(s -> lastRunIds.put(s.getId(), run.getId())));
+            // lastRunFormatted: время последнего запуска конкретного расписания (из sched.lastRunAt)
+            for (ZoomosShopSchedule s : list) {
+                if (s.getLastRunAt() != null) {
+                    lastRunFormatted.put(s.getId(),
+                            s.getLastRunAt().withZoneSameInstant(java.time.ZoneId.systemDefault()).format(fmt));
+                }
+            }
         }
         model.addAttribute("shops", shops);
         model.addAttribute("schedules", schedules);

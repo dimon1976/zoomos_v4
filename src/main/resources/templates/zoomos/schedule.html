@@ -228,12 +228,15 @@
 
                         <!-- Последний запуск -->
                         <td class="text-center small text-muted">
-                            <span th:if="${lastRunIds[sched.id] != null}">
-                                <a th:href="@{'/zoomos/check/results/' + ${lastRunIds[sched.id]}}"
+                            <span th:if="${lastRunFormatted[sched.id] != null}">
+                                <a th:if="${lastRunIds[sched.id] != null}"
+                                   th:href="@{'/zoomos/check/results/' + ${lastRunIds[sched.id]}}"
                                    class="text-decoration-none"
                                    th:text="${lastRunFormatted[sched.id]}"></a>
+                                <span th:unless="${lastRunIds[sched.id] != null}"
+                                      th:text="${lastRunFormatted[sched.id]}"></span>
                             </span>
-                            <span th:if="${lastRunIds[sched.id] == null}">—</span>
+                            <span th:if="${lastRunFormatted[sched.id] == null}">—</span>
                             <span class="sched-running-indicator d-none ms-1">
                                 <i class="fas fa-spinner fa-spin text-primary"></i>
                                 <span class="text-primary sched-progress-msg">Идёт...</span>
