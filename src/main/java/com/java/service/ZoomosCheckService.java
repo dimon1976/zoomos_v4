@@ -1062,11 +1062,6 @@ public class ZoomosCheckService {
 
     private void updateRunSummary(ZoomosCheckRun run, List<ZoomosParsingStats> stats,
                                    List<ZoomosCityId> allCityIds) {
-        log.info("updateRunSummary: runId={}, allStats={}", run.getId(), stats.size());
-        // Debug: первые 5 записей
-        stats.stream().limit(5).forEach(s -> log.info("  stat: site={}, city={}, isFinished={}, completionPercent={}, completionTotal={}",
-                s.getSiteName(), s.getCityName(), s.getIsFinished(), s.getCompletionPercent(), s.getCompletionTotal()));
-
         // Разделяем stats на "готовые для группировки" и "реально in-progress".
         // "Готовые" = isFinished != false (завершённые из finished-страницы)
         //           ИЛИ isFinished=false но completionPercent >= 100 (100%-ные in-progress, как в контроллере).
@@ -1076,7 +1071,6 @@ public class ZoomosCheckService {
                 .filter(s -> !Boolean.FALSE.equals(s.getIsFinished())
                         || (s.getCompletionPercent() != null && s.getCompletionPercent() >= 100))
                 .collect(Collectors.toList());
-        log.info("updateRunSummary: finishedStats={}, inProgressCandidates={}", finishedStats.size(), stats.size() - finishedStats.size());
         // Только реально незавершённые (<100%) — для расширения групп при checkParserCompleteness
         Map<String, List<ZoomosParsingStats>> inProgressBySite = stats.stream()
                 .filter(s -> Boolean.FALSE.equals(s.getIsFinished())
@@ -1092,7 +1086,6 @@ public class ZoomosCheckService {
                     }
                     return key;
                 }));
-
         int notFound = 0;
         int ok = 0;
         int warning = 0;
