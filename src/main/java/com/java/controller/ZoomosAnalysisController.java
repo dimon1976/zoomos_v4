@@ -532,11 +532,21 @@ public class ZoomosAnalysisController {
         // 100% записи убираем (они промоутированы в stats выше).
         // Overnight-парсинги (старт до timeFrom) НЕ убираем из inProgressStats — пользователь
         // должен видеть "Сейчас идёт" для любой выкачки начавшейся в день проверки,
-        // независимо от timeFrom. Поэтому сравниваем только по дате, без учёта времени.
+        // независимо от timeFrom. Поэтому нижнюю границу сравниваем только по дате.
+        // Верхняя граница (timeTo): выкачки, стартовавшие ПОСЛЕ timeTo, не относятся к
+        // проверяемому окну → исключаем, чтобы не показывать нерелевантные «в процессе».
+        ZonedDateTime effectiveRangeEnd = null;
+        if (run.getTimeTo() != null && !run.getTimeTo().isBlank()) {
+            effectiveRangeEnd = run.getDateTo().atTime(LocalTime.parse(run.getTimeTo())).atZone(ZoneOffset.UTC);
+        }
+        final ZonedDateTime finalRangeEnd = effectiveRangeEnd;
         inProgressStats = inProgressStats.stream()
                 .filter(ip -> (ip.getCompletionPercent() == null || ip.getCompletionPercent() < 100)
                         && (ip.getStartTime() == null
-                            || !ip.getStartTime().toLocalDate().isBefore(run.getDateFrom())))
+                            || !ip.getStartTime().toLocalDate().isBefore(run.getDateFrom()))
+                        // верхняя граница: старт не позже timeTo (если timeTo задан)
+                        && (finalRangeEnd == null || ip.getStartTime() == null
+                            || !ip.getStartTime().isAfter(finalRangeEnd)))
                 .collect(Collectors.toList());
 
         int dropThreshold = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
