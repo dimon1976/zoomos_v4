@@ -32,6 +32,8 @@
         .verdict-stat-tile { min-width: 56px; }
         .table-responsive thead th { position: sticky; top: 0; z-index: 1; background-color: #f8f9fa; }
         .parser-col { display: none; }
+        .issue-hidden { display: none !important; }
+        .resolved-block { border-top: 1px solid #dee2e6; background: #f8f9fa; }
     </style>
 </th:block>
 
@@ -65,6 +67,10 @@
                             <span class="badge bg-secondary">
                                 <i class="fas fa-store me-1"></i>
                                 <span th:text="${run.shop.shopName}"></span>
+                            </span>
+                            <span th:if="${clientName != null}" class="badge bg-light text-dark border">
+                                <i class="fas fa-user me-1"></i>
+                                <span th:text="${clientName}"></span>
                             </span>
                             <span class="badge bg-light text-dark border">
                                 <i class="fas fa-calendar me-1"></i>
@@ -120,12 +126,13 @@
                 <i class="fas fa-chevron-down chevron me-2"></i>
                 <i class="fas fa-clipboard-list me-1 text-warning"></i>
                 <strong>На что обратить внимание</strong>
-                <span class="badge bg-secondary ms-2" th:text="${issues.size()}">0</span>
+                <span class="badge bg-secondary ms-2" id="issuesCountBadge" th:text="${issues.size()}">0</span>
             </span>
         </div>
         <div id="issuesCollapse" class="collapse show">
             <div class="list-group list-group-flush">
                 <div th:each="issue : ${issues}" class="list-group-item py-2 px-3"
+                     th:data-site="${issue['site']}"
                      th:classappend="${issue['type'] == 'ERROR'} ? 'issue-error' :
                                     (${issue['type'] == 'WARNING'} ? 'issue-warning' :
                                     (${issue['type'] == 'IN_PROGRESS'} ? 'list-group-item-warning' :
@@ -177,6 +184,13 @@
                             </small>
                         </div>
                         <div class="d-flex gap-1 flex-shrink-0 align-self-start mt-1">
+                            <!-- Детали (переход к Блоку 3) -->
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-info py-0 px-2 btn-go-detail"
+                                    title="Перейти к деталям выкачки"
+                                    th:data-site="${issue['site']}">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
                             <!-- Матчинг -->
                             <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
                                target="_blank"
@@ -200,10 +214,31 @@
                                title="История парсинга (ITEM)">
                                 <i class="fas fa-history"></i>
                             </a>
+                            <!-- Скрыть (отметить как проверено) -->
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-success py-0 px-2 btn-hide-site"
+                                    title="Отметить сайт как проверено (скрыть из списка)"
+                                    th:data-site="${issue['site']}">
+                                <i class="fas fa-check"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
+            <!-- Блок "Проверено мной" (скрытые сайты) -->
+            <div id="resolvedBlock" class="resolved-block px-3 py-2" style="display:none">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <small class="text-muted fw-semibold">
+                        <i class="fas fa-check-circle me-1 text-success"></i>Проверено мной
+                        <span class="badge bg-secondary ms-1" id="resolvedCountBadge">0</span>
+                    </small>
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" id="clearResolvedBtn">
+                        <i class="fas fa-undo me-1"></i>Сбросить всё
+                    </button>
+                </div>
+                <div id="resolvedSitesList" class="d-flex flex-wrap gap-1"></div>
+            </div>
+
             <!-- Текст для ИТ -->
             <div class="px-3 py-2 border-top bg-light">
                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -287,7 +322,7 @@
         </div>
 
         <!-- Тело: подгруппы по городам -->
-        <div th:id="'grp-' + ${groupIter.index}" class="collapse">
+        <div th:id="'grp-' + ${groupIter.index}" class="collapse" th:data-site="${group['siteName']}">
             <div th:each="cg, cgIter : ${group['cityGroups']}">
                 <!-- Разделитель города (если > 1) -->
                 <div th:if="${group['cityGroups'].size() > 1}"
@@ -422,14 +457,16 @@
 </th:block>
 
 <th:block th:fragment="scripts">
-<script>
+<script th:inline="javascript">
+    const RUN_ID = /*[[${run.id}]]*/ 0;
+    const BLOCK_HEADERS = ['ОШИБКИ', 'НЕТ ДАННЫХ', 'ПРЕДУПРЕЖДЕНИЯ'];
+
     // Chevron rotation для всех collapsible
     document.querySelectorAll('.group-header').forEach(header => {
         const targetId = header.getAttribute('data-bs-target');
         if (!targetId) return;
         const el = document.querySelector(targetId);
         if (!el) return;
-        // Начальное состояние: свёрнуто
         header.classList.add('collapsed');
         el.addEventListener('show.bs.collapse', () => header.classList.remove('collapsed'));
         el.addEventListener('hide.bs.collapse', () => header.classList.add('collapsed'));
@@ -473,6 +510,172 @@
             }, 2000);
         });
     });
+
+    // ═══════════════════════════════════════════════
+    // FEATURE 2: Переход к деталям выкачки (↓)
+    // ═══════════════════════════════════════════════
+    function scrollToGroup(siteName) {
+        const collapse = document.querySelector('[data-site="' + siteName + '"].collapse');
+        if (!collapse) return;
+        const card = collapse.closest('.card');
+        if (!card) return;
+        bootstrap.Collapse.getOrCreateInstance(collapse).show();
+        setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    }
+
+    document.querySelectorAll('.btn-go-detail').forEach(btn => {
+        btn.addEventListener('click', () => scrollToGroup(btn.dataset.site));
+    });
+
+    // ═══════════════════════════════════════════════
+    // FEATURE 3: Скрытие проверенных сайтов
+    // ═══════════════════════════════════════════════
+    const LS_KEY = 'hidden-sites-' + RUN_ID;
+    let hiddenSites = new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]'));
+    const originalItText = document.getElementById('itTextBlock')?.textContent || '';
+
+    function saveHidden() {
+        localStorage.setItem(LS_KEY, JSON.stringify([...hiddenSites]));
+    }
+
+    function applyHidden() {
+        // Скрыть/показать issues в списке
+        const allItems = document.querySelectorAll('#issuesCollapse .list-group-item[data-site]');
+        let visibleCount = 0;
+        allItems.forEach(el => {
+            const site = el.dataset.site;
+            if (hiddenSites.has(site)) {
+                el.classList.add('issue-hidden');
+            } else {
+                el.classList.remove('issue-hidden');
+                visibleCount++;
+            }
+        });
+
+        // Обновить счётчик в заголовке
+        const badge = document.getElementById('issuesCountBadge');
+        if (badge) badge.textContent = visibleCount;
+
+        // Обновить блок "Проверено мной"
+        updateResolvedBlock();
+
+        // Пересчитать itText
+        rebuildItText();
+    }
+
+    function updateResolvedBlock() {
+        const block = document.getElementById('resolvedBlock');
+        const list = document.getElementById('resolvedSitesList');
+        const countBadge = document.getElementById('resolvedCountBadge');
+        if (!block || !list) return;
+
+        if (hiddenSites.size === 0) {
+            block.style.display = 'none';
+            return;
+        }
+        block.style.display = '';
+        if (countBadge) countBadge.textContent = hiddenSites.size;
+
+        list.innerHTML = '';
+        hiddenSites.forEach(site => {
+            const span = document.createElement('span');
+            span.className = 'badge bg-secondary d-inline-flex align-items-center gap-1 px-2 py-1';
+            span.innerHTML =
+                '<span>' + site + '</span>' +
+                '<button type="button" class="btn-close btn-close-white" style="font-size:0.6em" ' +
+                'onclick="restoreIssueSite(\'' + site.replace(/'/g, "\\'") + '\')" title="Восстановить"></button>';
+            list.appendChild(span);
+        });
+    }
+
+    function hideIssueSite(siteName) {
+        hiddenSites.add(siteName);
+        saveHidden();
+        applyHidden();
+    }
+
+    function restoreIssueSite(siteName) {
+        hiddenSites.delete(siteName);
+        saveHidden();
+        applyHidden();
+    }
+
+    function rebuildItText() {
+        const el = document.getElementById('itTextBlock');
+        if (!el || !originalItText) return;
+        if (hiddenSites.size === 0) {
+            el.textContent = originalItText;
+            return;
+        }
+
+        const lines = originalItText.split('\n');
+        const result = [];
+        let i = 0;
+        while (i < lines.length) {
+            const line = lines[i];
+            const trimmed = line.trim();
+
+            if (BLOCK_HEADERS.includes(trimmed)) {
+                result.push(line);
+                i++;
+                continue;
+            }
+            if (trimmed === '') {
+                result.push(line);
+                i++;
+                continue;
+            }
+            // URL строка (начинается с '  ')
+            if (line.startsWith('  ')) {
+                result.push(line);
+                i++;
+                continue;
+            }
+            // Строка сайта
+            const site = trimmed.split(' — ')[0].trim();
+            if (hiddenSites.has(site)) {
+                // Пропустить строку сайта и следующую URL
+                i++;
+                if (i < lines.length && lines[i].startsWith('  ')) i++;
+            } else {
+                result.push(line);
+                i++;
+            }
+        }
+
+        // Убрать пустые заголовки блоков
+        const cleaned = [];
+        for (let j = 0; j < result.length; j++) {
+            if (BLOCK_HEADERS.includes(result[j].trim())) {
+                // Смотрим вперёд — есть ли контент до следующего заголовка
+                let hasContent = false;
+                for (let k = j + 1; k < result.length; k++) {
+                    if (BLOCK_HEADERS.includes(result[k].trim())) break;
+                    if (result[k].trim()) { hasContent = true; break; }
+                }
+                if (hasContent) cleaned.push(result[j]);
+            } else {
+                cleaned.push(result[j]);
+            }
+        }
+
+        el.textContent = cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    // Навешиваем кнопки "Скрыть"
+    document.querySelectorAll('.btn-hide-site').forEach(btn => {
+        btn.addEventListener('click', () => hideIssueSite(btn.dataset.site));
+    });
+
+    // Кнопка "Сбросить всё"
+    document.getElementById('clearResolvedBtn')?.addEventListener('click', () => {
+        hiddenSites.clear();
+        saveHidden();
+        applyHidden();
+    });
+
+    // Инициализация — применить сохранённые hidden
+    applyHidden();
 
 </script>
 </th:block>
