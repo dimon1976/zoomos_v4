@@ -1150,12 +1150,6 @@ public class ZoomosAnalysisController {
                     return 4; // TREND_WARNING
                 }));
 
-        // Первое непустое имя клиента из данных выкачек — для отображения в заголовке
-        String runClientName = stats.stream()
-                .map(ZoomosParsingStats::getClientName)
-                .filter(cn -> cn != null && !cn.isBlank())
-                .findFirst().orElse(null);
-
         // Карта siteName → parserInclude для отображения в колонке "Парсер" (только фильтр, не полный parserDescription)
         Map<String, String> parserIncludeBysite = new HashMap<>();
         cityIdBySite.forEach((site, cid) -> parserIncludeBysite.put(site, cid.getParserInclude()));
@@ -1172,7 +1166,6 @@ public class ZoomosAnalysisController {
         model.addAttribute("liveWarnCount", liveWarnCount);
         model.addAttribute("liveErrCount", liveErrCount);
         model.addAttribute("liveNotFoundCount", liveNotFoundCount);
-        model.addAttribute("clientName", runClientName);
         return "zoomos/check-results";
     }
 
