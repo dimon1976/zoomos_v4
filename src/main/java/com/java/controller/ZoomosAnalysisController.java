@@ -1061,6 +1061,40 @@ public class ZoomosAnalysisController {
                     issues.add(issue);
                 }
             }
+
+            // Добавляем baseline-записи в таблицы деталей (Блок 3)
+            List<ZoomosParsingStats> baselineStatsList = parsingStatsRepository
+                    .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
+            if (!baselineStatsList.isEmpty()) {
+                // Группируем по site|cityName|addressId
+                Map<String, List<ZoomosParsingStats>> blBySca = new LinkedHashMap<>();
+                for (ZoomosParsingStats s : baselineStatsList) {
+                    String key = s.getSiteName() + "|"
+                            + (s.getCityName() != null ? s.getCityName() : "") + "|"
+                            + (s.getAddressId() != null ? s.getAddressId() : "");
+                    blBySca.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
+                }
+                // Прикрепляем к соответствующим address-группам
+                for (Map<String, Object> g : groups) {
+                    String sn = (String) g.get("siteName");
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> cgs = (List<Map<String, Object>>) g.get("cityGroups");
+                    for (Map<String, Object> cg : cgs) {
+                        String cn = cg.get("cityName") != null ? (String) cg.get("cityName") : "";
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> ags = (List<Map<String, Object>>) cg.get("addressGroups");
+                        for (Map<String, Object> ag : ags) {
+                            String aid = ag.get("addressId") != null ? (String) ag.get("addressId") : "";
+                            List<ZoomosParsingStats> bl = blBySca.get(sn + "|" + cn + "|" + aid);
+                            if (bl != null && !bl.isEmpty()) {
+                                @SuppressWarnings("unchecked")
+                                List<ZoomosParsingStats> agStats = (List<ZoomosParsingStats>) ag.get("stats");
+                                agStats.addAll(bl);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // CSV для ИТ: сайт;город;тип;сообщение;ссылка_на_историю

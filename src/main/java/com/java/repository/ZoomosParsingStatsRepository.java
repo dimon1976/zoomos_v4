@@ -16,6 +16,9 @@ public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsin
     // Только не-baseline записи (для отображения результатов проверки)
     List<ZoomosParsingStats> findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(Long checkRunId);
 
+    // Baseline-записи текущего run (для отображения в таблице деталей)
+    List<ZoomosParsingStats> findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(Long checkRunId);
+
     @Query("SELECT s FROM ZoomosParsingStats s WHERE s.checkRun.id = :checkRunId " +
            "AND s.siteName = :siteName ORDER BY s.finishTime DESC")
     List<ZoomosParsingStats> findByCheckRunAndSite(Long checkRunId, String siteName);

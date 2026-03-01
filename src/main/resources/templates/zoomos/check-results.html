@@ -34,6 +34,15 @@
         .parser-col { display: none; }
         .issue-hidden { display: none !important; }
         .resolved-block { border-top: 1px solid #dee2e6; background: #f8f9fa; }
+        .baseline-separator td { background: #e9ecef; font-size: 0.72rem; color: #6c757d;
+                                  font-style: italic; padding: 2px 6px !important; border-top: 2px solid #ced4da; }
+        .baseline-row { opacity: 0.65; font-size: 0.85em; background: #f8f9fa !important; }
+        @keyframes card-flash {
+            0%   { box-shadow: 0 0 0 3px #ffc107; }
+            60%  { box-shadow: 0 0 0 3px #ffc107; }
+            100% { box-shadow: none; }
+        }
+        .flash-card { animation: card-flash 1.6s ease-out; }
     </style>
 </th:block>
 
@@ -373,9 +382,18 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr th:each="stat, si : ${ag['stats']}"
-                                    th:with="nextStat=${si.index + 1 < ag['stats'].size() ? ag['stats'][si.index + 1] : null}"
-                                    th:classappend="${si.first ? (ag['status'] == 'ERROR' ? 'table-danger' : (ag['status'] == 'WARNING' ? 'table-warning' : 'table-active')) + ' fw-semibold' : ''}">
+                                <th:block th:each="stat, si : ${ag['stats']}"
+                                    th:with="nextStat=${si.index + 1 < ag['stats'].size() ? ag['stats'][si.index + 1] : null},
+                                             prevStat=${si.index > 0 ? ag['stats'][si.index - 1] : null}">
+                                <!-- Разделитель: первая baseline-строка -->
+                                <tr th:if="${stat.isBaseline and (prevStat == null or !prevStat.isBaseline)}"
+                                    class="baseline-separator">
+                                    <td colspan="11">
+                                        <i class="fas fa-history me-1"></i>Baseline:
+                                        <span th:text="${baselineFrom} + ' – ' + ${baselineTo}"></span>
+                                    </td>
+                                </tr>
+                                <tr th:classappend="${stat.isBaseline ? 'baseline-row' : (si.first ? (ag['status'] == 'ERROR' ? 'table-danger' : (ag['status'] == 'WARNING' ? 'table-warning' : 'table-active')) + ' fw-semibold' : '')}">
                                     <td class="text-center small"
                                         th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
                                     <td class="text-center small"
@@ -389,7 +407,7 @@
                                         th:text="${val != null ? val : '—'}"></td>
                                     <td class="text-end">
                                         <span th:text="${stat.totalProducts != null} ? ${#numbers.formatInteger(stat.totalProducts, 1, 'COMMA')} : '—'"></span>
-                                        <span th:if="${nextStat != null and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"
+                                        <span th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"
                                               th:with="pct=${(stat.totalProducts - nextStat.totalProducts) * 100 / nextStat.totalProducts}">
                                             <small th:if="${pct < -10}" class="delta-drop"> &#9660;</small>
                                             <small th:if="${pct > 10}"  class="delta-down"> &#9650;</small>
@@ -397,19 +415,19 @@
                                     </td>
                                     <td class="text-end">
                                         <span th:text="${stat.inStock != null} ? ${#numbers.formatInteger(stat.inStock, 1, 'COMMA')} : '—'"></span>
-                                        <span th:if="${nextStat != null and stat.inStock != null and nextStat.inStock != null and nextStat.inStock > 0}"
+                                        <span th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and stat.inStock != null and nextStat.inStock != null and nextStat.inStock > 0}"
                                               th:with="pct=${(stat.inStock - nextStat.inStock) * 100 / nextStat.inStock}">
                                             <small th:if="${stat.inStock == 0}" class="delta-drop"> &#9660;0</small>
                                             <small th:if="${stat.inStock > 0 and pct < -10}" class="delta-drop"> &#9660;</small>
                                             <small th:if="${pct > 10}" class="delta-down"> &#9650;</small>
                                         </span>
-                                        <small th:if="${nextStat != null and nextStat.inStock != null and nextStat.inStock > 0 and (stat.inStock == null or stat.inStock == 0)}"
+                                        <small th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and nextStat.inStock != null and nextStat.inStock > 0 and (stat.inStock == null or stat.inStock == 0)}"
                                                class="delta-drop"> &#9660;0</small>
                                     </td>
                                     <td class="text-end"
                                         th:classappend="${stat.errorCount != null and stat.errorCount > 0} ? 'text-danger' : ''">
                                         <span th:text="${stat.errorCount != null} ? ${stat.errorCount} : '—'"></span>
-                                        <span th:if="${nextStat != null and stat.errorCount != null and nextStat.errorCount != null and nextStat.errorCount > 0}"
+                                        <span th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and stat.errorCount != null and nextStat.errorCount != null and nextStat.errorCount > 0}"
                                               th:with="pct=${(stat.errorCount - nextStat.errorCount) * 100 / nextStat.errorCount}">
                                             <small th:if="${pct > 30}" class="delta-up"> &#9650;</small>
                                             <small th:if="${pct < -30}" class="delta-down"> &#9660;</small>
@@ -435,6 +453,7 @@
                                         </a>
                                     </td>
                                 </tr>
+                                </th:block>
                             </tbody>
                         </table>
                     </div>
@@ -516,7 +535,14 @@
         const card = collapse.closest('.card');
         if (!card) return;
         bootstrap.Collapse.getOrCreateInstance(collapse).show();
-        setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+        setTimeout(() => {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Кратковременное выделение карточки
+            card.classList.remove('flash-card');
+            void card.offsetWidth; // reflow для перезапуска анимации
+            card.classList.add('flash-card');
+            card.addEventListener('animationend', () => card.classList.remove('flash-card'), { once: true });
+        }, 200);
     }
 
     document.querySelectorAll('.btn-go-detail').forEach(btn => {
