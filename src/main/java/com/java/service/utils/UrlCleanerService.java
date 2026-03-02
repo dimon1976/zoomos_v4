@@ -7,8 +7,10 @@ import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateField;
 import com.java.model.entity.FileMetadata;
 import com.java.service.exports.FileGeneratorService;
+import com.java.util.FileReaderUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.Cell;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -32,6 +34,7 @@ public class UrlCleanerService {
 
     private final FileGeneratorService fileGeneratorService;
     private final ObjectMapper objectMapper;
+    private final FileReaderUtils fileReaderUtils;
     
     // Список параметров для удаления
     private static final Set<String> UTM_PARAMS = Set.of(
@@ -221,41 +224,26 @@ public class UrlCleanerService {
      */
     private List<List<String>> readExcelFile(FileMetadata metadata) throws IOException {
         List<List<String>> data = new ArrayList<>();
-        
+
         try (java.io.FileInputStream fis = new java.io.FileInputStream(metadata.getTempFilePath());
              org.apache.poi.ss.usermodel.Workbook workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(fis)) {
-            
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0); // Читаем первый лист
-            
+
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0);
+
             for (org.apache.poi.ss.usermodel.Row row : sheet) {
                 List<String> rowData = new ArrayList<>();
-                for (org.apache.poi.ss.usermodel.Cell cell : row) {
-                    String cellValue = "";
-                    if (cell != null) {
-                        switch (cell.getCellType()) {
-                            case STRING:
-                                cellValue = cell.getStringCellValue();
-                                break;
-                            case NUMERIC:
-                                cellValue = String.valueOf(cell.getNumericCellValue());
-                                break;
-                            case BOOLEAN:
-                                cellValue = String.valueOf(cell.getBooleanCellValue());
-                                break;
-                            case FORMULA:
-                                cellValue = cell.getCellFormula();
-                                break;
-                            default:
-                                cellValue = "";
-                        }
-                    }
-                    rowData.add(cellValue);
+                for (Cell cell : row) {
+                    rowData.add(getCellValue(cell));
                 }
                 data.add(rowData);
             }
         }
-        
+
         return data;
+    }
+
+    private String getCellValue(Cell cell) {
+        return fileReaderUtils.getCellValue(cell);
     }
 
     /**

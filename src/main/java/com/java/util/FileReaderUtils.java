@@ -4,10 +4,22 @@ import com.java.model.entity.FileMetadata;
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvValidationException;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.openxml4j.opc.OPCPackage;
+import org.apache.poi.openxml4j.opc.PackageAccess;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.util.IOUtils;
+import org.apache.poi.xssf.eventusermodel.XSSFReader;
+import org.apache.poi.xssf.eventusermodel.XSSFSheetXMLHandler;
+import org.apache.poi.xssf.eventusermodel.XSSFSheetXMLHandler.SheetContentsHandler;
+import org.apache.poi.xssf.model.StylesTable;
+import org.apache.poi.xssf.usermodel.XSSFComment;
 import org.springframework.stereotype.Component;
+import org.xml.sax.InputSource;
+import org.xml.sax.XMLReader;
+import javax.xml.parsers.SAXParserFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -16,6 +28,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -86,6 +99,7 @@ public class FileReaderUtils {
     private List<List<String>> readExcelFile(Path filePath) throws IOException {
         List<List<String>> data = new ArrayList<>();
 
+        IOUtils.setByteArrayMaxOverride(Integer.MAX_VALUE);
         try (Workbook workbook = WorkbookFactory.create(Files.newInputStream(filePath))) {
             Sheet sheet = workbook.getSheetAt(0);
 
@@ -117,9 +131,95 @@ public class FileReaderUtils {
     }
 
     /**
+     * SAX streaming чтение XLSX — только нужные колонки.
+     * Не загружает весь workbook в память. Пропускает строку-заголовок.
+     * @param filePath путь к файлу xlsx
+     * @param columnIndices 0-based индексы колонок; порядок сохраняется в результате
+     */
+    public List<List<String>> readExcelColumnar(Path filePath, List<Integer> columnIndices)
+            throws IOException {
+
+        int maxColIdx = columnIndices.stream().mapToInt(Integer::intValue).max().orElse(0);
+        List<List<String>> result = new ArrayList<>();
+
+        try (OPCPackage pkg = OPCPackage.open(filePath.toFile(), PackageAccess.READ)) {
+            XSSFReader xssfReader = new XSSFReader(pkg);
+            StylesTable styles = xssfReader.getStylesTable();
+            org.apache.poi.xssf.model.SharedStringsTable sst =
+                    (org.apache.poi.xssf.model.SharedStringsTable) xssfReader.getSharedStringsTable();
+
+            SheetContentsHandler handler = new SheetContentsHandler() {
+                boolean headerSkipped = false;
+                String[] currentRow;
+
+                @Override
+                public void startRow(int rowNum) {
+                    if (headerSkipped) {
+                        currentRow = new String[columnIndices.size()];
+                        Arrays.fill(currentRow, "");
+                    }
+                }
+
+                @Override
+                public void cell(String cellRef, String formattedValue, XSSFComment comment) {
+                    if (currentRow == null) return;
+                    int colIdx = cellRefToColIndex(cellRef);
+                    if (colIdx > maxColIdx) return;
+                    int pos = columnIndices.indexOf(colIdx);
+                    if (pos >= 0) {
+                        currentRow[pos] = formattedValue != null ? formattedValue : "";
+                    }
+                }
+
+                @Override
+                public void endRow(int rowNum) {
+                    if (!headerSkipped) {
+                        headerSkipped = true;
+                        return;
+                    }
+                    if (currentRow != null) {
+                        result.add(Arrays.asList(currentRow));
+                        currentRow = null;
+                    }
+                }
+
+                @Override
+                public void headerFooter(String text, boolean isHeader, String tagName) {}
+            };
+
+            SAXParserFactory saxFactory = SAXParserFactory.newInstance();
+            saxFactory.setNamespaceAware(true);
+            XMLReader xmlReader = saxFactory.newSAXParser().getXMLReader();
+            xmlReader.setContentHandler(new XSSFSheetXMLHandler(styles, sst, handler, false));
+            Iterator<InputStream> sheets = xssfReader.getSheetsData();
+            if (sheets.hasNext()) {
+                try (InputStream sheet = sheets.next()) {
+                    xmlReader.parse(new InputSource(sheet));
+                }
+            }
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Ошибка SAX-чтения XLSX: " + e.getMessage(), e);
+        }
+        return result;
+    }
+
+    /** Ссылка на ячейку (A1, BC12) → 0-based индекс колонки */
+    private static int cellRefToColIndex(String cellRef) {
+        int col = 0;
+        for (int i = 0; i < cellRef.length(); i++) {
+            char c = cellRef.charAt(i);
+            if (!Character.isLetter(c)) break;
+            col = col * 26 + (c - 'A' + 1);
+        }
+        return col - 1;
+    }
+
+    /**
      * Получает значение ячейки Excel как строку
      */
-    private String getCellValue(Cell cell) {
+    public String getCellValue(Cell cell) {
         if (cell == null) {
             return "";
         }

@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -57,8 +59,33 @@ public class StatsProcessorService {
         log.info("Начинаем обработку файла статистики: {}", metadata.getOriginalFilename());
 
         try {
-            // Читаем ВСЕ данные из файла через централизованный утилитарный класс
-            List<List<String>> data = fileReaderUtils.readFullFileData(metadata);
+            List<Integer> columnsToExport = getColumnsToExport(dto);
+            List<List<String>> data;
+
+            String fmt = metadata.getFileFormat().toLowerCase();
+            if ("xlsx".equals(fmt)) {
+                // SAX: читаем только нужные колонки, без загрузки всего workbook в память
+                Path filePath = Paths.get(metadata.getTempFilePath());
+                data = fileReaderUtils.readExcelColumnar(filePath, columnsToExport);
+                if (dto.isSourceReplace()) {
+                    int srcPos = columnsToExport.indexOf(SOURCE_COLUMN_INDEX);
+                    if (srcPos >= 0) {
+                        final int pos = srcPos;
+                        data = data.stream().map(row -> {
+                            List<String> r = new ArrayList<>(row);
+                            String val = r.get(pos);
+                            if (!val.isEmpty() && !KNOWN_USERS.contains(val.toLowerCase())) {
+                                r.set(pos, "manager");
+                            }
+                            return r;
+                        }).collect(Collectors.toList());
+                    }
+                }
+            } else {
+                // CSV / XLS — старый путь через readFullFileData + processData
+                data = fileReaderUtils.readFullFileData(metadata);
+                data = processData(data, columnsToExport, dto.isSourceReplace());
+            }
 
             if (data.isEmpty()) {
                 throw new IllegalArgumentException("Файл не содержит данных для обработки");
@@ -66,40 +93,18 @@ public class StatsProcessorService {
 
             log.info("Загружено {} строк для обработки", data.size());
 
-            // Определяем колонки для экспорта
-            List<Integer> columnsToExport = getColumnsToExport(dto);
-
-            // Обрабатываем данные
-            List<List<String>> processedData = processData(data, columnsToExport, dto.isSourceReplace());
-
-            log.info("Обработано {} строк", processedData.size());
-
-            // Создаем ExportTemplate
             ExportTemplate template = createExportTemplate(dto);
+            Stream<Map<String, Object>> dataStream = convertToMapStream(data, getHeaders(dto));
 
-            // Преобразуем данные в Stream<Map<String, Object>>
-            Stream<Map<String, Object>> dataStream = convertToMapStream(processedData, getHeaders(dto));
-
-            // Используем FileGeneratorService для генерации файла
             String fileName = "stats-processed_" + System.currentTimeMillis();
-            java.nio.file.Path generatedFile = fileGeneratorService.generateFile(
-                    dataStream,
-                    processedData.size(),
-                    template,
-                    fileName
-            );
+            Path generatedFile = fileGeneratorService.generateFile(dataStream, data.size(), template, fileName);
 
-            // Читаем сгенерированный файл в массив байт
             byte[] fileData = java.nio.file.Files.readAllBytes(generatedFile);
-
-            // Удаляем временный файл сразу после чтения
             try {
                 java.nio.file.Files.delete(generatedFile);
-                log.debug("Удалён временный файл: {}", generatedFile);
             } catch (IOException deleteEx) {
-                log.warn("Не удалось удалить временный файл: {}", generatedFile, deleteEx);
+                log.warn("Не удалось удалить временный файл: {}", generatedFile);
             }
-
             return fileData;
 
         } catch (Exception e) {

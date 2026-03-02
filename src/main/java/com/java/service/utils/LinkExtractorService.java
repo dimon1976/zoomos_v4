@@ -7,8 +7,10 @@ import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateField;
 import com.java.model.entity.FileMetadata;
 import com.java.service.exports.FileGeneratorService;
+import com.java.util.FileReaderUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.Cell;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -29,6 +31,7 @@ public class LinkExtractorService {
 
     private final FileGeneratorService fileGeneratorService;
     private final ObjectMapper objectMapper;
+    private final FileReaderUtils fileReaderUtils;
     
     // Регулярное выражение для поиска URL
     private static final Pattern URL_PATTERN = Pattern.compile(
@@ -200,51 +203,22 @@ public class LinkExtractorService {
         try (FileInputStream fis = new FileInputStream(metadata.getTempFilePath());
              org.apache.poi.ss.usermodel.Workbook workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(fis)) {
 
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0); // Читаем первый лист
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0);
 
             for (org.apache.poi.ss.usermodel.Row row : sheet) {
                 List<String> rowData = new ArrayList<>();
-                for (org.apache.poi.ss.usermodel.Cell cell : row) {
-                    String cellValue = "";
-                    if (cell != null) {
-                        switch (cell.getCellType()) {
-                            case STRING:
-                                // Для текстовых ячеек берем значение напрямую
-                                cellValue = cell.getStringCellValue();
-                                break;
-                            case NUMERIC:
-                                // Для числовых ячеек проверяем - целое число или дробное
-                                double numericValue = cell.getNumericCellValue();
-                                if (numericValue == Math.floor(numericValue)) {
-                                    // Целое число - форматируем без десятичной точки
-                                    cellValue = String.format("%.0f", numericValue);
-                                } else {
-                                    // Дробное число - оставляем как есть
-                                    cellValue = String.valueOf(numericValue);
-                                }
-                                break;
-                            case BOOLEAN:
-                                cellValue = String.valueOf(cell.getBooleanCellValue());
-                                break;
-                            case FORMULA:
-                                // Для формул пытаемся получить вычисленное значение
-                                try {
-                                    cellValue = cell.getStringCellValue();
-                                } catch (IllegalStateException e) {
-                                    cellValue = String.valueOf(cell.getNumericCellValue());
-                                }
-                                break;
-                            default:
-                                cellValue = "";
-                        }
-                    }
-                    rowData.add(cellValue);
+                for (Cell cell : row) {
+                    rowData.add(getCellValue(cell));
                 }
                 data.add(rowData);
             }
         }
 
         return data;
+    }
+
+    private String getCellValue(Cell cell) {
+        return fileReaderUtils.getCellValue(cell);
     }
 
     /**
