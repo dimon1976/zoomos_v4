@@ -138,6 +138,7 @@
             <div class="list-group list-group-flush">
                 <div th:each="issue : ${issues}" class="list-group-item py-2 px-3"
                      th:data-site="${issue['site']}"
+                     th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type']}"
                      th:classappend="${issue['type'] == 'ERROR'} ? 'issue-error' :
                                     (${issue['type'] == 'WARNING'} ? 'issue-warning' :
                                     (${issue['type'] == 'IN_PROGRESS'} ? 'list-group-item-warning' :
@@ -221,9 +222,9 @@
                             </a>
                             <!-- Скрыть (отметить как проверено) -->
                             <button type="button"
-                                    class="btn btn-sm btn-outline-success py-0 px-2 btn-hide-site"
-                                    title="Отметить сайт как проверено (скрыть из списка)"
-                                    th:data-site="${issue['site']}">
+                                    class="btn btn-sm btn-outline-success py-0 px-2 btn-hide-issue"
+                                    title="Отметить как проверено (скрыть из списка)"
+                                    th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type']}">
                                 <i class="fas fa-check"></i>
                             </button>
                         </div>
@@ -550,23 +551,24 @@
     });
 
     // ═══════════════════════════════════════════════
-    // FEATURE 3: Скрытие проверенных сайтов
+    // FEATURE 3: Скрытие проверенных строк
+    // Ключ: site|city|addressId|type — уникален для каждой строки
     // ═══════════════════════════════════════════════
-    const LS_KEY = 'hidden-sites-' + RUN_ID;
-    let hiddenSites = new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]'));
+    const LS_KEY = 'hidden-issues-' + RUN_ID;
+    let hiddenIssues = new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]'));
     const originalItText = document.getElementById('itTextBlock')?.textContent || '';
 
     function saveHidden() {
-        localStorage.setItem(LS_KEY, JSON.stringify([...hiddenSites]));
+        localStorage.setItem(LS_KEY, JSON.stringify([...hiddenIssues]));
     }
 
     function applyHidden() {
-        // Скрыть/показать issues в списке
-        const allItems = document.querySelectorAll('#issuesCollapse .list-group-item[data-site]');
+        // Скрыть/показать issues по составному ключу
+        const allItems = document.querySelectorAll('#issuesCollapse .list-group-item[data-issue-key]');
         let visibleCount = 0;
         allItems.forEach(el => {
-            const site = el.dataset.site;
-            if (hiddenSites.has(site)) {
+            const key = el.dataset.issueKey;
+            if (hiddenIssues.has(key)) {
                 el.classList.add('issue-hidden');
             } else {
                 el.classList.remove('issue-hidden');
@@ -591,33 +593,37 @@
         const countBadge = document.getElementById('resolvedCountBadge');
         if (!block || !list) return;
 
-        if (hiddenSites.size === 0) {
+        if (hiddenIssues.size === 0) {
             block.style.display = 'none';
             return;
         }
         block.style.display = '';
-        if (countBadge) countBadge.textContent = hiddenSites.size;
+        if (countBadge) countBadge.textContent = hiddenIssues.size;
 
         list.innerHTML = '';
-        hiddenSites.forEach(site => {
+        hiddenIssues.forEach(key => {
+            const parts = key.split('|');
+            const site = parts[0] || '';
+            const city = parts[1] || '';
+            const label = city ? site + ' (' + city + ')' : site;
             const span = document.createElement('span');
             span.className = 'badge bg-secondary d-inline-flex align-items-center gap-1 px-2 py-1';
             span.innerHTML =
-                '<span>' + site + '</span>' +
+                '<span>' + label + '</span>' +
                 '<button type="button" class="btn-close btn-close-white" style="font-size:0.6em" ' +
-                'onclick="restoreIssueSite(\'' + site.replace(/'/g, "\\'") + '\')" title="Восстановить"></button>';
+                'onclick="restoreIssue(\'' + key.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" title="Восстановить"></button>';
             list.appendChild(span);
         });
     }
 
-    function hideIssueSite(siteName) {
-        hiddenSites.add(siteName);
+    function hideIssue(key) {
+        hiddenIssues.add(key);
         saveHidden();
         applyHidden();
     }
 
-    function restoreIssueSite(siteName) {
-        hiddenSites.delete(siteName);
+    function restoreIssue(key) {
+        hiddenIssues.delete(key);
         saveHidden();
         applyHidden();
     }
@@ -625,10 +631,13 @@
     function rebuildItText() {
         const el = document.getElementById('itTextBlock');
         if (!el || !originalItText) return;
-        if (hiddenSites.size === 0) {
+        if (hiddenIssues.size === 0) {
             el.textContent = originalItText;
             return;
         }
+
+        // IT-текст работает на уровне сайта: скрываем сайты у которых есть любые скрытые issues
+        const hiddenSitesForIt = new Set([...hiddenIssues].map(k => k.split('|')[0]));
 
         const lines = originalItText.split('\n');
         const result = [];
@@ -655,7 +664,7 @@
             }
             // Строка сайта
             const site = trimmed.split(' — ')[0].trim();
-            if (hiddenSites.has(site)) {
+            if (hiddenSitesForIt.has(site)) {
                 // Пропустить строку сайта и следующую URL
                 i++;
                 if (i < lines.length && lines[i].startsWith('  ')) i++;
@@ -669,7 +678,6 @@
         const cleaned = [];
         for (let j = 0; j < result.length; j++) {
             if (BLOCK_HEADERS.includes(result[j].trim())) {
-                // Смотрим вперёд — есть ли контент до следующего заголовка
                 let hasContent = false;
                 for (let k = j + 1; k < result.length; k++) {
                     if (BLOCK_HEADERS.includes(result[k].trim())) break;
@@ -685,13 +693,13 @@
     }
 
     // Навешиваем кнопки "Скрыть"
-    document.querySelectorAll('.btn-hide-site').forEach(btn => {
-        btn.addEventListener('click', () => hideIssueSite(btn.dataset.site));
+    document.querySelectorAll('.btn-hide-issue').forEach(btn => {
+        btn.addEventListener('click', () => hideIssue(btn.dataset.issueKey));
     });
 
     // Кнопка "Сбросить всё"
     document.getElementById('clearResolvedBtn')?.addEventListener('click', () => {
-        hiddenSites.clear();
+        hiddenIssues.clear();
         saveHidden();
         applyHidden();
     });
