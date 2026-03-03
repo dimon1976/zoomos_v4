@@ -2,6 +2,7 @@ package com.java.controller;
 
 import com.java.config.ZoomosConfig;
 import com.java.model.entity.*;
+import com.java.service.RedmineService;
 import com.java.repository.ZoomosCityAddressRepository;
 import com.java.repository.ZoomosCityIdRepository;
 import com.java.repository.ZoomosCityNameRepository;
@@ -29,6 +30,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -56,6 +58,7 @@ public class ZoomosAnalysisController {
     private final ZoomosShopScheduleRepository scheduleRepository;
     private final ZoomosSchedulerService schedulerService;
     private final ZoomosParserPatternRepository parserPatternRepository;
+    private final RedmineService redmineService;
 
     @GetMapping({"", "/"})
     public String index(Model model) {
@@ -1200,6 +1203,19 @@ public class ZoomosAnalysisController {
         model.addAttribute("liveWarnCount", liveWarnCount);
         model.addAttribute("liveErrCount", liveErrCount);
         model.addAttribute("liveNotFoundCount", liveNotFoundCount);
+
+        // Redmine: загружаем существующие задачи из БД + обновляем статусы
+        model.addAttribute("redmineEnabled", redmineService.isEnabled());
+        if (redmineService.isEnabled() && !issues.isEmpty()) {
+            Set<String> siteNames = issues.stream()
+                    .map(i -> (String) i.get("site"))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            model.addAttribute("redmineIssues", redmineService.getIssuesMapForSites(siteNames));
+        } else {
+            model.addAttribute("redmineIssues", Collections.emptyMap());
+        }
+
         return "zoomos/check-results";
     }
 
