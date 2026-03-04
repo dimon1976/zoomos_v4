@@ -13,19 +13,35 @@ Zoomos v4 is a Spring Boot 3.2.12 file processing application with client-based 
 - **Build System**: Maven with Spring Boot parent
 - **Development**: Spring DevTools, Lombok, Flyway migrations
 
-## Quick Start (5 минут)
+## Development Commands
 
-### Запуск приложения
 ```bash
-# Быстрый старт с минимальным логированием (рекомендуется)
+# Быстрый старт (рекомендуется)
 mvn spring-boot:run -Dspring-boot.run.profiles=silent
+
+# Другие профили
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+mvn spring-boot:run -Dspring-boot.run.profiles=verbose
+
+# Build
+mvn clean compile
+mvn clean package
+mvn test
+mvn test -Dtest=ClassNameTest
+
+# Database
+psql -d zoomos_v4 -c "SELECT COUNT(*) FROM clients;"
+psql -d zoomos_v4 -c "SELECT COUNT(*) FROM file_operations;"
+mvn flyway:info
 ```
 
 ### Доступ к приложению
-- **Главная страница**: http://localhost:8081
+- **Главная**: http://localhost:8081
 - **Утилиты**: http://localhost:8081/utils
-- **Система обслуживания**: http://localhost:8081/maintenance
-- **Анализ статистики**: http://localhost:8081/statistics/setup
+- **Справочник**: http://localhost:8081/handbook
+- **Обслуживание**: http://localhost:8081/maintenance
+- **Статистика**: http://localhost:8081/statistics/setup
+- **Zoomos Check**: http://localhost:8081/zoomos
 
 ### Основные разделы
 1. **Import/Export** (главная страница) - Импорт и экспорт файлов для клиентов
@@ -34,49 +50,6 @@ mvn spring-boot:run -Dspring-boot.run.profiles=silent
 4. **Maintenance** (`/maintenance`) - Файловые операции, очистка БД, мониторинг системы
 5. **Statistics** (`/statistics/setup`) - Анализ и сравнение операций экспорта
 6. **Zoomos Check** (`/zoomos`) - Проверка выкачки: парсинг export.zoomos.by, вердикт по наличию товаров
-
-### Быстрая проверка работоспособности
-```bash
-# Проверка подключения к БД
-psql -d zoomos_v4 -c "SELECT COUNT(*) FROM clients;"
-
-# Просмотр статуса миграций
-mvn flyway:info
-```
-
-## Development Commands
-
-### Build and Run
-```bash
-# Quick start (preferred method)
-mvn spring-boot:run -Dspring-boot.run.profiles=silent
-
-# Build and test
-mvn clean compile                 # Compile project
-mvn clean package                 # Build JAR file
-mvn test                         # Run all tests
-mvn test -Dtest=ClassNameTest    # Run specific test
-
-# Run with different profiles
-mvn spring-boot:run -Dspring-boot.run.profiles=dev
-mvn spring-boot:run -Dspring-boot.run.profiles=verbose
-```
-
-### Application Access
-- **Main URL**: http://localhost:8081
-- **Dashboard**: http://localhost:8081/
-- **Maintenance System**: http://localhost:8081/maintenance
-- **Utilities**: http://localhost:8081/utils
-
-### Database Commands
-```bash
-# PostgreSQL connection
-psql -d zoomos_v4 -c "SELECT COUNT(*) FROM clients;"
-psql -d zoomos_v4 -c "SELECT COUNT(*) FROM file_operations;"
-
-# View Flyway migration status
-mvn flyway:info
-```
 
 ## Application Profiles
 
@@ -87,8 +60,13 @@ mvn flyway:info
 
 ## Recent Changes & Features
 
+### 2026-03
+
+- **Redmine интеграция** — Создание/редактирование задач в ТТ прямо со страницы результатов проверки. Flyway V39–V40. См. секцию ниже.
+
 ### 2026-02
 
+- **Zoomos Check — Расписание + Приоритетные сайты** — Cron-расписания автопроверок per-shop (`ZoomosSchedulerService`, `ThreadPoolTaskScheduler`). Флаг `is_priority` в справочнике сайтов. Глобальный баннер в layout при проблемах приоритетных сайтов. Flyway V32. См. секцию ниже.
 - **Zoomos Check — Baseline тренд-анализ** — Исторический анализ метрик выкачек за N дней. TREND_WARNING issues (не влияют на canDeliver). Flyway V29, поле `baselineDays` на форме. См. секцию ниже.
 - **Zoomos Check — CSV для ИТ** — «Текст для ИТ» теперь в формате CSV с разделителем `;` (Сайт;Город;Тип;Сообщение;История).
 - **Zoomos Check** — Проверка выкачки export.zoomos.by: парсинг истории через Playwright, вердикт готовности отчёта, сводка ИТ с копированием. Flyway V23–V28, 2 новые таблицы. См. секцию ниже.
@@ -114,14 +92,6 @@ mvn flyway:info
 ### 2025-09
 - **Data Merger Utility** - Слияние данных из двух файлов с настраиваемым маппингом колонок
 - **HTTP Redirect Utility Enhancements** - Двухрежимная обработка (sync/async) с WebSocket уведомлениями
-
-### Key Features
-- **Anti-Bot Bypass** - Трёхуровневая стратегия (Curl → Playwright → HttpClient) для обработки защищённых сайтов
-- **WebSocket Real-time Updates** - Прогресс операций, уведомления, восстановление состояния через sessionStorage
-- **Thread Pool Architecture** - 6 специализированных executor'ов для разных задач
-- **Flyway Migrations** - Версионирование схемы БД с автоматической миграцией
-
-Детальное описание каждой фичи см. в соответствующих разделах ниже.
 
 ## Architecture Overview
 
@@ -166,53 +136,14 @@ src/main/java/com/java/
 
 Система импорта использует паттерн **синхронного создания сессии + фоновой обработки**, идентичный ExportService.
 
-**Ключевые компоненты:**
-
 1. **AsyncImportService.startImport()** ([AsyncImportService.java:64](src/main/java/com/java/service/imports/AsyncImportService.java#L64))
-
    - Выполняется **синхронно** в HTTP потоке (без @Async)
-   - Создаёт FileOperation и ImportSession немедленно
-   - Возвращает `CompletableFuture.completedFuture(session)` сразу
+   - Создаёт FileOperation и ImportSession немедленно, возвращает `CompletableFuture.completedFuture(session)` сразу
    - Запускает фоновую обработку через `TransactionSynchronization.afterCommit()`
 
 2. **ImportController.startImport()** ([ImportController.java:164-240](src/main/java/com/java/controller/ImportController.java#L164-L240))
-
-   - Собирает все futures в список
-   - Ждёт завершения параллельно через `CompletableFuture.allOf()` (2 секунды)
-   - Извлекает operationId из каждой сессии
+   - Ждёт все futures параллельно через `CompletableFuture.allOf()` (2 секунды на все файлы)
    - Graceful degradation при timeout
-
-### Исправление TimeoutException (2026-02)
-
-**Проблема:**
-При загрузке 5+ файлов одновременно возникал `TimeoutException` из-за последовательного блокирующего ожидания:
-- Для каждого файла: `future.get(5, TimeUnit.SECONDS)`
-- Для 5 файлов: 5 × 5 секунд = **25 секунд** блокировки HTTP потока
-
-**Решение:**
-
-1. **Убрана @Async аннотация** с `AsyncImportService.startImport()`
-
-   - Создание сессии теперь синхронное (в HTTP потоке)
-   - FileOperation и ImportSession создаются немедленно
-   - Фоновая обработка остаётся через `afterCommit()`
-
-2. **Параллельное ожидание** в `ImportController`
-
-   - `CompletableFuture.allOf()` ждёт все futures одновременно
-   - Timeout: 2 секунды для всех файлов вместо 5 секунд на каждый
-   - Fallback для graceful degradation
-
-3. **Увеличены ресурсы** для множественных импортов
-
-   - Thread pool (silent): `core=2, max=5, queue=50`
-   - HikariCP pool: `max=10` (5 для импортов + 2 для HTTP + 3 резерв)
-
-**Результат:**
-
-- 5 файлов: **< 3 секунды** (было: 25+ секунд)
-- Нет TimeoutException
-- Консистентность с ExportService
 
 **Конфигурация** ([application-silent.properties:46-49](src/main/resources/application-silent.properties#L46-L49)):
 ```properties
@@ -241,13 +172,12 @@ Processes CSV/Excel files containing URLs to resolve final URLs after HTTP redir
 3. **HttpClientStrategy** (Priority 3): Java HTTP Client fallback
 
 ### Key Components
-- `RedirectFinderController` - Web interface with dual processing modes (/process and /process-async endpoints)  
+- `RedirectFinderController` - Web interface with dual processing modes (/process and /process-async endpoints)
 - `RedirectFinderService` - Core business logic with sync and async request preparation
 - `AsyncRedirectService` - Dedicated async processing with comprehensive WebSocket progress tracking
 - `RedirectStrategy` - Interface implemented by three processing strategies with intelligent fallback
 - `RedirectResult` - Result model with URL, redirect count, HTTP status, and processing metadata
-- `RedirectExportTemplate` - Template for seamless integration with export system
-- `RedirectProgressDto` - Progress tracking DTO for real-time WebSocket updates and user notifications
+- `RedirectProgressDto` - Progress tracking DTO for real-time WebSocket updates
 - `RedirectProcessingRequest` - Request model for async processing with URL data and configuration
 - `RedirectUrlData` - Individual URL data model supporting ID and model fields
 
@@ -258,75 +188,28 @@ Processes CSV/Excel files containing URLs to resolve final URLs after HTTP redir
 
 **JavaScript Redirect Detection**: PlaywrightStrategy successfully handles sites like Yandex Market where redirects occur via JavaScript rather than HTTP headers. Essential for e-commerce and dynamic sites.
 
-**Dual Processing Modes**: 
+**Dual Processing Modes**:
 - **Synchronous**: Direct file download after processing, suitable for files under 50 URLs
-- **Asynchronous**: Background processing with WebSocket notifications, allows multitasking
-
-**Asynchronous Architecture**: Fully integrated with existing async system using dedicated `redirectTaskExecutor` thread pool and WebSocket notifications via `/topic/redirect-progress/{operationId}`.
+- **Asynchronous**: Background processing with WebSocket notifications via `/topic/redirect-progress/{operationId}`
 
 ### Proxy Configuration for Geo-Blocking Bypass
 
-**Purpose**: Обход IP-based и региональных блокировок через proxy серверы.
-
 **Configuration** ([application.properties](src/main/resources/application.properties)):
 ```properties
-# Proxy для обхода региональных блокировок
 redirect.proxy.enabled=false
 redirect.proxy.server=host:port
 redirect.proxy.username=your_username
 redirect.proxy.password=your_password
 redirect.proxy.type=HTTP  # HTTP или SOCKS5
 
-# Rotating proxies для избежания rate limiting
 redirect.proxy.rotating.enabled=false
 redirect.proxy.rotating.pool-size=5
 redirect.proxy.rotating.pool-file=data/config/proxy-list.txt
 ```
 
-**Key Components**:
+Rotating proxies: файл `data/config/proxy-list.txt`, формат `host:port:username:password` на строку. Пример: [proxy-example.txt](data/config/proxy-example.txt).
 
-- `ProxyConfig` - Spring Boot конфигурация с @ConfigurationProperties для proxy настроек
-- `ProxyPoolManager` - Управление пулом proxy с round-robin ротацией
-- `PlaywrightStrategy` - Интеграция proxy в headless браузер через BrowserType.LaunchOptions
-- UI checkbox "Использовать прокси" на странице [redirect-finder-configure.html](src/main/resources/templates/utils/redirect-finder-configure.html)
-
-**Rotating Proxies Setup**:
-
-1. Создайте файл `data/config/proxy-list.txt` со списком proxy серверов
-2. Формат: `host:port:username:password` (один на строку)
-3. Пример из [proxy-example.txt](data/config/proxy-example.txt):
-
-   ```text
-   # Residential proxies (рекомендуется для обхода geo-blocking)
-   rp1.brightdata.com:22225:customer-user1:password1
-   rp2.brightdata.com:22225:customer-user2:password2
-
-   # Datacenter proxies (быстрее, но легче детектируются)
-   dc1.proxyrack.net:10000:user:pass
-   dc2.proxyrack.net:10001:user:pass
-   ```
-
-4. Включите `redirect.proxy.rotating.enabled=true` в application.properties
-5. Система автоматически ротирует IP для каждого URL
-
-**Recommended Proxy Providers**:
-
-- **Residential proxies**: Bright Data, Oxylabs, SmartProxy (лучше для geo-blocking)
-- **Datacenter proxies**: ProxyRack, Storm Proxies (быстрее, дешевле, но легче блокируются)
-
-**Usage**:
-
-- Proxy используется только в PlaywrightStrategy (когда CurlStrategy не справляется)
-- Чекбокс "Использовать прокси" доступен в UI для включения/выключения
-- Опциональная функция - backward compatible, не влияет на существующую логику
-
-**Implementation Details**:
-
-- Static proxy: используется один и тот же proxy из `redirect.proxy.server`
-- Rotating proxy: round-robin выборка из пула через AtomicInteger
-- Thread-safe: `CopyOnWriteArrayList` для хранения пула proxy
-- Поддержка аутентификации: username/password для платных proxy
-- Поддержка HTTP и SOCKS5 proxy
+**Key Components**: `ProxyConfig`, `ProxyPoolManager`, интеграция в `PlaywrightStrategy` через `BrowserType.LaunchOptions`. UI checkbox "Использовать прокси" на странице [redirect-finder-configure.html](src/main/resources/templates/utils/redirect-finder-configure.html). Proxy используется только когда CurlStrategy не справляется, backward compatible.
 
 ## Configuration System
 
@@ -381,16 +264,6 @@ export.async.max-pool-size=4
 - Use existing services like `FileAnalyzerService`, `FileGeneratorService`
 - Maintain consistent naming conventions
 
-### Testing Strategy
-```java
-// Test with real data examples
-@Test
-public void testGoldAppleRedirect() {
-    // https://goldapple.ru/qr/19000180719
-    // Expected: redirect to elixir-precious product page
-}
-```
-
 ## Maintenance System
 
 ### Scheduled Tasks (Disabled by Default)
@@ -404,7 +277,7 @@ maintenance.scheduler.health-check.cron=0 0 * * * *      # Hourly
 ### Web Interface
 - `/maintenance` - Main dashboard
 - `/maintenance/files` - File operations
-- `/maintenance/database` - Database maintenance  
+- `/maintenance/database` - Database maintenance
 - `/maintenance/system` - System health monitoring
 
 ## Error Handling
@@ -442,99 +315,29 @@ Real-time updates for:
 
 ### Auto-VACUUM after Data Cleanup
 
-Система автоматического выполнения `VACUUM ANALYZE` после массового удаления данных для оптимизации производительности PostgreSQL.
-
 **Configuration** ([application.properties:45-48](src/main/resources/application.properties#L45-L48)):
-- `database.cleanup.auto-vacuum.enabled=true` - Включение/выключение
+- `database.cleanup.auto-vacuum.enabled=true`
 - `database.cleanup.auto-vacuum.threshold-records=1000000` - Триггер при удалении ≥ 1M записей
 - `database.cleanup.auto-vacuum.run-async=true` - Асинхронное выполнение
 
-**Integration** ([DataCleanupService.java:154-157](src/main/java/com/java/service/maintenance/DataCleanupService.java#L154-L157)):
-- Automatically triggers VACUUM ANALYZE after deleting ≥ 1M records
-- Async mode (default): runs in background via `CompletableFuture`
-- Sync mode: waits for completion before returning result
-- Supports all entity types: AV_DATA, IMPORT_SESSIONS, EXPORT_SESSIONS, etc.
+Автоматически запускается `VACUUM ANALYZE` после удаления ≥ 1M записей. Async режим (default) не блокирует пользователя. Улучшает производительность запросов на 20-40% после крупных удалений.
 
-**Key Methods**:
+**Key Methods** ([DataCleanupService.java](src/main/java/com/java/service/maintenance/DataCleanupService.java)):
 - `performAutoVacuum()` - Controls async/sync execution (lines 599-621)
 - `executeVacuumAnalyze()` - Executes VACUUM ANALYZE for each table (lines 623-656)
 - `getTableNameForEntityType()` - Maps entity type to table name (lines 658-677)
 
-**Performance Impact**:
-- For 50M row table with 10M deletions: ~15-25 minutes VACUUM time
-- Improves query performance by 20-40% after large cleanups
-- Does NOT block table - application continues working
-- Clears dead tuples and updates table statistics
-
-**Documentation**:
-- Full guide: [VACUUM_AFTER_CLEANUP_GUIDE.md](VACUUM_AFTER_CLEANUP_GUIDE.md)
-- Quick start: [VACUUM_QUICK_START.md](VACUUM_QUICK_START.md)
-
-**Recommendation**: For tables with bloat > 30% after large cleanups, manually run REINDEX via `/maintenance/database` UI once per month.
-
 ### Asynchronous Data Cleanup with WebSocket Progress
 
-Система асинхронной очистки устаревших данных с отображением прогресса в реальном времени через WebSocket и возможностью восстановления состояния при возврате на страницу.
+Асинхронная очистка через `cleanupTaskExecutor` (1-2 потока, 30 мин timeout). Безопасное пакетное удаление (10000 записей/батч) с rollback на уровне каждого батча.
 
-**Architecture** ([AsyncConfig.java:152-167](src/main/java/com/java/config/AsyncConfig.java#L152-L167)):
-- Thread pool: `cleanupTaskExecutor` (1-2 потока, 30 мин timeout)
-- Выделенный executor для долгих операций очистки БД
+**Архитектура**:
+- `executeCleanupAsync()` — `@Async("cleanupTaskExecutor")` для UI ([DataCleanupController.java:110-173](src/main/java/com/java/controller/DataCleanupController.java#L110-L173)): генерирует `operationId` и немедленно возвращает клиенту
+- `executeCleanup()` — синхронный, для Scheduler
+- Прогресс через WebSocket `/topic/cleanup-progress/{operationId}`, state recovery через `sessionStorage`
+- Удаление через временные таблицы + `@Transactional(propagation = REQUIRES_NEW)` на батч
 
-**Key Components**:
-
-1. **DataCleanupService** - Два режима работы:
-   - `executeCleanup()` - Синхронный метод для MaintenanceController и Scheduler
-   - `executeCleanupAsync()` - Асинхронный метод с `@Async("cleanupTaskExecutor")` для UI
-   - `executeCleanupSync()` - Приватный метод с основной логикой
-
-2. **Safe Batch Deletion** ([DataCleanupService.java:330-380](src/main/java/com/java/service/maintenance/DataCleanupService.java#L330-L380)):
-   - Создание временной таблицы с ID для удаления
-   - Удаление батчами через `cleanupAvDataBatch()` с `@Transactional(propagation = REQUIRES_NEW)`
-   - Rollback возможен на уровне каждого батча
-   - Прямая отправка WebSocket сообщений (без CompletableFuture)
-
-3. **Controller Behavior** ([DataCleanupController.java:110-173](src/main/java/com/java/controller/DataCleanupController.java#L110-L173)):
-   - Генерирует `operationId` и немедленно возвращает клиенту
-   - Запускает async обработку через `executeCleanupAsync()` (non-blocking)
-   - Клиент подключается к WebSocket для получения прогресса
-
-4. **UI Progress Display** ([database.html:211-272](src/main/resources/templates/maintenance/database.html#L211-L272)):
-   - Прогресс отображается **на странице**, не в модальном окне
-   - Форма скрывается при запуске операции
-   - Автоматическая прокрутка к прогрессу (`scrollIntoView`)
-   - WebSocket подписка на `/topic/cleanup-progress/{operationId}`
-
-5. **State Persistence** ([database.html:586-637](src/main/resources/templates/maintenance/database.html#L586-L637)):
-   - Сохранение `operationId` в `sessionStorage` при запуске операции
-   - Автоматическое восстановление прогресса при возврате на страницу
-   - Очистка состояния при завершении операции
-   - Состояние живёт только в рамках текущей сессии браузера
-
-**Key Features**:
-- ✅ **Асинхронное выполнение** - пользователь может работать в других вкладках
-- ✅ **WebSocket прогресс** - обновления в реальном времени без polling
-- ✅ **Безопасное удаление** - временные таблицы + транзакции на уровне батча
-- ✅ **Восстановление состояния** - при возврате на страницу прогресс автоматически показывается
-- ✅ **sessionStorage** - состояние живёт только в рамках сессии браузера
-- ✅ **Progress на странице** - не блокирует работу, можно переходить между разделами
-
-**Safety Guarantees**:
-- Минимальный срок хранения данных - 7 дней (защита от случайного удаления)
-- Предпросмотр перед выполнением с детализацией по типам данных
-- Подтверждение через ввод "CONFIRM"
-- Rollback на уровне каждого батча при ошибках
-- Логирование всех операций с operationId
-
-**Performance**:
-- Выделенный пул потоков `cleanupTaskExecutor` (1-2 потока, 30 мин timeout)
-- Удаление батчами (по умолчанию 10000 записей)
-- Прямая отправка WebSocket без дополнительных потоков
-- Оптимизация производительности через временные таблицы
-
-**Integration with Auto-VACUUM**:
-- После удаления ≥ 1M записей автоматически запускается `VACUUM ANALYZE`
-- Очищает мёртвые кортежи и обновляет статистику таблиц
-- Работает асинхронно, не блокирует пользователя
+**Safety**: минимум 7 дней хранения данных, подтверждение через ввод "CONFIRM", rollback на уровне батча. После удаления ≥ 1M записей автоматически запускается VACUUM ANALYZE.
 
 ## Data Merger Utility
 
@@ -553,339 +356,89 @@ Utility for merging product data from two sources: source products with analogs 
 - **Dynamic Column Mapping**: Users select which columns map to required fields
 - **Data Expansion**: Creates multiple output records for each analog-link combination
 - **Export Integration**: Uses existing CSV/Excel export system for consistent output
-- **Error Handling**: Comprehensive validation with user-friendly error messages
 
-## Export Statistics with Multi-Dimensional Filtering
+## Statistics System
 
-### Purpose
-Advanced statistics system for analyzing export operations with multi-dimensional filtering capabilities. Allows tracking and comparing export metrics across multiple operations, with ability to filter statistics by arbitrary field values (e.g., stock status, category, brand).
+### Export Statistics with Multi-Dimensional Filtering
 
-### Architecture
+Система сравнения операций экспорта с фильтрацией по произвольным полям (stock status, category, brand).
 
 **Database Layer** (Flyway V15):
-- `filter_field_name` VARCHAR(255) - Name of the filter field
-- `filter_field_value` VARCHAR(255) - Value of the filter field
-- Composite index `idx_export_statistics_filter` for optimal query performance
-- Stores both general statistics (filter_field_name = NULL) and filtered statistics
+- `filter_field_name` VARCHAR(255), `filter_field_value` VARCHAR(255)
+- Composite index `idx_export_statistics_filter` (export_session_id, filter_field_name, filter_field_value)
+- Хранит общую статистику (filter_field_name = NULL) и фильтрованную
 
-**Repository Layer** (`ExportStatisticsRepository`):
-- `findBySessionIdsWithoutFilter()` - Retrieves general statistics
-- `findBySessionIdsAndFilter()` - Retrieves filtered statistics by field and value
-- `findDistinctFilterValues()` - Gets unique filter values for a field
-- `findDistinctFilterFields()` - Gets all available filter fields
+**Repository** (`ExportStatisticsRepository`):
+- `findBySessionIdsWithoutFilter()` — общая статистика
+- `findBySessionIdsAndFilter()` — фильтрованная статистика
+- `findDistinctFilterValues()` / `findDistinctFilterFields()` — доступные фильтры
 
-**Service Layer** (`ExportStatisticsService`):
-- Method overloading for backward compatibility
-- `calculateComparison(request)` - General statistics
-- `calculateComparison(request, filterField, filterValue)` - Filtered statistics
-- Automatic deviation detection with configurable warning/critical thresholds
+**Service** (`ExportStatisticsService`):
+- `calculateComparison(request)` — общая статистика
+- `calculateComparison(request, filterField, filterValue)` — фильтрованная
 
-**API Layer** (`ExportStatisticsController`):
-- `POST /statistics/analyze` - Analyze statistics with optional filter parameters
-- `GET /statistics/filter-values` - Returns available filter fields and their values as JSON Map
+**API**: `POST /statistics/analyze`, `GET /statistics/filter-values` → Map<fieldName, List<values>>
 
-**UI Layer** (`results.html`):
-- Interactive filter panel with dynamic field/value selection
-- Real-time loading of filter options via AJAX
-- Active filter indicator with quick reset button
-- POST-based form submission for filter application
+**Multi-Dimensional Statistics**: каждая сессия хранит общую статистику + по каждому уникальному значению фильтра.
+- Формула: `total_records = groups × metrics × (1 + unique_filter_values)`
+- Конфигурация: `statisticsFilterFields` JSON array на уровне шаблона, например `["competitorStockStatus", "productCategory"]`
 
-### Key Features
-
-**Multi-Dimensional Statistics**:
-- Each export session stores general statistics (no filter) + statistics for each unique filter value
-- Example: If `statisticsFilterFields = ["competitorStockStatus"]` and there are 2 unique values ("В наличии", "Нет в наличии"), then each group/metric creates 3 records: 1 general + 2 filtered
-- Formula: `total_records = groups × metrics × (1 + unique_filter_values)`
-
-**Interactive Filtering**:
-- Users can filter comparison view by any configured field
-- Dynamic loading of available filter values through API
-- Single active filter at a time (not multi-select)
-- Seamless switching between general and filtered views
-
-**Configuration**:
-- Template-level configuration via `statisticsFilterFields` JSON array
-- Example: `["competitorStockStatus", "productCategory"]`
-- Only configured fields appear in filter panel
-- No filtering panel if `statisticsFilterFields` is null or empty
-
-### Implementation Details
-
-**JavaScript Integration** ([results.html:630-840](src/main/resources/templates/statistics/results.html#L630-L840)):
-- `loadFilterFields()` - Загружает доступные поля и значения фильтров через API
-- `onFilterFieldChange()` - Обновляет dropdown значений при выборе поля
-- `applyFilter()` / `resetFilter()` - POST запросы с/без параметров фильтрации
-
-**Data Flow**:
-1. Export execution → `ExportStatisticsWriterService` saves multi-dimensional statistics
-2. User opens comparison → Controller passes request/filterField/filterValue to view
-3. JavaScript loads filter options → API returns Map<fieldName, List<values>>
-4. User selects filter → POST request with all parameters
-5. Service retrieves filtered data → `findBySessionIdsAndFilter()`
-6. View renders filtered comparison table
-
-**Performance Considerations**:
-- Composite index on (export_session_id, filter_field_name, filter_field_value)
-- JPQL queries with ORDER BY for consistent sorting
-- Single query to fetch all filter values per field
-- Client-side caching of filter data in JavaScript
-
-### Usage Example
-Template конфигурация с `statisticsFilterFields: ["competitorStockStatus"]` создаёт:
-- Общую статистику для всех продуктов
-- Фильтрованную статистику по каждому уникальному значению (например, "В наличии", "Нет в наличии")
-
-### Key Components
-
-**Services**:
-- `ExportStatisticsWriterService` - Saves multi-dimensional statistics during export (lines 180-250)
-- `ExportStatisticsService` - Retrieves and compares statistics with filter support (lines 85-120)
-- `StatisticsSettingsService` - Manages global statistics settings
-
-**Controllers**:
-- `ExportStatisticsController` - Handles statistics requests and filter API (lines 74-119, 308-345)
-
-**DTOs**:
-- `StatisticsRequestDto` - Request parameters (templateId, sessionIds, thresholds)
-- `StatisticsComparisonDto` - Comparison results with alert levels
-
-**Views**:
-- `statistics/results.html` - Interactive comparison table with filter panel (lines 387-421, 630-840)
-
-### Testing Status
-✅ Полностью протестировано - шаблоны, экспорт, фильтрация, API, UI работают корректно
+**Key Components**:
+- `ExportStatisticsWriterService` — сохраняет статистику при экспорте (lines 180-250)
+- `ExportStatisticsController` — API статистики (lines 74-119, 308-345)
+- `StatisticsRequestDto`, `StatisticsComparisonDto`
+- `statistics/results.html` — таблица сравнения с панелью фильтров (lines 387-421, 630-840)
 
 ### Excel Export with Trends Sheet
 
-#### Purpose
-Enhanced Excel export for statistics with dedicated "Trends" sheet showing metric changes across operations using visual symbols (↑↓=) and percentage changes.
+Двухлистовый Excel: **"Статистика"** (детальные метрики) + **"Тренды"** (изменения с индикаторами).
 
-#### Architecture
-
-**Two-Sheet Excel Structure**:
-1. **"Статистика"** - Main comparison table with detailed metrics
-2. **"Тренды"** - Simplified trends view with change indicators
-
-**Trends Sheet Format** (StatisticsExcelExportService.java:318-406):
+**Trends sheet format** ([StatisticsExcelExportService.java:318-406](src/main/java/com/java/service/statistics/StatisticsExcelExportService.java#L318-L406)):
 ```
-Группа    | Метрика           | Операция #1  | Операция #2  | ...
-----------|-------------------|--------------|--------------|-----
-ОБЩЕЕ     | PRICE             | ↑ (+5.2%)   | ↓ (-2.1%)   | ...
-Группа А  | DATE_MODIFICATIONS| ↓ (-4.0%)   | ↑ (+2.5%)   | ...
+Группа    | Метрика           | Операция #1  | Операция #2
+----------|-------------------|--------------|-------------
+ОБЩЕЕ     | PRICE             | ↑ (+5.2%)   | ↓ (-2.1%)
+Группа А  | DATE_MODIFICATIONS| ↓ (-4.0%)   | ↑ (+2.5%)
 ```
+- ↑ зелёный — рост, ↓ красный/оранжевый — падение, = серый — стабильно, "-" — нет предыдущего значения
+- Данные из `MetricValue.changeType` и `MetricValue.changePercentage`, без доп. запросов к БД
+- Фильтры results страницы применяются автоматически
 
-**Key Methods**:
-- `writeTrendsSheet()` - Creates trends sheet with headers and data (lines 318-406)
-- `formatTrendCell()` - Formats cell as "↑ (+5.2%)" or "↓ (-2.1%)" (lines 420-453)
-- `determineTrendCellStyle()` - Applies color coding (green/red/gray) (lines 462-484)
-- `extractMetricsByName()` - Organizes metrics by name across operations (lines 492-521)
+### Template-Based Operations Filtering
 
-**Visual Indicators**:
-- ↑ (U+2191) + green background - Growth (WARNING/CRITICAL levels)
-- ↓ (U+2193) + red/orange background - Decline (WARNING/CRITICAL levels)
-- = (U+003D) + gray background - Stable (no significant change)
-- "-" - No previous value for comparison (first operation)
+При выборе шаблона на `/statistics/setup` показываются только операции этого шаблона (клиентская фильтрация).
 
-#### Features
+- `filterExportsByTemplate(templateId)` — показывает/скрывает `.export-card` по `data-template-id`
+- Атрибуты: `data-template-id` на radio inputs шаблонов и на div.export-card операций
 
-**Automatic Filtering**:
-- Trends sheet automatically reflects active filters from results page
-- Uses same data source as main statistics table
-- Filter parameters passed through existing `exportToExcel()` function
-- No UI changes required - works seamlessly with current implementation
+### Unique Operation and TASK Numbers
 
-**Styling Integration**:
-- Reuses existing `ExcelStyles` from main sheet
-- Color scheme matches main statistics table:
-  - Light green (#d1e7dd) - Growth warning
-  - Lime (#badbcc) - Growth critical
-  - Light orange (#fff3cd) - Decline warning
-  - Coral (#f8d7da) - Decline critical
-
-**Sheet Configuration**:
-- Freeze panes: First 2 rows (headers) and first 2 columns (Group + Metric)
-- Auto-sized columns with 15% padding
-- Fixed width for Group (30 chars) and Metric (25 chars) columns
-
-#### Implementation Details
-
-**Export Flow**:
-1. User clicks "Экспорт в Excel" button (results.html:305, 687)
-2. JavaScript sends POST to `/statistics/export/excel` with filters (results.html:1105-1153)
-3. Controller calls `StatisticsExcelExportService.generateExcel()` (ExportStatisticsController.java:468-510)
-4. Service creates two sheets:
-   - Sheet 1: Statistics (existing functionality)
-   - Sheet 2: Trends (new functionality)
-5. Browser downloads file with both sheets
-
-**Data Source**:
-- Same `StatisticsComparisonDto` used for both sheets
-- Trends extracted from `MetricValue.changeType` and `MetricValue.changePercentage`
-- No additional database queries required
-
-#### Usage
-
-**Existing Workflow**:
-1. Navigate to http://localhost:8081/statistics/setup
-2. Select template and operations
-3. Click "Анализировать"
-4. (Optional) Apply filter on results page
-5. Click "Экспорт в Excel" - file now contains TWO sheets
-
-**Files Modified**:
-- `StatisticsExcelExportService.java` - Added trends sheet generation
-  - Modified `generateExcel()` to create two sheets (lines 45-67)
-  - Added 5 new private methods for trends functionality
-
-**No Breaking Changes**:
-- Main statistics sheet unchanged
-- Existing export API unchanged
-- UI buttons and JavaScript unchanged
-- Filter functionality works automatically
-
-#### Testing
-- ✅ Базовая интеграция завершена
-- ⏳ Ручное тестирование (с фильтром и без)
+- **Номера операций**: использовать `export.id` (exportSessionId), не `fileOperation.id` — гарантирует уникальность между setup и results страницами
+- **TASK-номера**: `extractTaskNumberFromSession()` извлекает из первой операции `sourceOperationIds → av_data.product_additional1` ([ExportStatisticsService.java:214-250](src/main/java/com/java/service/statistics/ExportStatisticsService.java#L214-L250))
+- `ExportSession.getTaskNumber()` — `@Transient` метод для setup.html, извлекает из имени файла через regex
 
 ## Import Date Handling (CRITICAL)
 
 ### Smart Date Format Detection for STRING Fields
 
-Система автоматически определяет формат даты/времени при импорте Excel файлов для сохранения в STRING поля (productAdditional*, competitorAdditional*, competitorTime, competitorDate).
+Применяется для полей productAdditional*, competitorAdditional*, competitorTime, competitorDate.
 
-**Проблема**: `DataFormatter` от Apache POI применяет US локаль и преобразует русский формат `'20.10.2025 6:32:00'` в американский `'10/20/25 6:32'`.
+**Проблема**: `DataFormatter` POI применяет US локаль → `'20.10.2025 6:32:00'` становится `'10/20/25 6:32'`.
 
 **Решение** ([ImportProcessorService.java:716-741](src/main/java/com/java/service/imports/ImportProcessorService.java#L716-L741)):
-- Определяет формат на основе точности данных (есть ли часы/минуты/секунды)
-- Выбирает один из трёх форматов: `dd.MM.yyyy`, `dd.MM.yyyy HH:mm`, или `dd.MM.yyyy HH:mm:ss`
-- Компактное хранение - не добавляет лишние `:00` если секунды отсутствуют
 
-**Автоматическая адаптация формата**:
+| Excel значение | Результат в БД |
+|----------------|----------------|
+| `20.10.2025` | `20.10.2025` |
+| `20.10.2025 06:32` | `20.10.2025 06:32` |
+| `20.10.2025 06:32:45` | `20.10.2025 06:32:45` |
+| `20.10.2025  6:32:00` | `20.10.2025 06:32` (унификация) |
 
-| Excel значение | Date объект | Результат в БД |
-|----------------|-------------|----------------|
-| `20.10.2025` | 00:00:00 | `20.10.2025` |
-| `20.10.2025 06:32` | 06:32:00 | `20.10.2025 06:32` |
-| `20.10.2025 06:32:45` | 06:32:45 | `20.10.2025 06:32:45` |
-| `20.10.2025  6:32:00` | 06:32:00 | `20.10.2025 06:32` (унификация) |
-
-**Преимущества**:
-- ✅ Компактное хранение - не добавляет лишние `:00` для секунд
-- ✅ Работает с разными файлами одновременно (с секундами и без)
-- ✅ Всегда русский формат `dd.MM.yyyy`
-- ✅ Без потери точности данных
-
-**ВАЖНО**:
-- Для полей типа **STRING** - применяется умное форматирование
-- Для полей типа **LocalDateTime** или **Date** - используется стандартная обработка POI
-- Не применяется никакая обработка для обычных текстовых строк
-
-**Коммиты**:
-- `8b45813` - Исправление конвертации дат в русский формат
-- `869c50c` - Умное определение формата даты/времени
+Применяется только для **STRING** полей. Для LocalDateTime/Date — стандартная обработка POI.
 
 ### Empty Cells for Zero Prices in Export
 
-При экспорте данных в Excel нулевые цены (0.0) отображаются как **пустые ячейки** вместо "0.00".
-
-**Реализация** ([XlsxFileGenerator.java:305-316](src/main/java/com/java/service/exports/generator/XlsxFileGenerator.java#L305-L316)):
-- Проверка `numValue == 0.0` → `cell.setBlank()`
-- Улучшенная читаемость экспортируемых файлов
-- Легче отличить отсутствующие цены от реальных нулевых значений
-
-## Statistics Operations Filtering
-
-### Template-Based Operation Filtering
-
-Система фильтрации операций экспорта по выбранному шаблону на странице анализа статистики. При выборе шаблона показываются только операции, выполненные с этим шаблоном.
-
-**Architecture**:
-
-**Controller Layer** ([ExportStatisticsController.java:53-98](src/main/java/com/java/controller/ExportStatisticsController.java#L53-L98)):
-- Метод `showStatisticsSetup()` загружает все операции клиента с включённой статистикой
-- Фильтрация по конкретному шаблону происходит на клиентской стороне (JavaScript)
-- Упрощена логика загрузки - убрана избыточная серверная фильтрация
-
-**Frontend Layer** ([setup.html:106-184](src/main/resources/templates/statistics/setup.html#L106-L184)):
-- Блок операций скрыт по умолчанию (`display: none`)
-- Добавлены информационные сообщения:
-  - `#noTemplateMessage` - "Сначала выберите шаблон экспорта"
-  - `#noOperationsMessage` - "Нет операций экспорта для выбранного шаблона"
-  - `#operationsList` - контейнер со списком операций
-
-**JavaScript Integration** ([setup.html:274-368](src/main/resources/templates/statistics/setup.html#L274-L368)):
-- Обработчик события `change` на radio buttons шаблонов
-- Функция `filterExportsByTemplate(templateId)` показывает/скрывает операции по `data-template-id`
-- Автоматическое обновление состояния чекбокса "Выбрать все"
-
-**Key Features**:
-- ✅ **Client-side filtering** - быстрая работа без перезагрузки страницы
-- ✅ **Smart visibility** - блок операций появляется только при выборе шаблона
-- ✅ **Informative messages** - понятные подсказки для пользователя
-- ✅ **Select all handling** - чекбокс "Выбрать все" работает только с видимыми операциями
-- ✅ **Visual feedback** - визуальное выделение выбранного шаблона
-
-**Implementation Details**:
-1. Radio button получает класс `.template-radio` и атрибут `data-template-id`
-2. При выборе срабатывает событие `change` → вызов `filterExportsByTemplate()`
-3. Функция фильтрует `.export-card` по атрибуту `data-template-id`
-4. Видимые операции показываются, остальные скрываются
-5. Снимается выбор со скрытых операций
-6. Обновляется состояние чекбокса "Выбрать все"
-
-**Data Attributes**:
-- Шаблоны: `data-template-id` на input radio
-- Операции: `data-template-id` и `data-export-id` на div.export-card
-
-**Коммит**: `a2d8f1d` - feat: фильтрация операций экспорта по выбранному шаблону статистики
-
-### Statistics Display - Unique Operation and TASK Numbers
-
-Исправлено дублирование номеров операций и TASK-номеров на страницах setup и results статистики.
-
-**Проблема:**
-
-- Номера операций дублировались из-за использования `fileOperation.id` (не уникален для разных сессий)
-- TASK-номера дублировались из-за извлечения из общих sourceOperationIds вместо конкретной операции
-
-**Решение:**
-
-**1. Уникальные номера операций** ([results.html:516](src/main/resources/templates/statistics/results.html#L516), [setup.html:157](src/main/resources/templates/statistics/setup.html#L157)):
-
-- Заменено `fileOperation.id` → `export.id` (exportSessionId)
-- Гарантирует уникальность между setup и results страницами
-- Совместимо со всеми клиентами
-
-**2. Правильные TASK-номера** ([ExportStatisticsService.java:214-250](src/main/java/com/java/service/statistics/ExportStatisticsService.java#L214-L250)):
-
-- Метод `extractTaskNumberFromSession()` использует ту же логику что `ExportProcessorService`
-- Извлекает из **первой операции** sourceOperationIds → `av_data.product_additional1`
-- Не зависит от формата имени файла экспорта
-- Каждая операция экспорта получает свой TASK-номер
-
-**3. Вспомогательный метод** ([ExportSession.java:90-98](src/main/java/com/java/model/entity/ExportSession.java#L90-L98)):
-
-- Добавлен `@Transient` метод `getTaskNumber()` для удобного отображения на setup.html
-- Извлекает TASK из имени файла через regex (для обратной совместимости)
-
-**Key Features:**
-
-- ✅ Консистентные номера между setup и results страницами
-- ✅ Независимость от формата имени файла
-- ✅ Использование того же источника данных что при экспорте
-- ✅ Обратная совместимость для клиентов без TASK-номеров
-
-**Пример отображения:**
-
-```text
-Setup page:
-  Операция #123          Операция #456
-  TASK-00008125         TASK-00007969
-
-Results page:
-  Операция #123   | Операция #456   ← exportSessionId (уникальны)
-  TASK-00008125   | TASK-00007969   ← Разные TASK-номера
-```
+Нулевые цены (0.0) → пустые ячейки в Excel ([XlsxFileGenerator.java:305-316](src/main/java/com/java/service/exports/generator/XlsxFileGenerator.java#L305-L316)): `numValue == 0.0` → `cell.setBlank()`.
 
 ## Zoomos Check (Проверка выкачки)
 
@@ -896,25 +449,35 @@ Results page:
 - **Главная**: `/zoomos` — список магазинов, запуск проверки
 - **Результаты**: `/zoomos/check/results/{runId}` — вердикт + детали
 - **История**: `/zoomos/check/history` — все прошлые проверки
-- **Справочник сайтов**: `/zoomos/sites` — список известных сайтов (zoomos_known_sites)
+- **Справочник сайтов**: `/zoomos/sites` — список известных сайтов + приоритет
+- **Расписание**: `/zoomos/schedule` — управление cron-расписаниями по магазинам
+- **Priority Alerts API**: `/zoomos/api/priority-alerts` — JSON-список проблем приоритетных сайтов
 
-### Database Schema (Flyway V23–V26)
+### Database Schema (Flyway V23–V32)
 ```sql
 zoomos_check_runs  -- запись о каждой проверке
   id, shop_id, date_from, date_to, time_from, time_to  -- time_from/time_to: "HH:mm" или null
   status (RUNNING/COMPLETED/FAILED)
   ok_count, warning_count, error_count, not_found_count
   drop_threshold (default 10%), error_growth_threshold (default 30%)
-  started_at, completed_at
+  baseline_days (V29), started_at, completed_at
 
 zoomos_parsing_stats  -- одна строка из таблицы истории парсинга
   id, check_run_id, site_name, city_name, server_name, client_name
   start_time, finish_time, total_products, in_stock, error_count
   completion_total, parsing_duration, check_type (API/ITEM), is_finished
   parsing_id, category_count, completion_percent, parsing_duration_minutes
+  is_baseline (V29)
 
-zoomos_known_sites  -- справочник известных сайтов zoomos (V25)
+zoomos_sites  -- справочник известных сайтов zoomos (V25, таблица zoomos_sites!)
   id, site_name (UNIQUE), check_type (API/ITEM)
+  is_priority BOOLEAN DEFAULT FALSE  (V30)
+
+zoomos_shop_schedules  -- расписания автопроверок (V30)
+  id, shop_id (UNIQUE FK → zoomos_shops), cron_expression, is_enabled
+  time_from, time_to, drop_threshold, error_growth_threshold, baseline_days
+  date_offset_from (default -1), date_offset_to (default 0)
+  last_run_at, created_at, updated_at
 ```
 
 ### Логика оценки (`ZoomosCheckService.evaluateGroup`)
@@ -967,23 +530,59 @@ zoomos_known_sites  -- справочник известных сайтов zoom
 
 **localStorage**: `checkTimeFrom-{shopId}` / `checkTimeTo-{shopId}` — независимые для каждого магазина.
 
+### Расписание автопроверок (`/zoomos/schedule`)
+
+`ZoomosSchedulerService` управляет динамическими cron-задачами через `ThreadPoolTaskScheduler` (bean `zoomosSchedulerTaskScheduler`, 3 потока).
+
+**Логика:**
+- `@PostConstruct init()` — загружает все enabled расписания при старте
+- `saveAndReschedule(schedule)` — сохраняет в БД, отменяет старую задачу, планирует новую
+- `toggleEnabled(shopId)` — переключает is_enabled и перепланирует
+- Cron: Unix-формат 5 полей (`мин час день мес нед`) → Spring 6 полей (добавляется `"0 "` в начало)
+- `runCheck(schedule)` — вычисляет dateFrom/dateTo через `today.plusDays(offset)`, запускает `checkService.runCheck(...)`, обновляет `lastRunAt`
+
+**Поля ZoomosShopSchedule:**
+- `dateOffsetFrom` (default -1) = вчера, `dateOffsetTo` (default 0) = сегодня
+- Один магазин — одно расписание (UNIQUE shop_id)
+
+### Приоритетные сайты и глобальный баннер
+
+**Флаг `is_priority`** в `zoomos_sites` (entity `ZoomosKnownSite`). Toggle через:
+- `POST /zoomos/sites/{id}/priority` — по id (из `/zoomos/sites`)
+- `POST /zoomos/sites/by-name/priority` — по siteName, создаёт запись если нет
+
+**API `GET /zoomos/api/priority-alerts`:**
+1. Загружает все priority-сайты (`findAllByIsPriorityTrue()`)
+2. Берёт последние COMPLETED run за сегодня (`findCompletedToday(startOfDay)`)
+3. Для каждого run — смотрит stats по priority-сайтам, оценивает `evaluateGroup()`
+4. Возвращает `[{siteName, severity, issueCount}]` (пустой массив при ошибке)
+
+**Баннер** в `layout/main.html` (между navbar и main): `d-none` по умолчанию, появляется только если API вернул непустой список. Inline JS fetch при загрузке каждой страницы, тихо игнорирует ошибки.
+
+**Важно:** Entity `ZoomosKnownSite` → таблица `zoomos_sites` (не `zoomos_known_sites`!).
+
 ### Ключевые файлы
 
 | Файл | Назначение |
 |------|-----------|
 | [ZoomosCheckService.java](src/main/java/com/java/service/ZoomosCheckService.java) | Playwright-парсинг, `evaluateGroup()`, `filterByTime()`, WebSocket прогресс |
-| [ZoomosAnalysisController.java](src/main/java/com/java/controller/ZoomosAnalysisController.java) | `/zoomos/*` роуты, группировка по сайту, `itText` с URL историй, `chartData` |
+| [ZoomosAnalysisController.java](src/main/java/com/java/controller/ZoomosAnalysisController.java) | `/zoomos/*` роуты, schedule CRUD, priority-alerts API, priority toggle |
 | [ZoomosParserService.java](src/main/java/com/java/service/ZoomosParserService.java) | Управление магазинами и city_ids, двунаправленная синхронизация настроек |
-| [ZoomosCheckRun.java](src/main/java/com/java/model/entity/ZoomosCheckRun.java) | JPA entity проверки (включая timeFrom/timeTo) |
+| [ZoomosSchedulerService.java](src/main/java/com/java/service/ZoomosSchedulerService.java) | Cron-расписания: @PostConstruct, saveAndReschedule, toggleEnabled |
+| [ZoomosCheckRun.java](src/main/java/com/java/model/entity/ZoomosCheckRun.java) | JPA entity проверки (включая timeFrom/timeTo, baselineDays) |
 | [ZoomosParsingStats.java](src/main/java/com/java/model/entity/ZoomosParsingStats.java) | JPA entity строки статистики |
-| [ZoomosKnownSite.java](src/main/java/com/java/model/entity/ZoomosKnownSite.java) | JPA entity справочника сайтов |
+| [ZoomosKnownSite.java](src/main/java/com/java/model/entity/ZoomosKnownSite.java) | JPA entity справочника сайтов (@Table zoomos_sites), поле isPriority |
+| [ZoomosShopSchedule.java](src/main/java/com/java/model/entity/ZoomosShopSchedule.java) | JPA entity расписания магазина |
 | [check-results.html](src/main/resources/templates/zoomos/check-results.html) | Страница результатов (4 блока) |
-| [index.html](src/main/resources/templates/zoomos/index.html) | Список магазинов + запуск проверки (поля времени) |
-| [sites.html](src/main/resources/templates/zoomos/sites.html) | Справочник известных сайтов |
+| [index.html](src/main/resources/templates/zoomos/index.html) | Список магазинов + кнопка "Расписание" |
+| [sites.html](src/main/resources/templates/zoomos/sites.html) | Справочник сайтов + кнопка приоритета (звёздочка) |
+| [schedule.html](src/main/resources/templates/zoomos/schedule.html) | Управление расписаниями, JS-based сохранение строк |
+| [layout/main.html](src/main/resources/templates/layout/main.html) | Глобальный priority-alerts баннер |
 | [V23__create_zoomos_check_tables.sql](src/main/resources/db/migration/V23__create_zoomos_check_tables.sql) | Flyway: базовые таблицы |
 | [V24__add_check_thresholds.sql](src/main/resources/db/migration/V24__add_check_thresholds.sql) | Flyway: пороги dropThreshold/errorGrowthThreshold |
-| [V25__zoomos_sites_and_parsing_stats_update.sql](src/main/resources/db/migration/V25__zoomos_sites_and_parsing_stats_update.sql) | Flyway: zoomos_known_sites + доп. поля parsing_stats |
+| [V25__zoomos_sites_and_parsing_stats_update.sql](src/main/resources/db/migration/V25__zoomos_sites_and_parsing_stats_update.sql) | Flyway: zoomos_sites + доп. поля parsing_stats |
 | [V26__add_time_range_to_check_runs.sql](src/main/resources/db/migration/V26__add_time_range_to_check_runs.sql) | Flyway: time_from, time_to в check_runs |
+| [V32__add_schedule_and_priority.sql](src/main/resources/db/migration/V32__add_schedule_and_priority.sql) | Flyway: is_priority в zoomos_sites, CREATE zoomos_shop_schedules |
 
 ### Технические детали
 
@@ -1013,6 +612,11 @@ zoomos_known_sites  -- справочник известных сайтов zoom
 ✅ Фильтрация по временному диапазону (finishTime для верхней границы)
 ✅ Ссылки на историю с cityId
 ✅ API: фильтрация по пустому полю "Клиент"
+✅ Расписание автопроверок (cron per-shop, ZoomosSchedulerService)
+✅ Приоритетные сайты (isPriority toggle в /zoomos/sites)
+✅ Глобальный баннер приоритетных сайтов (layout/main.html)
+✅ Чекбокс расписания на главной (с модальным подтверждением) + звёздочка приоритета в таблице сайтов
+✅ Кнопки "Адреса" и "Удалить сайт" разнесены по отдельным столбцам таблицы
 
 ## Barcode Handbook (Справочник штрихкодов)
 
@@ -1126,13 +730,85 @@ bh_domains   -- реестр доменов с флагом активности
 | [handbook/index.html](src/main/resources/templates/handbook/index.html) | Главная + AJAX поиск |
 | [handbook/search-configure.html](src/main/resources/templates/handbook/search-configure.html) | Настройка поиска (маппинг колонок + домены) |
 
-### Testing Status
-✅ Импорт BH_BARCODE_NAME — работает, JDBC batch
-✅ Импорт BH_NAME_URL — работает, JDBC batch
-✅ Multi-barcode (запятая) — разбивка и нормализация
-✅ Поиск и экспорт в XLSX/CSV — работает
-✅ UI AJAX поиск по ШК/имени/URL
-✅ Управление доменами
+## Redmine Интеграция
+
+### Назначение
+Создание и редактирование задач в трекере tt.zoomos.by прямо со страницы `/zoomos/check/results/{runId}`. Одна задача на домен (не на город/адрес).
+
+### Конфигурация (`application.properties`)
+```properties
+redmine.base-url=https://tt.zoomos.by/
+redmine.api-key=<key>
+redmine.project-id=19
+redmine.tracker-id=4      # дефолт для select
+redmine.status-id=10      # дефолт для select
+redmine.priority-id=2     # дефолт для select
+redmine.assigned-to-id=70 # дефолт для select
+```
+При пустом `base-url` или `api-key` — интеграция отключена (кнопки не отображаются).
+
+### API Endpoints (`/zoomos/redmine/`)
+| Метод | URL | Назначение |
+|-------|-----|-----------|
+| GET | `/options` | Трекеры, статусы, приоритеты, пользователи, кастомные поля + defaults |
+| GET | `/check-batch?sites=...` | Параллельный поиск задач для списка сайтов |
+| GET | `/check?site=...` | Задачи для одного сайта |
+| GET | `/issue/{id}` | Детали задачи + последние 3 комментария |
+| POST | `/create` | Создание задачи (`RedmineCreateRequest` JSON body) |
+| PUT | `/update/{id}` | Обновление задачи + добавление комментария |
+
+### Особенности сервера tt.zoomos.by
+**КРИТИЧНО**: сервер возвращает HTTP 404 с пустым телом на POST/PUT/DELETE, но операции выполняются успешно (Apache + mod_jk + Phusion Passenger).
+
+Workaround в `RedmineService`:
+- `postIgnoring404()` — не бросает исключение при 404 с пустым телом
+- После POST — поиск созданной задачи через `findRecentIssueBySubject()` (GET `?subject=~{site}&sort=created_on:desc`)
+- `putIgnoring404()` — аналогично для PUT
+
+### Статус-цвета кнопок
+- `btn-danger` (красная) — открытая задача (активная проблема)
+- `btn-success` (зелёная) — закрытая задача (проблема решена)
+- Определяется полем `is_closed` из Redmine API (`status.is_closed`)
+
+### Архитектура загрузки на странице результатов
+1. **Рендер страницы** (быстро): загрузка только из БД через `findAllBySiteNames()`, без API-запросов
+2. **После загрузки** (async JS): `GET /check-batch?sites=...` для ВСЕХ сайтов с проблемами одновременно → обновление статус-цветов кнопок и добавление новых найденных задач
+3. **Параллельность**: `CompletableFuture` с пулом 8 потоков в `RedmineService.checkBatch()`
+
+### Модальное окно
+- Открывается по 🐛 (создание) или ✏️ (редактирование)
+- При создании: загружает `/options` (кэшируется), заполняет dropdowns
+- При редактировании: загружает `/issue/{id}?include=journals`, показывает последние 3 комментария и textarea для нового
+- При 404 на edit (задача удалена) — автопереключение в режим создания
+- После создания: блок копирования `{site} - {описание}\n{url}`
+- `shortMessage`: значение "В чем ошибка" → fallback `data-message` (текст проблемы из строки issues)
+
+### Дублирование кнопки на все строки домена
+`replaceAllSiteBtns(site, issue)` — при создании/обновлении заменяет `.btn-redmine[data-site="{site}"]` во ВСЕХ строках issues (разные города, адреса).
+
+### Database Schema (Flyway V39–V40)
+```sql
+zoomos_redmine_issues
+  id, site_name (UNIQUE), issue_id, issue_status, is_closed, issue_url
+  created_at, updated_at
+```
+
+### Кастомные поля
+Ищутся по именам через `GET /custom_fields.json`:
+- `"В чем ошибка"` → `cfError` (главное поле)
+- `"Способ выкачки"` → `cfMethod`
+- `"Вариант настройки"` → `cfVariant`
+
+### Ключевые файлы
+| Файл | Назначение |
+|------|-----------|
+| [RedmineConfig.java](src/main/java/com/java/config/RedmineConfig.java) | Конфиг, `getBaseUrlNormalized()` |
+| [RedmineService.java](src/main/java/com/java/service/RedmineService.java) | Вся бизнес-логика: fetchOptions, createIssue, updateIssue, checkBatch |
+| [ZoomosRedmineController.java](src/main/java/com/java/controller/ZoomosRedmineController.java) | REST endpoints |
+| [RedmineCreateRequest.java](src/main/java/com/java/dto/RedmineCreateRequest.java) | DTO: site, description, shortMessage, notes, customFields, ... |
+| [RedmineIssueDto.java](src/main/java/com/java/dto/RedmineIssueDto.java) | DTO: id, subject, statusName, isClosed, url |
+| [ZoomosRedmineIssue.java](src/main/java/com/java/model/entity/ZoomosRedmineIssue.java) | JPA entity (@Table zoomos_redmine_issues) |
+| [check-results.html](src/main/resources/templates/zoomos/check-results.html) | Модал + JS batch-check + статус-цвета |
 
 ## Code References
 
@@ -1143,3 +819,5 @@ Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
 ALWAYS prefer editing an existing file to creating a new one.
 NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+# currentDate
+Today's date is 2026-02-21.

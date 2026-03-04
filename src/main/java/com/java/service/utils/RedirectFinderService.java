@@ -10,6 +10,7 @@ import com.java.model.utils.RedirectProcessingRequest;
 import com.java.service.exports.FileGeneratorService;
 import com.java.service.notification.NotificationService;
 import com.java.service.utils.redirect.RedirectStrategy;
+import com.java.util.FileReaderUtils;
 import com.java.service.utils.redirect.RedirectProgressDto;
 import com.java.dto.NotificationDto;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,7 @@ public class RedirectFinderService {
     private final FileGeneratorService fileGeneratorService;
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final FileReaderUtils fileReaderUtils;
     
     /**
      * Подготовка данных для асинхронной обработки
@@ -188,11 +190,10 @@ public class RedirectFinderService {
     private List<List<String>> readExcelFile(FileMetadata metadata) throws IOException {
         List<List<String>> data = new ArrayList<>();
         Path filePath = Path.of(metadata.getTempFilePath());
-        
+
         try (InputStream fis = Files.newInputStream(filePath)) {
             Workbook workbook;
-            
-            // Определяем тип файла по расширению
+
             String filename = metadata.getOriginalFilename().toLowerCase();
             if (filename.endsWith(".xlsx")) {
                 workbook = new XSSFWorkbook(fis);
@@ -201,66 +202,32 @@ public class RedirectFinderService {
             } else {
                 throw new IllegalArgumentException("Неподдерживаемый формат Excel файла: " + filename);
             }
-            
-            // Работаем с первым листом
+
             Sheet sheet = workbook.getSheetAt(0);
-            
+
             for (Row row : sheet) {
                 List<String> rowData = new ArrayList<>();
-                
-                // Проходим по всем ячейкам в строке
                 for (int i = 0; i < row.getLastCellNum(); i++) {
                     Cell cell = row.getCell(i);
-                    String cellValue = "";
-                    
-                    if (cell != null) {
-                        switch (cell.getCellType()) {
-                            case STRING:
-                                cellValue = cell.getStringCellValue();
-                                break;
-                            case NUMERIC:
-                                if (DateUtil.isCellDateFormatted(cell)) {
-                                    cellValue = cell.getDateCellValue().toString();
-                                } else {
-                                    // Преобразуем число в строку без десятичных знаков
-                                    double numericValue = cell.getNumericCellValue();
-                                    if (numericValue == (long) numericValue) {
-                                        cellValue = String.valueOf((long) numericValue);
-                                    } else {
-                                        cellValue = String.valueOf(numericValue);
-                                    }
-                                }
-                                break;
-                            case BOOLEAN:
-                                cellValue = String.valueOf(cell.getBooleanCellValue());
-                                break;
-                            case FORMULA:
-                                cellValue = cell.getCellFormula();
-                                break;
-                            case BLANK:
-                            default:
-                                cellValue = "";
-                                break;
-                        }
-                    }
-                    
-                    rowData.add(cellValue.trim());
+                    rowData.add(getCellValue(cell).trim());
                 }
-                
-                // Добавляем строку только если она не пустая
                 if (!rowData.isEmpty() && rowData.stream().anyMatch(s -> !s.isEmpty())) {
                     data.add(rowData);
                 }
             }
-            
+
             workbook.close();
-            
+
         } catch (Exception e) {
             log.error("Ошибка чтения Excel файла: {}", metadata.getOriginalFilename(), e);
             throw new IOException("Ошибка чтения Excel файла: " + e.getMessage(), e);
         }
-        
+
         return data;
+    }
+
+    private String getCellValue(Cell cell) {
+        return fileReaderUtils.getCellValue(cell);
     }
     
     private List<RedirectResult> processUrls(List<List<String>> rawData, RedirectFinderDto dto, FileMetadata metadata, String operationId) {

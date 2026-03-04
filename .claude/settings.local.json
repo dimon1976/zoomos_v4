@@ -35,13 +35,12 @@
       "Bash(git merge:*)",
       "Bash(git checkout:*)",
       "Bash(cat:*)",
-<<<<<<< Updated upstream
       "Bash(net start:*)",
       "Bash(psql:*)",
-      "Bash(mvn flyway:*)"
-=======
-      "Bash(del \"e:\\workspace\\zoomos_v4\\src\\main\\resources\\templates\\maintenance\\data-cleanup.html\")"
->>>>>>> Stashed changes
+      "Bash(mvn flyway:*)",
+      "Bash(net stop:*)",
+      "Bash(PGPASSWORD=root \"C:\\\\Program Files\\\\PostgreSQL\\\\14\\\\bin\\\\psql.exe\":*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []

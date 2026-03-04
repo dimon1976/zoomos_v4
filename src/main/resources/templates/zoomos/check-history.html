@@ -13,7 +13,7 @@
 <th:block th:fragment="styles"></th:block>
 
 <th:block th:fragment="pageActions">
-    <a th:href="@{/zoomos/check}" class="btn btn-sm btn-outline-secondary">
+    <a th:href="@{/zoomos}" class="btn btn-sm btn-outline-secondary">
         <i class="fas fa-arrow-left me-1"></i>Назад
     </a>
 </th:block>
@@ -24,6 +24,16 @@
     <div th:if="${runs.empty}" class="text-muted text-center py-4">
         <i class="fas fa-history fa-2x mb-2 d-block"></i>
         Проверок ещё не было. Перейдите на страницу проверки.
+    </div>
+
+    <div th:unless="${runs.empty}" class="mb-3 d-flex align-items-center gap-2">
+        <input type="text" id="historySearch" class="form-control form-control-sm w-auto"
+               placeholder="Фильтр по магазину..." style="min-width:220px"
+               th:value="${shopFilter}">
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="historySearchClear" title="Сбросить фильтр">
+            <i class="fas fa-times"></i>
+        </button>
+        <span id="historyCount" class="text-muted small"></span>
     </div>
 
     <div th:unless="${runs.empty}" class="card">
@@ -46,7 +56,8 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr th:each="r : ${runs}">
+                        <tr th:each="r : ${runs}"
+                            th:classappend="${r.status == 'FAILED'} ? 'table-danger' : (${r.status == 'RUNNING'} ? 'table-warning' : '')">
                             <td class="text-center" th:text="${r.id}">1</td>
                             <td th:text="${r.shop.shopName}">shop.ru</td>
                             <td class="text-center small">
@@ -81,5 +92,34 @@
 </div>
 </th:block>
 
-<th:block th:fragment="scripts"></th:block>
+<th:block th:fragment="scripts">
+<script>
+    const histSearch = document.getElementById('historySearch');
+    const histCount  = document.getElementById('historyCount');
+    const histClear  = document.getElementById('historySearchClear');
+
+    function filterHistory() {
+        const q = histSearch ? histSearch.value.trim().toLowerCase() : '';
+        const rows = document.querySelectorAll('tbody tr');
+        rows.forEach(r => {
+            const name = r.cells[1]?.textContent.toLowerCase() || '';
+            r.style.display = (!q || name.includes(q)) ? '' : 'none';
+        });
+        const total = rows.length;
+        const visible = Array.from(rows).filter(r => r.style.display !== 'none').length;
+        if (histCount) histCount.textContent = q ? `Показано: ${visible} из ${total}` : '';
+    }
+
+    if (histSearch) {
+        histSearch.addEventListener('input', filterHistory);
+        // Применяем фильтр сразу (если пришли с ?shop=...)
+        if (histSearch.value.trim()) filterHistory();
+    }
+    if (histClear) {
+        histClear.addEventListener('click', () => {
+            if (histSearch) { histSearch.value = ''; filterHistory(); }
+        });
+    }
+</script>
+</th:block>
 </html>

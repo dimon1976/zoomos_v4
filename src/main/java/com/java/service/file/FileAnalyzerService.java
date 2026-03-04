@@ -11,6 +11,7 @@ import com.opencsv.exceptions.CsvValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.util.IOUtils;
 import org.mozilla.universalchardet.UniversalDetector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -183,6 +184,7 @@ public class FileAnalyzerService {
     private void analyzeExcelFile(Path filePath, FileMetadata metadata) throws IOException {
         metadata.setDetectedEncoding("UTF-8"); // Excel внутренне использует UTF-8
 
+        IOUtils.setByteArrayMaxOverride(Integer.MAX_VALUE);
         try (Workbook workbook = WorkbookFactory.create(filePath.toFile())) {
             Sheet sheet = workbook.getSheetAt(0);
 

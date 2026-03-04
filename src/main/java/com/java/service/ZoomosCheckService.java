@@ -11,8 +11,11 @@ import com.microsoft.playwright.options.LoadState;
 import com.microsoft.playwright.options.SameSiteAttribute;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -37,8 +40,23 @@ public class ZoomosCheckService {
     private final ZoomosParsingStatsRepository parsingStatsRepository;
     private final ZoomosCityNameRepository cityNameRepository;
     private final ZoomosCityAddressRepository cityAddressRepository;
+    private final ZoomosKnownSiteRepository knownSiteRepository;
+    private final ZoomosParserPatternRepository parserPatternRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
+
+    // Self-injection для REQUIRES_NEW транзакций (немедленный коммит run-записи)
+    @Autowired @Lazy
+    private ZoomosCheckService self;
+
+    /**
+     * Сохраняет ZoomosCheckRun в отдельной транзакции (REQUIRES_NEW) — коммитится немедленно,
+     * чтобы запись с status=RUNNING была видна другим транзакциям во время проверки.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public ZoomosCheckRun saveRunImmediate(ZoomosCheckRun run) {
+        return checkRunRepository.save(run);
+    }
 
     private static final DateTimeFormatter DATE_PARAM_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     private static final DateTimeFormatter DATETIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yy H:mm");
@@ -51,7 +69,9 @@ public class ZoomosCheckService {
     public ZoomosCheckRun runCheck(Long shopId, LocalDate dateFrom, LocalDate dateTo,
                                     String timeFrom, String timeTo,
                                     int dropThreshold, int errorGrowthThreshold,
-                                    int baselineDays, String operationId) {
+                                    int baselineDays, int minAbsoluteErrors,
+                                    int trendDropThreshold, int trendErrorThreshold,
+                                    String operationId) {
         ZoomosShop shop = shopRepository.findById(shopId)
                 .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopId));
 
@@ -84,14 +104,24 @@ public class ZoomosCheckService {
                 .dropThreshold(dropThreshold)
                 .errorGrowthThreshold(errorGrowthThreshold)
                 .baselineDays(Math.max(0, baselineDays))
+                .minAbsoluteErrors(Math.max(0, minAbsoluteErrors))
+                .trendDropThreshold(Math.max(1, trendDropThreshold))
+                .trendErrorThreshold(Math.max(1, trendErrorThreshold))
                 .build();
-        run = checkRunRepository.save(run);
+        // Сохраняем в REQUIRES_NEW транзакции → немедленный коммит → status=RUNNING виден в БД
+        run = self.saveRunImmediate(run);
 
         // Группируем по типу проверки
         Map<String, List<ZoomosCityId>> byType = allCityIds.stream()
                 .collect(Collectors.groupingBy(c -> c.getCheckType() != null ? c.getCheckType() : "API"));
 
+        // Baseline совмещается с основным парсингом: запрашиваем расширенный диапазон дат,
+        // затем разделяем результаты по дате — записи до dateFrom помечаются is_baseline=true.
+        final boolean combineBaseline = (run.getBaselineDays() != null && run.getBaselineDays() > 0);
+        final LocalDate effectiveDateFrom = combineBaseline ? dateFrom.minusDays(run.getBaselineDays()) : dateFrom;
+
         List<ZoomosParsingStats> allStats = new ArrayList<>();
+        List<ZoomosParsingStats> allBaselineStats = new ArrayList<>();
 
         try (Playwright playwright = Playwright.create()) {
             Browser browser = playwright.chromium().launch(
@@ -131,16 +161,18 @@ public class ZoomosCheckService {
                 String siteName = entry.getKey();
                 List<ZoomosCityId> cityIdEntries = entry.getValue();
 
-                sendProgress(operationId, processed, total, "Проверяем " + siteName + " (API)...");
+                sendProgress(shopId, operationId, processed, total, "Проверяем " + siteName + " (API)...");
 
-                List<ZoomosParsingStats> stats = parseApiPage(page, siteName, dateFrom, dateTo, cityIdEntries, run);
+                // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
+                List<ZoomosParsingStats> stats = parseApiPage(page, siteName, effectiveDateFrom, dateTo, cityIdEntries, run);
+                List<ZoomosParsingStats> mainStats = splitBaseline(stats, dateFrom, combineBaseline, allBaselineStats);
                 if (hasTimeFilter) {
-                    stats = filterByTime(stats, rangeStart, rangeEnd);
+                    mainStats = filterByTime(mainStats, rangeStart, rangeEnd);
                 }
-                allStats.addAll(stats);
+                allStats.addAll(mainStats);
 
                 processed += cityIdEntries.size();
-                sendProgress(operationId, processed, total, siteName + " — " + stats.size() + " записей");
+                sendProgress(shopId, operationId, processed, total, siteName + " — " + mainStats.size() + " записей");
             }
 
             // --- Парсинг ITEM-сайтов (та же parsing-history + &shop=shopName) ---
@@ -152,18 +184,20 @@ public class ZoomosCheckService {
                 String siteName = entry.getKey();
                 List<ZoomosCityId> cityIdEntries = entry.getValue();
 
-                sendProgress(operationId, processed, total,
+                sendProgress(shopId, operationId, processed, total,
                         "Проверяем " + siteName + " (ITEM, shop=" + shop.getShopName() + ")...");
 
+                // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
                 List<ZoomosParsingStats> stats = parseItemPage(page, siteName, shop.getShopName(),
-                        dateFrom, dateTo, cityIdEntries, run);
+                        effectiveDateFrom, dateTo, cityIdEntries, run);
+                List<ZoomosParsingStats> mainStats = splitBaseline(stats, dateFrom, combineBaseline, allBaselineStats);
                 if (hasTimeFilter) {
-                    stats = filterByTime(stats, rangeStart, rangeEnd);
+                    mainStats = filterByTime(mainStats, rangeStart, rangeEnd);
                 }
-                allStats.addAll(stats);
+                allStats.addAll(mainStats);
 
                 processed += cityIdEntries.size();
-                sendProgress(operationId, processed, total, siteName + " — " + stats.size() + " записей");
+                sendProgress(shopId, operationId, processed, total, siteName + " — " + mainStats.size() + " записей");
             }
 
             // Дополнительный запрос in-progress для сайтов с неполными данными
@@ -183,6 +217,11 @@ public class ZoomosCheckService {
                 Set<String> expectedCities = parseCommaSeparated(cid.getCityIds());
                 Map<String, Set<String>> addrMapping = parseAddressMapping(cid.getAddressIds());
                 Set<String> allAddrs = flattenAddressIds(addrMapping);
+                // Сайт без настроенных городов/адресов (глобальная API-выкачка):
+                // нужен in-progress запрос если нет завершённых данных за этот период
+                if (expectedCities.isEmpty() && allAddrs.isEmpty()) {
+                    return allStats.stream().noneMatch(s -> site.equals(s.getSiteName()));
+                }
                 // Если хотя бы один адрес или один город без покрытия адресами не найден — нужен in-progress
                 for (String aid : allAddrs) {
                     if (!foundAddressKeysCheck.contains(site + "|" + aid)) return true;
@@ -199,7 +238,7 @@ public class ZoomosCheckService {
             }).collect(Collectors.toList());
 
             if (!needsInProgress.isEmpty()) {
-                sendProgress(operationId, processed, total, "Проверка незавершённых выкачек (" + needsInProgress.size() + ")...");
+                sendProgress(shopId, operationId, processed, total, "Проверка незавершённых выкачек (" + needsInProgress.size() + ")...");
                 // Дедуплицируем по siteName — один запрос на сайт
                 Map<String, ZoomosCityId> inProgressBySite = new LinkedHashMap<>();
                 for (ZoomosCityId cid : needsInProgress) {
@@ -209,9 +248,10 @@ public class ZoomosCheckService {
                     try {
                         List<ZoomosParsingStats> inProgressStats = parseInProgressPage(
                                 page, cid, shop.getShopName(), dateFrom, dateTo, run);
-                        if (hasTimeFilter) {
-                            inProgressStats = filterByTime(inProgressStats, rangeStart, rangeEnd);
-                        }
+                        // Time-фильтр НЕ применяем к in-progress записям:
+                        // overnight-парсинги (старт до timeFrom) нужно сохранить для
+                        // отображения "Сейчас идёт" в NOT_FOUND issue.
+                        // Промоушен в evaluated-stats контролируется в контроллере по rangeStart.
                         allStats.addAll(inProgressStats);
                     } catch (Exception ex) {
                         log.warn("Ошибка проверки in-progress для {}: {}", cid.getSiteName(), ex.getMessage());
@@ -219,13 +259,9 @@ public class ZoomosCheckService {
                 }
             }
 
-            // Загружаем baseline-данные (исторический период) если нужно
-            if (run.getBaselineDays() != null && run.getBaselineDays() > 0) {
-                try {
-                    fetchBaselineIfNeeded(page, run, allCityIds, dateFrom, shop.getShopName(), operationId);
-                } catch (Exception ex) {
-                    log.warn("Ошибка загрузки baseline: {}", ex.getMessage());
-                }
+            if (combineBaseline) {
+                log.info("Baseline совмещён с основным парсингом: {} baseline-записей для {}",
+                        allBaselineStats.size(), shop.getShopName());
             }
 
             page.close();
@@ -235,26 +271,56 @@ public class ZoomosCheckService {
             log.error("Ошибка проверки выкачки для {}: {}", shop.getShopName(), e.getMessage(), e);
             run.setStatus("FAILED");
             run.setCompletedAt(ZonedDateTime.now());
-            checkRunRepository.save(run);
-            sendProgress(operationId, 0, 0, "Ошибка: " + e.getMessage());
+            // REQUIRES_NEW — коммит FAILED не откатится при re-throw исключения
+            self.saveRunImmediate(run);
+            sendProgress(shopId, operationId, 0, 0, "Ошибка: " + e.getMessage());
             throw new RuntimeException("Ошибка проверки: " + e.getMessage(), e);
         }
 
-        // Сохраняем все результаты
+        // Сохраняем основные результаты
         if (!allStats.isEmpty()) {
             parsingStatsRepository.saveAll(allStats);
             upsertCityNames(allStats);
             upsertCityAddresses(allStats);
         }
 
-        // Подсчитываем итоги
+        // Сохраняем baseline-записи (совмещённые с основным парсингом)
+        if (!allBaselineStats.isEmpty()) {
+            parsingStatsRepository.saveAll(allBaselineStats);
+        }
+
+        // Подсчитываем итоги (только по основным записям, не baseline)
         updateRunSummary(run, allStats, allCityIds);
         run.setStatus("COMPLETED");
         run.setCompletedAt(ZonedDateTime.now());
         run = checkRunRepository.save(run);
 
-        sendProgress(operationId, run.getTotalSites(), run.getTotalSites(), "Проверка завершена");
+        sendProgress(shopId, operationId, run.getTotalSites(), run.getTotalSites(), "Проверка завершена");
         return run;
+    }
+
+    /**
+     * Разделяет список записей на основные и baseline.
+     * Записи с startTime до dateFrom (эксклюзивно) помечаются is_baseline=true
+     * и добавляются в baselineAccumulator. Возвращает основные записи.
+     */
+    private List<ZoomosParsingStats> splitBaseline(List<ZoomosParsingStats> stats,
+                                                    LocalDate mainDateFrom,
+                                                    boolean combineBaseline,
+                                                    List<ZoomosParsingStats> baselineAccumulator) {
+        if (!combineBaseline) {
+            return stats;
+        }
+        List<ZoomosParsingStats> main = new ArrayList<>();
+        for (ZoomosParsingStats s : stats) {
+            if (s.getStartTime() != null && s.getStartTime().toLocalDate().isBefore(mainDateFrom)) {
+                s.setIsBaseline(true);
+                baselineAccumulator.add(s);
+            } else {
+                main.add(s);
+            }
+        }
+        return main;
     }
 
     // =========================================================================
@@ -349,9 +415,11 @@ public class ZoomosCheckService {
         String checkType = cid.getCheckType() != null ? cid.getCheckType() : "ITEM";
 
         String shopParam = "ITEM".equals(checkType) ? shopName : "-";
+        // Смотрим на 1 день назад от dateFrom: overnight-парсинги стартуют накануне,
+        // а после завершения переходят на страницу своей даты старта (не текущего дня)
         String url = config.getBaseUrl() + "/shops-parser/" + siteName + "/parsing-history"
                 + "?upd=" + System.currentTimeMillis()
-                + "&dateFrom=" + dateFrom.format(DATE_PARAM_FORMAT)
+                + "&dateFrom=" + dateFrom.minusDays(1).format(DATE_PARAM_FORMAT)
                 + "&dateTo=" + dateTo.format(DATE_PARAM_FORMAT)
                 + "&launchDate=&shop=" + shopParam + "&site=&cityId=&address=&accountId=&server=";
 
@@ -478,6 +546,7 @@ public class ZoomosCheckService {
                 String updatedStr = getCellValue(cells, colIndex, "обновлено");
                 String completionStr = getCellValue(cells, colIndex, "завершено (всего)");
                 String timeStr = getCellValue(cells, colIndex, "время");
+                String parserDesc = getCellValue(cells, colIndex, "парсер");
 
                 String siteName = (site != null && !site.isEmpty()) ? site : defaultSiteName;
                 if (siteName == null) continue;
@@ -515,6 +584,7 @@ public class ZoomosCheckService {
                         .completionPercent(extractPercent(completionStr))
                         .parsingDuration(timeStr)
                         .parsingDurationMinutes(parseDurationMinutes(timeStr))
+                        .parserDescription(parserDesc)
                         .parsingDate(parsingDate)
                         .checkType(checkType)
                         .isFinished(true)
@@ -526,6 +596,9 @@ public class ZoomosCheckService {
                 log.warn("Ошибка парсинга строки таблицы: {}", e.getMessage());
             }
         }
+
+        // Сохраняем все уникальные паттерны парсера ДО фильтрации (чтобы не потерять паттерны других городов)
+        upsertParserPatterns(defaultSiteName, results);
 
         // Применяем комбинированный фильтр: address-покрытые города → только по addressId,
         // остальные города → по cityId
@@ -549,8 +622,57 @@ public class ZoomosCheckService {
             }).collect(Collectors.toList());
         }
 
+        // Применяем фильтр парсера (по parserDescription через config cityIdMap)
+        results = results.stream()
+                .filter(s -> matchesParserFilter(s, cityIdMap.get(extractCityId(s.getCityName()))))
+                .collect(Collectors.toList());
+
         log.info("Распарсено {} записей (checkType={}) со страницы: {}", results.size(), checkType, page.url());
         return results;
+    }
+
+    /**
+     * Проверяет, проходит ли строка статистики фильтр парсера, заданный в конфиге cityId.
+     */
+    private boolean matchesParserFilter(ZoomosParsingStats s, ZoomosCityId config) {
+        if (config == null) return true;
+        String pd = s.getParserDescription() != null ? s.getParserDescription().toLowerCase() : "";
+
+        // include: пустой = всё разрешено. Разделитель — точка с запятой (паттерны сами содержат запятые)
+        // AND и OR — одинаковая фильтрация (include ANY), различие только в оценке завершённости.
+        if (config.getParserInclude() != null && !config.getParserInclude().isBlank()) {
+            List<String> parts = Arrays.stream(config.getParserInclude().split(";"))
+                    .map(String::trim).filter(p -> !p.isEmpty())
+                    .map(String::toLowerCase).collect(Collectors.toList());
+            if (!parts.stream().anyMatch(pd::contains)) return false;
+        }
+
+        // exclude: всегда OR — если хотя бы одна подстрока совпала, исключаем
+        if (config.getParserExclude() != null && !config.getParserExclude().isBlank()) {
+            boolean excluded = Arrays.stream(config.getParserExclude().split(";"))
+                    .map(String::trim).filter(p -> !p.isEmpty())
+                    .anyMatch(p -> pd.contains(p.toLowerCase()));
+            if (excluded) return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Batch upsert уникальных (siteName, parserDescription) в справочник паттернов.
+     */
+    private void upsertParserPatterns(String siteName, List<ZoomosParsingStats> stats) {
+        stats.stream()
+                .map(ZoomosParsingStats::getParserDescription)
+                .filter(pd -> pd != null && !pd.isBlank())
+                .distinct()
+                .forEach(pd -> {
+                    try {
+                        parserPatternRepository.upsert(siteName, pd);
+                    } catch (Exception e) {
+                        log.warn("Не удалось сохранить паттерн парсера '{}': {}", pd, e.getMessage());
+                    }
+                });
     }
 
     // =========================================================================
@@ -800,7 +922,7 @@ public class ZoomosCheckService {
 
             log.info("Baseline для {}: только {} записей в БД — парсим последний день baseline ({})",
                     site, existing.size(), baselineTo);
-            sendProgress(operationId, 0, 0, "Загрузка baseline " + site + "...");
+            sendProgress(run.getShop().getId(), operationId, 0, 0, "Загрузка baseline " + site + "...");
 
             try {
                 List<ZoomosCityId> cityIdEntries = entry.getValue();
@@ -827,7 +949,10 @@ public class ZoomosCheckService {
 
     /**
      * Вычисляет медианные значения метрик по списку исторических выкачек.
-     * Возвращает Map: "stockRatio", "errorCount", "durationMinutes".
+     * Метрики нормализованы по числу товаров — устойчивы к росту ассортимента:
+     *   "stockRatio"    — inStock / totalProducts (доля наличия)
+     *   "errorRate"     — errorCount / totalProducts × 100 (% ошибок от товаров)
+     *   "durationRate"  — durationMinutes / totalProducts × 1000 (мин на 1000 товаров)
      */
     public Map<String, Double> computeMedianBaseline(List<ZoomosParsingStats> historicalStats) {
         Map<String, Double> result = new HashMap<>();
@@ -838,17 +963,20 @@ public class ZoomosCheckService {
                 .sorted().collect(Collectors.toList());
         if (!stockRatios.isEmpty()) result.put("stockRatio", computeMedian(stockRatios));
 
-        List<Double> errors = historicalStats.stream()
-                .filter(s -> s.getErrorCount() != null)
-                .map(s -> (double) s.getErrorCount())
+        // errorRate = % ошибок от числа товаров (масштабируется с размером сайта)
+        List<Double> errorRates = historicalStats.stream()
+                .filter(s -> s.getErrorCount() != null && s.getTotalProducts() != null && s.getTotalProducts() > 0)
+                .map(s -> s.getErrorCount() * 100.0 / s.getTotalProducts())
                 .sorted().collect(Collectors.toList());
-        if (!errors.isEmpty()) result.put("errorCount", computeMedian(errors));
+        if (!errorRates.isEmpty()) result.put("errorRate", computeMedian(errorRates));
 
-        List<Double> durations = historicalStats.stream()
-                .filter(s -> s.getParsingDurationMinutes() != null && s.getParsingDurationMinutes() > 0)
-                .map(s -> (double) s.getParsingDurationMinutes())
+        // durationRate = мин/1000 товаров (рост ассортимента = допустимо дольше)
+        List<Double> durationRates = historicalStats.stream()
+                .filter(s -> s.getParsingDurationMinutes() != null && s.getParsingDurationMinutes() > 0
+                          && s.getTotalProducts() != null && s.getTotalProducts() > 0)
+                .map(s -> s.getParsingDurationMinutes() * 1000.0 / s.getTotalProducts())
                 .sorted().collect(Collectors.toList());
-        if (!durations.isEmpty()) result.put("durationMinutes", computeMedian(durations));
+        if (!durationRates.isEmpty()) result.put("durationRate", computeMedian(durationRates));
 
         return result;
     }
@@ -886,28 +1014,42 @@ public class ZoomosCheckService {
             }
         }
 
-        // Error count
-        if (baseline.containsKey("errorCount") && current.getErrorCount() != null) {
-            double cur  = current.getErrorCount();
-            double base = baseline.get("errorCount");
-            if (base > 0 && (cur - base) / base > errFrac) {
+        // Error rate (% от числа товаров — масштабируется с размером сайта)
+        if (baseline.containsKey("errorRate") && current.getErrorCount() != null
+                && current.getTotalProducts() != null && current.getTotalProducts() > 0) {
+            double curRate  = current.getErrorCount() * 100.0 / current.getTotalProducts();
+            double baseRate = baseline.get("errorRate");
+            double deltaRate = curRate - baseRate;
+            if (baseRate > 0 && deltaRate / baseRate > errFrac && deltaRate > 0.5) {
+                // Предупреждаем только если рост > порога И абсолютная дельта rate > 0.5%
                 warnings.add(String.format(
-                        "Рост ошибок: было %.0f → стало %.0f (+%.0f%%) [норма %s]",
-                        base, cur, (cur - base) / base * 100, period));
-            } else if (base == 0 && cur > 10) {
-                warnings.add(String.format(
-                        "Появились ошибки: было 0 → стало %.0f [норма %s]", cur, period));
+                        "Рост ошибок: было %.2f%% → стало %.2f%% от товаров (+%.0f%%) [норма %s]",
+                        baseRate, curRate, deltaRate / baseRate * 100, period));
+            } else if (baseRate == 0) {
+                // Появились ошибки там где их раньше не было.
+                // Порог масштабируется с errFrac: при trendErrorThreshold=30% → >3%, при 100% → >10%
+                double appearedThreshold = Math.max(1.0, errFrac * 10);
+                if (curRate > appearedThreshold) {
+                    warnings.add(String.format(
+                            "Появились ошибки: %.2f%% товаров [норма %s]", curRate, period));
+                }
             }
         }
 
-        // Duration
-        if (baseline.containsKey("durationMinutes") && current.getParsingDurationMinutes() != null) {
-            double cur  = current.getParsingDurationMinutes();
-            double base = baseline.get("durationMinutes");
-            if (base > 0 && (cur - base) / base > dropFrac) {
-                warnings.add(String.format(
-                        "Время выкачки выросло: было %.0f мин → стало %.0f мин (+%.0f%%) [норма %s]",
-                        base, cur, (cur - base) / base * 100, period));
+        // Duration rate (мин/1000 товаров — рост ассортимента учитывается автоматически)
+        // Уменьшение скорости выкачки — всегда OK, предупреждаем только при замедлении
+        if (baseline.containsKey("durationRate") && current.getParsingDurationMinutes() != null
+                && current.getTotalProducts() != null && current.getTotalProducts() > 0) {
+            double curRate  = current.getParsingDurationMinutes() * 1000.0 / current.getTotalProducts();
+            double baseRate = baseline.get("durationRate");
+            if (baseRate > 0 && curRate > baseRate) {
+                double pct = (curRate - baseRate) / baseRate;
+                // Предупреждаем если замедление > порога И дельта rate > 0.1 мин/1000 тов.
+                if (pct > dropFrac && (curRate - baseRate) > 0.1) {
+                    warnings.add(String.format(
+                            "Скорость выкачки снизилась: было %.2f → стало %.2f мин/1000 тов. (+%.0f%%) [норма %s]",
+                            baseRate, curRate, pct * 100, period));
+                }
             }
         }
 
@@ -920,9 +1062,23 @@ public class ZoomosCheckService {
 
     private void updateRunSummary(ZoomosCheckRun run, List<ZoomosParsingStats> stats,
                                    List<ZoomosCityId> allCityIds) {
+        // Разделяем stats на "готовые для группировки" и "реально in-progress".
+        // "Готовые" = isFinished != false (завершённые из finished-страницы)
+        //           ИЛИ isFinished=false но completionPercent >= 100 (100%-ные in-progress, как в контроллере).
+        // Это важно когда finished-страница (onlyFinished=1) вернула 0 записей, а все данные —
+        // в in-progress (как для ITEM-сайтов, где onlyFinished не показывает текущее состояние).
+        List<ZoomosParsingStats> finishedStats = stats.stream()
+                .filter(s -> !Boolean.FALSE.equals(s.getIsFinished())
+                        || (s.getCompletionPercent() != null && s.getCompletionPercent() >= 100))
+                .collect(Collectors.toList());
+        // Только реально незавершённые (<100%) — для расширения групп при checkParserCompleteness
+        Map<String, List<ZoomosParsingStats>> inProgressBySite = stats.stream()
+                .filter(s -> Boolean.FALSE.equals(s.getIsFinished())
+                        && (s.getCompletionPercent() == null || s.getCompletionPercent() < 100))
+                .collect(Collectors.groupingBy(s -> s.getSiteName() != null ? s.getSiteName() : ""));
+
         // Группируем данные по site+city+address (уникальная группа = одна "линия выкачки")
-        // Если addressId задан — это отдельная группа внутри города
-        Map<String, List<ZoomosParsingStats>> grouped = stats.stream()
+        Map<String, List<ZoomosParsingStats>> grouped = finishedStats.stream()
                 .collect(Collectors.groupingBy(s -> {
                     String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
                     if (s.getAddressId() != null && !s.getAddressId().isBlank()) {
@@ -930,7 +1086,6 @@ public class ZoomosCheckService {
                     }
                     return key;
                 }));
-
         int notFound = 0;
         int ok = 0;
         int warning = 0;
@@ -979,7 +1134,17 @@ public class ZoomosCheckService {
             }
         }
 
-        // Оцениваем каждую группу site+city
+        // Загружаем сайты с ignoreStock один раз перед циклом оценки
+        Set<String> ignoreStockSites = knownSiteRepository.findAllByIgnoreStockTrue()
+                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+        int minAbsErrors = run.getMinAbsoluteErrors() != null ? run.getMinAbsoluteErrors() : 5;
+
+        // Карта siteName → cityId config для сайтов с парсер-фильтром
+        Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
+                .filter(c -> c.getParserInclude() != null && !c.getParserInclude().isBlank())
+                .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
+
+        // Оцениваем каждую группу site+city (только завершённые группы из grouped)
         for (Map.Entry<String, List<ZoomosParsingStats>> entry : grouped.entrySet()) {
             List<ZoomosParsingStats> group = entry.getValue();
             // Сортируем по startTime (хронологически)
@@ -987,7 +1152,25 @@ public class ZoomosCheckService {
                     s -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now(),
                     Comparator.naturalOrder()));
 
-            String status = evaluateGroup(group, run.getDropThreshold(), run.getErrorGrowthThreshold());
+            String groupKey = entry.getKey();
+            String siteName = groupKey.split("\\|")[0];
+            ZoomosCityId cidConfig = cityIdBySite.get(siteName);
+
+            String status;
+            if (cidConfig != null) {
+                // Парсер-фильтр: completeness-check, как в контроллере.
+                // Расширяем группу in-progress stats того же сайта — зеркалируем логику checkResults.
+                List<ZoomosParsingStats> groupExt = new ArrayList<>(group);
+                groupExt.addAll(inProgressBySite.getOrDefault(siteName, Collections.emptyList()));
+                List<Map<String, Object>> incomplete = checkParserCompleteness(
+                        groupExt, cidConfig.getParserInclude(), cidConfig.getParserIncludeMode());
+                status = (incomplete == null || incomplete.isEmpty()) ? "OK" : "ERROR";
+            } else {
+                boolean ignoreStock = group.get(0).getSiteName() != null
+                        && ignoreStockSites.contains(group.get(0).getSiteName());
+                status = evaluateGroup(group, run.getDropThreshold(), run.getErrorGrowthThreshold(),
+                        minAbsErrors, ignoreStock);
+            }
             switch (status) {
                 case "ERROR": error++; break;
                 case "WARNING": warning++; break;
@@ -1004,14 +1187,13 @@ public class ZoomosCheckService {
     /**
      * Оценивает группу выкачек (один site+city за весь период).
      * Сортировка: ASC по startTime (от старых к новым).
-     * Сравнивает последовательные выкачки: рост ошибок, падение "В наличии".
      *
-     * Ключевая логика inStock:
-     * - Если ВО ВСЕХ записях inStock == 0 или null — OK (особенность сайта, всегда нули)
-     * - Если было > 0, а стало 0 — ERROR (явная проблема)
-     * - Падение > dropThreshold% — WARNING, > dropThreshold*3% — ERROR
+     * @param ignoreStock если true — весь inStock-анализ пропускается (сайт без данных о наличии)
+     * @param minAbsoluteErrors минимальное абсолютное число ошибок для срабатывания варнинга
      */
-    public String evaluateGroup(List<ZoomosParsingStats> sortedGroup, int dropThreshold, int errorGrowthThreshold) {
+    public String evaluateGroup(List<ZoomosParsingStats> sortedGroup,
+                                 int dropThreshold, int errorGrowthThreshold,
+                                 int minAbsoluteErrors, boolean ignoreStock) {
         // sortedGroup отсортирован ASC (от старых к новым)
         ZoomosParsingStats newest = sortedGroup.get(sortedGroup.size() - 1);
 
@@ -1020,20 +1202,22 @@ public class ZoomosCheckService {
             if (newest.getCompletionPercent() != null && newest.getCompletionPercent() < 100) {
                 return "WARNING";
             }
-            // 100% выкачка, но нет товаров — нужна проверка
+            // 100% выкачка, но нет товаров совсем — нужна проверка
             if ((newest.getTotalProducts() == null || newest.getTotalProducts() == 0)
                     && newest.getCompletionPercent() != null && newest.getCompletionPercent() >= 100) {
                 return "WARNING";
+            }
+            // Одиночная запись: товары есть, но в наличии 0 — явная ошибка
+            if (!ignoreStock
+                    && newest.getInStock() != null && newest.getInStock() == 0
+                    && newest.getTotalProducts() != null && newest.getTotalProducts() > 0) {
+                return "ERROR";
             }
             return "OK";
         }
 
         // Сравниваем только ПОСЛЕДНЮЮ выкачку с ПРЕДПОСЛЕДНЕЙ — текущее состояние
         ZoomosParsingStats prev = sortedGroup.get(sortedGroup.size() - 2);
-
-        // Проверяем, всегда ли inStock == 0/null во всей истории (особенность сайта)
-        boolean alwaysZeroStock = sortedGroup.stream()
-                .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
 
         boolean hasWarning = false;
         boolean hasError = false;
@@ -1050,32 +1234,47 @@ public class ZoomosCheckService {
         double dropThresholdFraction = dropThreshold / 100.0;
         double errGrowthFraction = errorGrowthThreshold / 100.0;
 
-        // --- ERROR только: падение "В наличии" (только если не всегда нули) ---
-        if (!alwaysZeroStock) {
-            Integer prevStock = prev.getInStock();
-            Integer newStock = newest.getInStock();
-            if (prevStock != null && prevStock > 0) {
+        // --- inStock-анализ (пропускается для сайтов с ignoreStock) ---
+        if (!ignoreStock) {
+            boolean alwaysZeroStock = sortedGroup.stream()
+                    .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
+
+            if (!alwaysZeroStock) {
+                // Проверяем текущее значение: если 0 — ERROR (охватывает [500,0,0] и [500,0])
+                Integer newStock = newest.getInStock();
                 if (newStock != null && newStock == 0) {
                     hasError = true;
                 } else if (newStock != null) {
-                    double drop = (double)(prevStock - newStock) / prevStock;
-                    if (drop > dropThresholdFraction) {
-                        hasError = true;
+                    Integer prevStock = prev.getInStock();
+                    if (prevStock != null && prevStock > 0) {
+                        double drop = (double)(prevStock - newStock) / prevStock;
+                        if (drop > dropThresholdFraction) {
+                            hasError = true;
+                        }
                     }
+                }
+            } else {
+                // alwaysZeroStock: предупреждаем если в сайте есть товары (сломан давно)
+                boolean hasAnyProducts = sortedGroup.stream()
+                        .anyMatch(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0);
+                if (hasAnyProducts) {
+                    hasWarning = true;
                 }
             }
         }
 
-        // --- WARNING: рост ошибок ---
+        // --- WARNING: рост ошибок (только если достигнут минимальный порог) ---
         int prevErrors = prev.getErrorCount() != null ? prev.getErrorCount() : 0;
         int newErrors = newest.getErrorCount() != null ? newest.getErrorCount() : 0;
-        if (prevErrors > 0 && newErrors > prevErrors) {
-            double growth = (double)(newErrors - prevErrors) / prevErrors;
-            if (growth > errGrowthFraction) {
+        if (newErrors >= minAbsoluteErrors) {
+            if (prevErrors > 0 && newErrors > prevErrors) {
+                double growth = (double)(newErrors - prevErrors) / prevErrors;
+                if (growth > errGrowthFraction) {
+                    hasWarning = true;
+                }
+            } else if (prevErrors == 0) {
                 hasWarning = true;
             }
-        } else if (prevErrors == 0 && newErrors > 10) {
-            hasWarning = true;
         }
 
         // --- WARNING: падение товаров ---
@@ -1097,15 +1296,19 @@ public class ZoomosCheckService {
     // WebSocket прогресс
     // =========================================================================
 
-    private void sendProgress(String operationId, int current, int total, String message) {
-        if (operationId == null) return;
+    private void sendProgress(Long shopId, String operationId, int current, int total, String message) {
         Map<String, Object> progress = Map.of(
                 "current", current,
                 "total", total,
                 "message", message,
                 "percent", total > 0 ? (current * 100 / total) : 0
         );
-        messagingTemplate.convertAndSend("/topic/zoomos-check/" + operationId, progress);
+        if (operationId != null) {
+            messagingTemplate.convertAndSend("/topic/zoomos-check/" + operationId, progress);
+        }
+        if (shopId != null) {
+            messagingTemplate.convertAndSend("/topic/zoomos-check/shop/" + shopId, progress);
+        }
     }
 
     // =========================================================================
@@ -1174,6 +1377,89 @@ public class ZoomosCheckService {
             );
         } catch (Exception e) {
             log.warn("Не удалось сохранить куки: {}", e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // Проверка завершённости парсеров по фильтру (AND/OR)
+    // =========================================================================
+
+    /**
+     * Проверяет, завершены ли все обязательные парсеры в группе.
+     * <ul>
+     *   <li>OR-режим: хотя бы один из перечисленных паттернов имеет row с completionPercent&ge;100.</li>
+     *   <li>AND-режим: каждый паттерн обязан иметь хотя бы одну row с completionPercent&ge;100.</li>
+     * </ul>
+     * @return null — фильтр не задан; пустой список — всё OK; непустой — незавершённые паттерны с метриками.
+     */
+    public List<Map<String, Object>> checkParserCompleteness(
+            List<ZoomosParsingStats> group, String parserInclude, String parserIncludeMode) {
+
+        if (parserInclude == null || parserInclude.isBlank()) return null;
+
+        List<String> patterns = Arrays.stream(parserInclude.split(";"))
+                .map(String::trim).filter(p -> !p.isEmpty())
+                .map(String::toLowerCase)
+                .collect(Collectors.toList());
+        if (patterns.isEmpty()) return null;
+
+        boolean andMode = "AND".equalsIgnoreCase(parserIncludeMode);
+
+        if (andMode) {
+            // AND: каждый паттерн должен дать хотя бы одну завершённую row
+            List<Map<String, Object>> incomplete = new ArrayList<>();
+            for (String pattern : patterns) {
+                List<ZoomosParsingStats> matching = group.stream()
+                        .filter(s -> s.getParserDescription() != null
+                                && s.getParserDescription().toLowerCase().contains(pattern))
+                        .collect(Collectors.toList());
+                boolean anyComplete = matching.stream()
+                        .anyMatch(s -> s.getCompletionPercent() != null && s.getCompletionPercent() >= 100);
+                if (!anyComplete) {
+                    Map<String, Object> info = new LinkedHashMap<>();
+                    info.put("pattern", pattern);
+                    if (matching.isEmpty()) {
+                        info.put("noData", true);
+                    } else {
+                        matching.stream()
+                                .max(Comparator.comparing(s -> s.getCompletionPercent() != null ? s.getCompletionPercent() : 0))
+                                .ifPresent(best -> {
+                                    info.put("completion", best.getCompletionTotal());
+                                    info.put("total", best.getTotalProducts());
+                                    info.put("inStock", best.getInStock());
+                                    info.put("errors", best.getErrorCount());
+                                    info.put("description", best.getParserDescription());
+                                    info.put("updatedTime", best.getUpdatedTime());
+                                });
+                    }
+                    incomplete.add(info);
+                }
+            }
+            return incomplete;
+        } else {
+            // OR: хотя бы одна row из любого паттерна завершена на 100%
+            boolean anyComplete = group.stream()
+                    .filter(s -> s.getParserDescription() != null
+                            && patterns.stream().anyMatch(p -> s.getParserDescription().toLowerCase().contains(p)))
+                    .anyMatch(s -> s.getCompletionPercent() != null && s.getCompletionPercent() >= 100);
+            if (anyComplete) return Collections.emptyList();
+
+            Map<String, Object> info = new LinkedHashMap<>();
+            info.put("pattern", String.join(", ", patterns));
+            info.put("orMode", true);
+            group.stream()
+                    .filter(s -> s.getParserDescription() != null
+                            && patterns.stream().anyMatch(p -> s.getParserDescription().toLowerCase().contains(p)))
+                    .max(Comparator.comparing(s -> s.getCompletionPercent() != null ? s.getCompletionPercent() : 0))
+                    .ifPresentOrElse(best -> {
+                        info.put("completion", best.getCompletionTotal());
+                        info.put("total", best.getTotalProducts());
+                        info.put("inStock", best.getInStock());
+                        info.put("errors", best.getErrorCount());
+                        info.put("description", best.getParserDescription());
+                        info.put("updatedTime", best.getUpdatedTime());
+                    }, () -> info.put("noData", true));
+            return List.of(info);
         }
     }
 }

@@ -19,7 +19,7 @@
         .issue-error        { border-left: 3px solid #dc3545; }
         .issue-warning      { border-left: 3px solid #ffc107; }
         .issue-notfound     { border-left: 3px solid #6c757d; }
-        .issue-trend        { border-left: 3px solid #0dcaf0; }
+        .issue-trend        { border-left: 3px solid #0d9aad; }
         .group-header { cursor: pointer; user-select: none; }
         .group-header:hover { filter: brightness(0.96); }
         .group-header .chevron { transition: transform 0.2s; }
@@ -29,7 +29,20 @@
         .delta-drop { color: #dc3545; font-weight: bold; }
         .verdict-icon { font-size: 2.5rem; }
         .verdict-text { font-size: 1.4rem; font-weight: 700; }
-        .stat-badge { font-size: 0.95rem; padding: 0.4em 0.7em; }
+        .verdict-stat-tile { min-width: 56px; }
+        .table-responsive thead th { position: sticky; top: 0; z-index: 1; background-color: #f8f9fa; }
+        .parser-col { display: none; }
+        .issue-hidden { display: none !important; }
+        .resolved-block { border-top: 1px solid #dee2e6; background: #f8f9fa; }
+        .baseline-separator td { background: #e9ecef; font-size: 0.72rem; color: #6c757d;
+                                  font-style: italic; padding: 2px 6px !important; border-top: 2px solid #ced4da; }
+        .baseline-row { opacity: 0.65; font-size: 0.85em; background: #f8f9fa !important; }
+        @keyframes card-flash {
+            0%   { box-shadow: 0 0 0 3px #ffc107; }
+            60%  { box-shadow: 0 0 0 3px #ffc107; }
+            100% { box-shadow: none; }
+        }
+        .flash-card { animation: card-flash 1.6s ease-out; }
     </style>
 </th:block>
 
@@ -37,7 +50,7 @@
     <a th:href="@{/zoomos}" class="btn btn-sm btn-outline-secondary">
         <i class="fas fa-arrow-left me-1"></i>Назад
     </a>
-    <a th:href="@{/zoomos/check/history}" class="btn btn-sm btn-outline-info">
+    <a th:href="@{'/zoomos/check/history?shop=' + ${run.shop.shopName}}" class="btn btn-sm btn-outline-info">
         <i class="fas fa-history me-1"></i>История
     </a>
 </th:block>
@@ -58,41 +71,50 @@
                 <div class="flex-grow-1">
                     <div class="verdict-text mb-1" th:if="${canDeliver}">Отчёт готов — можно отдавать клиенту</div>
                     <div class="verdict-text mb-1" th:unless="${canDeliver}">Есть проблемы — проверьте перед отправкой</div>
-                    <div class="d-flex flex-wrap gap-2 align-items-center">
-                        <span class="badge bg-secondary stat-badge">
-                            <i class="fas fa-store me-1"></i>
-                            <span th:text="${run.shop.shopName}"></span>
-                        </span>
-                        <span class="badge bg-light text-dark stat-badge border">
-                            <i class="fas fa-calendar me-1"></i>
-                            <span th:text="${#temporals.format(run.dateFrom,'dd.MM.yyyy')}"></span>
-                            <span th:if="${run.timeFrom != null}" th:text="' ' + ${run.timeFrom}"></span>
-                            &nbsp;—&nbsp;
-                            <span th:text="${#temporals.format(run.dateTo,'dd.MM.yyyy')}"></span>
-                            <span th:if="${run.timeTo != null}" th:text="' ' + ${run.timeTo}"></span>
-                        </span>
-                        <span class="badge bg-success stat-badge">
-                            <i class="fas fa-check me-1"></i>OK: <span th:text="${liveOkCount}">0</span>
-                        </span>
-                        <span th:if="${liveWarnCount > 0}" class="badge bg-warning text-dark stat-badge">
-                            <i class="fas fa-exclamation-triangle me-1"></i>Warn: <span th:text="${liveWarnCount}">0</span>
-                        </span>
-                        <span th:if="${liveErrCount > 0}" class="badge bg-danger stat-badge">
-                            <i class="fas fa-times me-1"></i>Error: <span th:text="${liveErrCount}">0</span>
-                        </span>
-                        <span th:if="${liveNotFoundCount > 0}" class="badge bg-secondary stat-badge">
-                            <i class="fas fa-question me-1"></i>Нет данных: <span th:text="${liveNotFoundCount}">0</span>
-                        </span>
-                        <span class="text-muted small ms-2">
-                            Пороги: падение ≥<span th:text="${run.dropThreshold}">10</span>%,
-                            ошибки ≥<span th:text="${run.errorGrowthThreshold}">30</span>%
-                        </span>
-                        <span th:if="${baselineDays != null and baselineDays > 0}"
-                              class="badge bg-info bg-opacity-25 text-dark stat-badge ms-1"
-                              title="Исторический период для тренд-анализа">
-                            <i class="fas fa-chart-line me-1"></i>Baseline:
-                            <span th:text="${baselineFrom}"></span>–<span th:text="${baselineTo}"></span>
-                        </span>
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <span class="badge bg-secondary">
+                                <i class="fas fa-store me-1"></i>
+                                <span th:text="${run.shop.shopName}"></span>
+                            </span>
+                            <span class="badge bg-light text-dark border">
+                                <i class="fas fa-calendar me-1"></i>
+                                <span th:text="${#temporals.format(run.dateFrom,'dd.MM.yyyy')}"></span>
+                                <span th:if="${run.timeFrom != null}" th:text="' ' + ${run.timeFrom}"></span>
+                                &nbsp;—&nbsp;
+                                <span th:text="${#temporals.format(run.dateTo,'dd.MM.yyyy')}"></span>
+                                <span th:if="${run.timeTo != null}" th:text="' ' + ${run.timeTo}"></span>
+                            </span>
+                            <span class="text-muted small">
+                                Пороги: падение ≥<span th:text="${run.dropThreshold}">10</span>%,
+                                ошибки ≥<span th:text="${run.errorGrowthThreshold}">30</span>%
+                            </span>
+                            <span th:if="${baselineDays != null and baselineDays > 0}"
+                                  class="badge bg-info bg-opacity-25 text-dark ms-1"
+                                  data-bs-toggle="tooltip" data-bs-placement="bottom"
+                                  title="Тренд-анализ: сравнение с исторической нормой. Метрики нормализованы по числу товаров — рост ассортимента учитывается автоматически. Ошибки: % от total_products. Скорость: мин/1000 товаров. Уменьшение времени выкачки — всегда OK.">
+                                <i class="fas fa-chart-line me-1"></i>Baseline:
+                                <span th:text="${baselineFrom}"></span>–<span th:text="${baselineTo}"></span>
+                            </span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <div class="verdict-stat-tile bg-success bg-opacity-10 border border-success rounded text-center px-3 py-1">
+                                <div class="fw-bold text-success fs-5 lh-1" th:text="${liveOkCount}">0</div>
+                                <div class="text-success" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.05em">OK</div>
+                            </div>
+                            <div th:if="${liveWarnCount > 0}" class="verdict-stat-tile bg-warning bg-opacity-10 border border-warning rounded text-center px-3 py-1">
+                                <div class="fw-bold text-warning fs-5 lh-1" th:text="${liveWarnCount}">0</div>
+                                <div class="text-warning" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.05em">Warn</div>
+                            </div>
+                            <div th:if="${liveErrCount > 0}" class="verdict-stat-tile bg-danger bg-opacity-10 border border-danger rounded text-center px-3 py-1">
+                                <div class="fw-bold text-danger fs-5 lh-1" th:text="${liveErrCount}">0</div>
+                                <div class="text-danger" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.05em">Error</div>
+                            </div>
+                            <div th:if="${liveNotFoundCount > 0}" class="verdict-stat-tile bg-secondary bg-opacity-10 border border-secondary rounded text-center px-3 py-1">
+                                <div class="fw-bold text-secondary fs-5 lh-1" th:text="${liveNotFoundCount}">0</div>
+                                <div class="text-secondary" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.05em">Нет&nbsp;данных</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -109,70 +131,165 @@
                 <i class="fas fa-chevron-down chevron me-2"></i>
                 <i class="fas fa-clipboard-list me-1 text-warning"></i>
                 <strong>На что обратить внимание</strong>
-                <span class="badge bg-secondary ms-2" th:text="${issues.size()}">0</span>
+                <span class="badge bg-secondary ms-2" id="issuesCountBadge" th:text="${issues.size()}">0</span>
             </span>
         </div>
         <div id="issuesCollapse" class="collapse show">
             <div class="list-group list-group-flush">
                 <div th:each="issue : ${issues}" class="list-group-item py-2 px-3"
+                     th:data-site="${issue['site']}"
+                     th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type']}"
                      th:classappend="${issue['type'] == 'ERROR'} ? 'issue-error' :
                                     (${issue['type'] == 'WARNING'} ? 'issue-warning' :
                                     (${issue['type'] == 'IN_PROGRESS'} ? 'list-group-item-warning' :
                                     (${issue['type'] == 'TREND_WARNING'} ? 'issue-trend' : 'issue-notfound')))">
                     <div class="d-flex justify-content-between align-items-start gap-2">
                         <div class="flex-grow-1">
-                            <span class="badge me-2"
-                                  th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger' :
-                                                 (${issue['type'] == 'WARNING'} ? 'bg-warning text-dark' :
-                                                 (${issue['type'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' :
-                                                 (${issue['type'] == 'TREND_WARNING'} ? 'bg-info text-dark' : 'bg-secondary')))"
-                                  th:text="${issue['type'] == 'IN_PROGRESS'} ? 'В процессе' :
-                                           (${issue['type'] == 'TREND_WARNING'} ? 'Тренд' : ${issue['type']})">
-                            </span>
-                            <i th:if="${issue['type'] == 'TREND_WARNING'}"
-                               class="fas fa-chart-line me-1 text-info" title="Отклонение от исторической нормы"></i>
-                            <strong th:text="${issue['site']}"></strong>
-                            <span th:if="${issue['city']}" class="text-muted ms-1 small"
-                                  th:text="'(' + ${issue['city']} + ')'"></span>
-                            <span th:if="${issue['addressId'] != null and issue['type'] != 'ERROR' and issue['type'] != 'WARNING'}"
-                                  class="badge bg-light text-secondary border ms-1 small"
-                                  th:text="'адрес ' + ${issue['addressId']}"></span>
-                            <span th:if="${issue['addressName'] != null and (issue['type'] == 'ERROR' or issue['type'] == 'WARNING')}"
-                                  class="badge bg-info text-dark ms-1 small"
-                                  th:text="${issue['addressName']}"></span>
-                            <span class="small text-muted ms-2" th:text="${issue['message']}"></span>
+                            <div class="mb-1">
+                                <span class="badge me-2"
+                                      th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger' :
+                                                     (${issue['type'] == 'WARNING'} ? 'bg-warning text-dark' :
+                                                     (${issue['type'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' :
+                                                     (${issue['type'] == 'TREND_WARNING'} ? 'bg-info text-dark' : 'bg-secondary')))"
+                                      th:text="${issue['type'] == 'IN_PROGRESS'} ? 'В процессе' :
+                                               (${issue['type'] == 'TREND_WARNING'} ? 'Тренд' : ${issue['type']})">
+                                </span>
+                                <i th:if="${issue['type'] == 'TREND_WARNING'}"
+                                   class="fas fa-chart-line me-1 text-info"
+                                   data-bs-toggle="tooltip"
+                                   title="Отклонение от нормы. Ошибки и скорость выкачки нормализованы по числу товаров — рост ассортимента не вызывает ложных тревог. Уменьшение времени выкачки тренд не генерирует."></i>
+                                <i th:if="${issue['isPriority']}" class="fas fa-star text-warning me-1" title="Приоритетный сайт" style="font-size:0.8em;"></i>
+                                <strong th:text="${issue['site']}"></strong>
+                                <span th:if="${issue['city']}" class="text-muted ms-1 small"
+                                      th:text="'(' + ${issue['city']} + ')'"></span>
+                                <span th:if="${issue['addressId'] != null and issue['type'] != 'ERROR' and issue['type'] != 'WARNING'}"
+                                      class="badge bg-light text-secondary border ms-1 small"
+                                      th:text="'адрес ' + ${issue['addressId']}"></span>
+                                <span th:if="${issue['addressName'] != null and (issue['type'] == 'ERROR' or issue['type'] == 'WARNING')}"
+                                      class="badge bg-info text-dark ms-1 small"
+                                      th:text="${issue['addressName']}"></span>
+                            </div>
+                            <div class="fw-semibold" style="font-size:0.9rem" th:text="${issue['message']}"></div>
+                            <!-- NOT_FOUND: выкачка шла в момент последней проверки -->
+                            <small th:if="${issue['type'] == 'NOT_FOUND' and issue['currentIpPct'] != null}"
+                                   class="text-secondary d-block mt-1">
+                                <i class="fas fa-spinner me-1"></i>Сейчас идёт:
+                                <strong th:text="${issue['currentIpPct']}">?</strong>,
+                                старт <span th:text="${issue['currentIpStart']}">?</span>
+                                <span th:if="${issue['currentIpUpd'] != null}">,
+                                    обновл. <span th:text="${issue['currentIpUpd']}"></span></span>
+                            </small>
+                            <!-- NOT_FOUND: последняя завершённая на 100% выкачка -->
+                            <small th:if="${issue['type'] == 'NOT_FOUND' and issue['lastKnownDate'] != null}"
+                                   class="text-muted d-block mt-1">
+                                Последний раз на 100%: <strong th:text="${issue['lastKnownDate']}"></strong>
+                                &mdash; В наличии:
+                                <span th:text="${issue['lastKnownInStock'] != null ? issue['lastKnownInStock'] : 0}">0</span>
+                                /
+                                <span th:text="${issue['lastKnownTotal'] != null ? issue['lastKnownTotal'] : 0}">0</span>
+                            </small>
                         </div>
-                        <div th:if="${issue['type'] != 'TREND_WARNING'}" class="d-flex gap-1 flex-shrink-0">
+                        <div class="d-flex gap-1 flex-shrink-0 align-self-start mt-1">
+                            <!-- Детали (переход к Блоку 3) -->
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-info py-0 px-2 btn-go-detail"
+                                    title="Перейти к деталям выкачки"
+                                    th:data-site="${issue['site']}">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
                             <!-- Матчинг -->
                             <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
                                target="_blank"
                                class="btn btn-sm btn-outline-primary py-0 px-2"
-                               style="font-size:0.78rem"
                                title="Матчинг на export.zoomos.by">
-                                <i class="fas fa-link"></i> Матчинг
+                                <i class="fas fa-link"></i>
                             </a>
                             <!-- История (API) -->
                             <a th:if="${issue['checkType'] == 'API'}"
                                th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
                                target="_blank"
                                class="btn btn-sm btn-outline-secondary py-0 px-2"
-                               style="font-size:0.78rem"
                                title="История парсинга (API)">
-                                <i class="fas fa-history"></i> История
+                                <i class="fas fa-history"></i>
                             </a>
                             <!-- История (ITEM) -->
                             <a th:if="${issue['checkType'] == 'ITEM' or issue['checkType'] == null}"
                                th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
                                target="_blank"
                                class="btn btn-sm btn-outline-secondary py-0 px-2"
-                               style="font-size:0.78rem"
                                title="История парсинга (ITEM)">
-                                <i class="fas fa-history"></i> История
+                                <i class="fas fa-history"></i>
                             </a>
+                            <!-- Redmine: ссылка если задача уже есть, иначе кнопка создания -->
+                            <th:block th:if="${redmineEnabled}">
+                                <!-- Задача существует: ссылка + кнопка редактирования -->
+                                <th:block th:if="${redmineIssues[issue['site']] != null}">
+                                    <div class="btn-group btn-group-sm" role="group"
+                                         th:data-rm-site="${issue['site']}">
+                                        <a th:href="${redmineIssues[issue['site']].issueUrl}"
+                                           target="_blank"
+                                           th:class="'btn py-0 px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')"
+                                           th:title="'Redmine #' + ${redmineIssues[issue['site']].issueId} + ' — ' + ${redmineIssues[issue['site']].issueStatus}"
+                                           th:text="'#' + ${redmineIssues[issue['site']].issueId}">
+                                        </a>
+                                        <button type="button"
+                                                class="btn btn-outline-secondary py-0 px-1 btn-redmine-edit"
+                                                th:data-issueid="${redmineIssues[issue['site']].issueId}"
+                                                th:data-issueurl="${redmineIssues[issue['site']].issueUrl}"
+                                                th:data-site="${issue['site']}"
+                                                th:data-city="${issue['city'] != null ? issue['city'] : ''}"
+                                                th:data-message="${issue['message']}"
+                                                th:data-checktype="${issue['checkType'] != null ? issue['checkType'] : ''}"
+                                                th:data-historyurl="${issue['checkType'] == 'API' ?
+                                                    (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=') :
+                                                    (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=')}"
+                                                th:data-matchingurl="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}"
+                                                title="Редактировать задачу в Redmine">
+                                            <i class="fas fa-pen" style="font-size:0.65rem"></i>
+                                        </button>
+                                    </div>
+                                </th:block>
+                                <!-- Задача не создана: кнопка создания -->
+                                <button th:unless="${redmineIssues[issue['site']] != null}"
+                                        type="button"
+                                        class="btn btn-sm btn-outline-danger py-0 px-2 btn-redmine"
+                                        th:data-site="${issue['site']}"
+                                        th:data-city="${issue['city'] != null ? issue['city'] : ''}"
+                                        th:data-message="${issue['message']}"
+                                        th:data-checktype="${issue['checkType'] != null ? issue['checkType'] : ''}"
+                                        th:data-historyurl="${issue['checkType'] == 'API' ?
+                                            (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=') :
+                                            (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=')}"
+                                        th:data-matchingurl="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}"
+                                        title="Создать задачу в Redmine">
+                                    <i class="fas fa-bug"></i>
+                                </button>
+                            </th:block><!-- /Redmine -->
+                            <!-- Скрыть (отметить как проверено) -->
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-success py-0 px-2 btn-hide-issue"
+                                    title="Отметить как проверено (скрыть из списка)"
+                                    th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type']}">
+                                <i class="fas fa-check"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
+            <!-- Блок "Проверено мной" (скрытые сайты) -->
+            <div id="resolvedBlock" class="resolved-block px-3 py-2" style="display:none">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <small class="text-muted fw-semibold">
+                        <i class="fas fa-check-circle me-1 text-success"></i>Проверено мной
+                        <span class="badge bg-secondary ms-1" id="resolvedCountBadge">0</span>
+                    </small>
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" id="clearResolvedBtn">
+                        <i class="fas fa-undo me-1"></i>Сбросить всё
+                    </button>
+                </div>
+                <div id="resolvedSitesList" class="d-flex flex-wrap gap-1"></div>
+            </div>
+
             <!-- Текст для ИТ -->
             <div class="px-3 py-2 border-top bg-light">
                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -200,6 +317,9 @@
         <button class="btn btn-sm btn-outline-secondary py-0" id="collapseAll" type="button">
             <i class="fas fa-compress-alt me-1"></i>Свернуть всё
         </button>
+        <button class="btn btn-sm btn-outline-secondary py-0" id="toggleParser" type="button" title="Показать/скрыть колонку Парсер">
+            <i class="fas fa-tag me-1"></i>Парсер
+        </button>
     </div>
 
     <div th:each="group, groupIter : ${groups}" class="card mb-2">
@@ -214,48 +334,46 @@
                      th:data-bs-target="'#grp-' + ${groupIter.index}"
                      aria-expanded="false">
                     <i class="fas fa-chevron-down chevron me-2"></i>
+                    <span class="badge me-1"
+                          th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger' :
+                                         (${group['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
+                          th:text="${group['status']}">OK</span>
+                    <i th:if="${group['isPriority']}" class="fas fa-star text-warning me-1" title="Приоритетный сайт" style="font-size:0.8em;"></i>
                     <strong th:text="${group['siteName']}">site.ru</strong>
                     <span class="badge ms-2"
                           th:classappend="${group['checkType'] == 'API'} ? 'badge-api' : 'badge-item'"
                           th:text="${group['checkType']}">API</span>
                     <span class="text-muted ms-2 small" th:text="${group['count']} + ' выкач.'"></span>
                 </div>
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2" onclick="event.stopPropagation()">
                     <!-- Ссылка на матчинг -->
                     <a th:href="${baseUrl + '/shop/' + run.shop.shopName + '/sites-items-mapping?site=' + group['siteName'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
                        target="_blank"
                        class="btn btn-sm btn-outline-primary py-0 px-2"
-                       title="Матчинг на export.zoomos.by"
-                       onclick="event.stopPropagation()">
-                        <i class="fas fa-link"></i> Матчинг
+                       title="Матчинг на export.zoomos.by">
+                        <i class="fas fa-link"></i>
                     </a>
                     <!-- Ссылка на историю выкачки (зависит от типа) -->
                     <a th:if="${group['checkType'] == 'API'}"
                        th:href="${baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=&address=&accountId=&server='}"
                        target="_blank"
                        class="btn btn-sm btn-outline-secondary py-0 px-2"
-                       title="История парсинга (API)"
-                       onclick="event.stopPropagation()">
-                        <i class="fas fa-history"></i> История
+                       title="История парсинга (API)">
+                        <i class="fas fa-history"></i>
                     </a>
                     <a th:if="${group['checkType'] == 'ITEM'}"
                        th:href="${baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + run.shop.shopName + '&site=&cityId=&address=&accountId=&server='}"
                        target="_blank"
                        class="btn btn-sm btn-outline-secondary py-0 px-2"
-                       title="История парсинга (ITEM)"
-                       onclick="event.stopPropagation()">
-                        <i class="fas fa-history"></i> История
+                       title="История парсинга (ITEM)">
+                        <i class="fas fa-history"></i>
                     </a>
-                    <span class="badge"
-                          th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger' :
-                                         (${group['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
-                          th:text="${group['status']}">OK</span>
                 </div>
             </div>
         </div>
 
         <!-- Тело: подгруппы по городам -->
-        <div th:id="'grp-' + ${groupIter.index}" class="collapse">
+        <div th:id="'grp-' + ${groupIter.index}" class="collapse" th:data-site="${group['siteName']}">
             <div th:each="cg, cgIter : ${group['cityGroups']}">
                 <!-- Разделитель города (если > 1) -->
                 <div th:if="${group['cityGroups'].size() > 1}"
@@ -298,8 +416,9 @@
                                 <tr>
                                     <th class="text-center" style="width:110px">Старт</th>
                                     <th class="text-center" style="width:110px">Финиш</th>
-                                    <th class="text-center">Сервер</th>
-                                    <th class="text-center">Клиент</th>
+                                    <th class="text-center d-none d-md-table-cell">Сервер</th>
+                                    <th class="text-center d-none d-md-table-cell">Клиент</th>
+                                    <th class="parser-col" style="max-width:200px">Парсер</th>
                                     <th class="text-end">Товаров</th>
                                     <th class="text-end">В наличии</th>
                                     <th class="text-end">Ошибки</th>
@@ -309,18 +428,32 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr th:each="stat, si : ${ag['stats']}"
-                                    th:with="nextStat=${si.index + 1 < ag['stats'].size() ? ag['stats'][si.index + 1] : null}"
-                                    th:classappend="${si.first ? (ag['status'] == 'ERROR' ? 'table-danger' : (ag['status'] == 'WARNING' ? 'table-warning' : 'table-active')) + ' fw-semibold' : ''}">
+                                <th:block th:each="stat, si : ${ag['stats']}"
+                                    th:with="nextStat=${si.index + 1 < ag['stats'].size() ? ag['stats'][si.index + 1] : null},
+                                             prevStat=${si.index > 0 ? ag['stats'][si.index - 1] : null}">
+                                <!-- Разделитель: первая baseline-строка -->
+                                <tr th:if="${stat.isBaseline and (prevStat == null or !prevStat.isBaseline)}"
+                                    class="baseline-separator">
+                                    <td colspan="11">
+                                        <i class="fas fa-history me-1"></i>Baseline:
+                                        <span th:text="${baselineFrom} + ' – ' + ${baselineTo}"></span>
+                                    </td>
+                                </tr>
+                                <tr th:classappend="${stat.isBaseline ? 'baseline-row' : (si.first ? (ag['status'] == 'ERROR' ? 'table-danger' : (ag['status'] == 'WARNING' ? 'table-warning' : 'table-active')) + ' fw-semibold' : '')}">
                                     <td class="text-center small"
                                         th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
                                     <td class="text-center small"
                                         th:text="${stat.finishTime != null} ? ${#temporals.format(stat.finishTime, 'dd.MM HH:mm')} : '—'"></td>
-                                    <td class="text-center small" th:text="${stat.serverName}"></td>
-                                    <td class="text-center small" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
+                                    <td class="text-center small d-none d-md-table-cell" th:text="${stat.serverName}"></td>
+                                    <td class="text-center small d-none d-md-table-cell" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
+                                    <td class="parser-col small"
+                                        th:with="raw=${stat.parserDescription},
+                                                 val=${raw != null and #strings.contains(raw, 'urls: - ') ? #strings.substringAfter(raw, 'urls: - ') : raw}"
+                                        th:title="${parserIncludeBysite[stat.siteName]}"
+                                        th:text="${val != null ? val : '—'}"></td>
                                     <td class="text-end">
                                         <span th:text="${stat.totalProducts != null} ? ${#numbers.formatInteger(stat.totalProducts, 1, 'COMMA')} : '—'"></span>
-                                        <span th:if="${nextStat != null and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"
+                                        <span th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"
                                               th:with="pct=${(stat.totalProducts - nextStat.totalProducts) * 100 / nextStat.totalProducts}">
                                             <small th:if="${pct < -10}" class="delta-drop"> &#9660;</small>
                                             <small th:if="${pct > 10}"  class="delta-down"> &#9650;</small>
@@ -328,19 +461,19 @@
                                     </td>
                                     <td class="text-end">
                                         <span th:text="${stat.inStock != null} ? ${#numbers.formatInteger(stat.inStock, 1, 'COMMA')} : '—'"></span>
-                                        <span th:if="${nextStat != null and stat.inStock != null and nextStat.inStock != null and nextStat.inStock > 0}"
+                                        <span th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and stat.inStock != null and nextStat.inStock != null and nextStat.inStock > 0}"
                                               th:with="pct=${(stat.inStock - nextStat.inStock) * 100 / nextStat.inStock}">
                                             <small th:if="${stat.inStock == 0}" class="delta-drop"> &#9660;0</small>
                                             <small th:if="${stat.inStock > 0 and pct < -10}" class="delta-drop"> &#9660;</small>
                                             <small th:if="${pct > 10}" class="delta-down"> &#9650;</small>
                                         </span>
-                                        <small th:if="${nextStat != null and nextStat.inStock != null and nextStat.inStock > 0 and (stat.inStock == null or stat.inStock == 0)}"
+                                        <small th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and nextStat.inStock != null and nextStat.inStock > 0 and (stat.inStock == null or stat.inStock == 0)}"
                                                class="delta-drop"> &#9660;0</small>
                                     </td>
                                     <td class="text-end"
                                         th:classappend="${stat.errorCount != null and stat.errorCount > 0} ? 'text-danger' : ''">
                                         <span th:text="${stat.errorCount != null} ? ${stat.errorCount} : '—'"></span>
-                                        <span th:if="${nextStat != null and stat.errorCount != null and nextStat.errorCount != null and nextStat.errorCount > 0}"
+                                        <span th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and stat.errorCount != null and nextStat.errorCount != null and nextStat.errorCount > 0}"
                                               th:with="pct=${(stat.errorCount - nextStat.errorCount) * 100 / nextStat.errorCount}">
                                             <small th:if="${pct > 30}" class="delta-up"> &#9650;</small>
                                             <small th:if="${pct < -30}" class="delta-down"> &#9660;</small>
@@ -366,6 +499,7 @@
                                         </a>
                                     </td>
                                 </tr>
+                                </th:block>
                             </tbody>
                         </table>
                     </div>
@@ -380,18 +514,132 @@
     </div>
 
 
+<!-- Redmine Modal -->
+<div th:if="${redmineEnabled}" id="redmineModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="fas fa-bug me-2 text-danger"></i>Redmine — <span id="rmSiteName" class="fw-bold"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <!-- Загрузка -->
+                <div id="rmLoading" class="text-center py-3">
+                    <i class="fas fa-spinner fa-spin me-2"></i>Загрузка...
+                </div>
+                <!-- Существующие задачи -->
+                <div id="rmExistingBlock" class="d-none mb-2 pb-2 border-bottom">
+                    <div class="small text-muted fw-semibold mb-1">
+                        <i class="fas fa-tasks me-1"></i>Существующие задачи:
+                    </div>
+                    <div id="rmExistingList" class="d-flex flex-wrap gap-1"></div>
+                </div>
+                <!-- Форма новой задачи -->
+                <div id="rmCreateBlock" class="d-none">
+                    <!-- Строка 1: 4 основных поля -->
+                    <div class="row g-1 mb-2">
+                        <div class="col">
+                            <div class="small text-muted mb-1">Трекер</div>
+                            <select id="rmSelectTracker" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Статус</div>
+                            <select id="rmSelectStatus" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Приоритет</div>
+                            <select id="rmSelectPriority" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Исполнитель</div>
+                            <select id="rmSelectAssignee" class="form-select form-select-sm"></select>
+                        </div>
+                    </div>
+                    <!-- Строка 2: В чем ошибка (полная ширина — главное поле) -->
+                    <div id="rmCfErrorRow" class="mb-2" style="display:none">
+                        <div class="small text-muted mb-1">В чем ошибка <span class="text-muted" style="font-size:0.8em">(Ctrl/Shift для выбора нескольких)</span></div>
+                        <select id="rmSelectCfError" class="form-select form-select-sm" multiple size="4"></select>
+                    </div>
+                    <!-- Строка 3: Способ + Вариант -->
+                    <div class="row g-1 mb-2">
+                        <div id="rmCfMethodCol" class="col-6" style="display:none">
+                            <div class="small text-muted mb-1">Способ выкачки</div>
+                            <select id="rmSelectCfMethod" class="form-select form-select-sm"></select>
+                        </div>
+                        <div id="rmCfVariantCol" class="col-6" style="display:none">
+                            <div class="small text-muted mb-1">Вариант настройки</div>
+                            <select id="rmSelectCfVariant" class="form-select form-select-sm"></select>
+                        </div>
+                    </div>
+                    <!-- Описание — редактируемое, предзаполненное -->
+                    <div class="mb-2">
+                        <div class="small text-muted mb-1">
+                            Описание <span class="text-muted" style="font-size:0.75rem">(редактируемое)</span>
+                        </div>
+                        <textarea id="rmDescription" class="form-control form-control-sm"
+                                  rows="4" style="font-size:0.8rem; font-family:monospace; resize:vertical"></textarea>
+                    </div>
+                    <!-- Последние комментарии (только в режиме редактирования) -->
+                    <div id="rmCommentsBlock" class="d-none mb-2">
+                        <div class="small text-muted fw-semibold mb-1" style="cursor:pointer"
+                             onclick="document.getElementById('rmCommentsList').classList.toggle('d-none')">
+                            <i class="fas fa-comments me-1"></i>Последние комментарии
+                            <i class="fas fa-chevron-down ms-1" style="font-size:0.7rem"></i>
+                        </div>
+                        <div id="rmCommentsList" class="d-none">
+                            <!-- заполняется JS -->
+                        </div>
+                    </div>
+                    <!-- Добавить комментарий (только в режиме редактирования) -->
+                    <div id="rmNotesBlock" class="d-none">
+                        <div class="small text-muted mb-1">Добавить комментарий</div>
+                        <textarea id="rmNotes" class="form-control form-control-sm"
+                                  rows="2" placeholder="Текст комментария (будет добавлен к задаче в ТТ)"
+                                  style="font-size:0.8rem; resize:vertical"></textarea>
+                    </div>
+                </div>
+                <!-- Блок после успешного создания -->
+                <div id="rmCopyBlock" class="d-none">
+                    <div class="alert alert-success py-2 mb-2">
+                        <i class="fas fa-check-circle me-1"></i>Задача создана!
+                    </div>
+                    <pre id="rmCopyText" class="bg-light border rounded p-2 mb-1"
+                         style="font-size:0.82rem; white-space:pre-wrap; margin:0"></pre>
+                    <button type="button" class="btn btn-sm btn-outline-secondary mt-1" id="rmCopyBtn">
+                        <i class="fas fa-copy me-1"></i>Скопировать
+                    </button>
+                </div>
+                <div id="rmErrorMsg" class="d-none text-danger small mt-2"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button id="rmCreateBtn" class="btn btn-sm btn-danger d-none">
+                    <i class="fas fa-bug me-1"></i>Создать задачу
+                </button>
+                <button id="rmUpdateBtn" class="btn btn-sm btn-primary d-none">
+                    <i class="fas fa-save me-1"></i>Обновить задачу
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 </div>
 </th:block>
 
 <th:block th:fragment="scripts">
-<script>
+<script th:inline="javascript">
+    const RUN_ID = /*[[${run.id}]]*/ 0;
+    const BLOCK_HEADERS = ['ОШИБКИ', 'НЕТ ДАННЫХ', 'ПРЕДУПРЕЖДЕНИЯ'];
+
     // Chevron rotation для всех collapsible
     document.querySelectorAll('.group-header').forEach(header => {
         const targetId = header.getAttribute('data-bs-target');
         if (!targetId) return;
         const el = document.querySelector(targetId);
         if (!el) return;
-        // Начальное состояние: свёрнуто
         header.classList.add('collapsed');
         el.addEventListener('show.bs.collapse', () => header.classList.remove('collapsed'));
         el.addEventListener('hide.bs.collapse', () => header.classList.add('collapsed'));
@@ -407,6 +655,16 @@
         document.querySelectorAll('[id^="grp-"]').forEach(el => {
             if (el.classList.contains('show')) bootstrap.Collapse.getOrCreateInstance(el).hide();
         });
+    });
+
+    // Кнопка показа/скрытия колонки "Парсер"
+    let parserColVisible = false;
+    document.getElementById('toggleParser')?.addEventListener('click', function() {
+        parserColVisible = !parserColVisible;
+        document.querySelectorAll('.parser-col').forEach(el => {
+            el.style.display = parserColVisible ? 'table-cell' : 'none';
+        });
+        this.classList.toggle('active', parserColVisible);
     });
 
     // Для IT-сводки — при загрузке уже open (show), иконка должна быть раскрыта
@@ -425,6 +683,611 @@
             }, 2000);
         });
     });
+
+    // ═══════════════════════════════════════════════
+    // FEATURE 2: Переход к деталям выкачки (↓)
+    // ═══════════════════════════════════════════════
+    function scrollToGroup(siteName) {
+        const collapse = document.querySelector('[data-site="' + siteName + '"].collapse');
+        if (!collapse) return;
+        const card = collapse.closest('.card');
+        if (!card) return;
+        bootstrap.Collapse.getOrCreateInstance(collapse).show();
+        setTimeout(() => {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Кратковременное выделение карточки
+            card.classList.remove('flash-card');
+            void card.offsetWidth; // reflow для перезапуска анимации
+            card.classList.add('flash-card');
+            card.addEventListener('animationend', () => card.classList.remove('flash-card'), { once: true });
+        }, 200);
+    }
+
+    document.querySelectorAll('.btn-go-detail').forEach(btn => {
+        btn.addEventListener('click', () => scrollToGroup(btn.dataset.site));
+    });
+
+    // ═══════════════════════════════════════════════
+    // FEATURE 3: Скрытие проверенных строк
+    // Ключ: site|city|addressId|type — уникален для каждой строки
+    // ═══════════════════════════════════════════════
+    const LS_KEY = 'hidden-issues-' + RUN_ID;
+    let hiddenIssues = new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]'));
+    const originalItText = document.getElementById('itTextBlock')?.textContent || '';
+
+    function saveHidden() {
+        localStorage.setItem(LS_KEY, JSON.stringify([...hiddenIssues]));
+    }
+
+    function applyHidden() {
+        // Скрыть/показать issues по составному ключу
+        const allItems = document.querySelectorAll('#issuesCollapse .list-group-item[data-issue-key]');
+        let visibleCount = 0;
+        allItems.forEach(el => {
+            const key = el.dataset.issueKey;
+            if (hiddenIssues.has(key)) {
+                el.classList.add('issue-hidden');
+            } else {
+                el.classList.remove('issue-hidden');
+                visibleCount++;
+            }
+        });
+
+        // Обновить счётчик в заголовке
+        const badge = document.getElementById('issuesCountBadge');
+        if (badge) badge.textContent = visibleCount;
+
+        // Обновить блок "Проверено мной"
+        updateResolvedBlock();
+
+        // Пересчитать itText
+        rebuildItText();
+    }
+
+    function updateResolvedBlock() {
+        const block = document.getElementById('resolvedBlock');
+        const list = document.getElementById('resolvedSitesList');
+        const countBadge = document.getElementById('resolvedCountBadge');
+        if (!block || !list) return;
+
+        if (hiddenIssues.size === 0) {
+            block.style.display = 'none';
+            return;
+        }
+        block.style.display = '';
+        if (countBadge) countBadge.textContent = hiddenIssues.size;
+
+        list.innerHTML = '';
+        hiddenIssues.forEach(key => {
+            const parts = key.split('|');
+            const site = parts[0] || '';
+            const city = parts[1] || '';
+            const label = city ? site + ' (' + city + ')' : site;
+            const span = document.createElement('span');
+            span.className = 'badge bg-secondary d-inline-flex align-items-center gap-1 px-2 py-1';
+            span.innerHTML =
+                '<span>' + label + '</span>' +
+                '<button type="button" class="btn-close btn-close-white" style="font-size:0.6em" ' +
+                'onclick="restoreIssue(\'' + key.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" title="Восстановить"></button>';
+            list.appendChild(span);
+        });
+    }
+
+    function hideIssue(key) {
+        hiddenIssues.add(key);
+        saveHidden();
+        applyHidden();
+    }
+
+    function restoreIssue(key) {
+        hiddenIssues.delete(key);
+        saveHidden();
+        applyHidden();
+    }
+
+    function rebuildItText() {
+        const el = document.getElementById('itTextBlock');
+        if (!el || !originalItText) return;
+        if (hiddenIssues.size === 0) {
+            el.textContent = originalItText;
+            return;
+        }
+
+        // IT-текст работает на уровне сайта: скрываем сайты у которых есть любые скрытые issues
+        const hiddenSitesForIt = new Set([...hiddenIssues].map(k => k.split('|')[0]));
+
+        const lines = originalItText.split('\n');
+        const result = [];
+        let i = 0;
+        while (i < lines.length) {
+            const line = lines[i];
+            const trimmed = line.trim();
+
+            if (BLOCK_HEADERS.includes(trimmed)) {
+                result.push(line);
+                i++;
+                continue;
+            }
+            if (trimmed === '') {
+                result.push(line);
+                i++;
+                continue;
+            }
+            // URL строка (начинается с '  ')
+            if (line.startsWith('  ')) {
+                result.push(line);
+                i++;
+                continue;
+            }
+            // Строка сайта
+            const site = trimmed.split(' — ')[0].trim();
+            if (hiddenSitesForIt.has(site)) {
+                // Пропустить строку сайта и следующую URL
+                i++;
+                if (i < lines.length && lines[i].startsWith('  ')) i++;
+            } else {
+                result.push(line);
+                i++;
+            }
+        }
+
+        // Убрать пустые заголовки блоков
+        const cleaned = [];
+        for (let j = 0; j < result.length; j++) {
+            if (BLOCK_HEADERS.includes(result[j].trim())) {
+                let hasContent = false;
+                for (let k = j + 1; k < result.length; k++) {
+                    if (BLOCK_HEADERS.includes(result[k].trim())) break;
+                    if (result[k].trim()) { hasContent = true; break; }
+                }
+                if (hasContent) cleaned.push(result[j]);
+            } else {
+                cleaned.push(result[j]);
+            }
+        }
+
+        el.textContent = cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    // Навешиваем кнопки "Скрыть"
+    document.querySelectorAll('.btn-hide-issue').forEach(btn => {
+        btn.addEventListener('click', () => hideIssue(btn.dataset.issueKey));
+    });
+
+    // Кнопка "Сбросить всё"
+    document.getElementById('clearResolvedBtn')?.addEventListener('click', () => {
+        hiddenIssues.clear();
+        saveHidden();
+        applyHidden();
+    });
+
+    // Инициализация — применить сохранённые hidden
+    applyHidden();
+
+    // ── Redmine: асинхронный batch-check всех сайтов после загрузки страницы ────
+    (function() {
+        const allSites = new Set();
+        document.querySelectorAll('.btn-redmine[data-site], .btn-redmine-edit[data-site]')
+            .forEach(function(b) { allSites.add(b.dataset.site); });
+        if (!allSites.size) return;
+
+        const params = [...allSites].map(s => 'sites=' + encodeURIComponent(s)).join('&');
+        fetch('/zoomos/redmine/check-batch?' + params)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                // data: { "site.ru": {id, url, statusName, isClosed}, ... }
+                Object.entries(data).forEach(function([site, issue]) {
+                    if (!issue) return;
+                    const btnClass = issue.isClosed ? 'btn-success' : 'btn-danger';
+                    // Обновляем существующие ссылки #NNN (в btn-group с data-rm-site)
+                    document.querySelectorAll('[data-rm-site="' + CSS.escape(site) + '"] a.btn')
+                        .forEach(function(a) {
+                            a.className = 'btn py-0 px-2 ' + btnClass;
+                            a.title = 'Redmine #' + issue.id + ' — ' + issue.statusName;
+                        });
+                    // Если кнопка создания ещё на месте — заменяем на ссылку
+                    document.querySelectorAll('.btn-redmine[data-site="' + CSS.escape(site) + '"]')
+                        .forEach(function(b) {
+                            replaceAllSiteBtns(site, {id: issue.id, url: issue.url,
+                                status: issue.statusName, btnClass: btnClass});
+                        });
+                });
+            })
+            .catch(function() {}); // тихо игнорируем
+    })();
+
+    // ── Redmine интеграция ────────────────────────────────────────────
+    (function() {
+        const modalEl = document.getElementById('redmineModal');
+        if (!modalEl) return;
+
+        const modal = new bootstrap.Modal(modalEl);
+        let currentBtn  = null;
+        let currentMode = 'create'; // 'create' | 'edit'
+        let currentIssueId = null;
+        let rmOptions = null;       // кэш — грузим один раз
+
+        // ─── Утилиты ─────────────────────────────────────────────────
+
+        function fillSelect(selId, items, defaultId) {
+            const sel = document.getElementById(selId);
+            if (!sel) return;
+            sel.innerHTML = '';
+            items.forEach(function(item) {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.name;
+                if (String(item.id) === String(defaultId)) opt.selected = true;
+                sel.appendChild(opt);
+            });
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('rmErrorMsg');
+            el.textContent = msg;
+            el.classList.remove('d-none');
+        }
+
+        function resetModal() {
+            document.getElementById('rmLoading').classList.remove('d-none');
+            document.getElementById('rmExistingBlock').classList.add('d-none');
+            document.getElementById('rmCreateBlock').classList.add('d-none');
+            const createBtn = document.getElementById('rmCreateBtn');
+            createBtn.classList.add('d-none');
+            createBtn.disabled = false;
+            createBtn.innerHTML = '<i class="fas fa-bug me-1"></i>Создать задачу';
+            const updateBtn = document.getElementById('rmUpdateBtn');
+            updateBtn.classList.add('d-none');
+            updateBtn.disabled = false;
+            updateBtn.innerHTML = '<i class="fas fa-save me-1"></i>Обновить задачу';
+            document.getElementById('rmCopyBlock').classList.add('d-none');
+            document.getElementById('rmErrorMsg').classList.add('d-none');
+            document.getElementById('rmCommentsBlock').classList.add('d-none');
+            document.getElementById('rmCommentsList').classList.add('d-none');
+            document.getElementById('rmNotesBlock').classList.add('d-none');
+            document.getElementById('rmNotes').value = '';
+        }
+
+        function buildDescriptionFromBtn(btn) {
+            let d = 'Сайт: ' + (btn.dataset.site || '') + '\n';
+            if (btn.dataset.city)       d += 'Город: ' + btn.dataset.city + '\n';
+            if (btn.dataset.message)    d += 'Проблема: ' + btn.dataset.message + '\n';
+            if (btn.dataset.historyurl) d += '\nИстория выкачки: ' + btn.dataset.historyurl;
+            if (btn.dataset.matchingurl)d += '\nМатчинг: ' + btn.dataset.matchingurl;
+            return d;
+        }
+
+        function fillCfSelects(cfs, cfValues, checkType) {
+            if (cfs.cfError) {
+                const sel = document.getElementById('rmSelectCfError');
+                sel.innerHTML = '';
+                // cur может быть строкой или массивом строк
+                const rawCur = cfValues ? cfValues[String(cfs.cfError.id)] : null;
+                const curArr = Array.isArray(rawCur) ? rawCur : (rawCur ? [rawCur] : []);
+                (cfs.cfError.possibleValues || []).forEach(function(v) {
+                    const opt = document.createElement('option');
+                    opt.value = v;
+                    opt.textContent = v;
+                    if (curArr.includes(v)) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+                document.getElementById('rmCfErrorRow').style.display = '';
+            }
+            if (cfs.cfMethod) {
+                const items = (cfs.cfMethod.possibleValues || []).map(v => ({id:v, name:v}));
+                const cur = cfValues ? cfValues[String(cfs.cfMethod.id)] : checkType;
+                fillSelect('rmSelectCfMethod', items, cur || checkType || '');
+                document.getElementById('rmCfMethodCol').style.display = '';
+            }
+            if (cfs.cfVariant) {
+                const items = [{id:'', name:'— выбрать —'}].concat(
+                    (cfs.cfVariant.possibleValues || []).map(v => ({id:v, name:v})));
+                const cur = cfValues ? cfValues[String(cfs.cfVariant.id)] : '';
+                fillSelect('rmSelectCfVariant', items, cur || '');
+                document.getElementById('rmCfVariantCol').style.display = '';
+            }
+        }
+
+        function collectBody(mode, site, description) {
+            const cfs = rmOptions.customFields || {};
+            const customFields = [];
+            const cfErrorSel = document.getElementById('rmSelectCfError');
+            const cfErrorValues = cfs.cfError
+                ? Array.from(cfErrorSel.selectedOptions).map(o => o.value).filter(v => v !== '')
+                : [];
+            if (cfs.cfError)   customFields.push({ id: cfs.cfError.id,   value: cfErrorValues });
+            if (cfs.cfMethod)  customFields.push({ id: cfs.cfMethod.id,  value: document.getElementById('rmSelectCfMethod').value  || '' });
+            if (cfs.cfVariant) customFields.push({ id: cfs.cfVariant.id, value: document.getElementById('rmSelectCfVariant').value || '' });
+
+            // Если "В чем ошибка" не выбрано — берём текст проблемы из data-message кнопки
+            const shortMsg = cfErrorValues.length ? cfErrorValues.join(', ') : (currentBtn ? currentBtn.dataset.message || '' : '');
+
+            return {
+                site:         site,
+                description:  description,
+                shortMessage: shortMsg,
+                notes:        document.getElementById('rmNotes').value || '',
+                trackerId:    parseInt(document.getElementById('rmSelectTracker').value)  || 0,
+                statusId:     parseInt(document.getElementById('rmSelectStatus').value)   || 0,
+                priorityId:   parseInt(document.getElementById('rmSelectPriority').value) || 0,
+                assignedToId: parseInt(document.getElementById('rmSelectAssignee').value) || 0,
+                customFields: customFields
+            };
+        }
+
+        /** Заменяет все кнопки создания задачи (.btn-redmine) для данного сайта на ссылку + кнопку редактирования */
+        function replaceAllSiteBtns(site, issue) {
+            const btnClass = issue.btnClass || (issue.isClosed === false ? 'btn-danger' : 'btn-success');
+            function makeGroup(srcBtn) {
+                const group = document.createElement('div');
+                group.className = 'btn-group btn-group-sm';
+                group.dataset.rmSite = site;
+                const a = document.createElement('a');
+                a.href = issue.url; a.target = '_blank';
+                a.className = 'btn py-0 px-2 ' + btnClass;
+                a.title = 'Redmine #' + issue.id + ' — ' + issue.status;
+                a.textContent = '#' + issue.id;
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'btn btn-outline-secondary py-0 px-1 btn-redmine-edit';
+                editBtn.dataset.issueid = issue.id;
+                editBtn.dataset.site = site;
+                editBtn.title = 'Редактировать задачу в Redmine';
+                editBtn.innerHTML = '<i class="fas fa-pen" style="font-size:0.65rem"></i>';
+                // Копируем data-атрибуты из исходной кнопки создания (для описания при повторном редактировании)
+                if (srcBtn) {
+                    ['city','message','checktype','historyurl','matchingurl'].forEach(function(k) {
+                        if (srcBtn.dataset[k]) editBtn.dataset[k] = srcBtn.dataset[k];
+                    });
+                }
+                group.appendChild(a);
+                group.appendChild(editBtn);
+                return group;
+            }
+            // Заменяем все кнопки создания для этого сайта (включая currentBtn если ещё в DOM)
+            document.querySelectorAll('.btn-redmine[data-site="' + CSS.escape(site) + '"]')
+                .forEach(function(b) { b.replaceWith(makeGroup(b)); });
+        }
+
+        function showCopyBlock(site, shortMessage, issueUrl) {
+            // Не дублируем сайт в описании если shortMessage пуст или совпадает с сайтом
+            const msg = (shortMessage && shortMessage !== site) ? shortMessage : '';
+            const copyText = (msg ? site + ' - ' + msg : site) + '\n' + issueUrl;
+            document.getElementById('rmCopyText').textContent = copyText;
+            document.getElementById('rmCreateBlock').classList.add('d-none');
+            document.getElementById('rmCreateBtn').classList.add('d-none');
+            document.getElementById('rmUpdateBtn').classList.add('d-none');
+            document.getElementById('rmExistingBlock').classList.add('d-none');
+            document.getElementById('rmCopyBlock').classList.remove('d-none');
+        }
+
+        // ─── Клик на 🐛 (создать) ────────────────────────────────────
+
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-redmine');
+            if (!btn) return;
+            currentBtn = btn;
+            currentMode = 'create';
+            currentIssueId = null;
+
+            resetModal();
+            document.getElementById('rmSiteName').textContent = btn.dataset.site;
+            modal.show();
+
+            const checkType = btn.dataset.checktype || '';
+
+            Promise.all([
+                rmOptions ? Promise.resolve(rmOptions) : fetch('/zoomos/redmine/options').then(r => r.json()),
+                fetch('/zoomos/redmine/check?' + new URLSearchParams({ site: btn.dataset.site })).then(r => r.json())
+            ]).then(function([opts, checkData]) {
+                rmOptions = opts;
+                document.getElementById('rmLoading').classList.add('d-none');
+                if (!opts.enabled) { showError('Redmine не настроен'); return; }
+
+                if (checkData.existing && checkData.existing.length > 0) {
+                    const listEl = document.getElementById('rmExistingList');
+                    listEl.innerHTML = '';
+                    checkData.existing.forEach(function(iss) {
+                        const a = document.createElement('a');
+                        a.href = iss.url; a.target = '_blank';
+                        a.className = 'btn btn-sm btn-outline-primary py-0 px-2';
+                        a.innerHTML = '<i class="fas fa-external-link-alt me-1"></i>#' + iss.id
+                            + ' <span class="badge bg-secondary ms-1">' + iss.statusName + '</span>';
+                        listEl.appendChild(a);
+                    });
+                    document.getElementById('rmExistingBlock').classList.remove('d-none');
+                }
+
+                const defs = opts.defaults || {};
+                const cfs  = opts.customFields || {};
+                fillSelect('rmSelectTracker',  opts.trackers   || [], defs.trackerId   || 0);
+                fillSelect('rmSelectStatus',   opts.statuses   || [], defs.statusId    || 0);
+                fillSelect('rmSelectPriority', opts.priorities || [], defs.priorityId  || 0);
+                fillSelect('rmSelectAssignee', opts.users      || [], defs.assignedToId|| 0);
+                fillCfSelects(cfs, null, checkType);
+
+                document.getElementById('rmDescription').value = buildDescriptionFromBtn(btn);
+                document.getElementById('rmCreateBlock').classList.remove('d-none');
+                document.getElementById('rmCreateBtn').classList.remove('d-none');
+            }).catch(function(err) {
+                document.getElementById('rmLoading').classList.add('d-none');
+                showError('Ошибка загрузки: ' + err.message);
+            });
+        });
+
+        // ─── Клик на ✏️ (редактировать) ──────────────────────────────
+
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-redmine-edit');
+            if (!btn) return;
+            currentBtn = btn;
+            currentMode = 'edit';
+            currentIssueId = parseInt(btn.dataset.issueid);
+            const site = btn.dataset.site;
+
+            resetModal();
+            const issueUrl = btn.dataset.issueurl || '';
+            const siteNameEl = document.getElementById('rmSiteName');
+            if (issueUrl) {
+                siteNameEl.innerHTML = '<a href="' + issueUrl + '" target="_blank" class="text-dark text-decoration-none">#' + currentIssueId + '</a> — ' + site;
+            } else {
+                siteNameEl.textContent = '#' + currentIssueId + ' — ' + site;
+            }
+            modal.show();
+
+            Promise.all([
+                rmOptions ? Promise.resolve(rmOptions) : fetch('/zoomos/redmine/options').then(r => r.json()),
+                fetch('/zoomos/redmine/issue/' + currentIssueId).then(r => r.json())
+            ]).then(function([opts, issueData]) {
+                rmOptions = opts;
+                document.getElementById('rmLoading').classList.add('d-none');
+
+                if (!opts.enabled) { showError('Redmine не настроен'); return; }
+
+                const cfs = opts.customFields || {};
+
+                if (issueData.error) {
+                    // Задача удалена или недоступна — переключаемся в режим создания
+                    currentMode = 'create';
+                    document.getElementById('rmSiteName').textContent = btn.dataset.site;
+                    showError('Задача #' + currentIssueId + ' не найдена в Redmine — можно создать новую.');
+                    fillSelect('rmSelectTracker',  opts.trackers   || [], opts.defaults && opts.defaults.trackerId   || 0);
+                    fillSelect('rmSelectStatus',   opts.statuses   || [], opts.defaults && opts.defaults.statusId    || 0);
+                    fillSelect('rmSelectPriority', opts.priorities || [], opts.defaults && opts.defaults.priorityId  || 0);
+                    fillSelect('rmSelectAssignee', opts.users      || [], opts.defaults && opts.defaults.assignedToId|| 0);
+                    fillCfSelects(cfs, {}, btn.dataset.checktype || '');
+                    document.getElementById('rmDescription').value = buildDescriptionFromBtn(btn);
+                    document.getElementById('rmCreateBlock').classList.remove('d-none');
+                    document.getElementById('rmCreateBtn').classList.remove('d-none');
+                    return;
+                }
+
+                // Pre-select текущими значениями задачи
+                fillSelect('rmSelectTracker',  opts.trackers   || [], issueData.trackerId   || 0);
+                fillSelect('rmSelectStatus',   opts.statuses   || [], issueData.statusId    || 0);
+                fillSelect('rmSelectPriority', opts.priorities || [], issueData.priorityId  || 0);
+                fillSelect('rmSelectAssignee', opts.users      || [], issueData.assignedToId|| 0);
+                fillCfSelects(cfs, issueData.customFieldValues || {}, '');
+
+                document.getElementById('rmDescription').value = issueData.description || '';
+
+                // Показываем комментарии (раскрыты сразу)
+                const comments = issueData.comments || [];
+                if (comments.length > 0) {
+                    const list = document.getElementById('rmCommentsList');
+                    list.innerHTML = comments.map(function(c) {
+                        return '<div class="border-start border-secondary ps-2 mb-2" style="font-size:0.78rem">' +
+                            '<span class="fw-semibold">' + c.author + '</span>' +
+                            '<span class="text-muted ms-2" style="font-size:0.75rem">' + c.date + '</span>' +
+                            '<div class="text-secondary mt-1" style="white-space:pre-wrap">' + c.text + '</div>' +
+                            '</div>';
+                    }).join('');
+                    document.getElementById('rmCommentsBlock').classList.remove('d-none');
+                    document.getElementById('rmCommentsList').classList.remove('d-none');
+                }
+                document.getElementById('rmNotesBlock').classList.remove('d-none');
+                // Предзаполняем комментарий актуальными данными проблемы
+                document.getElementById('rmNotes').value = buildDescriptionFromBtn(currentBtn);
+
+                document.getElementById('rmCreateBlock').classList.remove('d-none');
+                document.getElementById('rmUpdateBtn').classList.remove('d-none');
+            }).catch(function(err) {
+                document.getElementById('rmLoading').classList.add('d-none');
+                showError('Ошибка загрузки: ' + err.message);
+            });
+        });
+
+        // ─── Создать задачу ───────────────────────────────────────────
+
+        document.getElementById('rmCreateBtn').addEventListener('click', function() {
+            if (!currentBtn || !rmOptions) return;
+            const btn = this;
+            const orig = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Создаётся...';
+            document.getElementById('rmErrorMsg').classList.add('d-none');
+
+            const site = currentBtn.dataset.site;
+            const body = Object.assign(collectBody('create', site, document.getElementById('rmDescription').value), {
+                city:        currentBtn.dataset.city        || '',
+                historyUrl:  currentBtn.dataset.historyurl  || '',
+                matchingUrl: currentBtn.dataset.matchingurl || ''
+            });
+
+            fetch('/zoomos/redmine/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(r => r.json())
+            .then(function(data) {
+                if (data.success && data.issue) {
+                    // Заменяем ВСЕ кнопки создания для этого сайта на #NNN + ✏️
+                    replaceAllSiteBtns(site, data.issue);
+
+                    showCopyBlock(data.issue.site, data.issue.shortMessage, data.issue.url);
+                } else {
+                    showError('Ошибка: ' + (data.error || 'неизвестная'));
+                    btn.disabled = false; btn.innerHTML = orig;
+                }
+            })
+            .catch(function(err) {
+                showError('Ошибка сети: ' + err.message);
+                btn.disabled = false; btn.innerHTML = orig;
+            });
+        });
+
+        // ─── Обновить задачу ──────────────────────────────────────────
+
+        document.getElementById('rmUpdateBtn').addEventListener('click', function() {
+            if (!currentIssueId || !rmOptions) return;
+            const btn = this;
+            const orig = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Сохраняется...';
+            document.getElementById('rmErrorMsg').classList.add('d-none');
+
+            const site = currentBtn.dataset.site;
+            const body = collectBody('edit', site, document.getElementById('rmDescription').value);
+
+            fetch('/zoomos/redmine/update/' + currentIssueId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(r => r.json())
+            .then(function(data) {
+                if (data.success) {
+                    const issueUrl = document.querySelector('.btn-redmine-edit[data-issueid="' + currentIssueId + '"]')
+                        ?.previousElementSibling?.href || '';
+                    showCopyBlock(site, 'обновлена', issueUrl || '#' + currentIssueId);
+                } else {
+                    showError('Ошибка: ' + (data.error || 'неизвестная'));
+                    btn.disabled = false; btn.innerHTML = orig;
+                }
+            })
+            .catch(function(err) {
+                showError('Ошибка сети: ' + err.message);
+                btn.disabled = false; btn.innerHTML = orig;
+            });
+        });
+
+        // ─── Копирование ──────────────────────────────────────────────
+
+        document.getElementById('rmCopyBtn').addEventListener('click', function() {
+            const text = document.getElementById('rmCopyText').textContent;
+            const self = this;
+            navigator.clipboard.writeText(text).then(function() {
+                self.innerHTML = '<i class="fas fa-check me-1 text-success"></i>Скопировано';
+                setTimeout(() => { self.innerHTML = '<i class="fas fa-copy me-1"></i>Скопировать'; }, 2000);
+            }).catch(function() {
+                const ta = document.createElement('textarea');
+                ta.value = text; document.body.appendChild(ta); ta.select();
+                document.execCommand('copy'); document.body.removeChild(ta);
+            });
+        });
+    })();
+    // ── /Redmine ──────────────────────────────────────────────────────
 
 </script>
 </th:block>

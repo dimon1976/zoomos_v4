@@ -116,7 +116,34 @@ public class ZoomosParserService {
     }
 
     /**
-     * Основной метод: парсинг страницы настроек магазина через Playwright
+     * Удалить отдельную запись ZoomosCityId
+     */
+    @Transactional
+    public void deleteCityId(Long id) {
+        cityIdRepository.deleteById(id);
+    }
+
+    /**
+     * Обновить фильтры парсера для строки (include, includeMode, exclude)
+     */
+    @Transactional
+    public ZoomosCityId updateParserFilters(Long id, String include, String includeMode, String exclude) {
+        ZoomosCityId entry = cityIdRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Запись не найдена: " + id));
+        entry.setParserInclude(include != null && !include.isBlank() ? include.trim() : null);
+        entry.setParserIncludeMode(includeMode != null && !includeMode.isBlank() ? includeMode.trim().toUpperCase() : "OR");
+        entry.setParserExclude(exclude != null && !exclude.isBlank() ? exclude.trim() : null);
+        return cityIdRepository.save(entry);
+    }
+
+    // =========================================================================
+    // Синхронизация настроек (только city_ids для существующих сайтов)
+    // =========================================================================
+
+    /**
+     * Основной метод: парсинг страницы настроек магазина через Playwright.
+     * ТОЛЬКО обновляет city_ids для уже существующих сайтов.
+     * Не добавляет новые сайты и не удаляет старые.
      */
     @Transactional
     public String syncShopSettings(String shopName) {
@@ -134,14 +161,11 @@ public class ZoomosParserService {
 
             context.setDefaultTimeout(config.getTimeoutSeconds() * 1000L);
 
-            // Загружаем сохранённые куки или авторизуемся
             if (!loadSession(context)) {
                 login(context);
             }
 
             Page page = context.newPage();
-
-            // Проверяем — может куки протухли (редирект на /login)
             String settingsUrl = config.getBaseUrl() + "/shop/" + shopName + "/settings?upd=" + System.currentTimeMillis();
             page.navigate(settingsUrl);
             page.waitForLoadState(LoadState.NETWORKIDLE);
@@ -153,17 +177,15 @@ public class ZoomosParserService {
                 page.waitForLoadState(LoadState.NETWORKIDLE);
             }
 
-            // Сохраняем актуальные куки
             saveSession(context);
 
-            // Парсим таблицу ID городов
             int count = parseCityIds(page, shop);
 
             shop.setLastSyncedAt(ZonedDateTime.now());
             shopRepository.save(shop);
 
             log.info("Синхронизация завершена: {} записей для {}", count, shopName);
-            return "Синхронизировано " + count + " записей для " + shopName;
+            return "Обновлено city_ids для " + count + " сайтов";
 
         } catch (Exception e) {
             log.error("Ошибка синхронизации {}: {}", shopName, e.getMessage(), e);
@@ -172,8 +194,207 @@ public class ZoomosParserService {
     }
 
     /**
-     * Загружает список сайтов со страницы матчинга и добавляет новые в zoomos_city_ids.
-     * Существующие записи не затрагиваются.
+     * Preview: парсит страницу настроек и возвращает список изменений city_ids
+     * без сохранения в БД.
+     * Возвращает {updates: [{entryId, site, oldCityIds, newCityIds}]}
+     */
+    public Map<String, Object> previewSyncSettings(String shopName) {
+        ZoomosShop shop = shopRepository.findByShopName(shopName.trim().toLowerCase())
+                .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopName));
+
+        log.info("Preview синхронизации настроек для: {}", shopName);
+
+        try (Playwright playwright = Playwright.create()) {
+            Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+            BrowserContext context = browser.newContext(new Browser.NewContextOptions().setViewportSize(1920, 1080));
+            context.setDefaultTimeout(config.getTimeoutSeconds() * 1000L);
+
+            if (!loadSession(context)) login(context);
+
+            Page page = context.newPage();
+            String settingsUrl = config.getBaseUrl() + "/shop/" + shopName + "/settings?upd=" + System.currentTimeMillis();
+            page.navigate(settingsUrl);
+            page.waitForLoadState(LoadState.NETWORKIDLE);
+
+            if (page.url().contains("/login")) {
+                login(context);
+                page.navigate(settingsUrl);
+                page.waitForLoadState(LoadState.NETWORKIDLE);
+            }
+            saveSession(context);
+
+            Map<String, String> parsedMap = parseSiteIdMapFromPage(page);
+            page.close();
+            browser.close();
+
+            Map<String, ZoomosCityId> existingMap = cityIdRepository.findByShopIdOrderBySiteName(shop.getId())
+                    .stream().collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c));
+
+            List<Map<String, Object>> updates = new ArrayList<>();
+            for (Map.Entry<String, String> e : parsedMap.entrySet()) {
+                String sn = e.getKey();
+                String newCityIds = e.getValue();
+                ZoomosCityId existing = existingMap.get(sn);
+                if (existing == null) continue; // не добавляем новые
+                String oldCityIds = existing.getCityIds() != null ? existing.getCityIds() : "";
+                if (!oldCityIds.equals(newCityIds)) {
+                    Map<String, Object> upd = new LinkedHashMap<>();
+                    upd.put("entryId", existing.getId());
+                    upd.put("site", sn);
+                    upd.put("oldCityIds", oldCityIds);
+                    upd.put("newCityIds", newCityIds);
+                    updates.add(upd);
+                }
+            }
+
+            log.info("Preview настроек: найдено {} изменений для {}", updates.size(), shopName);
+            return Map.of("updates", updates);
+
+        } catch (Exception e) {
+            log.error("Ошибка preview настроек {}: {}", shopName, e.getMessage(), e);
+            throw new RuntimeException("Ошибка: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Apply: применяет изменения city_ids (данные уже получены от preview, без Playwright).
+     * @param entryIdToCityIds Map<entryId, newCityIds>
+     */
+    @Transactional
+    public String applySyncSettings(String shopName, Map<Long, String> entryIdToCityIds) {
+        ZoomosShop shop = shopRepository.findByShopName(shopName.trim().toLowerCase())
+                .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopName));
+
+        int updated = 0;
+        for (Map.Entry<Long, String> e : entryIdToCityIds.entrySet()) {
+            Optional<ZoomosCityId> opt = cityIdRepository.findById(e.getKey());
+            if (opt.isPresent()) {
+                ZoomosCityId entry = opt.get();
+                entry.setCityIds(e.getValue());
+                cityIdRepository.save(entry);
+                updated++;
+            }
+        }
+
+        shop.setLastSyncedAt(ZonedDateTime.now());
+        shopRepository.save(shop);
+        log.info("Apply настроек: обновлено {} записей для {}", updated, shopName);
+        return "Обновлено city_ids для " + updated + " сайтов";
+    }
+
+    // =========================================================================
+    // Синхронизация из матчинга (полная синхронизация списка сайтов)
+    // =========================================================================
+
+    /**
+     * Preview: парсит страницу матчинга и возвращает diff (без сохранения).
+     * Возвращает {toAdd: [...], toDelete: [...], existing: [...], total: N}
+     */
+    public Map<String, Object> previewSyncFromMatching(String shopName) {
+        ZoomosShop shop = shopRepository.findByShopName(shopName.trim().toLowerCase())
+                .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopName));
+
+        log.info("Preview синхронизации из матчинга для: {}", shopName);
+
+        try (Playwright playwright = Playwright.create()) {
+            Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+            BrowserContext context = browser.newContext(new Browser.NewContextOptions().setViewportSize(1920, 1080));
+            context.setDefaultTimeout(config.getTimeoutSeconds() * 1000L);
+
+            if (!loadSession(context)) login(context);
+
+            Page page = context.newPage();
+            String url = config.getBaseUrl() + "/shop/" + shopName + "/sites-items-mapping?upd=" + System.currentTimeMillis();
+            page.navigate(url);
+            page.waitForLoadState(LoadState.NETWORKIDLE);
+
+            if (page.url().contains("/login")) {
+                login(context);
+                page.navigate(url);
+                page.waitForLoadState(LoadState.NETWORKIDLE);
+            }
+            saveSession(context);
+
+            @SuppressWarnings("unchecked")
+            List<String> siteNames = (List<String>) page.evaluate(
+                    "() => Array.from(document.querySelectorAll('select[name=\"site\"] option'))" +
+                    ".filter(o => o.value).map(o => o.value)");
+
+            page.close();
+            browser.close();
+
+            if (siteNames == null) siteNames = List.of();
+
+            Map<String, ZoomosCityId> existingMap = cityIdRepository.findByShopIdOrderBySiteName(shop.getId())
+                    .stream().collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c));
+
+            Set<String> siteSet = new HashSet<>(siteNames);
+            List<String> toAdd = siteNames.stream()
+                    .filter(s -> !existingMap.containsKey(s))
+                    .collect(Collectors.toList());
+            List<String> toDelete = existingMap.keySet().stream()
+                    .filter(s -> !siteSet.contains(s))
+                    .sorted()
+                    .collect(Collectors.toList());
+            List<String> existing = siteNames.stream()
+                    .filter(existingMap::containsKey)
+                    .collect(Collectors.toList());
+
+            log.info("Preview матчинга: toAdd={}, toDelete={}, existing={} для {}",
+                    toAdd.size(), toDelete.size(), existing.size(), shopName);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("toAdd", toAdd);
+            result.put("toDelete", toDelete);
+            result.put("existing", existing);
+            result.put("total", siteNames.size());
+            return result;
+
+        } catch (Exception e) {
+            log.error("Ошибка preview из матчинга {}: {}", shopName, e.getMessage(), e);
+            throw new RuntimeException("Ошибка: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Apply: применяет diff из матчинга (данные уже получены от preview, без Playwright).
+     * Добавляет toAdd и удаляет toDelete из zoomos_city_ids.
+     */
+    @Transactional
+    public String applySyncFromMatching(String shopName, List<String> toAdd, List<String> toDelete) {
+        ZoomosShop shop = shopRepository.findByShopName(shopName.trim().toLowerCase())
+                .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopName));
+
+        int added = 0;
+        for (String siteName : toAdd) {
+            Optional<ZoomosKnownSite> known = knownSiteRepository.findBySiteName(siteName);
+            String checkType = known.map(ZoomosKnownSite::getCheckType).orElse("ITEM");
+            cityIdRepository.save(ZoomosCityId.builder()
+                    .shop(shop).siteName(siteName).checkType(checkType).build());
+            // Добавляем в справочник если ещё нет
+            if (known.isEmpty()) {
+                knownSiteRepository.save(ZoomosKnownSite.builder()
+                        .siteName(siteName.trim().toLowerCase()).checkType(checkType).build());
+            }
+            added++;
+        }
+
+        int deleted = 0;
+        for (String siteName : toDelete) {
+            cityIdRepository.findByShopIdAndSiteName(shop.getId(), siteName)
+                    .ifPresent(cityIdRepository::delete);
+            deleted++;
+        }
+
+        shop.setLastSyncedAt(ZonedDateTime.now());
+        shopRepository.save(shop);
+        log.info("Apply матчинга: добавлено={}, удалено={} для {}", added, deleted, shopName);
+        return String.format("Добавлено: %d, удалено: %d", added, deleted);
+    }
+
+    /**
+     * Устаревший метод: загружает список сайтов со страницы матчинга и добавляет новые.
+     * Оставлен для обратной совместимости. Рекомендуется использовать preview/apply.
      */
     @Transactional
     public String syncFromMatchingPage(String shopName) {
@@ -206,7 +427,6 @@ public class ZoomosParserService {
             }
             saveSession(context);
 
-            // Извлекаем все option.value из select[name="site"] (кроме пустых)
             @SuppressWarnings("unchecked")
             List<String> siteNames = (List<String>) page.evaluate(
                     "() => Array.from(document.querySelectorAll('select[name=\"site\"] option'))" +
@@ -219,17 +439,21 @@ public class ZoomosParserService {
                 return "Сайты на странице матчинга не найдены";
             }
 
-            // Добавляем только новые сайты
             Map<String, ZoomosCityId> existing = cityIdRepository.findByShopIdOrderBySiteName(shop.getId())
                     .stream().collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c));
 
             int added = 0;
             for (String siteName : siteNames) {
                 if (!existing.containsKey(siteName)) {
-                    String checkType = knownSiteRepository.findBySiteName(siteName)
-                            .map(ZoomosKnownSite::getCheckType).orElse("ITEM");
+                    Optional<ZoomosKnownSite> known = knownSiteRepository.findBySiteName(siteName);
+                    String checkType = known.map(ZoomosKnownSite::getCheckType).orElse("ITEM");
                     cityIdRepository.save(ZoomosCityId.builder()
                             .shop(shop).siteName(siteName).checkType(checkType).build());
+                    // Добавляем в справочник если ещё нет
+                    if (known.isEmpty()) {
+                        knownSiteRepository.save(ZoomosKnownSite.builder()
+                                .siteName(siteName.trim().toLowerCase()).checkType(checkType).build());
+                    }
                     added++;
                 }
             }
@@ -245,8 +469,6 @@ public class ZoomosParserService {
 
     /**
      * Авторизация через форму логина.
-     * Сайт использует Spring Security: поля j_username / j_password,
-     * форма отправляется на j_spring_security_check.
      */
     private void login(BrowserContext context) {
         Page page = context.newPage();
@@ -260,7 +482,6 @@ public class ZoomosParserService {
             page.click("input[type='submit']");
             page.waitForLoadState(LoadState.NETWORKIDLE);
 
-            // После успешного логина редиректит на главную, не на /login
             if (page.url().contains("/login")) {
                 throw new RuntimeException("Авторизация не удалась — проверьте логин и пароль в настройках zoomos.*");
             }
@@ -272,8 +493,6 @@ public class ZoomosParserService {
 
     /**
      * Загрузить куки из БД в BrowserContext.
-     * Playwright Cookie не имеет дефолтного конструктора для Jackson,
-     * поэтому десериализуем через Map и создаём объекты вручную.
      */
     private boolean loadSession(BrowserContext context) {
         return sessionRepository.findTopByOrderByUpdatedAtDesc().map(session -> {
@@ -330,14 +549,12 @@ public class ZoomosParserService {
     }
 
     /**
-     * Парсинг таблицы ID городов со страницы настроек.
-     * Структура HTML:
-     *   <tr><td>ID городов apteka-april.ru:</td>
-     *       <td><input type="text" value="4400,3345,..."></td></tr>
+     * Парсит таблицу ID городов со страницы настроек.
+     * Возвращает Map<siteName, cityIds>.
      */
-    private int parseCityIds(Page page, ZoomosShop shop) {
+    private Map<String, String> parseSiteIdMapFromPage(Page page) {
         List<ElementHandle> rows = page.querySelectorAll("tr");
-        List<ZoomosCityId> toSave = new ArrayList<>();
+        Map<String, String> result = new LinkedHashMap<>();
 
         for (ElementHandle row : rows) {
             try {
@@ -347,11 +564,8 @@ public class ZoomosParserService {
                 String labelText = labelCell.innerText().trim();
                 if (!labelText.contains("ID городов")) continue;
 
-                // "ID городов apteka-april.ru:" → "apteka-april.ru"
                 String siteName = labelText.replace("ID городов", "").replace(":", "").trim();
-                if (siteName.isEmpty()) continue;
-                // Пропускаем строки где siteName содержит пробелы (несколько доменов или служебные поля)
-                if (siteName.contains(" ")) continue;
+                if (siteName.isEmpty() || siteName.contains(" ")) continue;
 
                 ElementHandle valueCell = row.querySelector("td:nth-child(2)");
                 if (valueCell == null) continue;
@@ -360,62 +574,41 @@ public class ZoomosParserService {
                 String cityIds = input != null ? input.getAttribute("value") : valueCell.innerText().trim();
                 if (cityIds == null) cityIds = "";
 
-                toSave.add(ZoomosCityId.builder()
-                        .shop(shop)
-                        .siteName(siteName)
-                        .cityIds(cityIds)
-                        .isActive(true)
-                        .build());
-
+                result.put(siteName, cityIds);
             } catch (Exception e) {
                 log.warn("Ошибка парсинга строки таблицы: {}", e.getMessage());
             }
         }
 
-        if (toSave.isEmpty()) {
+        return result;
+    }
+
+    /**
+     * Обновляет city_ids только для уже существующих записей.
+     * Не добавляет новые сайты и не удаляет старые.
+     */
+    private int parseCityIds(Page page, ZoomosShop shop) {
+        Map<String, String> parsedMap = parseSiteIdMapFromPage(page);
+
+        if (parsedMap.isEmpty()) {
             log.warn("Таблица ID городов не найдена на странице. URL: {}", page.url());
             return 0;
         }
 
-        // UPSERT: сохраняем check_type существующих записей
         Map<String, ZoomosCityId> existingMap = cityIdRepository.findByShopIdOrderBySiteName(shop.getId())
-                .stream().collect(java.util.stream.Collectors.toMap(ZoomosCityId::getSiteName, c -> c));
+                .stream().collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c));
 
-        Set<String> parsedSiteNames = toSave.stream()
-                .map(ZoomosCityId::getSiteName)
-                .collect(java.util.stream.Collectors.toSet());
-
-        List<ZoomosCityId> upserted = new ArrayList<>();
-        for (ZoomosCityId parsed : toSave) {
-            String sn = parsed.getSiteName();
-            ZoomosCityId existing = existingMap.get(sn);
+        List<ZoomosCityId> toUpdate = new ArrayList<>();
+        for (Map.Entry<String, String> e : parsedMap.entrySet()) {
+            ZoomosCityId existing = existingMap.get(e.getKey());
             if (existing != null) {
-                // Обновляем только cityIds, сохраняем check_type и is_active
-                existing.setCityIds(parsed.getCityIds());
-                upserted.add(existing);
-            } else {
-                // Новый сайт: берём checkType из справочника, иначе ITEM
-                String checkType = knownSiteRepository.findBySiteName(sn)
-                        .map(ZoomosKnownSite::getCheckType)
-                        .orElse("ITEM");
-                parsed.setCheckType(checkType);
-                upserted.add(parsed);
-                // Добавляем в справочник если ещё нет
-                if (!knownSiteRepository.existsBySiteName(sn)) {
-                    knownSiteRepository.save(ZoomosKnownSite.builder()
-                            .siteName(sn).checkType(checkType).build());
-                }
+                existing.setCityIds(e.getValue());
+                toUpdate.add(existing);
             }
+            // Новые сайты добавляются только через "Из матчинга" (preview/apply)
         }
 
-        // Удаляем записи, которых больше нет в настройках
-        for (ZoomosCityId existing : existingMap.values()) {
-            if (!parsedSiteNames.contains(existing.getSiteName())) {
-                cityIdRepository.delete(existing);
-            }
-        }
-
-        cityIdRepository.saveAll(upserted);
-        return upserted.size();
+        cityIdRepository.saveAll(toUpdate);
+        return toUpdate.size();
     }
 }

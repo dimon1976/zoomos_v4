@@ -25,6 +25,10 @@ public class ZoomosShop {
     @Column(name = "shop_name", nullable = false, unique = true)
     private String shopName;
 
+    @Column(name = "is_enabled", nullable = false)
+    @Builder.Default
+    private boolean isEnabled = true;
+
     @Column(name = "last_synced_at")
     private ZonedDateTime lastSyncedAt;
 

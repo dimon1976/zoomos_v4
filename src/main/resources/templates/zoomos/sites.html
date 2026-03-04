@@ -66,7 +66,9 @@
                         <th style="width:40px" class="text-center">#</th>
                         <th>Сайт</th>
                         <th style="width:150px" class="text-center">Тип выкачки</th>
-                        <th style="width:150px" class="text-center">Добавлен</th>
+                        <th style="width:80px" class="text-center">Приоритет</th>
+                        <th style="width:80px" class="text-center" title="Не отслеживать «В наличии» для этого сайта">Без наличия</th>
+                        <th style="width:150px" class="text-center d-none d-lg-table-cell">Добавлен</th>
                         <th style="width:80px" class="text-center">Действия</th>
                     </tr>
                 </thead>
@@ -82,7 +84,23 @@
                                 <option value="API" th:selected="${site.checkType == 'API'}">API</option>
                             </select>
                         </td>
-                        <td class="text-center small text-muted"
+                        <td class="text-center">
+                            <button type="button"
+                                    th:class="${site.isPriority} ? 'btn btn-sm py-0 px-2 priority-toggle-btn btn-warning' : 'btn btn-sm py-0 px-2 priority-toggle-btn btn-outline-secondary'"
+                                    th:data-id="${site.id}"
+                                    th:title="${site.isPriority} ? 'Приоритетный — показывать в баннере' : 'Обычный — нажмите чтобы отметить как приоритетный'">
+                                <i th:class="${site.isPriority} ? 'fas fa-star' : 'far fa-star'"></i>
+                            </button>
+                        </td>
+                        <td class="text-center">
+                            <button type="button"
+                                    th:class="${site.ignoreStock} ? 'btn btn-sm py-0 px-2 ignore-stock-btn btn-warning' : 'btn btn-sm py-0 px-2 ignore-stock-btn btn-outline-secondary'"
+                                    th:data-id="${site.id}"
+                                    th:title="${site.ignoreStock} ? 'Наличие не отслеживается — нажмите чтобы включить' : 'Нажмите чтобы отключить отслеживание наличия'">
+                                <i th:class="${site.ignoreStock} ? 'fas fa-eye-slash' : 'far fa-eye'"></i>
+                            </button>
+                        </td>
+                        <td class="text-center small text-muted d-none d-lg-table-cell"
                             th:text="${site.createdAt != null} ? ${#temporals.format(site.createdAt, 'dd.MM.yyyy')} : '—'"></td>
                         <td class="text-center">
                             <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 delete-site-btn"
@@ -176,6 +194,54 @@
                     if (data.success) {
                         document.getElementById('site-row-' + id).remove();
                         updateSearchCount();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(() => alert('Ошибка сети'));
+        });
+    });
+
+    // ---- Toggle приоритета ----
+    document.querySelectorAll('.priority-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            fetch('/zoomos/sites/' + id + '/priority', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const isPriority = data.isPriority;
+                        this.className = isPriority
+                            ? 'btn btn-sm py-0 px-2 priority-toggle-btn btn-warning'
+                            : 'btn btn-sm py-0 px-2 priority-toggle-btn btn-outline-secondary';
+                        this.querySelector('i').className = isPriority ? 'fas fa-star' : 'far fa-star';
+                        this.title = isPriority
+                            ? 'Приоритетный — показывать в баннере'
+                            : 'Обычный — нажмите чтобы отметить как приоритетный';
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(() => alert('Ошибка сети'));
+        });
+    });
+
+    // ---- Toggle "без наличия" ----
+    document.querySelectorAll('.ignore-stock-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            fetch('/zoomos/sites/' + id + '/ignore-stock', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const ignored = data.ignoreStock;
+                        this.className = ignored
+                            ? 'btn btn-sm py-0 px-2 ignore-stock-btn btn-warning'
+                            : 'btn btn-sm py-0 px-2 ignore-stock-btn btn-outline-secondary';
+                        this.querySelector('i').className = ignored ? 'fas fa-eye-slash' : 'far fa-eye';
+                        this.title = ignored
+                            ? 'Наличие не отслеживается — нажмите чтобы включить'
+                            : 'Нажмите чтобы отключить отслеживание наличия';
                     } else {
                         alert('Ошибка: ' + (data.error || 'неизвестная'));
                     }

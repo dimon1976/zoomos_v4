@@ -8,11 +8,14 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ZoomosCityIdRepository extends JpaRepository<ZoomosCityId, Long> {
 
     List<ZoomosCityId> findByShopIdOrderBySiteName(Long shopId);
+
+    Optional<ZoomosCityId> findByShopIdAndSiteName(Long shopId, String siteName);
 
     List<ZoomosCityId> findAllBySiteName(String siteName);
 

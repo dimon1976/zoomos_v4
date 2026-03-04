@@ -8,12 +8,16 @@ import org.springframework.stereotype.Repository;
 
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsingStats, Long> {
 
     // Только не-baseline записи (для отображения результатов проверки)
     List<ZoomosParsingStats> findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(Long checkRunId);
+
+    // Baseline-записи текущего run (для отображения в таблице деталей)
+    List<ZoomosParsingStats> findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(Long checkRunId);
 
     @Query("SELECT s FROM ZoomosParsingStats s WHERE s.checkRun.id = :checkRunId " +
            "AND s.siteName = :siteName ORDER BY s.finishTime DESC")
@@ -40,4 +44,35 @@ public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsin
             @Param("cityName") String cityName,
             @Param("from") ZonedDateTime from,
             @Param("to") ZonedDateTime to);
+
+    /**
+     * Последняя завершённая выкачка для данного сайта+города (по любому прошлому check_run).
+     * Ищет по completion_percent >= 100 без ограничения is_finished —
+     * overnight-парсинги сохраняются с is_finished=false но фактически завершены.
+     * Используется для отображения "Последний раз на 100%" в NOT_FOUND issue.
+     */
+    @Query(value = "SELECT * FROM zoomos_parsing_stats " +
+                   "WHERE site_name = :siteName " +
+                   "AND (city_name LIKE CONCAT(:cityId, ' %') OR city_name = :cityId) " +
+                   "AND completion_percent >= 100 " +
+                   "ORDER BY start_time DESC LIMIT 1",
+           nativeQuery = true)
+    Optional<ZoomosParsingStats> findLatestFinishedBySiteAndCityId(
+            @Param("siteName") String siteName,
+            @Param("cityId") String cityId);
+
+    /**
+     * Текущая in-progress выкачка для данного сайта+города.
+     * Возвращает последнюю сохранённую запись (ORDER BY id DESC) независимо от start_time.
+     * Используется для отображения "Сейчас идёт" в NOT_FOUND issue.
+     */
+    @Query(value = "SELECT * FROM zoomos_parsing_stats " +
+                   "WHERE site_name = :siteName " +
+                   "AND (city_name LIKE CONCAT(:cityId, ' %') OR city_name = :cityId) " +
+                   "AND is_finished = false " +
+                   "ORDER BY id DESC LIMIT 1",
+           nativeQuery = true)
+    Optional<ZoomosParsingStats> findLatestInProgressBySiteAndCityId(
+            @Param("siteName") String siteName,
+            @Param("cityId") String cityId);
 }

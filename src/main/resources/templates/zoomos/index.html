@@ -45,6 +45,12 @@
             padding: 1px 6px; font-size: 0.78em; font-weight: 500;
         }
         .addr-badge .btn-close { font-size: 0.45em; filter: invert(1) brightness(0.4); }
+        .btn-parser-filter.filter-active { border-color: #0d6efd; color: #0d6efd; }
+        .parser-pattern-item { cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 0.8em;
+            border: 1px solid #dee2e6; background: #f8f9fa; transition: all 0.15s; }
+        .parser-pattern-item.include { background: #d1e7dd; border-color: #a3cfbb; color: #0a3622; }
+        .parser-pattern-item.exclude { background: #f8d7da; border-color: #f1aeb5; color: #58151c; }
+        .parser-pattern-item:hover { filter: brightness(0.95); }
         #addrModalBody {
             display: grid; grid-template-columns: repeat(4, 1fr);
             gap: 8px; max-height: 65vh; overflow-y: auto;
@@ -97,10 +103,20 @@
             background: #e9ecef;
             color: #495057;
         }
+        .priority-star-btn {
+            line-height: 1;
+            vertical-align: middle;
+            text-decoration: none;
+        }
+        .priority-star-btn:hover { opacity: 0.75; }
+        .sched-label { white-space: nowrap; }
     </style>
 </th:block>
 
 <th:block th:fragment="pageActions">
+    <a th:href="@{/zoomos/schedule}" class="btn btn-sm btn-outline-primary me-2">
+        <i class="fas fa-clock me-1"></i>Расписание
+    </a>
     <a th:href="@{/zoomos/sites}" class="btn btn-sm btn-outline-secondary me-2">
         <i class="fas fa-book me-1"></i>Справочник сайтов
     </a>
@@ -125,41 +141,35 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 
-    <!-- Панель: добавление + поиск + период проверки -->
-    <div class="card mb-4">
+    <!-- Панель добавления магазина -->
+    <div class="card mb-3">
         <div class="card-header"><i class="fas fa-store me-2"></i>Управление магазинами</div>
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
-                <!-- Форма добавления -->
-                <div class="col-md-4">
-                    <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
-                        <div class="col">
-                            <label class="form-label fw-semibold mb-1">Добавить магазин</label>
-                            <input type="text" name="shopName" class="form-control form-control-sm"
-                                   placeholder="vitaexpress.ru" required autocomplete="off">
-                        </div>
-                        <div class="col-auto">
-                            <button type="submit" class="btn btn-sm btn-primary">
-                                <i class="fas fa-plus me-1"></i>Добавить
-                            </button>
-                        </div>
-                    </form>
+        <div class="card-body py-2">
+            <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
+                <div class="col-md-4 col-sm-8 col-9">
+                    <label class="form-label fw-semibold mb-1">Добавить магазин</label>
+                    <input type="text" name="shopName" class="form-control form-control-sm"
+                           placeholder="vitaexpress.ru" required autocomplete="off">
                 </div>
-                <!-- Поиск -->
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold mb-1">Поиск</label>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text"><i class="fas fa-search"></i></span>
-                        <input type="text" id="shopSearch" class="form-control"
-                               placeholder="Имя магазина...">
-                        <button class="btn btn-outline-secondary" type="button" id="clearSearch">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    <span id="searchCount" class="text-muted small"></span>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus me-1"></i>Добавить
+                    </button>
                 </div>
-            </div>
+            </form>
         </div>
+    </div>
+
+    <!-- Строка поиска -->
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+        <div class="input-group input-group-sm" style="max-width:260px;">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="shopSearch" class="form-control" placeholder="Поиск магазина...">
+            <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <span id="searchCount" class="text-muted small"></span>
     </div>
 
     <!-- Список магазинов -->
@@ -186,29 +196,69 @@
                    title="Открыть настройки на export.zoomos.by">
                     <i class="fas fa-external-link-alt"></i> настройки
                 </a>
+                <a th:href="@{'/zoomos/check/history?shop=' + ${shop.shopName}}"
+                   class="ms-2 small text-decoration-none text-muted"
+                   title="История проверок этого магазина">
+                    <i class="fas fa-history"></i> история
+                </a>
             </div>
             <div class="d-flex gap-2 align-items-center">
-                <form th:action="@{'/zoomos/shops/' + ${shop.shopName} + '/sync'}" method="post" class="d-inline">
-                    <button type="submit" class="btn btn-sm btn-success"
-                            onclick="this.disabled=true; this.innerHTML='<i class=\'fas fa-spinner fa-spin me-1\'></i>Синхронизация...'; this.form.submit();">
-                        <i class="fas fa-sync-alt me-1"></i>Синхронизировать
+                <!-- Чекбокс расписания -->
+                <div th:with="sched=${schedulesMap != null ? schedulesMap[shop.id] : null}"
+                     class="d-flex align-items-center gap-1 border-end pe-2">
+                    <input type="checkbox" class="form-check-input schedule-enabled-cb"
+                           th:id="'sched-cb-' + ${shop.id}"
+                           th:data-shop-id="${shop.id}"
+                           th:data-shop-name="${shop.shopName}"
+                           th:checked="${sched != null and sched.enabled}"
+                           style="cursor:pointer;">
+                    <label th:for="'sched-cb-' + ${shop.id}"
+                           class="small mb-0 ms-1 sched-label"
+                           th:classappend="${sched != null and sched.enabled} ? 'text-success' : 'text-muted'"
+                           style="cursor:pointer;">
+                        <i class="fas fa-clock"></i> авто
+                    </label>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-ellipsis-v"></i>
                     </button>
-                </form>
-                <form th:action="@{'/zoomos/shops/' + ${shop.shopName} + '/sync-from-matching'}"
-                      method="post" class="d-inline">
-                    <button type="submit" class="btn btn-sm btn-outline-info"
-                            onclick="this.disabled=true; this.innerHTML='<i class=\'fas fa-spinner fa-spin me-1\'></i>Загрузка...'; this.form.submit();"
-                            title="Загрузить список сайтов со страницы матчинга">
-                        <i class="fas fa-link me-1"></i>Из матчинга
-                    </button>
-                </form>
-                <form th:action="@{'/zoomos/shops/' + ${shop.id} + '/delete'}" method="post" class="d-inline"
-                      onsubmit="return confirm('Удалить магазин ' + this.dataset.name + '?')"
-                      th:data-name="${shop.shopName}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </form>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <button class="dropdown-item btn-sync-settings" type="button"
+                                    th:data-shop-name="${shop.shopName}"
+                                    title="Обновить city_ids для существующих сайтов (из настроек)">
+                                <i class="fas fa-sync-alt me-2 text-success"></i>Синхронизировать
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item btn-sync-matching" type="button"
+                                    th:data-shop-name="${shop.shopName}"
+                                    title="Полная синхронизация списка сайтов из страницы матчинга">
+                                <i class="fas fa-link me-2 text-info"></i>Из матчинга
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item btn-toggle-shop-enabled" type="button"
+                                    th:data-shop-id="${shop.id}"
+                                    th:data-shop-name="${shop.shopName}"
+                                    title="Выключить магазин (скрыть из основного списка)">
+                                <i class="fas fa-power-off me-2 text-secondary"></i>Выключить
+                            </button>
+                        </li>
+                        <li>
+                            <form th:action="@{'/zoomos/shops/' + ${shop.id} + '/delete'}" method="post"
+                                  onsubmit="return confirm('Удалить магазин ' + this.dataset.name + '?')"
+                                  th:data-name="${shop.shopName}">
+                                <button type="submit" class="dropdown-item text-danger">
+                                    <i class="fas fa-trash me-2"></i>Удалить
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
 
@@ -248,26 +298,36 @@
                 <span class="small text-muted ms-2" title="Горизонт сравнения с историей (0 = без анализа)">Baseline</span>
                 <input type="number" class="form-control form-control-sm check-baseline-days"
                        th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30" style="width:55px;">
+                <span class="small text-muted ms-2" title="Минимальное абсолютное число ошибок парсинга для варнинга. При значении 5: рост 1→2 — не варнинг, рост 5→15 — варнинг. Убирает шум на крупных сайтах.">Мин.ошибок <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
+                <input type="number" class="form-control form-control-sm check-min-abs-errors"
+                       th:id="'minAbsErrors-' + ${shop.id}" value="5" min="0" max="1000" style="width:60px;">
+                <span class="small text-muted ms-3 border-start ps-3"
+                      data-bs-toggle="tooltip" data-bs-placement="top"
+                      title="Тренд: порог замедления скорости выкачки (мин/1000 тов.) и падения доли «В наличии». Метрики нормализованы по числу товаров — рост ассортимента не вызывает ложных тревог. Дефолт 30%. Выше = меньше трендовых предупреждений.">Тренд пад% <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
+                <input type="number" class="form-control form-control-sm check-trend-drop"
+                       th:id="'trendDrop-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
+                <span class="small text-muted"
+                      data-bs-toggle="tooltip" data-bs-placement="top"
+                      title="Тренд: порог роста доли ошибок от числа товаров. Дефолт 100%. Выше = меньше трендовых предупреждений.">Тренд ош% <i class="fas fa-info-circle" style="font-size:0.8em"></i></span><button type="button" class="btn btn-link p-0 ms-1 text-info align-baseline" style="font-size:0.8em; line-height:1;" data-bs-toggle="modal" data-bs-target="#trendErrHelpModal" title="Подробное объяснение с примерами"><i class="fas fa-question-circle"></i></button>
+                <input type="number" class="form-control form-control-sm check-trend-err"
+                       th:id="'trendErr-' + ${shop.id}" value="100" min="1" max="1000" style="width:65px;">
             </div>
         </div>
 
         <!-- Мини-прогресс проверки (скрыт по умолчанию) -->
-        <div class="check-progress px-3 py-2 border-bottom" th:id="'check-progress-' + ${shop.id}" style="display:none;">
-            <div class="d-flex align-items-center gap-2">
-                <div class="flex-grow-1">
-                    <div class="progress">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated"
-                             th:id="'check-bar-' + ${shop.id}" style="width:0%">0%</div>
-                    </div>
-                </div>
-                <span class="text-muted small" th:id="'check-msg-' + ${shop.id}"></span>
+        <div class="check-progress px-3 pt-2 pb-1 border-bottom" th:id="'check-progress-' + ${shop.id}" style="display:none;">
+            <div class="progress">
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     th:id="'check-bar-' + ${shop.id}" style="width:0%">0%</div>
             </div>
+            <div class="text-muted small mt-1" th:id="'check-msg-' + ${shop.id}"></div>
         </div>
 
         <!-- Результат проверки (скрыт по умолчанию) -->
         <div class="px-3 py-2 border-bottom bg-light" th:id="'check-result-' + ${shop.id}" style="display:none;">
             <div class="d-flex align-items-center gap-3 flex-wrap">
                 <span class="fw-semibold small"><i class="fas fa-check-circle text-success me-1"></i>Проверка завершена</span>
+                <span class="text-muted small" th:id="'result-started-' + ${shop.id}" style="display:none;"></span>
                 <span class="badge bg-light text-dark border small" th:id="'result-period-' + ${shop.id}"></span>
                 <span class="badge bg-success" th:id="'result-ok-' + ${shop.id}">0 OK</span>
                 <span class="badge bg-warning text-dark" th:id="'result-warn-' + ${shop.id}">0 Warn</span>
@@ -305,6 +365,13 @@
                                     title="Снять все">
                                 <i class="fas fa-square"></i> Снять
                             </button>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-danger btn-delete-all-sites"
+                                    type="button"
+                                    th:data-shop-id="${shop.id}"
+                                    th:data-shop-name="${shop.shopName}"
+                                    title="Удалить все сайты из списка">
+                                <i class="fas fa-trash-alt"></i> Удалить все
+                            </button>
                             <button class="btn btn-sm btn-link text-decoration-none p-0 text-secondary collapse-toggle"
                                     type="button"
                                     th:data-bs-target="'#cityTable-' + ${shop.id}"
@@ -321,10 +388,12 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th style="width:40px" class="text-center">✓</th>
-                                        <th style="width:200px">Сайт-конкурент</th>
+                                        <th style="width:250px">Сайт-конкурент</th>
                                         <th style="width:130px" class="text-center">Тип проверки</th>
                                         <th class="city-ids-col">ID городов</th>
-                                        <th class="address-ids-col">ID адресов</th>
+                                        <th style="width:100px" class="text-center">ID адресов</th>
+                                        <th style="width:90px" class="text-center">Парсер</th>
+                                        <th style="width:44px"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -337,7 +406,22 @@
                                                    th:checked="${entry.isActive}"
                                                    th:data-id="${entry.id}">
                                         </td>
-                                        <td class="small align-middle" th:text="${entry.siteName}">site.ru</td>
+                                        <td class="small align-middle">
+                                            <span th:text="${entry.siteName}">site.ru</span>
+                                            <a th:if="${baseUrl != null}"
+                                               th:href="${baseUrl + '/shop/' + shop.shopName + '/sites-items-mapping?site=' + entry.siteName + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
+                                               target="_blank"
+                                               class="ms-2 text-decoration-none"
+                                               title="Матчинг (только связанные)">
+                                                <i class="fas fa-link text-muted" style="font-size:0.75em;"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-link priority-star-btn p-0 ms-3"
+                                                    th:data-site="${entry.siteName}"
+                                                    title="Приоритетный сайт — показывать глобальный баннер при проблемах">
+                                                <i th:class="${prioritySiteNames != null and #sets.contains(prioritySiteNames, entry.siteName)} ? 'fas fa-star text-warning' : 'far fa-star text-secondary'"
+                                                   style="font-size:0.85em;"></i>
+                                            </button>
+                                        </td>
                                         <td class="text-center">
                                             <select class="form-select form-select-sm check-type-select"
                                                     th:data-id="${entry.id}"
@@ -365,11 +449,306 @@
                                                 <span class="addr-count-label">Адреса</span>
                                             </button>
                                         </td>
+                                        <td class="text-center">
+                                            <button type="button"
+                                                    th:classappend="${(entry.parserInclude != null and !entry.parserInclude.blank) or (entry.parserExclude != null and !entry.parserExclude.blank)} ? 'filter-active' : ''"
+                                                    class="btn btn-sm btn-outline-secondary btn-parser-filter"
+                                                    th:data-id="${entry.id}"
+                                                    th:data-site="${entry.siteName}"
+                                                    th:data-include="${entry.parserInclude}"
+                                                    th:data-include-mode="${entry.parserIncludeMode}"
+                                                    th:data-exclude="${entry.parserExclude}"
+                                                    title="Фильтр по типу парсера">
+                                                <i class="fas fa-filter"></i>
+                                            </button>
+                                        </td>
+                                        <td class="text-center">
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-danger btn-delete-cityid"
+                                                    th:data-id="${entry.id}"
+                                                    th:data-site="${entry.siteName}"
+                                                    title="Удалить этот сайт из списка">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Выключенные магазины -->
+    <div th:unless="${disabledShops.empty}" class="mt-3">
+        <div class="card border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center py-2 bg-light text-secondary"
+                 data-bs-toggle="collapse" data-bs-target="#disabledShopsSection" style="cursor:pointer;">
+                <span>
+                    <i class="fas fa-eye-slash me-2"></i>Выключенные магазины
+                    <span class="badge bg-secondary ms-1" th:text="${#lists.size(disabledShops)}">0</span>
+                </span>
+                <i class="fas fa-chevron-down small"></i>
+            </div>
+            <div id="disabledShopsSection" class="collapse">
+                <div class="list-group list-group-flush">
+                    <div th:each="shop : ${disabledShops}"
+                         class="list-group-item d-flex justify-content-between align-items-center py-2">
+                        <span class="text-muted small">
+                            <i class="fas fa-store me-2"></i>
+                            <span th:text="${shop.shopName}"></span>
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-success btn-toggle-shop-enabled"
+                                th:data-shop-id="${shop.id}"
+                                th:data-shop-name="${shop.shopName}"
+                                title="Включить магазин">
+                            <i class="fas fa-power-off me-1"></i>Включить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка preview синхронизации -->
+    <div class="modal fade" id="syncConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title" id="syncModalTitle"><i class="fas fa-sync-alt me-2"></i>Синхронизация</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="syncModalBody" style="max-height:65vh; overflow-y:auto;">
+                    <div class="text-center py-4" id="syncModalSpinner">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <div class="mt-2 text-muted small">Загрузка данных...</div>
+                    </div>
+                    <div id="syncModalContent" style="display:none;"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="syncApplyBtn" style="display:none;">
+                        <i class="fas fa-check me-1"></i>Применить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка подтверждения переключения расписания -->
+    <div class="modal fade" id="scheduleToggleModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-clock me-2"></i>Расписание</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body py-2" id="schedToggleBody">
+                    <p class="mb-0 small">Изменить расписание для <strong id="schedToggleShopName"></strong>?</p>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" id="schedToggleCancelBtn" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="schedToggleConfirmBtn">Подтвердить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка: подробное объяснение "Тренд ош%" -->
+    <div class="modal fade" id="trendErrHelpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-chart-line me-2 text-info"></i>Тренд ош% — как работает параметр</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body small">
+                    <p class="text-muted mb-2">
+                        Вместо абсолютного числа ошибок система сравнивает
+                        <strong>errorRate = ошибки&nbsp;/&nbsp;число&nbsp;товаров&nbsp;×&nbsp;100%</strong>.
+                        Это устраняет ложные тревоги: рост числа товаров автоматически допускает пропорциональный рост ошибок.
+                    </p>
+
+                    <h6 class="fw-semibold mt-3 mb-1">Ситуация 1: ошибки в истории были (baseRate &gt; 0)</h6>
+                    <p class="text-muted mb-1">
+                        Тренд срабатывает если выполнены <strong>оба</strong> условия:<br>
+                        &bull; <code>curRate &gt; baseRate × (1 + Тренд&nbsp;ош% &div; 100)</code><br>
+                        &bull; Абсолютная дельта <code>curRate &minus; baseRate &gt; 0.5%</code> (фильтр мелкого шума)
+                    </p>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light text-center">
+                            <tr>
+                                <th>Товаров</th>
+                                <th>Норма (baseRate)</th>
+                                <th>Сейчас (curRate)</th>
+                                <th>Тренд&nbsp;ош%</th>
+                                <th>Результат</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>10 шт → <strong>0.20%</strong></td>
+                                <td>15 шт → 0.30%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-success">✓ Тихо — рост +50%, порог 100% не превышен</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>10 шт → <strong>0.20%</strong></td>
+                                <td>30 шт → 0.60%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-success">✓ Тихо — рост +200%, но дельта 0.40% &lt; 0.5%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>10 шт → <strong>0.20%</strong></td>
+                                <td>50 шт → 1.00%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-warning fw-semibold">⚠ Тренд — рост +400% &gt; 100%, дельта 0.80% &gt; 0.5%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>10 шт → <strong>0.20%</strong></td>
+                                <td>50 шт → 1.00%</td>
+                                <td class="text-center">500</td>
+                                <td class="text-success">✓ Тихо — рост +400% &lt; порог 500%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">50 000</td>
+                                <td>100 шт → <strong>0.20%</strong></td>
+                                <td>500 шт → 1.00%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-warning fw-semibold">⚠ Тренд — тот же результат, что у сайта с 5 000 товаров</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h6 class="fw-semibold mt-4 mb-1">Ситуация 2: ошибок в истории не было (baseRate = 0)</h6>
+                    <p class="text-muted mb-1">
+                        Сравнивать не с чем — порог появления вычисляется как
+                        <code>max(1%, Тренд&nbsp;ош% &div; 10)</code>:
+                    </p>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light text-center">
+                            <tr>
+                                <th>Товаров</th>
+                                <th>Текущие ошибки</th>
+                                <th>Тренд&nbsp;ош%</th>
+                                <th>Порог "Появились"</th>
+                                <th>Результат</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>100 шт → 2.00%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-center">max(1%, 10%) = <strong>10%</strong></td>
+                                <td class="text-success">✓ Тихо — 2% &lt; 10%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>600 шт → 12.00%</td>
+                                <td class="text-center">100</td>
+                                <td class="text-center">max(1%, 10%) = <strong>10%</strong></td>
+                                <td class="text-warning fw-semibold">⚠ Тренд — 12% &gt; 10%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>200 шт → 4.00%</td>
+                                <td class="text-center">30</td>
+                                <td class="text-center">max(1%, 3%) = <strong>3%</strong></td>
+                                <td class="text-warning fw-semibold">⚠ Тренд — 4% &gt; 3%</td>
+                            </tr>
+                            <tr>
+                                <td class="text-center">5 000</td>
+                                <td>200 шт → 4.00%</td>
+                                <td class="text-center">50</td>
+                                <td class="text-center">max(1%, 5%) = <strong>5%</strong></td>
+                                <td class="text-success">✓ Тихо — 4% &lt; 5%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h6 class="fw-semibold mt-4 mb-1">Рекомендуемые значения</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr><th>Тренд ош%</th><th>Поведение</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>30</strong></td>
+                                <td>Чувствительный — предупреждение при росте baseRate более чем на 30%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>100</strong> <span class="badge bg-secondary ms-1">по умолчанию</span></td>
+                                <td>Умеренный — только существенный двукратный рост; «Появились ошибки» при &gt;10% товаров</td>
+                            </tr>
+                            <tr>
+                                <td><strong>200</strong></td>
+                                <td>Мягкий — трёхкратный рост; «Появились ошибки» при &gt;20% товаров</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Закрыть</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка фильтра парсера -->
+    <div class="modal fade" id="parserFilterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-filter me-2"></i>Фильтр парсера: <span id="parserModalSite"></span></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <div class="text-muted small mb-1">Известные паттерны для этого сайта:</div>
+                        <div id="parserPatternsList" class="d-flex flex-wrap gap-1 mb-2 p-2 border rounded bg-light" style="min-height:36px;">
+                            <span class="text-muted small fst-italic">Загрузка...</span>
+                        </div>
+                        <div class="text-muted" style="font-size:0.75em;">
+                            Клик: <span class="badge bg-success">зелёный</span> — добавить в "Включить",
+                            <span class="badge bg-danger">красный</span> — добавить в "Исключить",
+                            ещё клик — убрать из правил
+                        </div>
+                    </div>
+                    <div class="row g-2 mt-1">
+                        <div class="col-8">
+                            <label class="form-label small mb-1">Включить (через <strong>;</strong>, строка должна содержать):</label>
+                            <textarea class="form-control form-control-sm" id="parserIncludeInput" rows="2"
+                                      placeholder="categories = []; техника для кухни"></textarea>
+                        </div>
+                        <div class="col-4 d-flex flex-column justify-content-end">
+                            <label class="form-label small mb-1">Режим включения:</label>
+                            <select class="form-select form-select-sm" id="parserIncludeModeSelect">
+                                <option value="OR">OR — любая подстрока</option>
+                                <option value="AND">AND — все подстроки</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <label class="form-label small mb-1">Исключить (через <strong>;</strong>, OR-логика):</label>
+                        <textarea class="form-control form-control-sm" id="parserExcludeInput" rows="2"
+                                  placeholder="stock = null; brands = polaris"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-auto" id="parserFilterClear">
+                        <i class="fas fa-times me-1"></i>Очистить фильтр
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="parserFilterSave">
+                        <i class="fas fa-save me-1"></i>Сохранить
+                    </button>
                 </div>
             </div>
         </div>
@@ -435,11 +814,46 @@
         if (timeFromEl) timeFromEl.addEventListener('change', () => localStorage.setItem('checkTimeFrom-' + shopId, timeFromEl.value));
         if (timeToEl)   timeToEl.addEventListener('change',   () => localStorage.setItem('checkTimeTo-' + shopId,   timeToEl.value));
 
+        const dropThresholdEl = document.getElementById('dropThreshold-' + shopId);
+        if (dropThresholdEl) {
+            dropThresholdEl.value = localStorage.getItem('checkDropThreshold-' + shopId) || '10';
+            dropThresholdEl.addEventListener('change', () =>
+                localStorage.setItem('checkDropThreshold-' + shopId, dropThresholdEl.value));
+        }
+
+        const errThresholdEl = document.getElementById('errThreshold-' + shopId);
+        if (errThresholdEl) {
+            errThresholdEl.value = localStorage.getItem('checkErrThreshold-' + shopId) || '30';
+            errThresholdEl.addEventListener('change', () =>
+                localStorage.setItem('checkErrThreshold-' + shopId, errThresholdEl.value));
+        }
+
         const baselineDaysEl = document.getElementById('baselineDays-' + shopId);
         if (baselineDaysEl) {
             baselineDaysEl.value = localStorage.getItem('checkBaselineDays-' + shopId) || '7';
             baselineDaysEl.addEventListener('change', () =>
                 localStorage.setItem('checkBaselineDays-' + shopId, baselineDaysEl.value));
+        }
+
+        const minAbsErrorsEl = document.getElementById('minAbsErrors-' + shopId);
+        if (minAbsErrorsEl) {
+            minAbsErrorsEl.value = localStorage.getItem('checkMinAbsErrors-' + shopId) || '5';
+            minAbsErrorsEl.addEventListener('change', () =>
+                localStorage.setItem('checkMinAbsErrors-' + shopId, minAbsErrorsEl.value));
+        }
+
+        const trendDropEl = document.getElementById('trendDrop-' + shopId);
+        if (trendDropEl) {
+            trendDropEl.value = localStorage.getItem('checkTrendDrop-' + shopId) || '30';
+            trendDropEl.addEventListener('change', () =>
+                localStorage.setItem('checkTrendDrop-' + shopId, trendDropEl.value));
+        }
+
+        const trendErrEl = document.getElementById('trendErr-' + shopId);
+        if (trendErrEl) {
+            trendErrEl.value = localStorage.getItem('checkTrendErr-' + shopId) || '100';
+            trendErrEl.addEventListener('change', () =>
+                localStorage.setItem('checkTrendErr-' + shopId, trendErrEl.value));
         }
     });
 
@@ -598,6 +1012,121 @@
                     }
                 })
                 .catch(() => { this.value = originalValue; });
+        });
+    });
+
+    // ---- Модалка фильтра парсера ----
+    let parserFilterEntryId = null;
+    const parserFilterModal = new bootstrap.Modal(document.getElementById('parserFilterModal'));
+
+    function loadParserPatterns(siteName) {
+        const container = document.getElementById('parserPatternsList');
+        container.innerHTML = '<span class="text-muted small fst-italic">Загрузка...</span>';
+        fetch('/zoomos/parser-patterns?siteName=' + encodeURIComponent(siteName))
+            .then(r => r.json())
+            .then(patterns => {
+                if (!patterns.length) {
+                    container.innerHTML = '<span class="text-muted small fst-italic">Паттернов пока нет — появятся после первой проверки</span>';
+                    return;
+                }
+                const include = (document.getElementById('parserIncludeInput').value || '').split(';').map(s => s.trim()).filter(s => s);
+                const exclude = (document.getElementById('parserExcludeInput').value || '').split(';').map(s => s.trim()).filter(s => s);
+                container.innerHTML = '';
+                patterns.forEach(p => {
+                    const el = document.createElement('span');
+                    el.className = 'parser-pattern-item';
+                    el.textContent = p;
+                    if (include.some(s => s === p)) {
+                        el.classList.add('include');
+                    } else if (exclude.some(s => s === p)) {
+                        el.classList.add('exclude');
+                    }
+                    el.addEventListener('click', function() {
+                        const incInput = document.getElementById('parserIncludeInput');
+                        const excInput = document.getElementById('parserExcludeInput');
+                        const incParts = (incInput.value || '').split(';').map(s => s.trim()).filter(s => s);
+                        const excParts = (excInput.value || '').split(';').map(s => s.trim()).filter(s => s);
+                        if (this.classList.contains('include')) {
+                            // убрать из include
+                            incInput.value = incParts.filter(s => s !== p).join('; ');
+                            this.classList.remove('include');
+                        } else if (this.classList.contains('exclude')) {
+                            // убрать из exclude
+                            excInput.value = excParts.filter(s => s !== p).join('; ');
+                            this.classList.remove('exclude');
+                        } else {
+                            // добавить в include
+                            if (!incParts.includes(p)) { incParts.push(p); incInput.value = incParts.join('; '); }
+                            this.classList.add('include');
+                        }
+                    });
+                    container.appendChild(el);
+                });
+            })
+            .catch(() => {
+                container.innerHTML = '<span class="text-muted small fst-italic">Ошибка загрузки паттернов</span>';
+            });
+    }
+
+    document.querySelectorAll('.btn-parser-filter').forEach(btn => {
+        btn.addEventListener('click', function() {
+            parserFilterEntryId = this.dataset.id;
+            document.getElementById('parserModalSite').textContent = this.dataset.site || '';
+            document.getElementById('parserIncludeInput').value = this.dataset.include || '';
+            document.getElementById('parserIncludeModeSelect').value = this.dataset.includeMode || 'OR';
+            document.getElementById('parserExcludeInput').value = this.dataset.exclude || '';
+            parserFilterModal.show();
+            loadParserPatterns(this.dataset.site || '');
+        });
+    });
+
+    document.getElementById('parserFilterClear').addEventListener('click', function() {
+        document.getElementById('parserIncludeInput').value = '';
+        document.getElementById('parserIncludeModeSelect').value = 'OR';
+        document.getElementById('parserExcludeInput').value = '';
+    });
+
+    document.getElementById('parserFilterSave').addEventListener('click', function() {
+        const include = (document.getElementById('parserIncludeInput').value || '').trim();
+        const includeMode = document.getElementById('parserIncludeModeSelect').value;
+        const exclude = (document.getElementById('parserExcludeInput').value || '').trim();
+        const saveBtn = this;
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Сохранение...';
+
+        const params = new URLSearchParams();
+        if (include) params.append('include', include);
+        params.append('includeMode', includeMode);
+        if (exclude) params.append('exclude', exclude);
+
+        fetch('/zoomos/city-ids/' + parserFilterEntryId + '/parser-filter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+        })
+        .then(r => r.json())
+        .then(data => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
+            if (data.success) {
+                parserFilterModal.hide();
+                // Обновить data-* и подсветку на кнопке
+                const btn = document.querySelector('.btn-parser-filter[data-id="' + parserFilterEntryId + '"]');
+                if (btn) {
+                    btn.dataset.include = include;
+                    btn.dataset.includeMode = includeMode;
+                    btn.dataset.exclude = exclude;
+                    const isActive = include || exclude;
+                    btn.classList.toggle('filter-active', !!isActive);
+                }
+            } else {
+                alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+            }
+        })
+        .catch(() => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
+            alert('Ошибка при сохранении фильтра парсера');
         });
     });
 
@@ -891,6 +1420,12 @@
 
             const baselineDaysEl2 = document.getElementById('baselineDays-' + shopId);
             const baselineDays = baselineDaysEl2 ? (baselineDaysEl2.value || '7') : '7';
+            const minAbsErrorsEl2 = document.getElementById('minAbsErrors-' + shopId);
+            const minAbsErrors = minAbsErrorsEl2 ? (minAbsErrorsEl2.value || '5') : '5';
+            const trendDropEl2 = document.getElementById('trendDrop-' + shopId);
+            const trendDrop = trendDropEl2 ? (trendDropEl2.value || '30') : '30';
+            const trendErrEl2 = document.getElementById('trendErr-' + shopId);
+            const trendErr = trendErrEl2 ? (trendErrEl2.value || '100') : '100';
 
             const fd = new FormData();
             fd.append('shopId', shopId);
@@ -901,6 +1436,9 @@
             fd.append('dropThreshold', dropThreshold);
             fd.append('errorGrowthThreshold', errThreshold);
             fd.append('baselineDays', baselineDays);
+            fd.append('minAbsoluteErrors', minAbsErrors);
+            fd.append('trendDropThreshold', trendDrop);
+            fd.append('trendErrorThreshold', trendErr);
 
             const btnRef = this;
 
@@ -1014,23 +1552,444 @@
             periodEl.textContent = fmtDate(data.dateFrom) + ' — ' + fmtDate(data.dateTo);
             periodEl.style.display = '';
         }
+        const startedEl = document.getElementById('result-started-' + shopId);
+        if (startedEl && data.startedAt) {
+            startedEl.textContent = data.startedAt;
+            startedEl.style.display = '';
+        }
         document.getElementById('result-link-' + shopId).href = '/zoomos/check/results/' + data.runId;
         document.getElementById('check-result-' + shopId).style.display = 'block';
     }
 
+    // ==================================================================
+    // Синхронизация: preview → modal → apply
+    // ==================================================================
+
+    let syncModal = null;
+    let syncApplyData = null;
+    let syncApplyType = null;
+    let syncApplyShopName = null;
+
+    function getSyncModal() {
+        if (!syncModal) syncModal = new bootstrap.Modal(document.getElementById('syncConfirmModal'));
+        return syncModal;
+    }
+
+    function previewSync(shopName, type) {
+        syncApplyShopName = shopName;
+        syncApplyType = type;
+        syncApplyData = null;
+
+        const titleEl = document.getElementById('syncModalTitle');
+        const spinnerEl = document.getElementById('syncModalSpinner');
+        const contentEl = document.getElementById('syncModalContent');
+        const applyBtn = document.getElementById('syncApplyBtn');
+
+        titleEl.innerHTML = '<i class="fas fa-sync-alt me-2"></i>' +
+            (type === 'matching' ? 'Из матчинга — ' + shopName : 'Синхронизировать city_ids — ' + shopName);
+        spinnerEl.style.display = 'block';
+        contentEl.style.display = 'none';
+        contentEl.innerHTML = '';
+        applyBtn.style.display = 'none';
+
+        getSyncModal().show();
+
+        const url = type === 'matching'
+            ? '/zoomos/shops/' + encodeURIComponent(shopName) + '/sync-from-matching/preview'
+            : '/zoomos/shops/' + encodeURIComponent(shopName) + '/sync/preview';
+
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                spinnerEl.style.display = 'none';
+                contentEl.style.display = 'block';
+
+                if (!data.success) {
+                    contentEl.innerHTML = '<div class="alert alert-danger mb-0">' +
+                        escHtml(data.error || 'Неизвестная ошибка') + '</div>';
+                    return;
+                }
+
+                syncApplyData = data;
+
+                if (type === 'matching') {
+                    renderMatchingPreview(data, contentEl, applyBtn);
+                } else {
+                    renderSettingsPreview(data, contentEl, applyBtn);
+                }
+            })
+            .catch(err => {
+                spinnerEl.style.display = 'none';
+                contentEl.style.display = 'block';
+                contentEl.innerHTML = '<div class="alert alert-danger mb-0">Ошибка сети: ' + escHtml(err.message) + '</div>';
+            });
+    }
+
+    function renderMatchingPreview(data, contentEl, applyBtn) {
+        const toAdd = data.toAdd || [];
+        const toDelete = data.toDelete || [];
+        const existing = data.existing || [];
+
+        if (toAdd.length === 0 && toDelete.length === 0) {
+            contentEl.innerHTML = '<div class="alert alert-success mb-0">' +
+                '<i class="fas fa-check-circle me-2"></i>Изменений нет. ' +
+                'Все ' + existing.length + ' сайтов уже актуальны.</div>';
+            return;
+        }
+
+        let html = '<div class="small mb-2 text-muted">Найдено на странице матчинга: <strong>' + data.total + '</strong></div>';
+
+        if (toAdd.length > 0) {
+            html += '<div class="mb-2"><strong class="text-success"><i class="fas fa-plus me-1"></i>Будут добавлены (' + toAdd.length + '):</strong><div class="d-flex flex-wrap gap-1 mt-1">';
+            toAdd.forEach(s => { html += '<span class="badge bg-success">' + escHtml(s) + '</span>'; });
+            html += '</div></div>';
+        }
+
+        if (toDelete.length > 0) {
+            html += '<div class="mb-2"><strong class="text-danger"><i class="fas fa-minus me-1"></i>Будут удалены (' + toDelete.length + '):</strong><div class="d-flex flex-wrap gap-1 mt-1">';
+            toDelete.forEach(s => { html += '<span class="badge bg-danger">' + escHtml(s) + '</span>'; });
+            html += '</div></div>';
+        }
+
+        if (existing.length > 0) {
+            html += '<div class="mb-0"><strong class="text-secondary"><i class="fas fa-equals me-1"></i>Без изменений (' + existing.length + ')</strong></div>';
+        }
+
+        contentEl.innerHTML = html;
+        applyBtn.style.display = '';
+    }
+
+    function renderSettingsPreview(data, contentEl, applyBtn) {
+        const updates = data.updates || [];
+
+        if (updates.length === 0) {
+            contentEl.innerHTML = '<div class="alert alert-success mb-0">' +
+                '<i class="fas fa-check-circle me-2"></i>Изменений нет. City IDs уже актуальны.</div>';
+            return;
+        }
+
+        let html = '<div class="small mb-2 text-muted">Изменений: <strong>' + updates.length + '</strong></div>';
+        html += '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr>' +
+            '<th>Сайт</th><th>Было</th><th>Стало</th></tr></thead><tbody>';
+        updates.forEach(u => {
+            html += '<tr><td class="small">' + escHtml(u.site) + '</td>' +
+                '<td class="small text-muted font-monospace">' + escHtml(u.oldCityIds || '—') + '</td>' +
+                '<td class="small text-success font-monospace">' + escHtml(u.newCityIds || '—') + '</td></tr>';
+        });
+        html += '</tbody></table>';
+
+        contentEl.innerHTML = html;
+        applyBtn.style.display = '';
+    }
+
+    document.getElementById('syncApplyBtn').addEventListener('click', function() {
+        if (!syncApplyData || !syncApplyShopName || !syncApplyType) return;
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Применение...';
+
+        let url, body;
+        if (syncApplyType === 'matching') {
+            url = '/zoomos/shops/' + encodeURIComponent(syncApplyShopName) + '/sync-from-matching/apply';
+            body = JSON.stringify({ toAdd: syncApplyData.toAdd || [], toDelete: syncApplyData.toDelete || [] });
+        } else {
+            url = '/zoomos/shops/' + encodeURIComponent(syncApplyShopName) + '/sync/apply';
+            const entryMap = {};
+            (syncApplyData.updates || []).forEach(u => { entryMap[u.entryId] = u.newCityIds; });
+            body = JSON.stringify(entryMap);
+        }
+
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                getSyncModal().hide();
+                location.reload();
+            } else {
+                alert('Ошибка: ' + (data.error || 'неизвестная'));
+                this.disabled = false;
+                this.innerHTML = '<i class="fas fa-check me-1"></i>Применить';
+            }
+        })
+        .catch(err => {
+            alert('Ошибка сети: ' + err.message);
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-check me-1"></i>Применить';
+        });
+    });
+
+    // Делегирование клика на кнопки синхронизации
+    document.querySelectorAll('.btn-sync-settings').forEach(btn => {
+        btn.addEventListener('click', function() {
+            previewSync(this.dataset.shopName, 'settings');
+        });
+    });
+    document.querySelectorAll('.btn-sync-matching').forEach(btn => {
+        btn.addEventListener('click', function() {
+            previewSync(this.dataset.shopName, 'matching');
+        });
+    });
+
+    // ==================================================================
+    // Удаление отдельного сайта (ZoomosCityId)
+    // ==================================================================
+
+    document.querySelectorAll('.btn-delete-cityid').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const site = this.dataset.site;
+            if (!confirm('Удалить сайт "' + site + '" из списка?')) return;
+
+            fetch('/zoomos/city-ids/' + id + '/delete', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const row = document.getElementById('row-' + id);
+                        if (row) row.remove();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(err => alert('Ошибка сети: ' + err.message));
+        });
+    });
+
+    // ==================================================================
+    // Приоритетные звёздочки в таблице сайтов клиента
+    // ==================================================================
+
+    document.querySelectorAll('.priority-star-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const siteName = this.dataset.site;
+            const fd = new FormData();
+            fd.append('siteName', siteName);
+            fetch('/zoomos/sites/by-name/priority', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.isPriority !== undefined) {
+                        // Обновить все кнопки с этим сайтом на странице
+                        document.querySelectorAll('.priority-star-btn[data-site="' + CSS.escape(siteName) + '"]').forEach(b => {
+                            const icon = b.querySelector('i');
+                            if (data.isPriority) {
+                                icon.className = 'fas fa-star text-warning';
+                            } else {
+                                icon.className = 'far fa-star text-secondary';
+                            }
+                        });
+                    }
+                })
+                .catch(() => {});
+        });
+    });
+
+    // ==================================================================
+    // Чекбокс расписания с модальным подтверждением
+    // ==================================================================
+
+    let schedToggleModal = null;
+    let pendingSchedToggle = null;
+
+    function getSchedToggleModal() {
+        if (!schedToggleModal) schedToggleModal = new bootstrap.Modal(document.getElementById('scheduleToggleModal'));
+        return schedToggleModal;
+    }
+
+    document.querySelectorAll('.schedule-enabled-cb').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const willEnable = this.checked;
+            const shopId = this.dataset.shopId;
+            const shopName = this.dataset.shopName;
+            // Откатываем чекбокс — применим только после подтверждения
+            this.checked = !willEnable;
+            pendingSchedToggle = { cb: this, shopId, shopName, willEnable };
+            const action = willEnable ? 'Включить' : 'Выключить';
+            document.getElementById('schedToggleShopName').textContent = shopName;
+            document.getElementById('schedToggleBody').innerHTML =
+                '<p class="mb-0 small">' + escHtml(action) + ' автопроверку по расписанию для <strong>' + escHtml(shopName) + '</strong>?</p>';
+            getSchedToggleModal().show();
+        });
+    });
+
+    document.getElementById('schedToggleCancelBtn').addEventListener('click', function() {
+        pendingSchedToggle = null;
+    });
+
+    document.getElementById('schedToggleConfirmBtn').addEventListener('click', function() {
+        if (!pendingSchedToggle) return;
+        const { cb, shopId, shopName } = pendingSchedToggle;
+        pendingSchedToggle = null;
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        const btn = this;
+
+        fetch('/zoomos/api/schedule/' + shopId + '/toggle', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = 'Подтвердить';
+                getSchedToggleModal().hide();
+                if (data.success) {
+                    cb.checked = data.isEnabled;
+                    const label = document.querySelector('label[for="sched-cb-' + shopId + '"]');
+                    if (label) {
+                        label.className = 'small mb-0 ms-1 sched-label ' + (data.isEnabled ? 'text-success' : 'text-muted');
+                    }
+                } else {
+                    alert((data.error || 'Расписание не создано. Настройте его на странице расписаний.'));
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = 'Подтвердить';
+                getSchedToggleModal().hide();
+                alert('Ошибка сети: ' + err.message);
+            });
+    });
+
+    // ==================================================================
+    // Удаление всех сайтов у магазина
+    // ==================================================================
+
+    document.querySelectorAll('.btn-delete-all-sites').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const shopName = this.dataset.shopName;
+            if (!confirm('Удалить все сайты у магазина "' + shopName + '"? Это действие нельзя отменить.')) return;
+
+            fetch('/zoomos/shops/' + shopId + '/city-ids/delete-all', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const tbody = document.querySelector('#cityTable-' + shopId + ' tbody');
+                        if (tbody) tbody.innerHTML = '';
+                        const badge = document.querySelector('[data-shop-id="' + shopId + '"].select-all-btn')
+                            ?.closest('.px-3')?.querySelector('.badge');
+                        if (badge) badge.textContent = '0';
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(err => alert('Ошибка сети: ' + err.message));
+        });
+    });
+
+    // ==================================================================
+    // Включить / выключить магазин
+    // ==================================================================
+
+    document.querySelectorAll('.btn-toggle-shop-enabled').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const shopName = this.dataset.shopName;
+            if (!confirm('Изменить статус магазина "' + shopName + '"?')) return;
+
+            fetch('/zoomos/shops/' + shopId + '/toggle-enabled', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(err => alert('Ошибка сети: ' + err.message));
+        });
+    });
+
     // ---- Загрузка сводки последней проверки при открытии страницы ----
+
+    // Множество магазинов, для которых уже запущен индикатор (чтобы не дублировать)
+    const runningShops = new Set();
+
+    function showRunningIndicator(shopId) {
+        if (runningShops.has(shopId)) return;
+        runningShops.add(shopId);
+
+        const progressEl = document.getElementById('check-progress-' + shopId);
+        const barEl = document.getElementById('check-bar-' + shopId);
+        const msgEl = document.getElementById('check-msg-' + shopId);
+        if (progressEl) {
+            progressEl.style.display = 'block';
+            barEl.style.width = '60%';
+            barEl.textContent = 'Идёт проверка...';
+            msgEl.textContent = 'Проверка запущена';
+        }
+
+        function finishRunning() {
+            runningShops.delete(shopId);
+            fetch('/zoomos/check/latest?shopId=' + shopId)
+                .then(r => r.json())
+                .then(data => {
+                    if (progressEl) progressEl.style.display = 'none';
+                    if (data.runId && data.runId > 0) showCheckResult(shopId, data);
+                })
+                .catch(() => { if (progressEl) progressEl.style.display = 'none'; });
+        }
+
+        function startPolling() {
+            const poll = setInterval(() => {
+                fetch('/zoomos/check/latest?shopId=' + shopId)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.status !== 'RUNNING') {
+                            clearInterval(poll);
+                            finishRunning();
+                        }
+                    })
+                    .catch(() => { clearInterval(poll); runningShops.delete(shopId); });
+            }, 5000);
+        }
+
+        try {
+            const socket = new SockJS('/ws');
+            const stompClient = Stomp.over(socket);
+            stompClient.debug = null;
+            stompClient.connect({}, function() {
+                stompClient.subscribe('/topic/zoomos-check/shop/' + shopId, function(msg) {
+                    const data = JSON.parse(msg.body);
+                    const pct = data.percent || 0;
+                    if (barEl) { barEl.style.width = pct + '%'; barEl.textContent = pct + '%'; }
+                    if (msgEl) msgEl.textContent = data.message || '';
+                    if (data.message && (data.message.includes('завершена') || data.message.includes('Ошибка'))) {
+                        stompClient.disconnect();
+                        setTimeout(() => finishRunning(), 800);
+                    }
+                });
+            }, function() { startPolling(); });
+        } catch (e) { startPolling(); }
+    }
+
     document.querySelectorAll('.shop-card').forEach(card => {
         const shopId = card.dataset.shopId;
         if (!shopId) return;
         fetch('/zoomos/check/latest?shopId=' + shopId)
             .then(r => r.json())
             .then(data => {
-                if (data.runId && data.runId > 0) {
+                if (data.status === 'RUNNING') {
+                    showRunningIndicator(shopId);
+                } else if (data.runId && data.runId > 0) {
                     showCheckResult(shopId, data);
                 }
             })
             .catch(() => {});
     });
+
+    // Фоновый polling: раз в 5 сек проверяем магазины без активного индикатора
+    setInterval(() => {
+        document.querySelectorAll('.shop-card').forEach(card => {
+            const shopId = card.dataset.shopId;
+            if (!shopId || runningShops.has(shopId)) return;
+            fetch('/zoomos/check/latest?shopId=' + shopId)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'RUNNING') showRunningIndicator(shopId);
+                })
+                .catch(() => {});
+        });
+    }, 5000);
 </script>
 </th:block>
 </html>

@@ -13,4 +13,8 @@ public interface ZoomosKnownSiteRepository extends JpaRepository<ZoomosKnownSite
     List<ZoomosKnownSite> findAllByOrderBySiteNameAsc();
 
     boolean existsBySiteName(String siteName);
+
+    List<ZoomosKnownSite> findAllByIsPriorityTrue();
+
+    List<ZoomosKnownSite> findAllByIgnoreStockTrue();
 }

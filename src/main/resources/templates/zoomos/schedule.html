@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Расписание проверок',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Расписание автопроверок',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Расписание проверок</title></head>
+
+<th:block th:fragment="styles">
+<style>
+    .sched-row td { vertical-align: middle; padding: 5px 6px; }
+    .sched-row input[type=text], .sched-row input[type=number], .sched-row input[type=time] { font-size: 0.85em; }
+    /* Фиксируем ширину time-input: без этого браузер растягивает их шире min-width колонки → горизонтальный скролл */
+    .sched-time-from, .sched-time-to { width: 68px; max-width: 68px; }
+    .offset-input { width: 58px; }
+    .threshold-input { width: 58px; }
+    .baseline-input { width: 58px; margin: 0 auto; display: block; }
+    .enabled-cb { width: 18px; height: 18px; cursor: pointer; }
+    .cron-cheatsheet table { font-size: 0.85em; }
+    .cron-cheatsheet code { font-size: 0.9em; color: #d63384; }
+    .cat-toggle { cursor: pointer; user-select: none; }
+    .shop-header-row td { background-color: #f1f3f5; font-size: 0.88em; }
+    .label-input { min-width: 90px; max-width: 120px; }
+    .btn-xs { font-size: 0.72rem; padding: 0.1rem 0.35rem; }
+</style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/zoomos}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>К магазинам
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- Flash-уведомления -->
+    <div th:if="${success}" class="alert alert-success alert-dismissible fade show">
+        <i class="fas fa-check-circle me-2"></i><span th:text="${success}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show">
+        <i class="fas fa-exclamation-circle me-2"></i><span th:text="${error}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <!-- Описание -->
+    <div class="alert alert-info py-2 mb-3">
+        <i class="fas fa-info-circle me-2"></i>
+        Расписание запускает проверку автоматически по cron-выражению (Spring-формат, 6 полей: сек мин час день-мес месяц день-нед).
+        Дата проверки вычисляется от текущего дня с заданным смещением.
+        <strong>Например:</strong> <code>0 0 8 * * *</code> — каждый день в 08:00. День недели: 1=Вс, 2=Пн, 3=Вт, 4=Ср, 5=Чт, 6=Пт, 7=Сб.
+        Один магазин может иметь несколько расписаний — нажмите <i class="fas fa-plus"></i> чтобы добавить.
+    </div>
+
+    <!-- Фильтрация и поиск -->
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+        <div class="input-group input-group-sm" style="max-width:280px;">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="schedSearch" class="form-control" placeholder="Поиск по магазину...">
+            <button class="btn btn-outline-secondary" type="button" id="schedSearchClear">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="showEnabledOnly" checked>
+            <label class="form-check-label small" for="showEnabledOnly">Только включённые</label>
+        </div>
+        <span id="schedFilterCount" class="text-muted small"></span>
+    </div>
+
+    <!-- Таблица расписаний -->
+    <div class="card mb-3">
+        <div class="card-header py-2">
+            <i class="fas fa-clock me-2"></i>Расписания по магазинам
+        </div>
+        <div class="card-body p-0">
+            <div th:if="${shops.empty}" class="text-muted text-center py-4">
+                Магазины не добавлены. <a th:href="@{/zoomos}">Добавьте магазин</a>.
+            </div>
+            <div th:unless="${shops.empty}" class="table-responsive">
+            <table class="table table-sm table-bordered table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px" class="text-center" title="Расписание включено">Вкл</th>
+                        <th style="min-width:90px" class="d-none d-md-table-cell">Метка</th>
+                        <th style="min-width:155px">Cron <span class="text-muted fw-normal" style="font-size:0.78em">(сек мин час д м нед)</span></th>
+                        <th style="min-width:120px" class="text-center d-none d-lg-table-cell">Период (offset)</th>
+                        <th style="min-width:150px" class="text-center d-none d-lg-table-cell">Время выкачки</th>
+                        <th style="min-width:130px" class="text-center d-none d-xl-table-cell" title="Порог падения % / Порог роста ошибок %">Пороги % <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
+                        <th style="min-width:80px" class="text-center d-none d-xxl-table-cell">Baseline дней</th>
+                        <th style="min-width:75px" class="text-center d-none d-xxl-table-cell"
+                            title="Минимальное абсолютное число ошибок парсинга для срабатывания предупреждения.">Мин.ошибок <i class="fas fa-info-circle text-muted" style="font-size:0.75em"></i></th>
+                        <th style="min-width:130px" class="text-center d-none d-xxl-table-cell"
+                            title="Пороги для TREND_WARNING: отдельно от основных порогов.">Тренд % <i class="fas fa-chart-line text-muted" style="font-size:0.75em"></i> <span class="text-muted fw-normal" style="font-size:0.78em">(пад/ош)</span></th>
+                        <th style="min-width:140px" class="text-center">Последний запуск</th>
+                        <th style="min-width:110px" class="text-center">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <th:block th:each="shop : ${shops}">
+
+                    <!-- Строка-заголовок магазина -->
+                    <tr class="shop-header-row"
+                        th:data-shop-id="${shop.id}"
+                        th:data-shop-name="${shop.shopName}">
+                        <td colspan="11" class="fw-semibold py-1 ps-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>
+                                    <i class="fas fa-store me-1 text-muted"></i>
+                                    <span th:text="${shop.shopName}"></span>
+                                </span>
+                                <button class="btn btn-xs btn-outline-primary btn-add-schedule py-0 px-2 me-1"
+                                        th:data-shop-id="${shop.id}"
+                                        title="Добавить расписание для этого магазина">
+                                    <i class="fas fa-plus me-1"></i>Добавить
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Строки расписаний этого магазина -->
+                    <tr th:each="sched : ${schedules[shop.id]}"
+                        class="sched-row"
+                        th:data-schedule-id="${sched.id}"
+                        th:data-shop-id="${shop.id}"
+                        th:data-shop-name="${shop.shopName}"
+                        th:data-shop-action="@{'/zoomos/schedule/item/' + ${sched.id}}">
+
+                        <!-- Чекбокс Вкл/Выкл -->
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input enabled-cb sched-enabled-cb"
+                                   th:checked="${sched.enabled}"
+                                   th:title="${sched.enabled} ? 'Расписание включено — нажмите чтобы выключить' : 'Расписание выключено — нажмите чтобы включить'"
+                                   style="width:18px;height:18px;cursor:pointer;">
+                        </td>
+
+                        <!-- Метка -->
+                        <td class="d-none d-md-table-cell">
+                            <input type="text" class="form-control form-control-sm label-input sched-label"
+                                   th:value="${sched.label}" placeholder="метка...">
+                        </td>
+
+                        <!-- Cron -->
+                        <td>
+                            <input type="text" class="form-control form-control-sm font-monospace sched-cron"
+                                   th:value="${sched.cronExpression}"
+                                   placeholder="0 0 8 * * *">
+                        </td>
+
+                        <!-- Период (offset) -->
+                        <td class="text-center d-none d-lg-table-cell">
+                            <div class="d-flex align-items-center justify-content-center gap-1">
+                                <input type="number" class="form-control form-control-sm offset-input text-center sched-offset-from"
+                                       th:value="${sched.dateOffsetFrom}"
+                                       min="-30" max="0" title="Смещение От: −1=вчера, 0=сегодня">
+                                <span class="small text-muted">…</span>
+                                <input type="number" class="form-control form-control-sm offset-input text-center sched-offset-to"
+                                       th:value="${sched.dateOffsetTo}"
+                                       min="-30" max="0" title="Смещение До: 0=сегодня">
+                            </div>
+                        </td>
+
+                        <!-- Время -->
+                        <td class="d-none d-lg-table-cell">
+                            <div class="d-flex align-items-center gap-1">
+                                <input type="time" class="form-control form-control-sm sched-time-from"
+                                       th:value="${sched.timeFrom}" title="Фильтр: начало выкачки (необяз.)">
+                                <span class="small text-muted">—</span>
+                                <input type="time" class="form-control form-control-sm sched-time-to"
+                                       th:value="${sched.timeTo}" title="Фильтр: конец выкачки (необяз.)">
+                            </div>
+                        </td>
+
+                        <!-- Пороги -->
+                        <td class="d-none d-xl-table-cell">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <div class="d-flex flex-column align-items-center">
+                                    <span class="text-muted" style="font-size:0.7em">пад%</span>
+                                    <input type="number" class="form-control form-control-sm text-center threshold-input sched-drop"
+                                           th:value="${sched.dropThreshold}"
+                                           min="1" max="100" title="Порог падения товаров/«в наличии» (%)">
+                                </div>
+                                <div class="d-flex flex-column align-items-center">
+                                    <span class="text-muted" style="font-size:0.7em">ош%</span>
+                                    <input type="number" class="form-control form-control-sm text-center threshold-input sched-err"
+                                           th:value="${sched.errorGrowthThreshold}"
+                                           min="1" max="500" title="Порог роста ошибок (%)">
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Baseline -->
+                        <td class="text-center d-none d-xxl-table-cell">
+                            <input type="number" class="form-control form-control-sm text-center baseline-input sched-baseline"
+                                   th:value="${sched.baselineDays}"
+                                   min="0" max="90" title="Дней для baseline-анализа (0 = отключено)">
+                        </td>
+
+                        <!-- Мин. ошибок -->
+                        <td class="text-center d-none d-xxl-table-cell">
+                            <input type="number" class="form-control form-control-sm text-center baseline-input sched-min-abs-errors"
+                                   th:value="${sched.minAbsoluteErrors}"
+                                   min="0" max="1000" title="Мин. абсолютное число ошибок для срабатывания варнинга">
+                        </td>
+
+                        <!-- Тренд пороги -->
+                        <td class="text-center d-none d-xxl-table-cell">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <div class="d-flex flex-column align-items-center">
+                                    <span class="text-muted" style="font-size:0.7em">пад%</span>
+                                    <input type="number" class="form-control form-control-sm text-center threshold-input sched-trend-drop"
+                                           th:value="${sched.trendDropThreshold}"
+                                           min="1" max="500" title="Порог замедления выкачки и падения доли «В наличии» для TREND_WARNING (%)">
+                                </div>
+                                <div class="d-flex flex-column align-items-center">
+                                    <span class="text-muted" style="font-size:0.7em">ош%</span>
+                                    <input type="number" class="form-control form-control-sm text-center threshold-input sched-trend-err"
+                                           th:value="${sched.trendErrorThreshold}"
+                                           min="1" max="1000" title="Порог роста доли ошибок от товаров для TREND_WARNING (%)">
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Последний запуск -->
+                        <td class="text-center small text-muted">
+                            <span th:if="${lastRunFormatted[sched.id] != null}">
+                                <a th:if="${lastRunIds[sched.id] != null}"
+                                   th:href="@{'/zoomos/check/results/' + ${lastRunIds[sched.id]}}"
+                                   class="text-decoration-none"
+                                   th:text="${lastRunFormatted[sched.id]}"></a>
+                                <span th:unless="${lastRunIds[sched.id] != null}"
+                                      th:text="${lastRunFormatted[sched.id]}"></span>
+                            </span>
+                            <span th:if="${lastRunFormatted[sched.id] == null}">—</span>
+                            <span class="sched-running-indicator d-none ms-1">
+                                <i class="fas fa-spinner fa-spin text-primary"></i>
+                                <span class="text-primary sched-progress-msg">Идёт...</span>
+                            </span>
+                        </td>
+
+                        <!-- Действия -->
+                        <td class="text-center">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <!-- Сохранить -->
+                                <button type="button" class="btn btn-sm btn-primary py-0 px-2 btn-sched-save"
+                                        title="Сохранить настройки расписания">
+                                    <i class="fas fa-save"></i>
+                                </button>
+                                <!-- Запустить сейчас -->
+                                <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 btn-run-now"
+                                        title="Запустить проверку прямо сейчас">
+                                    <i class="fas fa-bolt"></i>
+                                </button>
+                                <!-- Удалить -->
+                                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 btn-sched-delete"
+                                        th:data-schedule-id="${sched.id}"
+                                        th:data-shop-name="${shop.shopName}"
+                                        title="Удалить расписание">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Пустая строка если нет расписаний -->
+                    <tr th:if="${schedules[shop.id].empty}" class="shop-empty-row"
+                        th:data-shop-name="${shop.shopName}">
+                        <td colspan="11" class="text-muted text-center py-1 small fst-italic">
+                            Нет расписания — нажмите <i class="fas fa-plus"></i> чтобы добавить
+                        </td>
+                    </tr>
+
+                </th:block>
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Примеры cron -->
+    <div class="card cron-cheatsheet">
+        <div class="card-header py-2 cat-toggle d-flex justify-content-between align-items-center"
+             data-bs-toggle="collapse" data-bs-target="#cronExamples">
+            <span><i class="fas fa-question-circle me-2"></i>Справочник cron-выражений</span>
+            <i class="fas fa-chevron-down text-muted small"></i>
+        </div>
+        <div class="collapse" id="cronExamples">
+        <div class="card-body py-2">
+            <div class="row g-3">
+                <!-- Каждый день -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Каждый день</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light"><tr><th>Выражение</th><th>Описание</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>0 0 8 * * *</code></td><td>В 08:00 каждый день</td></tr>
+                            <tr><td><code>0 30 7 * * *</code></td><td>В 07:30 каждый день</td></tr>
+                            <tr><td><code>0 0 0 * * *</code></td><td>В полночь (00:00)</td></tr>
+                            <tr><td><code>0 0 12 * * *</code></td><td>В полдень (12:00)</td></tr>
+                            <tr><td><code>0 0 6,18 * * *</code></td><td>В 06:00 и 18:00</td></tr>
+                            <tr><td><code>0 0 8,12,18 * * *</code></td><td>В 08:00, 12:00 и 18:00</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Определённые дни -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Определённые дни недели</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light"><tr><th>Выражение</th><th>Описание</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>0 30 7 * * 2-6</code></td><td>Пн–Пт в 07:30</td></tr>
+                            <tr><td><code>0 0 9 * * 2-6</code></td><td>Пн–Пт в 09:00</td></tr>
+                            <tr><td><code>0 0 9 * * 2</code></td><td>По понедельникам в 09:00</td></tr>
+                            <tr><td><code>0 0 9 * * 7,1</code></td><td>Сб и Вс в 09:00</td></tr>
+                            <tr><td><code>0 0 8 * * 2,4,6</code></td><td>Пн, Ср, Пт в 08:00</td></tr>
+                            <tr><td><code>0 0 10 * * 3,5</code></td><td>Вт и Чт в 10:00</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Периодически -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Периодически</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light"><tr><th>Выражение</th><th>Описание</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>0 */15 * * * *</code></td><td>Каждые 15 минут</td></tr>
+                            <tr><td><code>0 */30 * * * *</code></td><td>Каждые 30 минут</td></tr>
+                            <tr><td><code>0 0 */2 * * *</code></td><td>Каждые 2 часа</td></tr>
+                            <tr><td><code>0 0 */4 * * *</code></td><td>Каждые 4 часа</td></tr>
+                            <tr><td><code>0 0 */6 * * *</code></td><td>Каждые 6 часов</td></tr>
+                            <tr><td><code>0 0 9-18 * * 2-6</code></td><td>Каждый час с 09 до 18, Пн–Пт</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Определённые числа месяца -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-2">Определённые числа месяца</h6>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light"><tr><th>Выражение</th><th>Описание</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>0 0 8 1 * *</code></td><td>1-го числа каждого месяца в 08:00</td></tr>
+                            <tr><td><code>0 0 8 1,15 * *</code></td><td>1-го и 15-го в 08:00</td></tr>
+                            <tr><td><code>0 0 8 */7 * *</code></td><td>Каждые 7 дней в 08:00</td></tr>
+                            <tr><td><code>0 0 0 1 1 *</code></td><td>1 января в полночь</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Справка по полям -->
+            <div class="mt-3 p-2 bg-light rounded border small">
+                <strong>Формат (Spring, 6 полей):</strong> <code>СЕК МИН ЧАС ДЕНЬ_МЕС МЕСЯЦ ДЕНЬ_НЕД</code><br>
+                <div class="row mt-1">
+                    <div class="col-auto"><code>СЕК</code> — 0–59 (обычно 0)</div>
+                    <div class="col-auto"><code>МИН</code> — 0–59</div>
+                    <div class="col-auto"><code>ЧАС</code> — 0–23</div>
+                    <div class="col-auto"><code>ДЕНЬ_МЕС</code> — 1–31</div>
+                    <div class="col-auto"><code>МЕСЯЦ</code> — 1–12</div>
+                    <div class="col-auto"><code>ДЕНЬ_НЕД</code> — 1=Вс, 2=Пн, 3=Вт, 4=Ср, 5=Чт, 6=Пт, 7=Сб</div>
+                </div>
+                <div class="mt-1">
+                    <code>*</code> — любое &nbsp;|&nbsp;
+                    <code>*/N</code> — каждые N &nbsp;|&nbsp;
+                    <code>A,B</code> — несколько значений &nbsp;|&nbsp;
+                    <code>A-B</code> — диапазон
+                </div>
+                <hr class="my-2">
+                <strong>Смещение дат:</strong> <code>-1</code> = вчера, <code>0</code> = сегодня.
+                Обычно: From = −1, To = 0 (проверяем вчера–сегодня).<br>
+                <strong>Пороги:</strong> пад% — падение «в наличии» или товаров; ош% — рост ошибок парсинга.
+            </div>
+        </div>
+        </div>
+    </div>
+
+</div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+    // ---- Фильтрация строк ----
+    const schedSearchEl = document.getElementById('schedSearch');
+    const schedSearchClearEl = document.getElementById('schedSearchClear');
+    const showEnabledOnlyEl = document.getElementById('showEnabledOnly');
+    const schedFilterCountEl = document.getElementById('schedFilterCount');
+
+    function filterSchedRows() {
+        const q = schedSearchEl ? schedSearchEl.value.trim().toLowerCase() : '';
+        const onlyEnabled = showEnabledOnlyEl ? showEnabledOnlyEl.checked : false;
+        const schedRows = document.querySelectorAll('tr.sched-row');
+        const emptyRows = document.querySelectorAll('tr.shop-empty-row');
+        const headerRows = document.querySelectorAll('tr.shop-header-row');
+
+        // Шаг 1: фильтруем строки расписаний
+        let visibleSchedRows = 0;
+        schedRows.forEach(row => {
+            const name = (row.dataset.shopName || '').toLowerCase();
+            const enabledCb = row.querySelector('.sched-enabled-cb');
+            const isEnabled = enabledCb ? enabledCb.checked : false;
+            const show = (!q || name.includes(q)) && (!onlyEnabled || isEnabled);
+            row.style.display = show ? '' : 'none';
+            if (show) visibleSchedRows++;
+        });
+
+        // Шаг 2: показываем/скрываем заголовок магазина —
+        // скрываем если не совпадает поиск ИЛИ если onlyEnabled и ни одна строка расписания не видна
+        headerRows.forEach(hRow => {
+            const shopName = (hRow.dataset.shopName || '').toLowerCase();
+            const shopId = hRow.dataset.shopId;
+            if (q && !shopName.includes(q)) {
+                hRow.style.display = 'none';
+                return;
+            }
+            if (onlyEnabled) {
+                // Есть ли хоть одна видимая sched-row у этого магазина?
+                const hasVisible = [...schedRows].some(r =>
+                    r.dataset.shopId === shopId && r.style.display !== 'none');
+                hRow.style.display = hasVisible ? '' : 'none';
+            } else {
+                hRow.style.display = '';
+            }
+        });
+
+        // Шаг 3: пустые строки (магазины без расписания)
+        // При onlyEnabled скрываем — раз нет расписаний, нечего «включать»
+        emptyRows.forEach(eRow => {
+            const shopName = (eRow.dataset.shopName || '').toLowerCase();
+            if (q && !shopName.includes(q)) {
+                eRow.style.display = 'none';
+                return;
+            }
+            eRow.style.display = onlyEnabled ? 'none' : '';
+        });
+
+        if (schedFilterCountEl) {
+            schedFilterCountEl.textContent = (q || onlyEnabled)
+                ? 'Показано: ' + visibleSchedRows + ' расписаний'
+                : '';
+        }
+    }
+
+    if (schedSearchEl) {
+        schedSearchEl.addEventListener('input', filterSchedRows);
+        schedSearchClearEl.addEventListener('click', () => { schedSearchEl.value = ''; filterSchedRows(); });
+    }
+    if (showEnabledOnlyEl) showEnabledOnlyEl.addEventListener('change', filterSchedRows);
+
+    // Применяем фильтр сразу при загрузке (чекбокс checked по умолчанию)
+    filterSchedRows();
+
+    // ---- Добавить расписание ----
+    document.querySelectorAll('.btn-add-schedule').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const orig = this.innerHTML;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            this.disabled = true;
+            fetch('/zoomos/schedule/' + shopId + '/new', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                        this.innerHTML = orig;
+                        this.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    alert('Ошибка сети');
+                    this.innerHTML = orig;
+                    this.disabled = false;
+                });
+        });
+    });
+
+    // ---- Чекбокс Вкл/Выкл (AJAX) ----
+    document.querySelectorAll('.sched-enabled-cb').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const scheduleId = row.dataset.scheduleId;
+            const wantEnabled = this.checked;
+            this.disabled = true;
+
+            fetch('/zoomos/schedule/item/' + scheduleId + '/toggle', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    this.checked = data.isEnabled !== undefined ? data.isEnabled : wantEnabled;
+                    this.title = this.checked
+                        ? 'Расписание включено — нажмите чтобы выключить'
+                        : 'Расписание выключено — нажмите чтобы включить';
+                    this.disabled = false;
+                    filterSchedRows();
+                })
+                .catch(() => {
+                    this.checked = !wantEnabled; // откатить
+                    this.disabled = false;
+                    alert('Ошибка сети');
+                });
+        });
+    });
+
+    // ---- Сохранить расписание ----
+    document.querySelectorAll('.btn-sched-save').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const row = this.closest('tr');
+            const action = row.dataset.shopAction; // /zoomos/schedule/item/{scheduleId}
+
+            const fd = new FormData();
+            fd.append('label',            row.querySelector('.sched-label')?.value?.trim() || '');
+            fd.append('cronExpression',   row.querySelector('.sched-cron').value.trim());
+            fd.append('dateOffsetFrom',   row.querySelector('.sched-offset-from').value);
+            fd.append('dateOffsetTo',     row.querySelector('.sched-offset-to').value);
+            fd.append('timeFrom',  row.querySelector('.sched-time-from').value || '');
+            fd.append('timeTo',    row.querySelector('.sched-time-to').value || '');
+            fd.append('dropThreshold',        row.querySelector('.sched-drop').value);
+            fd.append('errorGrowthThreshold', row.querySelector('.sched-err').value);
+            fd.append('baselineDays',         row.querySelector('.sched-baseline').value);
+            fd.append('minAbsoluteErrors',    row.querySelector('.sched-min-abs-errors').value || '5');
+            fd.append('trendDropThreshold',   row.querySelector('.sched-trend-drop').value || '30');
+            fd.append('trendErrorThreshold',  row.querySelector('.sched-trend-err').value || '100');
+
+            const orig = this.innerHTML;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            this.disabled = true;
+
+            fetch(action, { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        this.innerHTML = '<i class="fas fa-check"></i>';
+                        this.className = 'btn btn-sm btn-success py-0 px-2 btn-sched-save';
+                        setTimeout(() => {
+                            this.innerHTML = orig;
+                            this.className = 'btn btn-sm btn-primary py-0 px-2 btn-sched-save';
+                            this.disabled = false;
+                        }, 1500);
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'не удалось сохранить'));
+                        this.innerHTML = orig;
+                        this.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    alert('Ошибка сети');
+                    this.innerHTML = orig;
+                    this.disabled = false;
+                });
+        });
+    });
+
+    // ---- Удалить расписание ----
+    document.querySelectorAll('.btn-sched-delete').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const scheduleId = this.dataset.scheduleId;
+            const shopName = this.dataset.shopName;
+            if (!confirm('Удалить расписание для ' + shopName + '?')) return;
+            this.disabled = true;
+            fetch('/zoomos/schedule/item/' + scheduleId + '/delete', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Ошибка удаления');
+                        this.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    alert('Ошибка сети');
+                    this.disabled = false;
+                });
+        });
+    });
+
+    // ---- Индикатор текущей проверки (page load) ----
+    document.querySelectorAll('tr.sched-row').forEach(row => {
+        const shopId = row.dataset.shopId;
+        if (!shopId) return;
+        fetch('/zoomos/check/latest?shopId=' + shopId)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'RUNNING') {
+                    const indicator = row.querySelector('.sched-running-indicator');
+                    const msgEl = indicator ? indicator.querySelector('.sched-progress-msg') : null;
+                    if (indicator) indicator.classList.remove('d-none');
+                    subscribeToShopProgress(shopId, indicator, msgEl);
+                }
+            })
+            .catch(() => {});
+    });
+
+    function subscribeToShopProgress(shopId, indicator, msgEl) {
+        function finish() {
+            if (indicator) indicator.classList.add('d-none');
+        }
+        function startPolling() {
+            const poll = setInterval(() => {
+                fetch('/zoomos/check/latest?shopId=' + shopId)
+                    .then(r => r.json())
+                    .then(d => { if (d.status !== 'RUNNING') { clearInterval(poll); finish(); } })
+                    .catch(() => clearInterval(poll));
+            }, 5000);
+        }
+        try {
+            const socket = new SockJS('/ws');
+            const stompClient = Stomp.over(socket);
+            stompClient.debug = null;
+            stompClient.connect({}, function() {
+                stompClient.subscribe('/topic/zoomos-check/shop/' + shopId, function(msg) {
+                    const data = JSON.parse(msg.body);
+                    if (msgEl) msgEl.textContent = data.message || 'Идёт...';
+                    if (data.message && (data.message.includes('завершена') || data.message.includes('Ошибка'))) {
+                        stompClient.disconnect();
+                        finish();
+                    }
+                });
+            }, function() { startPolling(); });
+        } catch (e) { startPolling(); }
+    }
+
+    // ---- Запустить сейчас ----
+    document.querySelectorAll('.btn-run-now').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const row = this.closest('tr');
+            const shopId = row.dataset.shopId;
+            const offsetFrom = parseInt(row.querySelector('.sched-offset-from').value || '-1');
+            const offsetTo   = parseInt(row.querySelector('.sched-offset-to').value   || '0');
+
+            const today = new Date();
+            const fmt = d => {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return y + '-' + m + '-' + day;
+            };
+            const dateFrom = fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + offsetFrom));
+            const dateTo   = fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + offsetTo));
+
+            const fd = new FormData();
+            fd.append('shopId', shopId);
+            fd.append('dateFrom', dateFrom);
+            fd.append('dateTo', dateTo);
+            const tf = row.querySelector('.sched-time-from').value;
+            const tt = row.querySelector('.sched-time-to').value;
+            if (tf) fd.append('timeFrom', tf);
+            if (tt) fd.append('timeTo',   tt);
+            fd.append('dropThreshold',        row.querySelector('.sched-drop').value || '10');
+            fd.append('errorGrowthThreshold', row.querySelector('.sched-err').value  || '30');
+            fd.append('baselineDays',         row.querySelector('.sched-baseline').value || '7');
+            fd.append('minAbsoluteErrors',    row.querySelector('.sched-min-abs-errors').value || '5');
+            fd.append('trendDropThreshold',   row.querySelector('.sched-trend-drop').value || '30');
+            fd.append('trendErrorThreshold',  row.querySelector('.sched-trend-err').value || '100');
+
+            const orig = this.innerHTML;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            this.disabled = true;
+
+            const runBtn = this;
+            fetch('/zoomos/check/run', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        runBtn.innerHTML = '<i class="fas fa-check"></i>';
+                        runBtn.className = 'btn btn-sm btn-success py-0 px-2 btn-run-now';
+                        const indicator = row.querySelector('.sched-running-indicator');
+                        const msgEl = indicator ? indicator.querySelector('.sched-progress-msg') : null;
+                        if (indicator) indicator.classList.remove('d-none');
+                        subscribeToScheduleCheck(shopId, data.operationId, runBtn, orig, indicator, msgEl);
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                        runBtn.innerHTML = orig;
+                        runBtn.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    alert('Ошибка сети');
+                    runBtn.innerHTML = orig;
+                    runBtn.disabled = false;
+                });
+        });
+    });
+
+    function subscribeToScheduleCheck(shopId, operationId, btn, origHtml, indicator, msgEl) {
+        function finish() {
+            if (indicator) indicator.classList.add('d-none');
+            btn.innerHTML = origHtml;
+            btn.className = 'btn btn-sm btn-outline-info py-0 px-2 btn-run-now';
+            btn.disabled = false;
+        }
+        function startPolling() {
+            const poll = setInterval(() => {
+                fetch('/zoomos/check/latest?shopId=' + shopId)
+                    .then(r => r.json())
+                    .then(d => { if (d.status !== 'RUNNING') { clearInterval(poll); finish(); } })
+                    .catch(() => clearInterval(poll));
+            }, 5000);
+        }
+        try {
+            const socket = new SockJS('/ws');
+            const stompClient = Stomp.over(socket);
+            stompClient.debug = null;
+            stompClient.connect({}, function() {
+                stompClient.subscribe('/topic/zoomos-check/shop/' + shopId, function(msg) {
+                    const data = JSON.parse(msg.body);
+                    if (msgEl) msgEl.textContent = data.message || 'Идёт...';
+                    if (data.message && (data.message.includes('завершена') || data.message.includes('Ошибка'))) {
+                        stompClient.disconnect();
+                        finish();
+                    }
+                });
+            }, function() { startPolling(); });
+        } catch (e) { startPolling(); }
+    }
+</script>
+</th:block>
+
+</html>

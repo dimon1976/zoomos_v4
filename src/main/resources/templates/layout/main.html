@@ -81,6 +81,38 @@
     </nav>
 </header>
 
+<!-- Глобальный баннер приоритетных сайтов -->
+<div id="priority-alerts-banner" class="alert alert-danger mb-0 rounded-0 d-none py-2" role="alert">
+    <div class="container d-flex align-items-center gap-3 flex-wrap">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>Проблемы в приоритетных сайтах:</strong>
+        <span id="priority-alerts-text"></span>
+        <a href="/zoomos" class="btn btn-sm btn-outline-danger ms-auto">Перейти к Zoomos Check →</a>
+        <button type="button" class="btn-close btn-close-white" id="priority-alerts-close" title="Закрыть до следующей загрузки страницы"></button>
+    </div>
+</div>
+<script>
+  (function() {
+    var DISMISS_KEY = 'priority-alerts-dismissed';
+    if (sessionStorage.getItem(DISMISS_KEY)) return;
+    fetch('/zoomos/api/priority-alerts')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.length > 0) {
+          var text = data.map(function(a) {
+            return a.siteName + ' (' + a.severity + ': ' + a.issueCount + ' пр.)';
+          }).join(', ');
+          document.getElementById('priority-alerts-text').textContent = text;
+          document.getElementById('priority-alerts-banner').classList.remove('d-none');
+        }
+      }).catch(function() {});
+    document.getElementById('priority-alerts-close').addEventListener('click', function() {
+      document.getElementById('priority-alerts-banner').classList.add('d-none');
+      sessionStorage.setItem(DISMISS_KEY, '1');
+    });
+  })();
+</script>
+
 <!-- Основной контент -->
 <main class="container my-2">
     <!-- Уведомления -->
