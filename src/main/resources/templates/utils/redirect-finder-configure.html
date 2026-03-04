@@ -244,35 +244,10 @@
                                                     <input class="form-check-input" type="checkbox" th:field="*{usePlaywright}" id="usePlaywright">
                                                     <label class="form-check-label" for="usePlaywright">
                                                         <i class="fas fa-browser text-primary"></i>
-                                                        Принудительно использовать браузер
+                                                        Принудительно использовать браузер (Playwright)
                                                     </label>
-                                                    <div class="form-text">Использовать Playwright вместо curl для всех URL</div>
+                                                    <div class="form-text">По умолчанию используется cURL, браузер запускается автоматически только при блокировке</div>
                                                 </div>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" th:field="*{useProxy}" id="useProxy">
-                                                    <label class="form-check-label" for="useProxy">
-                                                        <i class="fas fa-shield-alt text-success"></i>
-                                                        Использовать прокси
-                                                    </label>
-                                                    <div class="form-text">
-                                                        Обход региональных блокировок через proxy сервер
-                                                        <span class="text-info" data-bs-toggle="tooltip"
-                                                              title="Требует настройки redirect.proxy.* в application.properties">
-                                                            <i class="fas fa-info-circle"></i>
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="row mb-3">
-                                            <div class="col-md-6">
-                                                <label class="form-label">Формат результата</label>
-                                                <select class="form-select" th:field="*{outputFormat}">
-                                                    <option value="csv" selected>CSV файл</option>
-                                                    <option value="xlsx">Excel файл</option>
-                                                </select>
                                             </div>
                                         </div>
                                     </div>
@@ -281,19 +256,31 @@
 
                             <!-- Strategy Information -->
                             <div class="strategy-info">
-                                <h6><i class="fas fa-info-circle"></i> Стратегии обработки</h6>
-                                <div class="row text-small">
+                                <h6><i class="fas fa-info-circle"></i> Стратегии обработки (автоматический каскад)</h6>
+                                <div class="row text-small g-2">
                                     <div class="col-md-4">
                                         <strong>1. cURL</strong><br>
-                                        <span class="text-muted">Основная стратегия, быстро и эффективно</span>
+                                        <span class="text-muted">Быстро, без User-Agent — обходит базовые блокировки</span>
                                     </div>
                                     <div class="col-md-4">
-                                        <strong>2. Playwright</strong><br>
-                                        <span class="text-muted">При блокировке cURL, использует браузер</span>
+                                        <strong>2. WebClient</strong><br>
+                                        <span class="text-muted">Browser-заголовки (Accept, Sec-Fetch-*) — при блокировке по заголовкам</span>
                                     </div>
                                     <div class="col-md-4">
-                                        <strong>3. HttpClient</strong><br>
-                                        <span class="text-muted">Резервная стратегия</span>
+                                        <strong>3. Chrome Playwright</strong><br>
+                                        <span class="text-muted">Headless Chrome + JS-редиректы (Яндекс.Маркет, Wildberries)</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>4. Firefox Playwright</strong><br>
+                                        <span class="text-muted">Headless Firefox — другой TLS fingerprint (Imperva, DataDome)</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>5. HttpClient</strong><br>
+                                        <span class="text-muted">Java HTTP клиент — простой fallback</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>6. Jsoup</strong><br>
+                                        <span class="text-muted">HTML-парсер — обрабатывает meta-refresh редиректы</span>
                                     </div>
                                 </div>
                             </div>

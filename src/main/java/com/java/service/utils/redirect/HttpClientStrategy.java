@@ -159,7 +159,7 @@ public class HttpClientStrategy implements RedirectStrategy {
     
     @Override
     public int getPriority() {
-        return 3; // Lowest priority - fallback only
+        return 5; // Priority 5: перед JsoupStrategy (6), после Firefox (4)
     }
     
     @Override
