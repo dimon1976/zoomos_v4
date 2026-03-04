@@ -28,7 +28,10 @@
     </style>
 </head>
 <body>
-<div class="page-actions">
+<div class="page-actions d-flex gap-2">
+    <a th:href="@{/statistics/history}" class="btn btn-outline-primary">
+        <i class="fas fa-history me-1"></i>История анализов
+    </a>
     <a href="javascript:history.back()" class="btn btn-secondary">
         <i class="fas fa-arrow-left me-1"></i>Назад
     </a>

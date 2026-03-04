@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html('Справка', ~{::section}, ~{::script}, ~{::style}, 'Справка', ~{::.page-actions})}">
+<head>
+    <title>Справка</title>
+    <style>
+        .help-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .help-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions"></div>
+<section>
+    <div class="row">
+        <!-- Нормализация данных -->
+        <div class="col-md-6 mb-4">
+            <div class="card help-card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-magic me-2"></i>Нормализация данных
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Правила и алгоритмы нормализации данных при импорте: обработка дат, цен, штрихкодов, статусов наличия и других полей.</p>
+                    <p class="text-muted small">Актуально при настройке шаблонов импорта и диагностике проблем с данными.</p>
+                </div>
+                <div class="card-footer d-flex gap-2">
+                    <a href="/normalization/help" class="btn btn-primary btn-sm">
+                        <i class="fas fa-book me-1"></i>Подробнее
+                    </a>
+                    <a href="/clients" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-upload me-1"></i>Перейти к импорту
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Merger -->
+        <div class="col-md-6 mb-4">
+            <div class="card help-card h-100">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-database me-2"></i>Data Merger
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Слияние данных из двух файлов: файл с товарами и аналогами + файл со ссылками. Настраиваемый маппинг колонок.</p>
+                    <p class="text-muted small">Используется для обогащения списков товаров URL-адресами из другого источника.</p>
+                </div>
+                <div class="card-footer d-flex gap-2">
+                    <a href="/utils/data-merger/docs" class="btn btn-success btn-sm">
+                        <i class="fas fa-book me-1"></i>Подробнее
+                    </a>
+                    <a href="/utils/data-merger" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-tools me-1"></i>Перейти к инструменту
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<script></script>
+</body>
+</html>
