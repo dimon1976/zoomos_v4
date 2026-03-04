@@ -222,13 +222,33 @@
                             </a>
                             <!-- Redmine: ссылка если задача уже есть, иначе кнопка создания -->
                             <th:block th:if="${redmineEnabled}">
-                                <a th:if="${redmineIssues[issue['site']] != null}"
-                                   th:href="${redmineIssues[issue['site']].issueUrl}"
-                                   target="_blank"
-                                   class="btn btn-sm btn-success py-0 px-2"
-                                   th:title="'Redmine #' + ${redmineIssues[issue['site']].issueId} + ' — ' + ${redmineIssues[issue['site']].issueStatus}"
-                                   th:text="'#' + ${redmineIssues[issue['site']].issueId}">
-                                </a>
+                                <!-- Задача существует: ссылка + кнопка редактирования -->
+                                <th:block th:if="${redmineIssues[issue['site']] != null}">
+                                    <div class="btn-group btn-group-sm" role="group"
+                                         th:data-rm-site="${issue['site']}">
+                                        <a th:href="${redmineIssues[issue['site']].issueUrl}"
+                                           target="_blank"
+                                           th:class="'btn py-0 px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')"
+                                           th:title="'Redmine #' + ${redmineIssues[issue['site']].issueId} + ' — ' + ${redmineIssues[issue['site']].issueStatus}"
+                                           th:text="'#' + ${redmineIssues[issue['site']].issueId}">
+                                        </a>
+                                        <button type="button"
+                                                class="btn btn-outline-secondary py-0 px-1 btn-redmine-edit"
+                                                th:data-issueid="${redmineIssues[issue['site']].issueId}"
+                                                th:data-site="${issue['site']}"
+                                                th:data-city="${issue['city'] != null ? issue['city'] : ''}"
+                                                th:data-message="${issue['message']}"
+                                                th:data-checktype="${issue['checkType'] != null ? issue['checkType'] : ''}"
+                                                th:data-historyurl="${issue['checkType'] == 'API' ?
+                                                    (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=') :
+                                                    (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=')}"
+                                                th:data-matchingurl="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}"
+                                                title="Редактировать задачу в Redmine">
+                                            <i class="fas fa-pen" style="font-size:0.65rem"></i>
+                                        </button>
+                                    </div>
+                                </th:block>
+                                <!-- Задача не создана: кнопка создания -->
                                 <button th:unless="${redmineIssues[issue['site']] != null}"
                                         type="button"
                                         class="btn btn-sm btn-outline-danger py-0 px-2 btn-redmine"
@@ -239,11 +259,11 @@
                                         th:data-historyurl="${issue['checkType'] == 'API' ?
                                             (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=') :
                                             (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=')}"
-                                        th:data-matchingurl="${baseUrl + '/shop/' + issue['shopName']}"
+                                        th:data-matchingurl="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}"
                                         title="Создать задачу в Redmine">
                                     <i class="fas fa-bug"></i>
                                 </button>
-                            </th:block>
+                            </th:block><!-- /Redmine -->
                             <!-- Скрыть (отметить как проверено) -->
                             <button type="button"
                                     class="btn btn-sm btn-outline-success py-0 px-2 btn-hide-issue"
@@ -504,40 +524,101 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body py-2">
+                <!-- Загрузка -->
                 <div id="rmLoading" class="text-center py-3">
-                    <i class="fas fa-spinner fa-spin me-2"></i>Проверяем Redmine...
+                    <i class="fas fa-spinner fa-spin me-2"></i>Загрузка...
                 </div>
                 <!-- Существующие задачи -->
-                <div id="rmExistingBlock" class="d-none mb-3">
+                <div id="rmExistingBlock" class="d-none mb-2 pb-2 border-bottom">
                     <div class="small text-muted fw-semibold mb-1">
                         <i class="fas fa-tasks me-1"></i>Существующие задачи:
                     </div>
                     <div id="rmExistingList" class="d-flex flex-wrap gap-1"></div>
                 </div>
-                <!-- Превью новой задачи -->
+                <!-- Форма новой задачи -->
                 <div id="rmCreateBlock" class="d-none">
-                    <div class="small text-muted fw-semibold mb-1">
-                        <i class="fas fa-plus me-1"></i>Новая задача:
+                    <!-- Строка 1: 4 основных поля -->
+                    <div class="row g-1 mb-2">
+                        <div class="col">
+                            <div class="small text-muted mb-1">Трекер</div>
+                            <select id="rmSelectTracker" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Статус</div>
+                            <select id="rmSelectStatus" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Приоритет</div>
+                            <select id="rmSelectPriority" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Исполнитель</div>
+                            <select id="rmSelectAssignee" class="form-select form-select-sm"></select>
+                        </div>
                     </div>
-                    <table class="table table-sm table-bordered mb-2" style="font-size:0.88rem">
-                        <tr><td class="text-muted" style="width:140px">Тема</td>
-                            <td id="rmSubject" class="fw-semibold"></td></tr>
-                        <tr><td class="text-muted">Трекер / Статус</td>
-                            <td><span id="rmTracker"></span> / <span id="rmStatus"></span></td></tr>
-                        <tr><td class="text-muted">Приоритет</td><td id="rmPriority"></td></tr>
-                        <tr><td class="text-muted">В чем ошибка</td><td id="rmError" class="text-danger"></td></tr>
-                        <tr><td class="text-muted">Способ выкачки</td><td id="rmMethod"></td></tr>
-                    </table>
-                    <div class="small text-muted mb-1">Описание:</div>
-                    <pre id="rmDescription" class="bg-light border rounded p-2 mb-0"
-                         style="font-size:0.82rem; white-space:pre-wrap; max-height:140px; overflow-y:auto"></pre>
+                    <!-- Строка 2: В чем ошибка (полная ширина — главное поле) -->
+                    <div id="rmCfErrorRow" class="mb-2" style="display:none">
+                        <div class="small text-muted mb-1">В чем ошибка</div>
+                        <select id="rmSelectCfError" class="form-select form-select-sm"></select>
+                    </div>
+                    <!-- Строка 3: Способ + Вариант -->
+                    <div class="row g-1 mb-2">
+                        <div id="rmCfMethodCol" class="col-6" style="display:none">
+                            <div class="small text-muted mb-1">Способ выкачки</div>
+                            <select id="rmSelectCfMethod" class="form-select form-select-sm"></select>
+                        </div>
+                        <div id="rmCfVariantCol" class="col-6" style="display:none">
+                            <div class="small text-muted mb-1">Вариант настройки</div>
+                            <select id="rmSelectCfVariant" class="form-select form-select-sm"></select>
+                        </div>
+                    </div>
+                    <!-- Описание — редактируемое, предзаполненное -->
+                    <div class="mb-2">
+                        <div class="small text-muted mb-1">
+                            Описание <span class="text-muted" style="font-size:0.75rem">(редактируемое)</span>
+                        </div>
+                        <textarea id="rmDescription" class="form-control form-control-sm"
+                                  rows="4" style="font-size:0.8rem; font-family:monospace; resize:vertical"></textarea>
+                    </div>
+                    <!-- Последние комментарии (только в режиме редактирования) -->
+                    <div id="rmCommentsBlock" class="d-none mb-2">
+                        <div class="small text-muted fw-semibold mb-1" style="cursor:pointer"
+                             onclick="document.getElementById('rmCommentsList').classList.toggle('d-none')">
+                            <i class="fas fa-comments me-1"></i>Последние комментарии
+                            <i class="fas fa-chevron-down ms-1" style="font-size:0.7rem"></i>
+                        </div>
+                        <div id="rmCommentsList" class="d-none">
+                            <!-- заполняется JS -->
+                        </div>
+                    </div>
+                    <!-- Добавить комментарий (только в режиме редактирования) -->
+                    <div id="rmNotesBlock" class="d-none">
+                        <div class="small text-muted mb-1">Добавить комментарий</div>
+                        <textarea id="rmNotes" class="form-control form-control-sm"
+                                  rows="2" placeholder="Текст комментария (будет добавлен к задаче в ТТ)"
+                                  style="font-size:0.8rem; resize:vertical"></textarea>
+                    </div>
                 </div>
-                <div id="rmError2" class="d-none text-danger small mt-2"></div>
+                <!-- Блок после успешного создания -->
+                <div id="rmCopyBlock" class="d-none">
+                    <div class="alert alert-success py-2 mb-2">
+                        <i class="fas fa-check-circle me-1"></i>Задача создана!
+                    </div>
+                    <pre id="rmCopyText" class="bg-light border rounded p-2 mb-1"
+                         style="font-size:0.82rem; white-space:pre-wrap; margin:0"></pre>
+                    <button type="button" class="btn btn-sm btn-outline-secondary mt-1" id="rmCopyBtn">
+                        <i class="fas fa-copy me-1"></i>Скопировать
+                    </button>
+                </div>
+                <div id="rmErrorMsg" class="d-none text-danger small mt-2"></div>
             </div>
             <div class="modal-footer py-2">
-                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
                 <button id="rmCreateBtn" class="btn btn-sm btn-danger d-none">
-                    <i class="fas fa-plus me-1"></i>Создать задачу
+                    <i class="fas fa-bug me-1"></i>Создать задачу
+                </button>
+                <button id="rmUpdateBtn" class="btn btn-sm btn-primary d-none">
+                    <i class="fas fa-save me-1"></i>Обновить задачу
                 </button>
             </div>
         </div>
@@ -782,134 +863,401 @@
     // Инициализация — применить сохранённые hidden
     applyHidden();
 
+    // ── Redmine: асинхронный batch-check всех сайтов после загрузки страницы ────
+    (function() {
+        const allSites = new Set();
+        document.querySelectorAll('.btn-redmine[data-site], .btn-redmine-edit[data-site]')
+            .forEach(function(b) { allSites.add(b.dataset.site); });
+        if (!allSites.size) return;
+
+        const params = [...allSites].map(s => 'sites=' + encodeURIComponent(s)).join('&');
+        fetch('/zoomos/redmine/check-batch?' + params)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                // data: { "site.ru": {id, url, statusName, isClosed}, ... }
+                Object.entries(data).forEach(function([site, issue]) {
+                    if (!issue) return;
+                    const btnClass = issue.isClosed ? 'btn-success' : 'btn-danger';
+                    // Обновляем существующие ссылки #NNN (в btn-group с data-rm-site)
+                    document.querySelectorAll('[data-rm-site="' + CSS.escape(site) + '"] a.btn')
+                        .forEach(function(a) {
+                            a.className = 'btn py-0 px-2 ' + btnClass;
+                            a.title = 'Redmine #' + issue.id + ' — ' + issue.statusName;
+                        });
+                    // Если кнопка создания ещё на месте — заменяем на ссылку
+                    document.querySelectorAll('.btn-redmine[data-site="' + CSS.escape(site) + '"]')
+                        .forEach(function(b) {
+                            replaceAllSiteBtns(site, {id: issue.id, url: issue.url,
+                                status: issue.statusName, btnClass: btnClass});
+                        });
+                });
+            })
+            .catch(function() {}); // тихо игнорируем
+    })();
+
     // ── Redmine интеграция ────────────────────────────────────────────
     (function() {
         const modalEl = document.getElementById('redmineModal');
-        if (!modalEl) return; // Redmine отключён
+        if (!modalEl) return;
 
         const modal = new bootstrap.Modal(modalEl);
-        let rmConfig = null;
-        let currentBtn = null;
+        let currentBtn  = null;
+        let currentMode = 'create'; // 'create' | 'edit'
+        let currentIssueId = null;
+        let rmOptions = null;       // кэш — грузим один раз
 
-        // Загрузка конфига при старте
-        fetch('/zoomos/redmine/config')
-            .then(r => r.json())
-            .then(cfg => { if (cfg.enabled) rmConfig = cfg; })
-            .catch(() => {});
+        // ─── Утилиты ─────────────────────────────────────────────────
 
-        // Клик на кнопку RM
-        document.addEventListener('click', function(e) {
-            const btn = e.target.closest('.btn-redmine');
-            if (!btn || !rmConfig) return;
-            currentBtn = btn;
+        function fillSelect(selId, items, defaultId) {
+            const sel = document.getElementById(selId);
+            if (!sel) return;
+            sel.innerHTML = '';
+            items.forEach(function(item) {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.name;
+                if (String(item.id) === String(defaultId)) opt.selected = true;
+                sel.appendChild(opt);
+            });
+        }
 
-            // Сброс modal
+        function showError(msg) {
+            const el = document.getElementById('rmErrorMsg');
+            el.textContent = msg;
+            el.classList.remove('d-none');
+        }
+
+        function resetModal() {
             document.getElementById('rmLoading').classList.remove('d-none');
             document.getElementById('rmExistingBlock').classList.add('d-none');
             document.getElementById('rmCreateBlock').classList.add('d-none');
             document.getElementById('rmCreateBtn').classList.add('d-none');
-            document.getElementById('rmError2').classList.add('d-none');
+            document.getElementById('rmUpdateBtn').classList.add('d-none');
+            document.getElementById('rmCopyBlock').classList.add('d-none');
+            document.getElementById('rmErrorMsg').classList.add('d-none');
+            document.getElementById('rmCommentsBlock').classList.add('d-none');
+            document.getElementById('rmCommentsList').classList.add('d-none');
+            document.getElementById('rmNotesBlock').classList.add('d-none');
+            document.getElementById('rmNotes').value = '';
+        }
+
+        function buildDescriptionFromBtn(btn) {
+            let d = 'Сайт: ' + (btn.dataset.site || '') + '\n';
+            if (btn.dataset.city)       d += 'Город: ' + btn.dataset.city + '\n';
+            if (btn.dataset.message)    d += 'Проблема: ' + btn.dataset.message + '\n';
+            if (btn.dataset.historyurl) d += '\nИстория выкачки: ' + btn.dataset.historyurl;
+            if (btn.dataset.matchingurl)d += '\nМатчинг: ' + btn.dataset.matchingurl;
+            return d;
+        }
+
+        function fillCfSelects(cfs, cfValues, checkType) {
+            if (cfs.cfError) {
+                const items = [{id:'', name:'— выбрать —'}].concat(
+                    (cfs.cfError.possibleValues || []).map(v => ({id:v, name:v})));
+                const cur = cfValues ? cfValues[String(cfs.cfError.id)] : '';
+                fillSelect('rmSelectCfError', items, cur || '');
+                document.getElementById('rmCfErrorRow').style.display = '';
+            }
+            if (cfs.cfMethod) {
+                const items = (cfs.cfMethod.possibleValues || []).map(v => ({id:v, name:v}));
+                const cur = cfValues ? cfValues[String(cfs.cfMethod.id)] : checkType;
+                fillSelect('rmSelectCfMethod', items, cur || checkType || '');
+                document.getElementById('rmCfMethodCol').style.display = '';
+            }
+            if (cfs.cfVariant) {
+                const items = [{id:'', name:'— выбрать —'}].concat(
+                    (cfs.cfVariant.possibleValues || []).map(v => ({id:v, name:v})));
+                const cur = cfValues ? cfValues[String(cfs.cfVariant.id)] : '';
+                fillSelect('rmSelectCfVariant', items, cur || '');
+                document.getElementById('rmCfVariantCol').style.display = '';
+            }
+        }
+
+        function collectBody(mode, site, description) {
+            const cfs = rmOptions.customFields || {};
+            const customFields = [];
+            const cfErrorValue = cfs.cfError ? (document.getElementById('rmSelectCfError').value || '') : '';
+            if (cfs.cfError)   customFields.push({ id: cfs.cfError.id,   value: cfErrorValue });
+            if (cfs.cfMethod)  customFields.push({ id: cfs.cfMethod.id,  value: document.getElementById('rmSelectCfMethod').value  || '' });
+            if (cfs.cfVariant) customFields.push({ id: cfs.cfVariant.id, value: document.getElementById('rmSelectCfVariant').value || '' });
+
+            // Если "В чем ошибка" не выбрано — берём текст проблемы из data-message кнопки
+            const shortMsg = cfErrorValue || (currentBtn ? currentBtn.dataset.message || '' : '');
+
+            return {
+                site:         site,
+                description:  description,
+                shortMessage: shortMsg,
+                notes:        document.getElementById('rmNotes').value || '',
+                trackerId:    parseInt(document.getElementById('rmSelectTracker').value)  || 0,
+                statusId:     parseInt(document.getElementById('rmSelectStatus').value)   || 0,
+                priorityId:   parseInt(document.getElementById('rmSelectPriority').value) || 0,
+                assignedToId: parseInt(document.getElementById('rmSelectAssignee').value) || 0,
+                customFields: customFields
+            };
+        }
+
+        /** Заменяет все кнопки создания задачи (.btn-redmine) для данного сайта на ссылку + кнопку редактирования */
+        function replaceAllSiteBtns(site, issue) {
+            const btnClass = issue.btnClass || (issue.isClosed === false ? 'btn-danger' : 'btn-success');
+            function makeGroup(srcBtn) {
+                const group = document.createElement('div');
+                group.className = 'btn-group btn-group-sm';
+                group.dataset.rmSite = site;
+                const a = document.createElement('a');
+                a.href = issue.url; a.target = '_blank';
+                a.className = 'btn py-0 px-2 ' + btnClass;
+                a.title = 'Redmine #' + issue.id + ' — ' + issue.status;
+                a.textContent = '#' + issue.id;
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'btn btn-outline-secondary py-0 px-1 btn-redmine-edit';
+                editBtn.dataset.issueid = issue.id;
+                editBtn.dataset.site = site;
+                editBtn.title = 'Редактировать задачу в Redmine';
+                editBtn.innerHTML = '<i class="fas fa-pen" style="font-size:0.65rem"></i>';
+                // Копируем data-атрибуты из исходной кнопки создания (для описания при повторном редактировании)
+                if (srcBtn) {
+                    ['city','message','checktype','historyurl','matchingurl'].forEach(function(k) {
+                        if (srcBtn.dataset[k]) editBtn.dataset[k] = srcBtn.dataset[k];
+                    });
+                }
+                group.appendChild(a);
+                group.appendChild(editBtn);
+                return group;
+            }
+            // Заменяем все кнопки создания для этого сайта (включая currentBtn если ещё в DOM)
+            document.querySelectorAll('.btn-redmine[data-site="' + CSS.escape(site) + '"]')
+                .forEach(function(b) { b.replaceWith(makeGroup(b)); });
+        }
+
+        function showCopyBlock(site, shortMessage, issueUrl) {
+            // Не дублируем сайт в описании если shortMessage пуст или совпадает с сайтом
+            const msg = (shortMessage && shortMessage !== site) ? shortMessage : '';
+            const copyText = (msg ? site + ' - ' + msg : site) + '\n' + issueUrl;
+            document.getElementById('rmCopyText').textContent = copyText;
+            document.getElementById('rmCreateBlock').classList.add('d-none');
+            document.getElementById('rmCreateBtn').classList.add('d-none');
+            document.getElementById('rmUpdateBtn').classList.add('d-none');
+            document.getElementById('rmExistingBlock').classList.add('d-none');
+            document.getElementById('rmCopyBlock').classList.remove('d-none');
+        }
+
+        // ─── Клик на 🐛 (создать) ────────────────────────────────────
+
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-redmine');
+            if (!btn) return;
+            currentBtn = btn;
+            currentMode = 'create';
+            currentIssueId = null;
+
+            resetModal();
             document.getElementById('rmSiteName').textContent = btn.dataset.site;
             modal.show();
 
-            const params = new URLSearchParams({
-                site: btn.dataset.site,
-                city: btn.dataset.city || '',
-                message: btn.dataset.message || '',
-                checkType: btn.dataset.checktype || '',
-                historyUrl: btn.dataset.historyurl || '',
-                matchingUrl: btn.dataset.matchingurl || ''
+            const checkType = btn.dataset.checktype || '';
+
+            Promise.all([
+                rmOptions ? Promise.resolve(rmOptions) : fetch('/zoomos/redmine/options').then(r => r.json()),
+                fetch('/zoomos/redmine/check?' + new URLSearchParams({ site: btn.dataset.site })).then(r => r.json())
+            ]).then(function([opts, checkData]) {
+                rmOptions = opts;
+                document.getElementById('rmLoading').classList.add('d-none');
+                if (!opts.enabled) { showError('Redmine не настроен'); return; }
+
+                if (checkData.existing && checkData.existing.length > 0) {
+                    const listEl = document.getElementById('rmExistingList');
+                    listEl.innerHTML = '';
+                    checkData.existing.forEach(function(iss) {
+                        const a = document.createElement('a');
+                        a.href = iss.url; a.target = '_blank';
+                        a.className = 'btn btn-sm btn-outline-primary py-0 px-2';
+                        a.innerHTML = '<i class="fas fa-external-link-alt me-1"></i>#' + iss.id
+                            + ' <span class="badge bg-secondary ms-1">' + iss.statusName + '</span>';
+                        listEl.appendChild(a);
+                    });
+                    document.getElementById('rmExistingBlock').classList.remove('d-none');
+                }
+
+                const defs = opts.defaults || {};
+                const cfs  = opts.customFields || {};
+                fillSelect('rmSelectTracker',  opts.trackers   || [], defs.trackerId   || 0);
+                fillSelect('rmSelectStatus',   opts.statuses   || [], defs.statusId    || 0);
+                fillSelect('rmSelectPriority', opts.priorities || [], defs.priorityId  || 0);
+                fillSelect('rmSelectAssignee', opts.users      || [], defs.assignedToId|| 0);
+                fillCfSelects(cfs, null, checkType);
+
+                document.getElementById('rmDescription').value = buildDescriptionFromBtn(btn);
+                document.getElementById('rmCreateBlock').classList.remove('d-none');
+                document.getElementById('rmCreateBtn').classList.remove('d-none');
+            }).catch(function(err) {
+                document.getElementById('rmLoading').classList.add('d-none');
+                showError('Ошибка загрузки: ' + err.message);
             });
-
-            fetch('/zoomos/redmine/check?' + params)
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById('rmLoading').classList.add('d-none');
-                    if (!data.enabled) return;
-
-                    // Существующие задачи
-                    if (data.existing && data.existing.length > 0) {
-                        const listEl = document.getElementById('rmExistingList');
-                        listEl.innerHTML = '';
-                        data.existing.forEach(iss => {
-                            const a = document.createElement('a');
-                            a.href = iss.url;
-                            a.target = '_blank';
-                            a.className = 'btn btn-sm btn-outline-primary py-0 px-2';
-                            a.innerHTML = '<i class="fas fa-external-link-alt me-1"></i>#' + iss.id
-                                + ' <span class="badge bg-secondary ms-1">' + iss.statusName + '</span>';
-                            listEl.appendChild(a);
-                        });
-                        document.getElementById('rmExistingBlock').classList.remove('d-none');
-                    }
-
-                    // Превью новой задачи
-                    if (data.preview) {
-                        const p = data.preview;
-                        document.getElementById('rmSubject').textContent = p.subject || '';
-                        document.getElementById('rmTracker').textContent = p.tracker || rmConfig.trackerName || '';
-                        document.getElementById('rmStatus').textContent = p.status || rmConfig.statusName || '';
-                        document.getElementById('rmPriority').textContent = p.priority || rmConfig.priorityName || '';
-                        document.getElementById('rmError').textContent = p.errorMessage || '';
-                        document.getElementById('rmMethod').textContent = p.checkType || '';
-                        document.getElementById('rmDescription').textContent = p.description || '';
-                        document.getElementById('rmCreateBlock').classList.remove('d-none');
-                        document.getElementById('rmCreateBtn').classList.remove('d-none');
-                    }
-                })
-                .catch(err => {
-                    document.getElementById('rmLoading').classList.add('d-none');
-                    const errEl = document.getElementById('rmError2');
-                    errEl.textContent = 'Ошибка: ' + err.message;
-                    errEl.classList.remove('d-none');
-                });
         });
 
-        // Создание задачи
+        // ─── Клик на ✏️ (редактировать) ──────────────────────────────
+
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-redmine-edit');
+            if (!btn) return;
+            currentBtn = btn;
+            currentMode = 'edit';
+            currentIssueId = parseInt(btn.dataset.issueid);
+            const site = btn.dataset.site;
+
+            resetModal();
+            document.getElementById('rmSiteName').textContent = '#' + currentIssueId + ' — ' + site;
+            modal.show();
+
+            Promise.all([
+                rmOptions ? Promise.resolve(rmOptions) : fetch('/zoomos/redmine/options').then(r => r.json()),
+                fetch('/zoomos/redmine/issue/' + currentIssueId).then(r => r.json())
+            ]).then(function([opts, issueData]) {
+                rmOptions = opts;
+                document.getElementById('rmLoading').classList.add('d-none');
+
+                if (!opts.enabled) { showError('Redmine не настроен'); return; }
+
+                const cfs = opts.customFields || {};
+
+                if (issueData.error) {
+                    // Задача удалена или недоступна — переключаемся в режим создания
+                    currentMode = 'create';
+                    document.getElementById('rmSiteName').textContent = btn.dataset.site;
+                    showError('Задача #' + currentIssueId + ' не найдена в Redmine — можно создать новую.');
+                    fillSelect('rmSelectTracker',  opts.trackers   || [], opts.defaults && opts.defaults.trackerId   || 0);
+                    fillSelect('rmSelectStatus',   opts.statuses   || [], opts.defaults && opts.defaults.statusId    || 0);
+                    fillSelect('rmSelectPriority', opts.priorities || [], opts.defaults && opts.defaults.priorityId  || 0);
+                    fillSelect('rmSelectAssignee', opts.users      || [], opts.defaults && opts.defaults.assignedToId|| 0);
+                    fillCfSelects(cfs, {}, btn.dataset.checktype || '');
+                    document.getElementById('rmDescription').value = buildDescriptionFromBtn(btn);
+                    document.getElementById('rmCreateBlock').classList.remove('d-none');
+                    document.getElementById('rmCreateBtn').classList.remove('d-none');
+                    return;
+                }
+
+                // Pre-select текущими значениями задачи
+                fillSelect('rmSelectTracker',  opts.trackers   || [], issueData.trackerId   || 0);
+                fillSelect('rmSelectStatus',   opts.statuses   || [], issueData.statusId    || 0);
+                fillSelect('rmSelectPriority', opts.priorities || [], issueData.priorityId  || 0);
+                fillSelect('rmSelectAssignee', opts.users      || [], issueData.assignedToId|| 0);
+                fillCfSelects(cfs, issueData.customFieldValues || {}, '');
+
+                document.getElementById('rmDescription').value = issueData.description || '';
+
+                // Показываем комментарии и поле для новой заметки
+                const comments = issueData.comments || [];
+                if (comments.length > 0) {
+                    const list = document.getElementById('rmCommentsList');
+                    list.innerHTML = comments.map(function(c) {
+                        return '<div class="border-start ps-2 mb-1" style="font-size:0.78rem">' +
+                            '<span class="fw-semibold">' + c.author + '</span>' +
+                            '<span class="text-muted ms-1">' + c.date + '</span>' +
+                            '<div class="text-secondary" style="white-space:pre-wrap">' + c.text + '</div>' +
+                            '</div>';
+                    }).join('');
+                    document.getElementById('rmCommentsBlock').classList.remove('d-none');
+                }
+                document.getElementById('rmNotesBlock').classList.remove('d-none');
+
+                document.getElementById('rmCreateBlock').classList.remove('d-none');
+                document.getElementById('rmUpdateBtn').classList.remove('d-none');
+            }).catch(function(err) {
+                document.getElementById('rmLoading').classList.add('d-none');
+                showError('Ошибка загрузки: ' + err.message);
+            });
+        });
+
+        // ─── Создать задачу ───────────────────────────────────────────
+
         document.getElementById('rmCreateBtn').addEventListener('click', function() {
-            if (!currentBtn) return;
+            if (!currentBtn || !rmOptions) return;
             const btn = this;
             const orig = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Создаётся...';
+            document.getElementById('rmErrorMsg').classList.add('d-none');
 
-            const params = new URLSearchParams({
-                site: currentBtn.dataset.site,
-                city: currentBtn.dataset.city || '',
-                message: currentBtn.dataset.message || '',
-                checkType: currentBtn.dataset.checktype || '',
-                historyUrl: currentBtn.dataset.historyurl || '',
+            const site = currentBtn.dataset.site;
+            const body = Object.assign(collectBody('create', site, document.getElementById('rmDescription').value), {
+                city:        currentBtn.dataset.city        || '',
+                historyUrl:  currentBtn.dataset.historyurl  || '',
                 matchingUrl: currentBtn.dataset.matchingurl || ''
             });
 
-            fetch('/zoomos/redmine/create?' + params, { method: 'POST' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success && data.issue) {
-                        // Заменяем кнопку в строке на ссылку
-                        const a = document.createElement('a');
-                        a.href = data.issue.url;
-                        a.target = '_blank';
-                        a.className = 'btn btn-sm btn-success py-0 px-2';
-                        a.title = 'Redmine #' + data.issue.id + ' — ' + data.issue.status;
-                        a.textContent = '#' + data.issue.id;
-                        currentBtn.replaceWith(a);
-                        modal.hide();
-                    } else {
-                        const errEl = document.getElementById('rmError2');
-                        errEl.textContent = 'Ошибка: ' + (data.error || 'неизвестная');
-                        errEl.classList.remove('d-none');
-                        btn.disabled = false;
-                        btn.innerHTML = orig;
-                    }
-                })
-                .catch(err => {
-                    const errEl = document.getElementById('rmError2');
-                    errEl.textContent = 'Ошибка сети: ' + err.message;
-                    errEl.classList.remove('d-none');
-                    btn.disabled = false;
-                    btn.innerHTML = orig;
-                });
+            fetch('/zoomos/redmine/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(r => r.json())
+            .then(function(data) {
+                if (data.success && data.issue) {
+                    // Заменяем ВСЕ кнопки создания для этого сайта на #NNN + ✏️
+                    replaceAllSiteBtns(site, data.issue);
+
+                    showCopyBlock(data.issue.site, data.issue.shortMessage, data.issue.url);
+                } else {
+                    showError('Ошибка: ' + (data.error || 'неизвестная'));
+                    btn.disabled = false; btn.innerHTML = orig;
+                }
+            })
+            .catch(function(err) {
+                showError('Ошибка сети: ' + err.message);
+                btn.disabled = false; btn.innerHTML = orig;
+            });
+        });
+
+        // ─── Обновить задачу ──────────────────────────────────────────
+
+        document.getElementById('rmUpdateBtn').addEventListener('click', function() {
+            if (!currentIssueId || !rmOptions) return;
+            const btn = this;
+            const orig = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Сохраняется...';
+            document.getElementById('rmErrorMsg').classList.add('d-none');
+
+            const site = currentBtn.dataset.site;
+            const body = collectBody('edit', site, document.getElementById('rmDescription').value);
+
+            fetch('/zoomos/redmine/update/' + currentIssueId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(r => r.json())
+            .then(function(data) {
+                if (data.success) {
+                    const issueUrl = document.querySelector('.btn-redmine-edit[data-issueid="' + currentIssueId + '"]')
+                        ?.previousElementSibling?.href || '';
+                    showCopyBlock(site, 'обновлена', issueUrl || '#' + currentIssueId);
+                } else {
+                    showError('Ошибка: ' + (data.error || 'неизвестная'));
+                    btn.disabled = false; btn.innerHTML = orig;
+                }
+            })
+            .catch(function(err) {
+                showError('Ошибка сети: ' + err.message);
+                btn.disabled = false; btn.innerHTML = orig;
+            });
+        });
+
+        // ─── Копирование ──────────────────────────────────────────────
+
+        document.getElementById('rmCopyBtn').addEventListener('click', function() {
+            const text = document.getElementById('rmCopyText').textContent;
+            const self = this;
+            navigator.clipboard.writeText(text).then(function() {
+                self.innerHTML = '<i class="fas fa-check me-1 text-success"></i>Скопировано';
+                setTimeout(() => { self.innerHTML = '<i class="fas fa-copy me-1"></i>Скопировать'; }, 2000);
+            }).catch(function() {
+                const ta = document.createElement('textarea');
+                ta.value = text; document.body.appendChild(ta); ta.select();
+                document.execCommand('copy'); document.body.removeChild(ta);
+            });
         });
     })();
     // ── /Redmine ──────────────────────────────────────────────────────

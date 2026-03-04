@@ -32,6 +32,10 @@ public class ZoomosRedmineIssue {
     @Column(name = "issue_url")
     private String issueUrl;
 
+    @Column(name = "is_closed")
+    @Builder.Default
+    private boolean isClosed = false;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

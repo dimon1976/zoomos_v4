@@ -9,5 +9,6 @@ public class RedmineIssueDto {
     private int id;
     private String subject;
     private String statusName;
+    private boolean isClosed;
     private String url;
 }

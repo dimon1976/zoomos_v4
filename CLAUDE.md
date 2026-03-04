@@ -60,6 +60,10 @@ mvn flyway:info
 
 ## Recent Changes & Features
 
+### 2026-03
+
+- **Redmine интеграция** — Создание/редактирование задач в ТТ прямо со страницы результатов проверки. Flyway V39–V40. См. секцию ниже.
+
 ### 2026-02
 
 - **Zoomos Check — Расписание + Приоритетные сайты** — Cron-расписания автопроверок per-shop (`ZoomosSchedulerService`, `ThreadPoolTaskScheduler`). Флаг `is_priority` в справочнике сайтов. Глобальный баннер в layout при проблемах приоритетных сайтов. Flyway V32. См. секцию ниже.
@@ -725,6 +729,86 @@ bh_domains   -- реестр доменов с флагом активности
 | [EntityPersistenceService.java](src/main/java/com/java/service/imports/handlers/EntityPersistenceService.java) | Switch cases для BH типов |
 | [handbook/index.html](src/main/resources/templates/handbook/index.html) | Главная + AJAX поиск |
 | [handbook/search-configure.html](src/main/resources/templates/handbook/search-configure.html) | Настройка поиска (маппинг колонок + домены) |
+
+## Redmine Интеграция
+
+### Назначение
+Создание и редактирование задач в трекере tt.zoomos.by прямо со страницы `/zoomos/check/results/{runId}`. Одна задача на домен (не на город/адрес).
+
+### Конфигурация (`application.properties`)
+```properties
+redmine.base-url=https://tt.zoomos.by/
+redmine.api-key=<key>
+redmine.project-id=19
+redmine.tracker-id=4      # дефолт для select
+redmine.status-id=10      # дефолт для select
+redmine.priority-id=2     # дефолт для select
+redmine.assigned-to-id=70 # дефолт для select
+```
+При пустом `base-url` или `api-key` — интеграция отключена (кнопки не отображаются).
+
+### API Endpoints (`/zoomos/redmine/`)
+| Метод | URL | Назначение |
+|-------|-----|-----------|
+| GET | `/options` | Трекеры, статусы, приоритеты, пользователи, кастомные поля + defaults |
+| GET | `/check-batch?sites=...` | Параллельный поиск задач для списка сайтов |
+| GET | `/check?site=...` | Задачи для одного сайта |
+| GET | `/issue/{id}` | Детали задачи + последние 3 комментария |
+| POST | `/create` | Создание задачи (`RedmineCreateRequest` JSON body) |
+| PUT | `/update/{id}` | Обновление задачи + добавление комментария |
+
+### Особенности сервера tt.zoomos.by
+**КРИТИЧНО**: сервер возвращает HTTP 404 с пустым телом на POST/PUT/DELETE, но операции выполняются успешно (Apache + mod_jk + Phusion Passenger).
+
+Workaround в `RedmineService`:
+- `postIgnoring404()` — не бросает исключение при 404 с пустым телом
+- После POST — поиск созданной задачи через `findRecentIssueBySubject()` (GET `?subject=~{site}&sort=created_on:desc`)
+- `putIgnoring404()` — аналогично для PUT
+
+### Статус-цвета кнопок
+- `btn-danger` (красная) — открытая задача (активная проблема)
+- `btn-success` (зелёная) — закрытая задача (проблема решена)
+- Определяется полем `is_closed` из Redmine API (`status.is_closed`)
+
+### Архитектура загрузки на странице результатов
+1. **Рендер страницы** (быстро): загрузка только из БД через `findAllBySiteNames()`, без API-запросов
+2. **После загрузки** (async JS): `GET /check-batch?sites=...` для ВСЕХ сайтов с проблемами одновременно → обновление статус-цветов кнопок и добавление новых найденных задач
+3. **Параллельность**: `CompletableFuture` с пулом 8 потоков в `RedmineService.checkBatch()`
+
+### Модальное окно
+- Открывается по 🐛 (создание) или ✏️ (редактирование)
+- При создании: загружает `/options` (кэшируется), заполняет dropdowns
+- При редактировании: загружает `/issue/{id}?include=journals`, показывает последние 3 комментария и textarea для нового
+- При 404 на edit (задача удалена) — автопереключение в режим создания
+- После создания: блок копирования `{site} - {описание}\n{url}`
+- `shortMessage`: значение "В чем ошибка" → fallback `data-message` (текст проблемы из строки issues)
+
+### Дублирование кнопки на все строки домена
+`replaceAllSiteBtns(site, issue)` — при создании/обновлении заменяет `.btn-redmine[data-site="{site}"]` во ВСЕХ строках issues (разные города, адреса).
+
+### Database Schema (Flyway V39–V40)
+```sql
+zoomos_redmine_issues
+  id, site_name (UNIQUE), issue_id, issue_status, is_closed, issue_url
+  created_at, updated_at
+```
+
+### Кастомные поля
+Ищутся по именам через `GET /custom_fields.json`:
+- `"В чем ошибка"` → `cfError` (главное поле)
+- `"Способ выкачки"` → `cfMethod`
+- `"Вариант настройки"` → `cfVariant`
+
+### Ключевые файлы
+| Файл | Назначение |
+|------|-----------|
+| [RedmineConfig.java](src/main/java/com/java/config/RedmineConfig.java) | Конфиг, `getBaseUrlNormalized()` |
+| [RedmineService.java](src/main/java/com/java/service/RedmineService.java) | Вся бизнес-логика: fetchOptions, createIssue, updateIssue, checkBatch |
+| [ZoomosRedmineController.java](src/main/java/com/java/controller/ZoomosRedmineController.java) | REST endpoints |
+| [RedmineCreateRequest.java](src/main/java/com/java/dto/RedmineCreateRequest.java) | DTO: site, description, shortMessage, notes, customFields, ... |
+| [RedmineIssueDto.java](src/main/java/com/java/dto/RedmineIssueDto.java) | DTO: id, subject, statusName, isClosed, url |
+| [ZoomosRedmineIssue.java](src/main/java/com/java/model/entity/ZoomosRedmineIssue.java) | JPA entity (@Table zoomos_redmine_issues) |
+| [check-results.html](src/main/resources/templates/zoomos/check-results.html) | Модал + JS batch-check + статус-цвета |
 
 ## Code References
 

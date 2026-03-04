@@ -1,0 +1,2 @@
+ALTER TABLE zoomos_redmine_issues
+    ADD COLUMN IF NOT EXISTS is_closed BOOLEAN NOT NULL DEFAULT FALSE;

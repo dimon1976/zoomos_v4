@@ -16,9 +16,10 @@
 ## Что создаётся
 
 ### Новые файлы
+
 | Файл | Назначение |
 |------|-----------|
-| `db/migration/V33__add_redmine_issues.sql` | Таблица `zoomos_redmine_issues` |
+| `db/migration/V39__add_redmine_issues.sql` | Таблица `zoomos_redmine_issues` |
 | `config/RedmineConfig.java` | @ConfigurationProperties `redmine.*` |
 | `dto/RedmineIssueDto.java` | DTO для передачи данных задачи |
 | `model/entity/ZoomosRedmineIssue.java` | JPA entity |
@@ -27,6 +28,7 @@
 | `controller/ZoomosRedmineController.java` | REST-эндпоинты `/zoomos/redmine/*` |
 
 ### Изменяемые файлы
+
 | Файл | Изменение |
 |------|-----------|
 | `application.properties` | Настройки `redmine.*` |

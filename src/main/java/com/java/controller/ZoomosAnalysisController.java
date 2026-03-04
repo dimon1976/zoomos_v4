@@ -1204,14 +1204,19 @@ public class ZoomosAnalysisController {
         model.addAttribute("liveErrCount", liveErrCount);
         model.addAttribute("liveNotFoundCount", liveNotFoundCount);
 
-        // Redmine: загружаем существующие задачи из БД + обновляем статусы
+        // Redmine: только из БД (статусы обновляются async через JS /check-batch после загрузки страницы)
         model.addAttribute("redmineEnabled", redmineService.isEnabled());
         if (redmineService.isEnabled() && !issues.isEmpty()) {
             Set<String> siteNames = issues.stream()
                     .map(i -> (String) i.get("site"))
                     .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
-            model.addAttribute("redmineIssues", redmineService.getIssuesMapForSites(siteNames));
+            // Без refreshStatuses — только БД, быстро
+            List<com.java.model.entity.ZoomosRedmineIssue> existing =
+                    redmineService.findAllBySiteNames(siteNames);
+            model.addAttribute("redmineIssues",
+                    existing.stream().collect(Collectors.toMap(
+                            com.java.model.entity.ZoomosRedmineIssue::getSiteName, e -> e)));
         } else {
             model.addAttribute("redmineIssues", Collections.emptyMap());
         }

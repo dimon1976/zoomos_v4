@@ -18,35 +18,25 @@ public class RedmineConfig {
     /** ID проекта в Redmine */
     private int projectId;
 
-    /** ID трекера */
+    /** ID трекера (default для pre-select в dropdown) */
     private int trackerId;
 
-    /** Отображаемое имя трекера */
-    private String trackerName = "";
-
-    /** ID статуса новой задачи */
+    /** ID статуса новой задачи (default для pre-select в dropdown) */
     private int statusId;
 
-    /** Отображаемое имя статуса */
-    private String statusName = "";
-
-    /** ID приоритета */
+    /** ID приоритета (default для pre-select в dropdown) */
     private int priorityId;
-
-    /** Отображаемое имя приоритета */
-    private String priorityName = "";
 
     /** ID исполнителя (0 = не назначать) */
     private int assignedToId;
 
-    /** ID custom field "В чем ошибка" (0 = не передавать) */
-    private int cfErrorId;
-
-    /** ID custom field "Способ выкачки" (0 = не передавать) */
-    private int cfParsingMethodId;
-
     public boolean isEnabled() {
         return baseUrl != null && !baseUrl.isBlank()
                 && apiKey != null && !apiKey.isBlank();
+    }
+
+    /** URL без trailing slash */
+    public String getBaseUrlNormalized() {
+        return baseUrl != null ? baseUrl.stripTrailing().replaceAll("/$", "") : "";
     }
 }
