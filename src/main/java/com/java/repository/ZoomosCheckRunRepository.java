@@ -24,4 +24,6 @@ public interface ZoomosCheckRunRepository extends JpaRepository<ZoomosCheckRun, 
     @Query("SELECT r FROM ZoomosCheckRun r WHERE r.status = 'COMPLETED' " +
            "AND r.startedAt >= :startOfDay ORDER BY r.startedAt DESC")
     List<ZoomosCheckRun> findCompletedToday(@Param("startOfDay") ZonedDateTime startOfDay);
+
+    List<ZoomosCheckRun> findAllByStatus(String status);
 }

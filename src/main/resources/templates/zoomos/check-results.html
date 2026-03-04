@@ -235,6 +235,7 @@
                                         <button type="button"
                                                 class="btn btn-outline-secondary py-0 px-1 btn-redmine-edit"
                                                 th:data-issueid="${redmineIssues[issue['site']].issueId}"
+                                                th:data-issueurl="${redmineIssues[issue['site']].issueUrl}"
                                                 th:data-site="${issue['site']}"
                                                 th:data-city="${issue['city'] != null ? issue['city'] : ''}"
                                                 th:data-message="${issue['message']}"
@@ -558,8 +559,8 @@
                     </div>
                     <!-- Строка 2: В чем ошибка (полная ширина — главное поле) -->
                     <div id="rmCfErrorRow" class="mb-2" style="display:none">
-                        <div class="small text-muted mb-1">В чем ошибка</div>
-                        <select id="rmSelectCfError" class="form-select form-select-sm"></select>
+                        <div class="small text-muted mb-1">В чем ошибка <span class="text-muted" style="font-size:0.8em">(Ctrl/Shift для выбора нескольких)</span></div>
+                        <select id="rmSelectCfError" class="form-select form-select-sm" multiple size="4"></select>
                     </div>
                     <!-- Строка 3: Способ + Вариант -->
                     <div class="row g-1 mb-2">
@@ -931,8 +932,14 @@
             document.getElementById('rmLoading').classList.remove('d-none');
             document.getElementById('rmExistingBlock').classList.add('d-none');
             document.getElementById('rmCreateBlock').classList.add('d-none');
-            document.getElementById('rmCreateBtn').classList.add('d-none');
-            document.getElementById('rmUpdateBtn').classList.add('d-none');
+            const createBtn = document.getElementById('rmCreateBtn');
+            createBtn.classList.add('d-none');
+            createBtn.disabled = false;
+            createBtn.innerHTML = '<i class="fas fa-bug me-1"></i>Создать задачу';
+            const updateBtn = document.getElementById('rmUpdateBtn');
+            updateBtn.classList.add('d-none');
+            updateBtn.disabled = false;
+            updateBtn.innerHTML = '<i class="fas fa-save me-1"></i>Обновить задачу';
             document.getElementById('rmCopyBlock').classList.add('d-none');
             document.getElementById('rmErrorMsg').classList.add('d-none');
             document.getElementById('rmCommentsBlock').classList.add('d-none');
@@ -952,10 +959,18 @@
 
         function fillCfSelects(cfs, cfValues, checkType) {
             if (cfs.cfError) {
-                const items = [{id:'', name:'— выбрать —'}].concat(
-                    (cfs.cfError.possibleValues || []).map(v => ({id:v, name:v})));
-                const cur = cfValues ? cfValues[String(cfs.cfError.id)] : '';
-                fillSelect('rmSelectCfError', items, cur || '');
+                const sel = document.getElementById('rmSelectCfError');
+                sel.innerHTML = '';
+                // cur может быть строкой или массивом строк
+                const rawCur = cfValues ? cfValues[String(cfs.cfError.id)] : null;
+                const curArr = Array.isArray(rawCur) ? rawCur : (rawCur ? [rawCur] : []);
+                (cfs.cfError.possibleValues || []).forEach(function(v) {
+                    const opt = document.createElement('option');
+                    opt.value = v;
+                    opt.textContent = v;
+                    if (curArr.includes(v)) opt.selected = true;
+                    sel.appendChild(opt);
+                });
                 document.getElementById('rmCfErrorRow').style.display = '';
             }
             if (cfs.cfMethod) {
@@ -976,13 +991,16 @@
         function collectBody(mode, site, description) {
             const cfs = rmOptions.customFields || {};
             const customFields = [];
-            const cfErrorValue = cfs.cfError ? (document.getElementById('rmSelectCfError').value || '') : '';
-            if (cfs.cfError)   customFields.push({ id: cfs.cfError.id,   value: cfErrorValue });
+            const cfErrorSel = document.getElementById('rmSelectCfError');
+            const cfErrorValues = cfs.cfError
+                ? Array.from(cfErrorSel.selectedOptions).map(o => o.value).filter(v => v !== '')
+                : [];
+            if (cfs.cfError)   customFields.push({ id: cfs.cfError.id,   value: cfErrorValues });
             if (cfs.cfMethod)  customFields.push({ id: cfs.cfMethod.id,  value: document.getElementById('rmSelectCfMethod').value  || '' });
             if (cfs.cfVariant) customFields.push({ id: cfs.cfVariant.id, value: document.getElementById('rmSelectCfVariant').value || '' });
 
             // Если "В чем ошибка" не выбрано — берём текст проблемы из data-message кнопки
-            const shortMsg = cfErrorValue || (currentBtn ? currentBtn.dataset.message || '' : '');
+            const shortMsg = cfErrorValues.length ? cfErrorValues.join(', ') : (currentBtn ? currentBtn.dataset.message || '' : '');
 
             return {
                 site:         site,
@@ -1108,7 +1126,13 @@
             const site = btn.dataset.site;
 
             resetModal();
-            document.getElementById('rmSiteName').textContent = '#' + currentIssueId + ' — ' + site;
+            const issueUrl = btn.dataset.issueurl || '';
+            const siteNameEl = document.getElementById('rmSiteName');
+            if (issueUrl) {
+                siteNameEl.innerHTML = '<a href="' + issueUrl + '" target="_blank" class="text-dark text-decoration-none">#' + currentIssueId + '</a> — ' + site;
+            } else {
+                siteNameEl.textContent = '#' + currentIssueId + ' — ' + site;
+            }
             modal.show();
 
             Promise.all([
@@ -1147,20 +1171,23 @@
 
                 document.getElementById('rmDescription').value = issueData.description || '';
 
-                // Показываем комментарии и поле для новой заметки
+                // Показываем комментарии (раскрыты сразу)
                 const comments = issueData.comments || [];
                 if (comments.length > 0) {
                     const list = document.getElementById('rmCommentsList');
                     list.innerHTML = comments.map(function(c) {
-                        return '<div class="border-start ps-2 mb-1" style="font-size:0.78rem">' +
+                        return '<div class="border-start border-secondary ps-2 mb-2" style="font-size:0.78rem">' +
                             '<span class="fw-semibold">' + c.author + '</span>' +
-                            '<span class="text-muted ms-1">' + c.date + '</span>' +
-                            '<div class="text-secondary" style="white-space:pre-wrap">' + c.text + '</div>' +
+                            '<span class="text-muted ms-2" style="font-size:0.75rem">' + c.date + '</span>' +
+                            '<div class="text-secondary mt-1" style="white-space:pre-wrap">' + c.text + '</div>' +
                             '</div>';
                     }).join('');
                     document.getElementById('rmCommentsBlock').classList.remove('d-none');
+                    document.getElementById('rmCommentsList').classList.remove('d-none');
                 }
                 document.getElementById('rmNotesBlock').classList.remove('d-none');
+                // Предзаполняем комментарий актуальными данными проблемы
+                document.getElementById('rmNotes').value = buildDescriptionFromBtn(currentBtn);
 
                 document.getElementById('rmCreateBlock').classList.remove('d-none');
                 document.getElementById('rmUpdateBtn').classList.remove('d-none');

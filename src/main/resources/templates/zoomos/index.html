@@ -814,6 +814,20 @@
         if (timeFromEl) timeFromEl.addEventListener('change', () => localStorage.setItem('checkTimeFrom-' + shopId, timeFromEl.value));
         if (timeToEl)   timeToEl.addEventListener('change',   () => localStorage.setItem('checkTimeTo-' + shopId,   timeToEl.value));
 
+        const dropThresholdEl = document.getElementById('dropThreshold-' + shopId);
+        if (dropThresholdEl) {
+            dropThresholdEl.value = localStorage.getItem('checkDropThreshold-' + shopId) || '10';
+            dropThresholdEl.addEventListener('change', () =>
+                localStorage.setItem('checkDropThreshold-' + shopId, dropThresholdEl.value));
+        }
+
+        const errThresholdEl = document.getElementById('errThreshold-' + shopId);
+        if (errThresholdEl) {
+            errThresholdEl.value = localStorage.getItem('checkErrThreshold-' + shopId) || '30';
+            errThresholdEl.addEventListener('change', () =>
+                localStorage.setItem('checkErrThreshold-' + shopId, errThresholdEl.value));
+        }
+
         const baselineDaysEl = document.getElementById('baselineDays-' + shopId);
         if (baselineDaysEl) {
             baselineDaysEl.value = localStorage.getItem('checkBaselineDays-' + shopId) || '7';

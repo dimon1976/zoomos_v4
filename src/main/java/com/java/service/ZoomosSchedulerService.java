@@ -1,6 +1,8 @@
 package com.java.service;
 
+import com.java.model.entity.ZoomosCheckRun;
 import com.java.model.entity.ZoomosShopSchedule;
+import com.java.repository.ZoomosCheckRunRepository;
 import com.java.repository.ZoomosShopScheduleRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 public class ZoomosSchedulerService {
 
     private final ZoomosShopScheduleRepository scheduleRepo;
+    private final ZoomosCheckRunRepository checkRunRepository;
     private final ZoomosCheckService checkService;
 
     @Qualifier("zoomosSchedulerTaskScheduler")
@@ -36,6 +39,14 @@ public class ZoomosSchedulerService {
 
     @PostConstruct
     public void init() {
+        // Переводим зависшие RUNNING-проверки в FAILED (остались после рестарта приложения)
+        List<ZoomosCheckRun> stuckRuns = checkRunRepository.findAllByStatus("RUNNING");
+        if (!stuckRuns.isEmpty()) {
+            ZonedDateTime now = ZonedDateTime.now();
+            stuckRuns.forEach(r -> { r.setStatus("FAILED"); r.setCompletedAt(now); });
+            checkRunRepository.saveAll(stuckRuns);
+            log.warn("ZoomosSchedulerService: {} зависших RUNNING-проверок переведены в FAILED", stuckRuns.size());
+        }
         scheduleRepo.findAllByIsEnabledTrue().forEach(this::scheduleCheck);
         log.info("ZoomosSchedulerService: загружено {} активных расписаний", scheduleMap.size());
     }
