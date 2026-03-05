@@ -3,6 +3,7 @@ package com.java.controller;
 import com.java.dto.RedmineCreateRequest;
 import com.java.model.entity.ZoomosRedmineIssue;
 import com.java.service.RedmineService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -81,8 +82,13 @@ public class ZoomosRedmineController {
         if (!redmineService.isEnabled())
             return ResponseEntity.ok(Map.of("success", false, "error", "Redmine не настроен"));
         try {
-            redmineService.updateIssue(issueId, req);
-            return ResponseEntity.ok(Map.of("success", true, "issueId", issueId));
+            ZoomosRedmineIssue updated = redmineService.updateIssue(issueId, req);
+            Map<String, Object> issueData = new HashMap<>();
+            issueData.put("id", issueId);
+            issueData.put("url", updated != null ? updated.getIssueUrl() : "");
+            issueData.put("statusName", updated != null ? updated.getIssueStatus() : "");
+            issueData.put("isClosed", updated != null && updated.isClosed());
+            return ResponseEntity.ok(Map.of("success", true, "issue", issueData));
         } catch (Exception e) {
             log.error("Ошибка обновления задачи Redmine #{}: {}", issueId, e.getMessage());
             return ResponseEntity.ok(Map.of("success", false, "error", e.getMessage()));

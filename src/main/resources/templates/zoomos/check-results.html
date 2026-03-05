@@ -1049,7 +1049,7 @@
                 .forEach(function(b) { b.replaceWith(makeGroup(b)); });
         }
 
-        function showCopyBlock(site, shortMessage, issueUrl) {
+        function showCopyBlock(site, shortMessage, issueUrl, mode) {
             // Не дублируем сайт в описании если shortMessage пуст или совпадает с сайтом
             const msg = (shortMessage && shortMessage !== site) ? shortMessage : '';
             const copyText = (msg ? site + ' - ' + msg : site) + '\n' + issueUrl;
@@ -1058,6 +1058,13 @@
             document.getElementById('rmCreateBtn').classList.add('d-none');
             document.getElementById('rmUpdateBtn').classList.add('d-none');
             document.getElementById('rmExistingBlock').classList.add('d-none');
+            // Текст алерта зависит от режима
+            const alertEl = document.querySelector('#rmCopyBlock .alert');
+            if (alertEl) {
+                alertEl.innerHTML = mode === 'edit'
+                    ? '<i class="fas fa-check-circle me-1"></i>Задача обновлена!'
+                    : '<i class="fas fa-check-circle me-1"></i>Задача создана!';
+            }
             document.getElementById('rmCopyBlock').classList.remove('d-none');
         }
 
@@ -1258,9 +1265,20 @@
             .then(r => r.json())
             .then(function(data) {
                 if (data.success) {
-                    const issueUrl = document.querySelector('.btn-redmine-edit[data-issueid="' + currentIssueId + '"]')
-                        ?.previousElementSibling?.href || '';
-                    showCopyBlock(site, 'обновлена', issueUrl || '#' + currentIssueId);
+                    // Обновляем цвет кнопки на странице без перезагрузки
+                    if (data.issue) {
+                        const iss = data.issue;
+                        const btnClass = iss.isClosed ? 'btn-success' : 'btn-danger';
+                        document.querySelectorAll('[data-rm-site="' + CSS.escape(site) + '"] a.btn')
+                            .forEach(function(a) {
+                                a.className = 'btn py-0 px-2 ' + btnClass;
+                                a.title = 'Redmine #' + iss.id + ' — ' + (iss.statusName || '');
+                            });
+                    }
+                    const issueUrl = (data.issue && data.issue.url)
+                        || document.querySelector('.btn-redmine-edit[data-issueid="' + currentIssueId + '"]')
+                            ?.previousElementSibling?.href || '';
+                    showCopyBlock(site, 'обновлена', issueUrl || '#' + currentIssueId, 'edit');
                 } else {
                     showError('Ошибка: ' + (data.error || 'неизвестная'));
                     btn.disabled = false; btn.innerHTML = orig;

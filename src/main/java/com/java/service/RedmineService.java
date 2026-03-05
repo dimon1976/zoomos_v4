@@ -98,8 +98,11 @@ public class RedmineService {
             if (memberships != null && memberships.isArray()) {
                 for (JsonNode m : memberships) {
                     JsonNode user = m.get("user");
+                    JsonNode group = m.get("group");
                     if (user != null) {
                         users.add(Map.of("id", user.get("id").asInt(), "name", user.path("name").asText("")));
+                    } else if (group != null) {
+                        users.add(Map.of("id", group.get("id").asInt(), "name", "[Группа] " + group.path("name").asText("")));
                     }
                 }
             }
@@ -303,7 +306,7 @@ public class RedmineService {
     // ──────────────────────────────────────────────────────────────────
 
     @Transactional
-    public void updateIssue(int issueId, RedmineCreateRequest req) {
+    public ZoomosRedmineIssue updateIssue(int issueId, RedmineCreateRequest req) {
         String base = config.getBaseUrlNormalized();
         String url = base + "/issues/" + issueId + ".json";
 
@@ -322,14 +325,33 @@ public class RedmineService {
 
             String json = objectMapper.writeValueAsString(Map.of("issue", issue));
             log.info("Redmine PUT → {} | status={}", url, req.getStatusId());
-            // Сервер возвращает 404 даже при успешном обновлении — игнорируем
             putIgnoring404(url, json);
 
-            // Обновляем время в нашей БД
-            repo.findBySiteName(req.getSite()).ifPresent(entity -> {
-                entity.setUpdatedAt(LocalDateTime.now());
-                repo.save(entity);
-            });
+            // Получаем актуальный статус и обновляем нашу БД
+            String issueUrl = base + "/issues/" + issueId;
+            ZoomosRedmineIssue entity = repo.findBySiteName(req.getSite())
+                    .orElseGet(() -> ZoomosRedmineIssue.builder()
+                            .siteName(req.getSite())
+                            .issueId(issueId)
+                            .issueUrl(issueUrl)
+                            .build());
+            entity.setIssueUrl(issueUrl);
+
+            try {
+                JsonNode updatedRoot = objectMapper.readTree(get(base + "/issues/" + issueId + ".json"));
+                JsonNode updatedIssue = updatedRoot.path("issue");
+                String newStatus = updatedIssue.path("status").path("name").asText("");
+                boolean isClosed = updatedIssue.path("status").path("is_closed").asBoolean(false);
+                if (!newStatus.isBlank()) entity.setIssueStatus(newStatus);
+                entity.setClosed(isClosed);
+            } catch (Exception fe) {
+                log.warn("Redmine: не удалось получить обновлённый статус #{}: {}", issueId, fe.getMessage());
+            }
+
+            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+            entity.setUpdatedAt(LocalDateTime.now());
+            return repo.save(entity);
+
         } catch (Exception e) {
             log.error("Redmine updateIssue #{}: {}", issueId, e.getMessage());
             throw new RuntimeException("Не удалось обновить задачу в Redmine: " + e.getMessage(), e);
@@ -525,14 +547,35 @@ public class RedmineService {
     }
 
     /**
-     * Выполняет POST или PUT без следования редиректам.
+     * Выполняет POST или PUT с retry до 3 раз при transient-ошибках (timeout, connection reset).
+     * Задержка между попытками — 2 секунды.
+     */
+    private String sendMutating(String method, String url, String json, boolean ignore404EmptyBody) throws Exception {
+        int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return doSendMutating(method, url, json, ignore404EmptyBody);
+            } catch (Exception e) {
+                String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+                boolean isTransient = msg.contains("timed out") || msg.contains("connection reset")
+                        || msg.contains("connection refused");
+                if (!isTransient || attempt == maxAttempts) throw e;
+                log.warn("Redmine {} попытка {}/{}: {}. Повтор через 2с...", method, attempt, maxAttempts, e.getMessage());
+                Thread.sleep(2000);
+            }
+        }
+        throw new RuntimeException("sendMutating: все попытки исчерпаны");
+    }
+
+    /**
+     * Один HTTP-запрос POST/PUT без следования редиректам.
      * Аутентификация через ?key= (URL-параметр) — надёжнее заголовка.
      *
      * @param ignore404EmptyBody если true — 404 с пустым телом не считается ошибкой
      *                           (этот Redmine-сервер всегда возвращает 404 на мутирующих операциях,
      *                           при этом операция фактически выполняется)
      */
-    private String sendMutating(String method, String url, String json, boolean ignore404EmptyBody) throws Exception {
+    private String doSendMutating(String method, String url, String json, boolean ignore404EmptyBody) throws Exception {
         String urlWithKey = url.contains("?")
                 ? url + "&key=" + config.getApiKey()
                 : url + "?key=" + config.getApiKey();
