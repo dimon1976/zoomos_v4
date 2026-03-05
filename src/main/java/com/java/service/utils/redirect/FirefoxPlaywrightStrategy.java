@@ -6,6 +6,7 @@ import com.java.model.utils.PageStatus;
 import com.java.model.utils.RedirectResult;
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.LoadState;
+import io.github.kihdev.playwright.stealth4j.Stealth4j;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -80,10 +81,8 @@ public class FirefoxPlaywrightStrategy implements RedirectStrategy {
                             ApplicationConstants.Playwright.DEFAULT_VIEWPORT_HEIGHT
                     ));
 
-            Page page = context.newPage();
-
-            // Скрываем признаки автоматизации
-            page.addInitScript("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})");
+            // Stealth4j: патчит ~20 fingerprint-полей (webdriver, WebGL, plugins, navigator.languages и др.)
+            Page page = Stealth4j.newStealthPage(context);
 
             page.setDefaultTimeout(timeoutMs);
             page.setDefaultNavigationTimeout(timeoutMs);
