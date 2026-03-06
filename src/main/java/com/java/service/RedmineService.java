@@ -409,9 +409,8 @@ public class RedmineService {
     /**
      * Параллельная проверка Redmine для списка сайтов.
      * Возвращает Map<siteName, latestIssue> — только для сайтов, у которых нашлась задача.
-     * Также сохраняет/обновляет найденные задачи в БД.
+     * Также сохраняет/обновляет найденные задачи в БД (вторичная операция — ошибка save не теряет результат).
      */
-    @Transactional
     public Map<String, Object> checkBatch(List<String> sites) {
         if (!isEnabled() || sites == null || sites.isEmpty()) return Collections.emptyMap();
 
@@ -421,21 +420,29 @@ public class RedmineService {
                         List<RedmineIssueDto> found = findIssuesBySite(site);
                         if (found.isEmpty()) return null;
                         RedmineIssueDto latest = found.get(0);
-                        // Сохраняем/обновляем в БД
-                        ZoomosRedmineIssue entity = repo.findBySiteName(site)
-                                .orElseGet(() -> ZoomosRedmineIssue.builder().siteName(site).build());
-                        entity.setIssueId(latest.getId());
-                        entity.setIssueStatus(latest.getStatusName());
-                        entity.setClosed(latest.isClosed());
-                        entity.setIssueUrl(latest.getUrl());
-                        entity.setUpdatedAt(LocalDateTime.now());
-                        if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
-                        repo.save(entity);
+
+                        // Результат API — всегда возвращаем независимо от состояния БД
                         Map<String, Object> data = new LinkedHashMap<>();
                         data.put("id", latest.getId());
                         data.put("url", latest.getUrl());
                         data.put("statusName", latest.getStatusName());
                         data.put("isClosed", latest.isClosed());
+
+                        // Сохраняем/обновляем в БД — вторичная операция, ошибка не теряет данные
+                        try {
+                            ZoomosRedmineIssue entity = repo.findBySiteName(site)
+                                    .orElseGet(() -> ZoomosRedmineIssue.builder().siteName(site).build());
+                            entity.setIssueId(latest.getId());
+                            entity.setIssueStatus(latest.getStatusName());
+                            entity.setClosed(latest.isClosed());
+                            entity.setIssueUrl(latest.getUrl());
+                            entity.setUpdatedAt(LocalDateTime.now());
+                            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+                            repo.save(entity);
+                        } catch (Exception dbEx) {
+                            log.warn("Redmine checkBatch DB save '{}': {}", site, dbEx.getMessage());
+                        }
+
                         return Map.entry(site, (Object) data);
                     } catch (Exception e) {
                         log.warn("Redmine checkBatch '{}': {}", site, e.getMessage());
@@ -447,7 +454,7 @@ public class RedmineService {
         Map<String, Object> result = new LinkedHashMap<>();
         for (CompletableFuture<Map.Entry<String, Object>> f : futures) {
             try {
-                Map.Entry<String, Object> entry = f.get();
+                Map.Entry<String, Object> entry = f.get(30, java.util.concurrent.TimeUnit.SECONDS);
                 if (entry != null) result.put(entry.getKey(), entry.getValue());
             } catch (Exception e) {
                 log.warn("Redmine checkBatch future: {}", e.getMessage());
