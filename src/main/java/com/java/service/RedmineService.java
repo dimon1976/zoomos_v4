@@ -418,7 +418,19 @@ public class RedmineService {
                 .map(site -> CompletableFuture.supplyAsync(() -> {
                     try {
                         List<RedmineIssueDto> found = findIssuesBySite(site);
-                        if (found.isEmpty()) return null;
+                        if (found.isEmpty()) {
+                            // Задача не найдена в TT — удаляем stale-запись из БД (best-effort)
+                            // JS обнаружит отсутствие сайта в ответе и откатит кнопку сам
+                            try {
+                                repo.findBySiteName(site).ifPresent(entity -> {
+                                    repo.delete(entity);
+                                    log.info("Redmine checkBatch: удалена stale-запись для '{}'", site);
+                                });
+                            } catch (Exception dbEx) {
+                                log.warn("Redmine checkBatch delete stale '{}': {}", site, dbEx.getMessage());
+                            }
+                            return null;
+                        }
                         RedmineIssueDto latest = found.get(0);
 
                         // Результат API — всегда возвращаем независимо от состояния БД
@@ -455,6 +467,7 @@ public class RedmineService {
         for (CompletableFuture<Map.Entry<String, Object>> f : futures) {
             try {
                 Map.Entry<String, Object> entry = f.get(30, java.util.concurrent.TimeUnit.SECONDS);
+                // Включаем и null-записи (задача удалена из TT) — JS откатит кнопку к "создать"
                 if (entry != null) result.put(entry.getKey(), entry.getValue());
             } catch (Exception e) {
                 log.warn("Redmine checkBatch future: {}", e.getMessage());

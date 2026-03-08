@@ -871,6 +871,30 @@
             .forEach(function(b) { allSites.add(b.dataset.site); });
         if (!allSites.size) return;
 
+        // Откатить stale btn-group для сайта назад к кнопке "создать"
+        function revertStaleBtnGroup(site) {
+            document.querySelectorAll('[data-rm-site="' + CSS.escape(site) + '"]')
+                .forEach(function(grp) {
+                    const editBtn = grp.querySelector('.btn-redmine-edit');
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn btn-sm btn-outline-danger py-0 px-2 btn-redmine';
+                    if (editBtn) {
+                        btn.dataset.site = editBtn.dataset.site || site;
+                        btn.dataset.city = editBtn.dataset.city || '';
+                        btn.dataset.message = editBtn.dataset.message || '';
+                        btn.dataset.checktype = editBtn.dataset.checktype || '';
+                        btn.dataset.historyurl = editBtn.dataset.historyurl || '';
+                        btn.dataset.matchingurl = editBtn.dataset.matchingurl || '';
+                    } else {
+                        btn.dataset.site = site;
+                    }
+                    btn.innerHTML = '<i class="fas fa-bug"></i>';
+                    btn.title = 'Создать задачу в Redmine';
+                    grp.replaceWith(btn);
+                });
+        }
+
         const params = [...allSites].map(s => 'sites=' + encodeURIComponent(s)).join('&');
         fetch('/zoomos/redmine/check-batch?' + params)
             .then(function(r) { return r.json(); })
@@ -891,6 +915,14 @@
                             replaceAllSiteBtns(site, {id: issue.id, url: issue.url,
                                 status: issue.statusName, btnClass: btnClass});
                         });
+                });
+
+                // Для всех сайтов с btn-group (stale DB-запись), которых НЕТ в ответе API —
+                // задача удалена из TT, откатываем кнопку к режиму "создать"
+                allSites.forEach(function(site) {
+                    if (data[site] == null) { // undefined (нет в ответе) или null
+                        revertStaleBtnGroup(site);
+                    }
                 });
             })
             .catch(function() {}); // тихо игнорируем

@@ -29,6 +29,10 @@ public class ZoomosShop {
     @Builder.Default
     private boolean isEnabled = true;
 
+    @Column(name = "is_priority", nullable = false)
+    @Builder.Default
+    private boolean isPriority = false;
+
     @Column(name = "last_synced_at")
     private ZonedDateTime lastSyncedAt;
 

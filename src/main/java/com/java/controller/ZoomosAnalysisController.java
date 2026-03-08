@@ -17,6 +17,8 @@ import com.java.service.ZoomosParserService;
 import com.java.service.ZoomosSchedulerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +32,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.Comparator;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -60,10 +63,16 @@ public class ZoomosAnalysisController {
     private final ZoomosParserPatternRepository parserPatternRepository;
     private final RedmineService redmineService;
 
+    @Autowired
+    @Qualifier("zoomosCheckExecutor")
+    private java.util.concurrent.Executor zoomosCheckExecutor;
+
     @GetMapping({"", "/"})
     public String index(Model model) {
         List<ZoomosShop> allShops = parserService.getAllShops();
-        List<ZoomosShop> shops = allShops.stream().filter(ZoomosShop::isEnabled).collect(Collectors.toList());
+        List<ZoomosShop> shops = allShops.stream().filter(ZoomosShop::isEnabled)
+                .sorted(Comparator.comparing(ZoomosShop::isPriority).reversed())
+                .collect(Collectors.toList());
         List<ZoomosShop> disabledShops = allShops.stream().filter(s -> !s.isEnabled()).collect(Collectors.toList());
 
         Map<Long, List<ZoomosCityId>> cityIdsMap = new java.util.LinkedHashMap<>();
@@ -99,6 +108,14 @@ public class ZoomosAnalysisController {
         model.addAttribute("prioritySiteNames", prioritySiteNames);
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
         return "zoomos/index";
+    }
+
+    /** AJAX-toggle приоритетности магазина */
+    @PostMapping("/shops/{shopId}/priority")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> toggleShopPriority(@PathVariable Long shopId) {
+        boolean isPriority = parserService.togglePriority(shopId);
+        return ResponseEntity.ok(Map.of("success", true, "isPriority", isPriority));
     }
 
     /** AJAX-toggle расписания (для index.html без перезагрузки) — переключает ВСЕ расписания магазина */
@@ -477,7 +494,7 @@ public class ZoomosAnalysisController {
         try {
             String operationId = UUID.randomUUID().toString();
 
-            // Запускаем в фоне, чтобы не блокировать HTTP
+            // Запускаем в фоне через выделенный пул (для параллельного запуска нескольких магазинов)
             CompletableFuture.runAsync(() -> {
                 try {
                     checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, mae, tdt, tet, operationId);
@@ -490,7 +507,7 @@ public class ZoomosAnalysisController {
                 } catch (Exception e) {
                     log.error("Ошибка фоновой проверки: {}", e.getMessage(), e);
                 }
-            });
+            }, zoomosCheckExecutor);
 
             return ResponseEntity.ok(Map.of(
                     "success", true,

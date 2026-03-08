@@ -110,6 +110,13 @@
         }
         .priority-star-btn:hover { opacity: 0.75; }
         .sched-label { white-space: nowrap; }
+        #batchPanel {
+            position: sticky; top: 0; z-index: 100;
+            background: #fff3cd; border-bottom: 2px solid #ffc107;
+            padding: 8px 16px; display: none;
+            align-items: center; gap: 12px; flex-wrap: wrap;
+        }
+        .shop-batch-cb { cursor: pointer; }
     </style>
 </th:block>
 
@@ -172,6 +179,16 @@
         <span id="searchCount" class="text-muted small"></span>
     </div>
 
+    <!-- Батч-панель (показывается при выборе магазинов) -->
+    <div id="batchPanel">
+        <span class="fw-semibold small"><i class="fas fa-check-square me-1"></i>Выбрано: <span id="batchCount">0</span></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="batchSelectAll">Выбрать все</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="batchDeselect">Снять выделение</button>
+        <button type="button" class="btn btn-sm btn-warning" id="batchRunBtn">
+            <i class="fas fa-play me-1"></i>Проверить выбранные
+        </button>
+    </div>
+
     <!-- Список магазинов -->
     <div th:if="${shops.empty}" class="text-muted text-center py-4">
         <i class="fas fa-store fa-2x mb-2 d-block"></i>
@@ -182,7 +199,17 @@
          th:data-shop-name="${shop.shopName}" th:data-shop-id="${shop.id}">
         <div class="card-header d-flex justify-content-between align-items-center">
             <div>
-                <i class="fas fa-store me-2 text-primary"></i>
+                <input type="checkbox" class="form-check-input shop-batch-cb me-1"
+                       th:data-shop-id="${shop.id}"
+                       title="Выбрать для batch-проверки">
+                <button type="button" class="btn btn-link p-0 me-1 btn-shop-priority"
+                        th:data-shop-id="${shop.id}"
+                        th:data-priority="${shop.priority}"
+                        title="Приоритетный магазин — показывать вверху списка">
+                    <i th:class="${shop.priority} ? 'fas fa-star text-warning' : 'far fa-star text-secondary'"
+                       style="font-size:0.9em;"></i>
+                </button>
+                <i class="fas fa-store me-1 text-primary"></i>
                 <strong th:text="${shop.shopName}">shop.ru</strong>
                 <span th:if="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
                     <i class="fas fa-sync-alt me-1"></i>Обновлено:
@@ -1758,6 +1785,28 @@
     });
 
     // ==================================================================
+    // Приоритетные магазины (звёздочка в заголовке карточки)
+    // ==================================================================
+
+    document.querySelectorAll('.btn-shop-priority').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            fetch('/zoomos/shops/' + shopId + '/priority', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.isPriority !== undefined) {
+                        const icon = this.querySelector('i');
+                        if (data.isPriority) {
+                            icon.className = 'fas fa-star text-warning';
+                        } else {
+                            icon.className = 'far fa-star text-secondary';
+                        }
+                    }
+                })
+                .catch(() => {});
+        });
+    });
+
     // Приоритетные звёздочки в таблице сайтов клиента
     // ==================================================================
 
@@ -1975,6 +2024,47 @@
                 }
             })
             .catch(() => {});
+    });
+
+    // ==================================================================
+    // Batch-проверка: чекбоксы + панель управления
+    // ==================================================================
+
+    const batchPanel = document.getElementById('batchPanel');
+    const batchCount = document.getElementById('batchCount');
+
+    function updateBatchPanel() {
+        const checked = document.querySelectorAll('.shop-batch-cb:checked');
+        batchCount.textContent = checked.length;
+        batchPanel.style.display = checked.length > 0 ? 'flex' : 'none';
+    }
+
+    document.querySelectorAll('.shop-batch-cb').forEach(cb => {
+        cb.addEventListener('change', updateBatchPanel);
+    });
+
+    document.getElementById('batchSelectAll').addEventListener('click', function() {
+        document.querySelectorAll('.shop-batch-cb').forEach(cb => { cb.checked = true; });
+        updateBatchPanel();
+    });
+
+    document.getElementById('batchDeselect').addEventListener('click', function() {
+        document.querySelectorAll('.shop-batch-cb').forEach(cb => { cb.checked = false; });
+        updateBatchPanel();
+    });
+
+    document.getElementById('batchRunBtn').addEventListener('click', function() {
+        const selected = [...document.querySelectorAll('.shop-batch-cb:checked')];
+        if (!selected.length) return;
+        selected.forEach(cb => {
+            const shopId = cb.dataset.shopId;
+            // Имитируем клик на кнопке "Проверить" для каждого выбранного магазина
+            const runBtn = document.querySelector('.btn-run-check[data-shop-id="' + shopId + '"]');
+            if (runBtn && !runBtn.disabled) runBtn.click();
+        });
+        // Сбрасываем чекбоксы после запуска
+        document.querySelectorAll('.shop-batch-cb').forEach(cb => { cb.checked = false; });
+        updateBatchPanel();
     });
 
     // Фоновый polling: раз в 5 сек проверяем магазины без активного индикатора

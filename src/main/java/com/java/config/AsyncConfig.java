@@ -168,6 +168,23 @@ public class AsyncConfig {
     }
 
     /**
+     * Пул потоков для параллельных проверок выкачки Zoomos (Playwright IO-тяжёлые операции)
+     */
+    @Bean(name = "zoomosCheckExecutor")
+    public Executor zoomosCheckExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(3);
+        executor.setMaxPoolSize(6);
+        executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("zoomos-check-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(600);
+        executor.initialize();
+        return executor;
+    }
+
+    /**
      * Планировщик задач для автоматических проверок Zoomos (cron-расписания)
      */
     @Bean(name = "zoomosSchedulerTaskScheduler")
