@@ -573,6 +573,16 @@ public class ZoomosAnalysisController {
         int errorGrowthThreshold = run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30;
         int minAbsoluteErrors = run.getMinAbsoluteErrors() != null ? run.getMinAbsoluteErrors() : 5;
 
+        // Baseline: вычисляем диапазон дат заранее (используется и в оценке групп, и в тренд-анализе)
+        int baselineDays = run.getBaselineDays() != null ? run.getBaselineDays() : 0;
+        ZonedDateTime baselineDatesFrom = null, baselineDatesTo = null;
+        if (baselineDays > 0) {
+            LocalDate blFrom = run.getDateFrom().minusDays(baselineDays);
+            LocalDate blTo   = run.getDateFrom().minusDays(1);
+            baselineDatesFrom = blFrom.atStartOfDay(ZoneOffset.UTC);
+            baselineDatesTo   = blTo.atTime(23, 59).atZone(ZoneOffset.UTC);
+        }
+
         Set<String> ignoreStockSites = knownSiteRepository.findAllByIgnoreStockTrue()
                 .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
         Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue()
@@ -668,14 +678,22 @@ public class ZoomosAnalysisController {
                     }
                 }
             } else {
-                // Без фильтра: стандартный evaluateGroup
+                // Без фильтра: evaluateGroup с baseline-медианой
                 boolean ignoreStock = group.get(0).getSiteName() != null
                         && ignoreStockSites.contains(group.get(0).getSiteName());
+                ZoomosCheckService.MedianStats groupBaseline = null;
+                if (baselineDatesFrom != null) {
+                    String siteForBl = group.get(0).getSiteName();
+                    String cityForBl = group.get(0).getCityName();
+                    List<ZoomosParsingStats> bl = parsingStatsRepository
+                            .findForBaseline(siteForBl, cityForBl, baselineDatesFrom, baselineDatesTo);
+                    groupBaseline = checkService.computeBaselineMedian(bl);
+                }
                 status = checkService.evaluateGroup(group, dropThreshold, errorGrowthThreshold,
-                        minAbsoluteErrors, ignoreStock);
+                        minAbsoluteErrors, ignoreStock, groupBaseline);
                 if (!"OK".equals(status)) {
                     buildGroupIssues(group, status, dropThreshold, errorGrowthThreshold,
-                            minAbsoluteErrors, ignoreStock, issues, run.getShop().getShopName());
+                            minAbsoluteErrors, ignoreStock, groupBaseline, issues, run.getShop().getShopName());
                 }
             }
             siteCityStatuses.put(groupKey, status);
@@ -936,14 +954,14 @@ public class ZoomosAnalysisController {
                 .thenComparingInt(g -> statusPriority((String) g.get("status")))
                 .thenComparing(g -> (String) g.get("siteName")));
 
-        // Добавляем NOT_FOUND/IN_PROGRESS пары в groups для отображения в Блоке 3
+        // Добавляем noData-пары в groups для отображения в Блоке 3
         Map<String, Map<String, Object>> groupBySite = new LinkedHashMap<>();
         for (Map<String, Object> g : groups) {
             groupBySite.put((String) g.get("siteName"), g);
         }
         for (Map<String, Object> issue : issues) {
+            if (!Boolean.TRUE.equals(issue.get("noData"))) continue;
             String iType = (String) issue.get("type");
-            if (!"NOT_FOUND".equals(iType) && !"IN_PROGRESS".equals(iType)) continue;
             String iSite      = (String) issue.get("site");
             String iCity      = (String) issue.get("city");
             String iCityId    = (String) issue.get("cityId");
@@ -997,6 +1015,7 @@ public class ZoomosAnalysisController {
                 ag.put("stats", new ArrayList<>());
                 ag.put("issueMessage", iMsg);
                 ag.put("inProgressStat", issue.get("inProgress"));
+                ag.put("noData", true); // нет данных — показываем заглушку вместо таблицы
                 cityGroupAddrGroups.add(ag);
             }
         }
@@ -1025,17 +1044,13 @@ public class ZoomosAnalysisController {
                 .thenComparing(g -> (String) g.get("siteName")));
 
         boolean canDeliver = issues.stream()
-                .noneMatch(i -> "ERROR".equals(i.get("type"))
-                        || "NOT_FOUND".equals(i.get("type"))
-                        || "IN_PROGRESS".equals(i.get("type")));
+                .noneMatch(i -> "ERROR".equals(i.get("type")));
 
-        // ---- Исторический baseline-анализ ----
-        int baselineDays = run.getBaselineDays() != null ? run.getBaselineDays() : 0;
+        // ---- Исторический baseline-анализ (тренды) ----
+        // baselineDays и baselineDatesFrom/To уже вычислены выше
         if (baselineDays > 0) {
             LocalDate baselineFrom = run.getDateFrom().minusDays(baselineDays);
             LocalDate baselineTo   = run.getDateFrom().minusDays(1);
-            ZonedDateTime bFrom = baselineFrom.atStartOfDay(ZoneOffset.UTC);
-            ZonedDateTime bTo   = baselineTo.atTime(23, 59).atZone(ZoneOffset.UTC);
 
             model.addAttribute("baselineDays", baselineDays);
             model.addAttribute("baselineFrom", baselineFrom.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
@@ -1057,7 +1072,7 @@ public class ZoomosAnalysisController {
 
                 // Загружаем исторические данные для данного сайта+города
                 List<ZoomosParsingStats> historical = parsingStatsRepository
-                        .findForBaseline(siteName, cityName, bFrom, bTo);
+                        .findForBaseline(siteName, cityName, baselineDatesFrom, baselineDatesTo);
 
                 if (historical.size() < 3) continue; // недостаточно данных
 
@@ -1124,15 +1139,16 @@ public class ZoomosAnalysisController {
         long ts = System.currentTimeMillis();
 
         // Блочный формат: группируем по типу проблемы
+        // noData=true — города/адреса без данных (бывший NOT_FOUND/IN_PROGRESS): отдельный блок
         List<Map<String, Object>> itErrors    = new ArrayList<>();
         List<Map<String, Object>> itNotFound  = new ArrayList<>();
         List<Map<String, Object>> itWarnings  = new ArrayList<>();
         for (Map<String, Object> issue : issues) {
             String t = (String) issue.get("type");
             if ("TREND_WARNING".equals(t)) continue;
-            if ("ERROR".equals(t))                          itErrors.add(issue);
-            else if ("NOT_FOUND".equals(t) || "IN_PROGRESS".equals(t)) itNotFound.add(issue);
-            else if ("WARNING".equals(t))                   itWarnings.add(issue);
+            if (Boolean.TRUE.equals(issue.get("noData"))) itNotFound.add(issue);
+            else if ("ERROR".equals(t))                    itErrors.add(issue);
+            else if ("WARNING".equals(t))                  itWarnings.add(issue);
         }
 
         StringBuilder itText = new StringBuilder();
@@ -1180,11 +1196,12 @@ public class ZoomosAnalysisController {
         }
 
         // Считаем счётчики динамически из текущей оценки, чтобы не зависеть от устаревших run.warningCount
-        long liveOkCount      = siteCityStatuses.values().stream().filter("OK"::equals).count();
-        long liveWarnCount    = siteCityStatuses.values().stream().filter("WARNING"::equals).count();
-        long liveErrCount     = siteCityStatuses.values().stream().filter("ERROR"::equals).count();
+        long liveOkCount       = siteCityStatuses.values().stream().filter("OK"::equals).count();
+        long liveWarnCount     = siteCityStatuses.values().stream().filter("WARNING"::equals).count();
+        long liveErrCount      = siteCityStatuses.values().stream().filter("ERROR"::equals).count();
+        // liveNotFoundCount — число городов/адресов, по которым нет данных (IN_PROGRESS или совсем нет)
         long liveNotFoundCount = issues.stream()
-                .filter(i -> "NOT_FOUND".equals(i.get("type")) || "IN_PROGRESS".equals(i.get("type")))
+                .filter(i -> Boolean.TRUE.equals(i.get("noData")))
                 .count();
 
         // Помечаем приоритетные сайты в issues
@@ -1193,16 +1210,20 @@ public class ZoomosAnalysisController {
             issue.put("isPriority", site != null && prioritySiteNames.contains(site));
         }
 
-        // Сортируем issues: приоритетные первые, затем ERROR → WARNING → IN_PROGRESS → NOT_FOUND → TREND_WARNING
+        // Сортируем issues: приоритетные первые, затем ERROR → WARNING → TREND_WARNING
         issues.sort(Comparator.comparingInt((Map<?, ?> issue) -> Boolean.TRUE.equals(issue.get("isPriority")) ? 0 : 1)
                 .thenComparingInt(issue -> {
                     String t = (String) issue.get("type");
                     if ("ERROR".equals(t)) return 0;
                     if ("WARNING".equals(t)) return 1;
-                    if ("IN_PROGRESS".equals(t)) return 2;
-                    if ("NOT_FOUND".equals(t)) return 3;
-                    return 4; // TREND_WARNING
+                    return 2; // TREND_WARNING
                 }));
+
+        // Разделяем issues: главные (ERROR/WARNING) и тренды (TREND_WARNING)
+        List<Map<String, Object>> mainIssues  = issues.stream()
+                .filter(i -> !"TREND_WARNING".equals(i.get("type"))).toList();
+        List<Map<String, Object>> trendIssues = issues.stream()
+                .filter(i ->  "TREND_WARNING".equals(i.get("type"))).toList();
 
         // Карта siteName → parserInclude для отображения в колонке "Парсер" (только фильтр, не полный parserDescription)
         Map<String, String> parserIncludeBysite = new HashMap<>();
@@ -1210,7 +1231,8 @@ public class ZoomosAnalysisController {
 
         model.addAttribute("run", run);
         model.addAttribute("groups", groups);
-        model.addAttribute("issues", issues);
+        model.addAttribute("issues", mainIssues);
+        model.addAttribute("trendIssues", trendIssues);
         model.addAttribute("parserIncludeBysite", parserIncludeBysite);
         model.addAttribute("prioritySiteNames", prioritySiteNames);
         model.addAttribute("canDeliver", canDeliver);
@@ -1223,8 +1245,8 @@ public class ZoomosAnalysisController {
 
         // Redmine: только из БД (статусы обновляются async через JS /check-batch после загрузки страницы)
         model.addAttribute("redmineEnabled", redmineService.isEnabled());
-        if (redmineService.isEnabled() && !issues.isEmpty()) {
-            Set<String> siteNames = issues.stream()
+        if (redmineService.isEnabled() && !mainIssues.isEmpty()) {
+            Set<String> siteNames = mainIssues.stream()
                     .map(i -> (String) i.get("site"))
                     .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
@@ -1244,15 +1266,16 @@ public class ZoomosAnalysisController {
     private void buildGroupIssues(List<ZoomosParsingStats> sortedAsc, String groupStatus,
                                     int dropThreshold, int errorGrowthThreshold,
                                     int minAbsoluteErrors, boolean ignoreStock,
+                                    ZoomosCheckService.MedianStats baseline,
                                     List<Map<String, Object>> issues, String shopName) {
         ZoomosParsingStats newest = sortedAsc.get(sortedAsc.size() - 1);
+        ZoomosParsingStats prev   = sortedAsc.size() >= 2 ? sortedAsc.get(sortedAsc.size() - 2) : null;
 
-        String siteName   = newest.getSiteName();
-        String cityName   = newest.getCityName();
-        String checkType  = newest.getCheckType();
-        String addressId  = newest.getAddressId();
+        String siteName    = newest.getSiteName();
+        String cityName    = newest.getCityName();
+        String checkType   = newest.getCheckType();
+        String addressId   = newest.getAddressId();
         String addressName = newest.getAddressName();
-        // Извлекаем числовой ID города из "3509 - Вологда"
         String cityId = cityName != null && cityName.contains(" - ")
                 ? cityName.substring(0, cityName.indexOf(" - ")).trim()
                 : (cityName != null ? cityName.trim() : "");
@@ -1272,110 +1295,122 @@ public class ZoomosAnalysisController {
             issues.add(issue);
         }
 
-        // ERROR: одиночная запись, есть товары, но в наличии 0
-        if (!ignoreStock && sortedAsc.size() < 2
+        // WARNING (одиночная запись без baseline): товары есть, но в наличии 0 — нет с чем сравнить
+        if (!ignoreStock && prev == null && baseline == null
                 && newest.getInStock() != null && newest.getInStock() == 0
                 && newest.getTotalProducts() != null && newest.getTotalProducts() > 0) {
             Map<String, Object> issue = new LinkedHashMap<>();
             issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
             issue.put("addressId", addressId); issue.put("addressName", addressName);
             issue.put("checkType", checkType); issue.put("shopName", shopName);
-            issue.put("type", "ERROR");
-            issue.put("message", "В наличии: 0 из " + newest.getTotalProducts() + " товаров");
+            issue.put("type", "WARNING");
+            issue.put("message", "В наличии: 0 из " + newest.getTotalProducts() + " товаров (первая запись)");
             issues.add(issue);
         }
 
-        if (sortedAsc.size() < 2) return;
-        // Оцениваем только последнюю пару (текущее состояние)
-        ZoomosParsingStats prev = sortedAsc.get(sortedAsc.size() - 2);
+        if (prev == null && baseline == null) return;
 
-        // --- inStock-анализ (пропускается для сайтов с ignoreStock) ---
-        if (!ignoreStock) {
-            boolean alwaysZeroStock = sortedAsc.stream()
-                    .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
-            Integer prevStock = prev.getInStock();
+        boolean alwaysZeroInStock = sortedAsc.stream()
+                .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
+
+        // --- inStock-анализ (первичная метрика) ---
+        if (!ignoreStock && !alwaysZeroInStock) {
+            // Референс: медиана или предыдущая запись
+            Integer refInStock = (baseline != null && baseline.inStock() != null)
+                    ? baseline.inStock()
+                    : (prev != null ? prev.getInStock() : null);
+            boolean usingBaseline = baseline != null && baseline.inStock() != null;
             Integer newStock = newest.getInStock();
 
-            if (!alwaysZeroStock && newStock != null && newStock == 0) {
-                // Ищем последнее ненулевое значение в истории
-                int lastNonZero = sortedAsc.subList(0, sortedAsc.size() - 1).stream()
-                        .filter(s -> s.getInStock() != null && s.getInStock() > 0)
-                        .mapToInt(ZoomosParsingStats::getInStock).max().orElse(0);
-                String msg = lastNonZero > 0
-                        ? String.format("В наличии: %d → 0 (−100%%)", lastNonZero)
-                        : "В наличии: 0 (нет товаров в наличии)";
-                Map<String, Object> issue = new LinkedHashMap<>();
-                issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                issue.put("addressId", addressId); issue.put("addressName", addressName);
-                issue.put("checkType", checkType); issue.put("shopName", shopName);
-                issue.put("type", "ERROR");
-                issue.put("message", msg);
-                issues.add(issue);
-            } else if (!alwaysZeroStock && prevStock != null && prevStock > 0 && newStock != null) {
-                double drop = (double)(prevStock - newStock) / prevStock * 100;
-                if (drop > dropThreshold) {
+            if (refInStock != null && refInStock > 0 && newStock != null) {
+                if (newStock == 0) {
+                    // Ищем последнее ненулевое значение для сообщения
+                    int lastNonZero = usingBaseline ? refInStock
+                            : sortedAsc.subList(0, sortedAsc.size() - 1).stream()
+                                    .filter(s -> s.getInStock() != null && s.getInStock() > 0)
+                                    .mapToInt(ZoomosParsingStats::getInStock).max().orElse(refInStock);
+                    String prefix = usingBaseline ? String.format("[медиана: %d]", refInStock) : String.valueOf(lastNonZero);
                     Map<String, Object> issue = new LinkedHashMap<>();
                     issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
                     issue.put("addressId", addressId); issue.put("addressName", addressName);
                     issue.put("checkType", checkType); issue.put("shopName", shopName);
                     issue.put("type", "ERROR");
-                    issue.put("message", String.format("Падение 'В наличии': %d → %d (−%.0f%%)", prevStock, newStock, drop));
+                    issue.put("message", String.format("В наличии: %s → 0 (−100%%)", prefix));
                     issues.add(issue);
-                }
-            } else if (alwaysZeroStock) {
-                boolean hasAnyProducts = sortedAsc.stream()
-                        .anyMatch(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0);
-                if (hasAnyProducts) {
-                    Map<String, Object> issue = new LinkedHashMap<>();
-                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                    issue.put("addressId", addressId); issue.put("addressName", addressName);
-                    issue.put("checkType", checkType); issue.put("shopName", shopName);
-                    issue.put("type", "WARNING");
-                    issue.put("message", "В наличии: всегда 0 — нужна проверка");
-                    issues.add(issue);
+                } else {
+                    double drop = (double)(refInStock - newStock) / refInStock * 100;
+                    if (drop > dropThreshold) {
+                        String refLabel = usingBaseline ? String.format("[медиана: %d]", refInStock) : String.valueOf(refInStock);
+                        Map<String, Object> issue = new LinkedHashMap<>();
+                        issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                        issue.put("addressId", addressId); issue.put("addressName", addressName);
+                        issue.put("checkType", checkType); issue.put("shopName", shopName);
+                        issue.put("type", "ERROR");
+                        issue.put("message", String.format("Падение 'В наличии': %s → %d (−%.0f%%)", refLabel, newStock, drop));
+                        issues.add(issue);
+                    }
                 }
             }
-        }
-
-        // WARNING: рост ошибок (только если достигнут минимальный абсолютный порог)
-        int prevErr = prev.getErrorCount() != null ? prev.getErrorCount() : 0;
-        int newErr = newest.getErrorCount() != null ? newest.getErrorCount() : 0;
-        if (newErr >= minAbsoluteErrors) {
-            if (prevErr > 0 && newErr > prevErr) {
-                double growth = (double)(newErr - prevErr) / prevErr * 100;
-                if (growth > errorGrowthThreshold) {
-                    Map<String, Object> issue = new LinkedHashMap<>();
-                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                    issue.put("addressId", addressId); issue.put("addressName", addressName);
-                    issue.put("checkType", checkType); issue.put("shopName", shopName);
-                    issue.put("type", "WARNING");
-                    issue.put("message", String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErr, newErr, growth));
-                    issues.add(issue);
-                }
-            } else if (prevErr == 0) {
+            // alwaysZeroInStock=false но конкретной записи нет — предупреждаем только если есть товары
+        } else if (!ignoreStock && alwaysZeroInStock) {
+            boolean hasAnyProducts = sortedAsc.stream()
+                    .anyMatch(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0);
+            if (hasAnyProducts) {
                 Map<String, Object> issue = new LinkedHashMap<>();
                 issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
                 issue.put("addressId", addressId); issue.put("addressName", addressName);
                 issue.put("checkType", checkType); issue.put("shopName", shopName);
                 issue.put("type", "WARNING");
-                issue.put("message", String.format("Ошибки парсинга: 0 → %d", newErr));
+                issue.put("message", "В наличии: всегда 0 — нужна проверка");
                 issues.add(issue);
             }
         }
 
-        // WARNING: падение товаров
-        Integer prevTotal = prev.getTotalProducts();
-        Integer newTotal = newest.getTotalProducts();
-        if (prevTotal != null && newTotal != null && prevTotal > 0) {
-            double drop = (double)(prevTotal - newTotal) / prevTotal * 100;
-            if (drop > dropThreshold) {
-                Map<String, Object> issue = new LinkedHashMap<>();
-                issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                issue.put("addressId", addressId); issue.put("addressName", addressName);
-                issue.put("checkType", checkType); issue.put("shopName", shopName);
-                issue.put("type", "WARNING");
-                issue.put("message", String.format("Падение товаров: %d → %d (−%.0f%%)", prevTotal, newTotal, drop));
-                issues.add(issue);
+        // --- totalProducts (запасная метрика — только если inStock недоступен) ---
+        if (ignoreStock || alwaysZeroInStock) {
+            Integer refTotal = (baseline != null && baseline.totalProducts() != null)
+                    ? baseline.totalProducts()
+                    : (prev != null ? prev.getTotalProducts() : null);
+            boolean usingBaseline = baseline != null && baseline.totalProducts() != null;
+            Integer newTotal = newest.getTotalProducts();
+            if (refTotal != null && refTotal > 0 && newTotal != null) {
+                double drop = (double)(refTotal - newTotal) / refTotal * 100;
+                if (drop > dropThreshold) {
+                    String refLabel = usingBaseline ? String.format("[медиана: %d]", refTotal) : String.valueOf(refTotal);
+                    Map<String, Object> issue = new LinkedHashMap<>();
+                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                    issue.put("addressId", addressId); issue.put("addressName", addressName);
+                    issue.put("checkType", checkType); issue.put("shopName", shopName);
+                    issue.put("type", "ERROR");
+                    issue.put("message", String.format("Падение товаров: %s → %d (−%.0f%%)", refLabel, newTotal, drop));
+                    issues.add(issue);
+                }
+            }
+
+            // Ошибки парсинга — только когда inStock недоступен
+            int prevErr = prev != null && prev.getErrorCount() != null ? prev.getErrorCount() : 0;
+            int newErr  = newest.getErrorCount() != null ? newest.getErrorCount() : 0;
+            if (newErr >= minAbsoluteErrors) {
+                if (prevErr > 0 && newErr > prevErr) {
+                    double growth = (double)(newErr - prevErr) / prevErr * 100;
+                    if (growth > errorGrowthThreshold) {
+                        Map<String, Object> issue = new LinkedHashMap<>();
+                        issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                        issue.put("addressId", addressId); issue.put("addressName", addressName);
+                        issue.put("checkType", checkType); issue.put("shopName", shopName);
+                        issue.put("type", "WARNING");
+                        issue.put("message", String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErr, newErr, growth));
+                        issues.add(issue);
+                    }
+                } else if (prevErr == 0) {
+                    Map<String, Object> issue = new LinkedHashMap<>();
+                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                    issue.put("addressId", addressId); issue.put("addressName", addressName);
+                    issue.put("checkType", checkType); issue.put("shopName", shopName);
+                    issue.put("type", "WARNING");
+                    issue.put("message", String.format("Ошибки парсинга: 0 → %d", newErr));
+                    issues.add(issue);
+                }
             }
         }
     }
@@ -1398,8 +1433,9 @@ public class ZoomosAnalysisController {
      * NOT_FOUND:   данных нет совсем. Если есть lastKnown — добавляет историческую информацию.
      */
     private void addIssueStatus(Map<String, Object> issue, ZoomosParsingStats ip, ZoomosParsingStats lastKnown) {
+        issue.put("noData", true); // маркер: нет данных (бывший NOT_FOUND/IN_PROGRESS)
         if (ip == null) {
-            issue.put("type", "NOT_FOUND");
+            issue.put("type", "ERROR");
             String aid = (String) issue.get("addressId");
             String cityId = (String) issue.get("cityId");
             if (aid != null && !aid.isBlank()) {
@@ -1415,7 +1451,7 @@ public class ZoomosAnalysisController {
         } else {
             boolean frozen = ip.getUpdatedTime() != null &&
                     ip.getUpdatedTime().isBefore(ZonedDateTime.now().minusHours(2));
-            issue.put("type", frozen ? "NOT_FOUND" : "IN_PROGRESS");
+            issue.put("type", "WARNING"); // IN_PROGRESS и frozen → WARNING (не блокирует canDeliver)
             issue.put("inProgress", ip);
             String pct = ip.getCompletionTotal() != null ? ip.getCompletionTotal() : "?";
             String startStr = ip.getStartTime() != null
@@ -1441,10 +1477,9 @@ public class ZoomosAnalysisController {
 
     private static int statusPriority(String st) {
         return switch (st != null ? st : "") {
-            case "ERROR", "NOT_FOUND" -> 0;
-            case "IN_PROGRESS" -> 1;
-            case "WARNING" -> 2;
-            default -> 3; // OK
+            case "ERROR" -> 0;
+            case "WARNING" -> 1;
+            default -> 2; // OK
         };
     }
 

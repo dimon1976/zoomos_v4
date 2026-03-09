@@ -112,7 +112,7 @@
                             </div>
                             <div th:if="${liveNotFoundCount > 0}" class="verdict-stat-tile bg-secondary bg-opacity-10 border border-secondary rounded text-center px-3 py-1">
                                 <div class="fw-bold text-secondary fs-5 lh-1" th:text="${liveNotFoundCount}">0</div>
-                                <div class="text-secondary" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.05em">Нет&nbsp;данных</div>
+                                <div class="text-secondary" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.05em">Нет/Идёт</div>
                             </div>
                         </div>
                     </div>
@@ -139,25 +139,18 @@
                 <div th:each="issue : ${issues}" class="list-group-item py-2 px-3"
                      th:data-site="${issue['site']}"
                      th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type']}"
-                     th:classappend="${issue['type'] == 'ERROR'} ? 'issue-error' :
-                                    (${issue['type'] == 'WARNING'} ? 'issue-warning' :
-                                    (${issue['type'] == 'IN_PROGRESS'} ? 'list-group-item-warning' :
-                                    (${issue['type'] == 'TREND_WARNING'} ? 'issue-trend' : 'issue-notfound')))">
+                     th:classappend="${issue['type'] == 'ERROR'} ? 'issue-error' : 'issue-warning'">
                     <div class="d-flex justify-content-between align-items-start gap-2">
                         <div class="flex-grow-1">
                             <div class="mb-1">
                                 <span class="badge me-2"
-                                      th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger' :
-                                                     (${issue['type'] == 'WARNING'} ? 'bg-warning text-dark' :
-                                                     (${issue['type'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' :
-                                                     (${issue['type'] == 'TREND_WARNING'} ? 'bg-info text-dark' : 'bg-secondary')))"
-                                      th:text="${issue['type'] == 'IN_PROGRESS'} ? 'В процессе' :
-                                               (${issue['type'] == 'TREND_WARNING'} ? 'Тренд' : ${issue['type']})">
+                                      th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger' : 'bg-warning text-dark'"
+                                      th:text="${issue['noData'] == true and issue['inProgress'] != null ? 'В процессе' : (issue['noData'] == true ? 'Нет данных' : issue['type'])}">
                                 </span>
-                                <i th:if="${issue['type'] == 'TREND_WARNING'}"
-                                   class="fas fa-chart-line me-1 text-info"
-                                   data-bs-toggle="tooltip"
-                                   title="Отклонение от нормы. Ошибки и скорость выкачки нормализованы по числу товаров — рост ассортимента не вызывает ложных тревог. Уменьшение времени выкачки тренд не генерирует."></i>
+                                <i th:if="${issue['noData'] == true and issue['inProgress'] != null}"
+                                   class="fas fa-spinner me-1 text-warning" title="Выкачка в процессе"></i>
+                                <i th:if="${issue['noData'] == true and issue['inProgress'] == null}"
+                                   class="fas fa-ban me-1 text-danger" title="Нет данных"></i>
                                 <i th:if="${issue['isPriority']}" class="fas fa-star text-warning me-1" title="Приоритетный сайт" style="font-size:0.8em;"></i>
                                 <strong th:text="${issue['site']}"></strong>
                                 <span th:if="${issue['city']}" class="text-muted ms-1 small"
@@ -170,8 +163,8 @@
                                       th:text="${issue['addressName']}"></span>
                             </div>
                             <div class="fw-semibold" style="font-size:0.9rem" th:text="${issue['message']}"></div>
-                            <!-- NOT_FOUND: выкачка шла в момент последней проверки -->
-                            <small th:if="${issue['type'] == 'NOT_FOUND' and issue['currentIpPct'] != null}"
+                            <!-- noData: выкачка шла в момент последней проверки -->
+                            <small th:if="${issue['noData'] == true and issue['currentIpPct'] != null}"
                                    class="text-secondary d-block mt-1">
                                 <i class="fas fa-spinner me-1"></i>Сейчас идёт:
                                 <strong th:text="${issue['currentIpPct']}">?</strong>,
@@ -179,8 +172,8 @@
                                 <span th:if="${issue['currentIpUpd'] != null}">,
                                     обновл. <span th:text="${issue['currentIpUpd']}"></span></span>
                             </small>
-                            <!-- NOT_FOUND: последняя завершённая на 100% выкачка -->
-                            <small th:if="${issue['type'] == 'NOT_FOUND' and issue['lastKnownDate'] != null}"
+                            <!-- noData: последняя завершённая на 100% выкачка -->
+                            <small th:if="${issue['noData'] == true and issue['lastKnownDate'] != null}"
                                    class="text-muted d-block mt-1">
                                 Последний раз на 100%: <strong th:text="${issue['lastKnownDate']}"></strong>
                                 &mdash; В наличии:
@@ -307,6 +300,51 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════════════
+         БЛОК 2.5: ТРЕНДЫ — свёрнут по умолчанию
+    ═══════════════════════════════════════════════════════ -->
+    <div th:if="${trendIssues != null and !trendIssues.isEmpty()}" class="card mb-3 border-info">
+        <div class="card-header bg-info bg-opacity-10 group-header d-flex justify-content-between align-items-center py-2"
+             data-bs-toggle="collapse" data-bs-target="#trendsCollapse" style="cursor:pointer">
+            <span>
+                <i class="fas fa-chevron-down chevron me-2"></i>
+                <i class="fas fa-chart-line me-1 text-info"></i>
+                <strong>Тренды</strong>
+                <span class="badge bg-info text-dark ms-2" th:text="${trendIssues.size()}">0</span>
+                <small class="text-muted ms-2 d-none d-md-inline">Отклонения от исторической нормы</small>
+            </span>
+        </div>
+        <div id="trendsCollapse" class="collapse">
+            <div class="list-group list-group-flush">
+                <div th:each="issue : ${trendIssues}" class="list-group-item py-2 px-3 issue-trend">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="flex-grow-1">
+                            <div class="mb-1">
+                                <span class="badge bg-info text-dark me-2">Тренд</span>
+                                <i class="fas fa-chart-line me-1 text-info"
+                                   data-bs-toggle="tooltip"
+                                   title="Отклонение от нормы. Метрики нормализованы по числу товаров."></i>
+                                <i th:if="${issue['isPriority']}" class="fas fa-star text-warning me-1" title="Приоритетный сайт" style="font-size:0.8em;"></i>
+                                <strong th:text="${issue['site']}"></strong>
+                                <span th:if="${issue['city']}" class="text-muted ms-1 small"
+                                      th:text="'(' + ${issue['city']} + ')'"></span>
+                            </div>
+                            <div class="fw-semibold" style="font-size:0.9rem" th:text="${issue['message']}"></div>
+                        </div>
+                        <div class="d-flex gap-1 flex-shrink-0 align-self-start mt-1">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-info py-0 px-2 btn-go-detail"
+                                    title="Перейти к деталям выкачки"
+                                    th:data-site="${issue['site']}">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
          БЛОК 3: ДЕТАЛИ ПО САЙТАМ — все свёрнуты по умолчанию
     ═══════════════════════════════════════════════════════ -->
     <div th:unless="${groups.isEmpty()}" class="mb-2 d-flex align-items-center gap-2">
@@ -391,22 +429,20 @@
                     <!-- Заголовок адреса (если для города настроены адреса) -->
                     <div th:if="${ag['addressId'] != null}"
                          class="px-3 py-1 small border-bottom d-flex align-items-center gap-2"
-                         th:classappend="${ag['status'] == 'ERROR' or ag['status'] == 'NOT_FOUND'} ? 'bg-danger bg-opacity-10 text-danger' :
-                                        (${ag['status'] == 'WARNING' or ag['status'] == 'IN_PROGRESS'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
+                         th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10 text-danger' :
+                                        (${ag['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
                         <i class="fas fa-map-pin"></i>
                         <span th:text="${ag['addressName'] != null ? ag['addressName'] : ag['addressId']}"></span>
                         <span class="badge ms-1"
-                              th:classappend="${ag['status'] == 'ERROR' or ag['status'] == 'NOT_FOUND'} ? 'bg-danger' :
-                                             (${ag['status'] == 'IN_PROGRESS'} ? 'bg-warning text-dark' :
-                                             (${ag['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success'))"
-                              th:text="${ag['status'] == 'IN_PROGRESS'} ? 'В процессе' :
-                                       (${ag['status'] == 'NOT_FOUND'} ? 'Нет данных' : ${ag['status']})"></span>
+                              th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger' :
+                                             (${ag['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
+                              th:text="${ag['noData'] == true and ag['inProgressStat'] != null ? 'В процессе' : (ag['noData'] == true and ag['status'] == 'ERROR' ? 'Нет данных' : ag['status'])}"></span>
                     </div>
-                    <!-- Нет данных (NOT_FOUND / IN_PROGRESS) — строка-заглушка вместо таблицы -->
-                    <div th:if="${ag['stats'].isEmpty() and ag['issueMessage'] != null}"
+                    <!-- Нет данных (noData) — строка-заглушка вместо таблицы -->
+                    <div th:if="${ag['noData'] == true and ag['issueMessage'] != null}"
                          class="px-3 py-2 border-bottom text-muted small"
-                         th:classappend="${ag['status'] == 'NOT_FOUND'} ? 'bg-secondary bg-opacity-10' : 'bg-warning bg-opacity-10'">
-                        <i th:classappend="${ag['status'] == 'IN_PROGRESS'} ? 'fas fa-spinner me-1' : 'fas fa-ban me-1'"></i>
+                         th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10' : 'bg-warning bg-opacity-10'">
+                        <i th:classappend="${ag['inProgressStat'] != null} ? 'fas fa-spinner me-1' : 'fas fa-ban me-1'"></i>
                         <span th:text="${ag['issueMessage']}"></span>
                     </div>
                     <!-- Таблица выкачек (если данные есть) -->
