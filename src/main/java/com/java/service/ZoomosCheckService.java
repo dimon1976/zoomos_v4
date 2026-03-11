@@ -281,16 +281,13 @@ public class ZoomosCheckService {
         // Сохраняем основные результаты
         if (!allStats.isEmpty()) {
             parsingStatsRepository.saveAll(allStats);
-            upsertCityNames(allStats);
-            upsertCityAddresses(allStats);
+            // upsertCityNames/Addresses вызываются внутри parseTable ДО фильтрации,
+            // поэтому здесь они не нужны — все города и адреса уже сохранены.
         }
 
-        // Сохраняем baseline-записи и наполняем справочники городов/адресов
-        // (baseline может содержать города/адреса, которых нет в проверяемом периоде)
+        // Сохраняем baseline-записи (города/адреса уже сохранены внутри parseTable)
         if (!allBaselineStats.isEmpty()) {
             parsingStatsRepository.saveAll(allBaselineStats);
-            upsertCityNames(allBaselineStats);
-            upsertCityAddresses(allBaselineStats);
         }
 
         // Подсчитываем итоги (только по основным записям, не baseline)
@@ -601,8 +598,13 @@ public class ZoomosCheckService {
             }
         }
 
-        // Сохраняем все уникальные паттерны парсера ДО фильтрации (чтобы не потерять паттерны других городов)
+        // Сохраняем все уникальные паттерны парсера, города и адреса ДО фильтрации.
+        // upsertCityNames/Addresses ОБЯЗАТЕЛЬНО до фильтра: адреса/города, которых нет
+        // в allowedCityIds/allowedAddressIds, будут отсеяны фильтром и не попадут в справочник.
+        // Это создаёт замкнутый круг — нельзя настроить адрес, которого нет в справочнике.
         upsertParserPatterns(defaultSiteName, results);
+        upsertCityNames(results);
+        upsertCityAddresses(results);
 
         // Применяем комбинированный фильтр: address-покрытые города → только по addressId,
         // остальные города → по cityId
