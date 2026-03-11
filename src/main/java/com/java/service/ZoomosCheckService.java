@@ -601,7 +601,9 @@ public class ZoomosCheckService {
         // Сохраняем все уникальные паттерны парсера, города и адреса ДО фильтрации.
         // upsertCityNames/Addresses ОБЯЗАТЕЛЬНО до фильтра: адреса/города, которых нет
         // в allowedCityIds/allowedAddressIds, будут отсеяны фильтром и не попадут в справочник.
-        // Это создаёт замкнутый круг — нельзя настроить адрес, которого нет в справочнике.
+        log.info("parseTable [{}] до фильтра: {} записей, примеры городов: {}", defaultSiteName, results.size(),
+                results.stream().map(ZoomosParsingStats::getCityName).filter(Objects::nonNull)
+                        .distinct().limit(5).collect(Collectors.joining(", ")));
         upsertParserPatterns(defaultSiteName, results);
         upsertCityNames(results);
         upsertCityAddresses(results);
@@ -748,12 +750,21 @@ public class ZoomosCheckService {
     }
 
     private void upsertCityAddresses(List<ZoomosParsingStats> stats) {
+        int saved = 0, skipped = 0;
         for (ZoomosParsingStats s : stats) {
             String cityId = extractCityId(s.getCityName());
             if (cityId != null && s.getAddressId() != null && !s.getAddressId().isBlank()) {
-                cityAddressRepository.upsert(cityId, s.getAddressId(), s.getAddressName());
+                try {
+                    cityAddressRepository.upsert(cityId, s.getAddressId(), s.getAddressName());
+                    saved++;
+                } catch (Exception e) {
+                    log.warn("upsertCityAddresses: cityId={} addressId={}: {}", cityId, s.getAddressId(), e.getMessage());
+                }
+            } else {
+                skipped++;
             }
         }
+        log.info("upsertCityAddresses: сохранено={}, пропущено={} (нет cityId или addressId)", saved, skipped);
     }
 
     private void upsertCityNames(List<ZoomosParsingStats> stats) {
@@ -765,8 +776,13 @@ public class ZoomosCheckService {
                 names.put(id, name);
             }
         }
+        log.info("upsertCityNames: уникальных городов для сохранения={} из {} записей", names.size(), stats.size());
         for (Map.Entry<String, String> e : names.entrySet()) {
-            cityNameRepository.upsert(e.getKey(), e.getValue());
+            try {
+                cityNameRepository.upsert(e.getKey(), e.getValue());
+            } catch (Exception ex) {
+                log.warn("upsertCityNames: cityId={}: {}", e.getKey(), ex.getMessage());
+            }
         }
     }
 
