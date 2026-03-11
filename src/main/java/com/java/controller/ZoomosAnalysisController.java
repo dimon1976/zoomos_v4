@@ -1243,19 +1243,22 @@ public class ZoomosAnalysisController {
         model.addAttribute("liveErrCount", liveErrCount);
         model.addAttribute("liveNotFoundCount", liveNotFoundCount);
 
-        // Redmine: только из БД (статусы обновляются async через JS /check-batch после загрузки страницы)
+        // Redmine: загружаем из БД для всех сайтов (mainIssues + groups)
+        // Статусы обновляются async через JS /check-batch после загрузки страницы
         model.addAttribute("redmineEnabled", redmineService.isEnabled());
-        if (redmineService.isEnabled() && !mainIssues.isEmpty()) {
-            Set<String> siteNames = mainIssues.stream()
-                    .map(i -> (String) i.get("site"))
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
-            // Без refreshStatuses — только БД, быстро
-            List<com.java.model.entity.ZoomosRedmineIssue> existing =
-                    redmineService.findAllBySiteNames(siteNames);
-            model.addAttribute("redmineIssues",
-                    existing.stream().collect(Collectors.toMap(
-                            com.java.model.entity.ZoomosRedmineIssue::getSiteName, e -> e)));
+        if (redmineService.isEnabled()) {
+            Set<String> allSiteNames = new LinkedHashSet<>();
+            mainIssues.forEach(i -> { String s = (String) i.get("site"); if (s != null) allSiteNames.add(s); });
+            groups.forEach(g -> { String s = (String) g.get("siteName"); if (s != null) allSiteNames.add(s); });
+            if (!allSiteNames.isEmpty()) {
+                List<com.java.model.entity.ZoomosRedmineIssue> existing =
+                        redmineService.findAllBySiteNames(allSiteNames);
+                model.addAttribute("redmineIssues",
+                        existing.stream().collect(Collectors.toMap(
+                                com.java.model.entity.ZoomosRedmineIssue::getSiteName, e -> e)));
+            } else {
+                model.addAttribute("redmineIssues", Collections.emptyMap());
+            }
         } else {
             model.addAttribute("redmineIssues", Collections.emptyMap());
         }

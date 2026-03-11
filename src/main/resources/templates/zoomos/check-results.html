@@ -449,7 +449,7 @@
                           th:text="${group['checkType']}">API</span>
                     <span class="text-muted ms-2 small" th:text="${group['count']} + ' выкач.'"></span>
                 </div>
-                <div class="d-flex align-items-center gap-2" onclick="event.stopPropagation()">
+                <div class="d-flex align-items-center gap-2">
                     <!-- Ссылка на матчинг -->
                     <a th:href="${baseUrl + '/shop/' + run.shop.shopName + '/sites-items-mapping?site=' + group['siteName'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
                        target="_blank"
@@ -1055,7 +1055,15 @@
                     document.querySelectorAll('[data-rm-site="' + CSS.escape(site) + '"] a.btn')
                         .forEach(function(a) {
                             a.className = 'btn py-0 px-2 ' + btnClass;
+                            a.href = issue.url;
                             a.title = 'Redmine #' + issue.id + ' — ' + issue.statusName;
+                            a.textContent = '#' + issue.id;
+                        });
+                    // Обновляем data-атрибуты кнопки редактирования
+                    document.querySelectorAll('[data-rm-site="' + CSS.escape(site) + '"] .btn-redmine-edit')
+                        .forEach(function(b) {
+                            b.dataset.issueid = issue.id;
+                            b.dataset.issueurl = issue.url || '';
                         });
                     // Если кнопка создания ещё на месте — заменяем на ссылку
                     document.querySelectorAll('.btn-redmine[data-site="' + CSS.escape(site) + '"]')
@@ -1207,6 +1215,7 @@
                 editBtn.type = 'button';
                 editBtn.className = 'btn btn-outline-secondary py-0 px-1 btn-redmine-edit';
                 editBtn.dataset.issueid = issue.id;
+                editBtn.dataset.issueurl = issue.url || '';
                 editBtn.dataset.site = site;
                 editBtn.title = 'Редактировать задачу в Redmine';
                 editBtn.innerHTML = '<i class="fas fa-pen" style="font-size:0.65rem"></i>';

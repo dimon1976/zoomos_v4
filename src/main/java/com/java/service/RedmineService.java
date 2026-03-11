@@ -419,8 +419,22 @@ public class RedmineService {
                     try {
                         List<RedmineIssueDto> found = findIssuesBySite(site);
                         if (found.isEmpty()) {
-                            // Задача не найдена — API-поиск мог не сработать, DB-запись не трогаем
-                            return null;
+                            // API-поиск не дал результатов — возвращаем данные из БД как fallback
+                            try {
+                                return repo.findBySiteName(site)
+                                        .map(entity -> {
+                                            Map<String, Object> data = new LinkedHashMap<>();
+                                            data.put("id", entity.getIssueId());
+                                            data.put("url", entity.getIssueUrl());
+                                            data.put("statusName", entity.getIssueStatus());
+                                            data.put("isClosed", entity.isClosed());
+                                            return Map.entry(site, (Object) data);
+                                        })
+                                        .orElse(null);
+                            } catch (Exception dbEx) {
+                                log.warn("Redmine checkBatch DB fallback '{}': {}", site, dbEx.getMessage());
+                                return null;
+                            }
                         }
                         RedmineIssueDto latest = found.get(0);
 
