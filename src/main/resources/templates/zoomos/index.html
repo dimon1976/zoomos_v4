@@ -539,13 +539,6 @@
                                     title="Удалить все сайты из списка">
                                 <i class="fas fa-trash-alt"></i> Удалить все
                             </button>
-                            <button class="btn btn-sm btn-link text-decoration-none p-0 text-secondary collapse-toggle"
-                                    type="button"
-                                    th:data-bs-target="'#cityTable-' + ${shop.id}"
-                                    data-bs-toggle="collapse"
-                                    aria-expanded="false">
-                                <i class="fas fa-chevron-down"></i> Показать
-                            </button>
                         </div>
                     </div>
                     <!-- Таблица скрыта по умолчанию -->
@@ -2445,6 +2438,12 @@
                 ? '<i class="fas fa-chevron-up"></i>'
                 : '<i class="fas fa-chevron-down"></i>';
             this.title = expanded ? 'Свернуть' : 'Развернуть / свернуть список сайтов';
+            // Авто-раскрыть/свернуть таблицу сайтов
+            const cityTable = document.getElementById('cityTable-' + shopId);
+            if (cityTable) {
+                const collapseInstance = bootstrap.Collapse.getOrCreateInstance(cityTable);
+                expanded ? collapseInstance.show() : collapseInstance.hide();
+            }
         });
     });
 
