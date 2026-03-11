@@ -479,14 +479,14 @@
         </div>
 
         <!-- Мини-прогресс проверки (скрыт по умолчанию) -->
-        <div class="check-progress px-3 py-2 border-bottom" th:id="'check-progress-' + ${shop.id}" style="display:none;">
-            <div style="position:relative;height:2.25rem;background:#dee2e6;border-radius:.375rem;overflow:hidden;">
+        <div class="check-progress px-3 border-bottom" th:id="'check-progress-' + ${shop.id}" style="display:none;padding-top:6px;padding-bottom:6px;">
+            <div style="position:relative;height:1.4rem;background:#dee2e6;border-radius:.25rem;overflow:hidden;">
                 <div class="progress-bar-striped progress-bar-animated"
                      th:id="'check-bar-' + ${shop.id}"
                      style="position:absolute;top:0;left:0;height:100%;width:0%;background-color:#0d6efd;transition:width .3s ease;"></div>
-                <div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 .75rem;pointer-events:none;z-index:1;">
+                <div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 .5rem;pointer-events:none;z-index:1;">
                     <span th:id="'check-bar-label-' + ${shop.id}"
-                          style="font-size:.82rem;font-weight:600;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">0%</span>
+                          style="font-size:.75rem;font-weight:600;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">0%</span>
                 </div>
             </div>
         </div>
