@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-03 (рефакторинг evaluateGroup — медиана)
+> Последнее обновление: 2026-03 (baseline по check_run_id; Redmine findIssuesBySite auto-save)
 
 ## Назначение
 
@@ -68,6 +68,7 @@ zoomos_redmine_issues
 ### Ключевые концепции
 
 - **baseline** (`MedianStats`) — медиана `inStock`, `totalProducts`, `parsingDurationMinutes` за `baselineDays` дней до начала проверки. Если `baselineDays = 0` или данных < 1 записи → `baseline = null`.
+- **Важно**: baseline загружается только из записей **текущего** `check_run_id` (поле `is_baseline=true`), предзагружается одним запросом в начале `checkResults()`. Это исключает кросс-run загрязнение медианы.
 - **Сравнение**: с `baseline.inStock` если доступен, иначе с `prev.inStock` (предыдущая запись).
 - **ignoreStock** — флаг из `zoomos_sites.ignore_stock`: inStock-метрика пропускается, используется `totalProducts`.
 
@@ -235,7 +236,9 @@ boolean canDeliver = issues.stream()
 **Особенность сервера**: HTTP 404 при POST/PUT, но операции выполняются успешно.
 Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `findRecentIssueBySubject()`.
 
-Эндпоинты: `/zoomos/redmine/check-batch`, `/zoomos/redmine/create`, `/zoomos/redmine/update/{id}`
+Эндпоинты: `/zoomos/redmine/check-batch`, `/zoomos/redmine/check`, `/zoomos/redmine/create`, `/zoomos/redmine/update/{id}`
+
+**Auto-save**: `findIssuesBySite()` автоматически сохраняет первую найденную задачу в `zoomos_redmine_issues` — последующие загрузки страницы сразу показывают кнопку "Изменить" без async API-запроса.
 
 Конфиг: `redmine.base-url`, `redmine.api-key`, `redmine.project-id`, и т.д. в `application.properties`.
 

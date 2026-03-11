@@ -588,6 +588,17 @@ public class ZoomosAnalysisController {
         Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue()
                 .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
 
+        // Предзагружаем baseline-записи текущего run один раз.
+        // Фильтруем по check_run_id — иначе findForBaseline включает записи других run
+        // в те же даты, что даёт неверную медиану.
+        List<ZoomosParsingStats> baselineStatsList = parsingStatsRepository
+                .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
+        Map<String, List<ZoomosParsingStats>> baselineByKey = new LinkedHashMap<>();
+        for (ZoomosParsingStats s : baselineStatsList) {
+            String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
+            baselineByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
+        }
+
         // Группируем по site+city+address для оценки динамики.
         // Строки с addressId → отдельная группа внутри города (address-level проверка).
         Map<String, List<ZoomosParsingStats>> bySiteCity = stats.stream()
@@ -685,8 +696,8 @@ public class ZoomosAnalysisController {
                 if (baselineDatesFrom != null) {
                     String siteForBl = group.get(0).getSiteName();
                     String cityForBl = group.get(0).getCityName();
-                    List<ZoomosParsingStats> bl = parsingStatsRepository
-                            .findForBaseline(siteForBl, cityForBl, baselineDatesFrom, baselineDatesTo);
+                    String blKey = siteForBl + "|" + (cityForBl != null ? cityForBl : "");
+                    List<ZoomosParsingStats> bl = baselineByKey.getOrDefault(blKey, Collections.emptyList());
                     groupBaseline = checkService.computeBaselineMedian(bl);
                 }
                 status = checkService.evaluateGroup(group, dropThreshold, errorGrowthThreshold,
@@ -1070,9 +1081,9 @@ public class ZoomosAnalysisController {
                 String siteName = current.getSiteName();
                 String cityName = current.getCityName();
 
-                // Загружаем исторические данные для данного сайта+города
-                List<ZoomosParsingStats> historical = parsingStatsRepository
-                        .findForBaseline(siteName, cityName, baselineDatesFrom, baselineDatesTo);
+                // Используем предзагруженные baseline-записи текущего run
+                String blKey = siteName + "|" + (cityName != null ? cityName : "");
+                List<ZoomosParsingStats> historical = baselineByKey.getOrDefault(blKey, Collections.emptyList());
 
                 if (historical.size() < 3) continue; // недостаточно данных
 
@@ -1098,8 +1109,7 @@ public class ZoomosAnalysisController {
             }
 
             // Добавляем baseline-записи в таблицы деталей (Блок 3)
-            List<ZoomosParsingStats> baselineStatsList = parsingStatsRepository
-                    .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
+            // baselineStatsList предзагружен выше по check_run_id
             if (!baselineStatsList.isEmpty()) {
                 // Группируем по site|cityName|addressId
                 Map<String, List<ZoomosParsingStats>> blBySca = new LinkedHashMap<>();

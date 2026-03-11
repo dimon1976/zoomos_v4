@@ -226,10 +226,32 @@ public class RedmineService {
                     + "&subject=~" + encoded
                     + "&status_id=*"
                     + "&limit=25";
-            return parseIssuesList(get(url));
+            List<RedmineIssueDto> found = parseIssuesList(get(url));
+            if (!found.isEmpty()) {
+                saveIssueToDb(siteName, found.get(0));
+            }
+            return found;
         } catch (Exception e) {
             log.warn("Redmine findIssuesBySite '{}': {}", siteName, e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    /** Сохраняет/обновляет найденную задачу в локальной БД. */
+    @Transactional
+    public void saveIssueToDb(String site, RedmineIssueDto dto) {
+        try {
+            ZoomosRedmineIssue entity = repo.findBySiteName(site)
+                    .orElseGet(() -> ZoomosRedmineIssue.builder().siteName(site).build());
+            entity.setIssueId(dto.getId());
+            entity.setIssueStatus(dto.getStatusName());
+            entity.setClosed(dto.isClosed());
+            entity.setIssueUrl(dto.getUrl());
+            entity.setUpdatedAt(LocalDateTime.now());
+            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+            repo.save(entity);
+        } catch (Exception e) {
+            log.warn("Redmine saveIssueToDb '{}': {}", site, e.getMessage());
         }
     }
 
