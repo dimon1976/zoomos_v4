@@ -285,9 +285,12 @@ public class ZoomosCheckService {
             upsertCityAddresses(allStats);
         }
 
-        // Сохраняем baseline-записи (совмещённые с основным парсингом)
+        // Сохраняем baseline-записи и наполняем справочники городов/адресов
+        // (baseline может содержать города/адреса, которых нет в проверяемом периоде)
         if (!allBaselineStats.isEmpty()) {
             parsingStatsRepository.saveAll(allBaselineStats);
+            upsertCityNames(allBaselineStats);
+            upsertCityAddresses(allBaselineStats);
         }
 
         // Подсчитываем итоги (только по основным записям, не baseline)
