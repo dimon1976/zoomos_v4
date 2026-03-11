@@ -337,6 +337,72 @@
                                     th:data-site="${issue['site']}">
                                 <i class="fas fa-arrow-down"></i>
                             </button>
+                            <!-- Матчинг -->
+                            <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-primary py-0 px-2"
+                               title="Матчинг на export.zoomos.by">
+                                <i class="fas fa-link"></i>
+                            </a>
+                            <!-- История (API) -->
+                            <a th:if="${issue['checkType'] == 'API'}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-secondary py-0 px-2"
+                               title="История парсинга (API)">
+                                <i class="fas fa-history"></i>
+                            </a>
+                            <!-- История (ITEM) -->
+                            <a th:if="${issue['checkType'] == 'ITEM' or issue['checkType'] == null}"
+                               th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server='}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-secondary py-0 px-2"
+                               title="История парсинга (ITEM)">
+                                <i class="fas fa-history"></i>
+                            </a>
+                            <!-- Redmine -->
+                            <th:block th:if="${redmineEnabled}">
+                                <th:block th:if="${redmineIssues[issue['site']] != null}">
+                                    <div class="btn-group btn-group-sm" role="group"
+                                         th:data-rm-site="${issue['site']}">
+                                        <a th:href="${redmineIssues[issue['site']].issueUrl}"
+                                           target="_blank"
+                                           th:class="'btn py-0 px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')"
+                                           th:title="'Redmine #' + ${redmineIssues[issue['site']].issueId} + ' — ' + ${redmineIssues[issue['site']].issueStatus}"
+                                           th:text="'#' + ${redmineIssues[issue['site']].issueId}">
+                                        </a>
+                                        <button type="button"
+                                                class="btn btn-outline-secondary py-0 px-1 btn-redmine-edit"
+                                                th:data-issueid="${redmineIssues[issue['site']].issueId}"
+                                                th:data-issueurl="${redmineIssues[issue['site']].issueUrl}"
+                                                th:data-site="${issue['site']}"
+                                                th:data-city="${issue['city'] != null ? issue['city'] : ''}"
+                                                th:data-message="${issue['message']}"
+                                                th:data-checktype="${issue['checkType'] != null ? issue['checkType'] : ''}"
+                                                th:data-historyurl="${issue['checkType'] == 'API' ?
+                                                    (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=') :
+                                                    (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=')}"
+                                                th:data-matchingurl="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}"
+                                                title="Редактировать задачу в Redmine">
+                                            <i class="fas fa-pen" style="font-size:0.65rem"></i>
+                                        </button>
+                                    </div>
+                                </th:block>
+                                <button th:unless="${redmineIssues[issue['site']] != null}"
+                                        type="button"
+                                        class="btn btn-sm btn-outline-danger py-0 px-2 btn-redmine"
+                                        th:data-site="${issue['site']}"
+                                        th:data-city="${issue['city'] != null ? issue['city'] : ''}"
+                                        th:data-message="${issue['message']}"
+                                        th:data-checktype="${issue['checkType'] != null ? issue['checkType'] : ''}"
+                                        th:data-historyurl="${issue['checkType'] == 'API' ?
+                                            (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=') :
+                                            (baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + issue['shopName'] + '&site=&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '') + '&accountId=&server=')}"
+                                        th:data-matchingurl="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}"
+                                        title="Создать задачу в Redmine">
+                                    <i class="fas fa-bug"></i>
+                                </button>
+                            </th:block>
                         </div>
                     </div>
                 </div>
@@ -406,6 +472,49 @@
                        title="История парсинга (ITEM)">
                         <i class="fas fa-history"></i>
                     </a>
+                    <!-- Redmine -->
+                    <th:block th:if="${redmineEnabled}">
+                        <th:block th:if="${redmineIssues[group['siteName']] != null}">
+                            <div class="btn-group btn-group-sm" role="group"
+                                 th:data-rm-site="${group['siteName']}">
+                                <a th:href="${redmineIssues[group['siteName']].issueUrl}"
+                                   target="_blank"
+                                   th:class="'btn py-0 px-2 ' + (${redmineIssues[group['siteName']].closed} ? 'btn-success' : 'btn-danger')"
+                                   th:title="'Redmine #' + ${redmineIssues[group['siteName']].issueId} + ' — ' + ${redmineIssues[group['siteName']].issueStatus}"
+                                   th:text="'#' + ${redmineIssues[group['siteName']].issueId}">
+                                </a>
+                                <button type="button"
+                                        class="btn btn-outline-secondary py-0 px-1 btn-redmine-edit"
+                                        th:data-issueid="${redmineIssues[group['siteName']].issueId}"
+                                        th:data-issueurl="${redmineIssues[group['siteName']].issueUrl}"
+                                        th:data-site="${group['siteName']}"
+                                        data-city=""
+                                        data-message=""
+                                        th:data-checktype="${group['checkType'] != null ? group['checkType'] : ''}"
+                                        th:data-historyurl="${group['checkType'] == 'API' ?
+                                            (baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=&accountId=&server=') :
+                                            (baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + run.shop.shopName + '&site=&cityId=&accountId=&server=')}"
+                                        th:data-matchingurl="${baseUrl + '/shop/' + run.shop.shopName + '/sites-items-mapping?site=' + group['siteName'] + '&onlyAssociated=1'}"
+                                        title="Редактировать задачу в Redmine">
+                                    <i class="fas fa-pen" style="font-size:0.65rem"></i>
+                                </button>
+                            </div>
+                        </th:block>
+                        <button th:unless="${redmineIssues[group['siteName']] != null}"
+                                type="button"
+                                class="btn btn-sm btn-outline-danger py-0 px-2 btn-redmine"
+                                th:data-site="${group['siteName']}"
+                                data-city=""
+                                data-message=""
+                                th:data-checktype="${group['checkType'] != null ? group['checkType'] : ''}"
+                                th:data-historyurl="${group['checkType'] == 'API' ?
+                                    (baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=&accountId=&server=') :
+                                    (baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + run.shop.shopName + '&site=&cityId=&accountId=&server=')}"
+                                th:data-matchingurl="${baseUrl + '/shop/' + run.shop.shopName + '/sites-items-mapping?site=' + group['siteName'] + '&onlyAssociated=1'}"
+                                title="Создать задачу в Redmine">
+                            <i class="fas fa-bug"></i>
+                        </button>
+                    </th:block>
                 </div>
             </div>
         </div>
@@ -903,8 +1012,11 @@
     // ── Redmine: асинхронный batch-check всех сайтов после загрузки страницы ────
     (function() {
         const allSites = new Set();
-        document.querySelectorAll('.btn-redmine[data-site], .btn-redmine-edit[data-site]')
+        const dbKnownSites = new Set(); // сайты, у которых задача уже есть в БД (btn-group)
+        document.querySelectorAll('.btn-redmine[data-site]')
             .forEach(function(b) { allSites.add(b.dataset.site); });
+        document.querySelectorAll('.btn-redmine-edit[data-site]')
+            .forEach(function(b) { allSites.add(b.dataset.site); dbKnownSites.add(b.dataset.site); });
         if (!allSites.size) return;
 
         // Откатить stale btn-group для сайта назад к кнопке "создать"
@@ -953,13 +1065,9 @@
                         });
                 });
 
-                // Для всех сайтов с btn-group (stale DB-запись), которых НЕТ в ответе API —
-                // задача удалена из TT, откатываем кнопку к режиму "создать"
-                allSites.forEach(function(site) {
-                    if (data[site] == null) { // undefined (нет в ответе) или null
-                        revertStaleBtnGroup(site);
-                    }
-                });
+                // Для DB-known сайтов (btn-group) НЕ откатываем кнопки — API-поиск ненадёжен,
+                // задача может существовать но не находиться по subject. Stale-записи видны как 404.
+                // Для create-кнопок revert не нужен — они уже показывают "создать".
             })
             .catch(function() {}); // тихо игнорируем
     })();

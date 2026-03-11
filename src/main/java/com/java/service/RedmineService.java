@@ -419,16 +419,7 @@ public class RedmineService {
                     try {
                         List<RedmineIssueDto> found = findIssuesBySite(site);
                         if (found.isEmpty()) {
-                            // Задача не найдена в TT — удаляем stale-запись из БД (best-effort)
-                            // JS обнаружит отсутствие сайта в ответе и откатит кнопку сам
-                            try {
-                                repo.findBySiteName(site).ifPresent(entity -> {
-                                    repo.delete(entity);
-                                    log.info("Redmine checkBatch: удалена stale-запись для '{}'", site);
-                                });
-                            } catch (Exception dbEx) {
-                                log.warn("Redmine checkBatch delete stale '{}': {}", site, dbEx.getMessage());
-                            }
+                            // Задача не найдена — API-поиск мог не сработать, DB-запись не трогаем
                             return null;
                         }
                         RedmineIssueDto latest = found.get(0);

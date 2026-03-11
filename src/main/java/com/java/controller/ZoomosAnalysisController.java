@@ -780,8 +780,8 @@ public class ZoomosAnalysisController {
                 if (ip == null && addrCity != null) {
                     ip = inProgressByCityKey.get(site + "|" + addrCity);
                 }
-                ZoomosParsingStats lastKnownAddr = (ip == null && addrCity != null)
-                        ? parsingStatsRepository.findLatestFinishedBySiteAndCityId(site, addrCity).orElse(null)
+                ZoomosParsingStats lastKnownAddr = (ip == null && aid != null)
+                        ? parsingStatsRepository.findLatestFinishedBySiteAndAddressId(site, aid).orElse(null)
                         : null;
                 addIssueStatus(issue, ip, lastKnownAddr);
                 if (ip == null && addrCity != null) {

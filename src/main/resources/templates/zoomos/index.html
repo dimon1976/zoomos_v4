@@ -117,6 +117,58 @@
             align-items: center; gap: 12px; flex-wrap: wrap;
         }
         .shop-batch-cb { cursor: pointer; }
+        .sortable-ghost { opacity: 0.4; background: #e8f4f8; }
+        .shop-order-btns .btn { padding: 1px 5px; font-size: 0.75em; }
+        /* Compact-only элементы — скрыты в стандартном режиме */
+        .compact-result { display: none; }
+        .compact-run-btn { display: none !important; }
+        .compact-status-dot {
+            display: none;
+            width: 10px; height: 10px; border-radius: 50%;
+            background: #adb5bd; flex-shrink: 0;
+        }
+        .compact-status-dot.status-ok      { background: #198754; }
+        .compact-status-dot.status-warn    { background: #ffc107; }
+        .compact-status-dot.status-err     { background: #dc3545; }
+        .compact-status-dot.status-loading { background: #0d6efd; animation: dotPulse 1s ease-in-out infinite; }
+        @keyframes dotPulse { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
+        /* === Список-режим === */
+        #shops-container.compact-mode .shop-card {
+            margin-bottom: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            border-bottom: 1px solid #dee2e6 !important;
+        }
+        #shops-container.compact-mode .shop-card:first-of-type {
+            border-top: 1px solid #dee2e6 !important;
+        }
+        #shops-container.compact-mode .check-action-row { display: none !important; }
+        #shops-container.compact-mode .shop-sites-section { display: none !important; }
+        #shops-container.compact-mode .card-body { display: none !important; }
+        #shops-container.compact-mode [id^="check-result-"] { display: none !important; }
+        /* check-progress в compact mode: тонкая полоска (JS управляет display: block/none) */
+        #shops-container.compact-mode .check-progress { padding: 0 !important; }
+        #shops-container.compact-mode .check-progress .progress { height: 3px !important; border-radius: 0; margin: 0 !important; }
+        #shops-container.compact-mode .check-progress .text-muted { display: none !important; }
+        #shops-container.compact-mode .card-header {
+            padding: 0.3rem 0.75rem !important;
+            background: #fff !important;
+            border-bottom: none !important;
+        }
+        #shops-container.compact-mode .sync-status { font-size: 0.8em !important; }
+        /* Показать compact-only */
+        #shops-container.compact-mode .compact-result { display: inline-flex !important; align-items: center; gap: 3px; }
+        #shops-container.compact-mode .compact-run-btn { display: inline-block !important; padding: 2px 8px !important; }
+        #shops-container.compact-mode .compact-status-dot { display: inline-block !important; }
+        .compact-settings-btn { display: none !important; }
+        #shops-container.compact-mode .compact-settings-btn { display: inline-block !important; padding: 2px 8px !important; }
+        .compact-expand-btn { display: none !important; }
+        #shops-container.compact-mode .compact-expand-btn { display: inline-block !important; padding: 2px 8px !important; }
+        /* Expanded card in compact mode — только список сайтов */
+        #shops-container.compact-mode .shop-card.compact-expanded { border-radius: 0.375rem !important; border: 1px solid #dee2e6 !important; margin-bottom: 0.5rem !important; }
+        #shops-container.compact-mode .shop-card.compact-expanded .card-body { display: block !important; }
+        #shops-container.compact-mode .shop-card.compact-expanded .shop-sites-section { display: block !important; }
+        #shops-container.compact-mode .shop-card.compact-expanded .card-header { border-bottom: 1px solid rgba(0,0,0,.125) !important; }
     </style>
 </th:block>
 
@@ -177,6 +229,9 @@
             </button>
         </div>
         <span id="searchCount" class="text-muted small"></span>
+        <button id="viewToggleBtn" class="btn btn-sm btn-outline-secondary ms-auto" title="Компактный вид">
+            <i class="fas fa-th-list"></i>
+        </button>
     </div>
 
     <!-- Батч-панель (показывается при выборе магазинов) -->
@@ -189,7 +244,21 @@
         </button>
     </div>
 
+    <!-- Глобальная дата-панель (список-режим) -->
+    <div id="globalDateBar" class="d-none sticky-top bg-white border-bottom px-3 py-2 d-flex align-items-center gap-2 flex-wrap" style="z-index:98;">
+        <small class="text-muted fw-semibold"><i class="fas fa-calendar-alt me-1"></i>Период для всех:</small>
+        <input type="date" id="globalDateFrom" class="form-control form-control-sm" style="width:135px;">
+        <input type="time" id="globalTimeFrom" class="form-control form-control-sm" style="width:105px;"
+               title="Время начала (необязательно)">
+        <span class="text-muted small">—</span>
+        <input type="date" id="globalDateTo" class="form-control form-control-sm" style="width:135px;">
+        <input type="time" id="globalTimeTo" class="form-control form-control-sm" style="width:105px;"
+               title="Время окончания (необязательно)">
+        <small class="text-muted ms-1"><i class="fas fa-info-circle"></i> Значения применяются ко всем магазинам</small>
+    </div>
+
     <!-- Список магазинов -->
+    <div id="shops-container">
     <div th:if="${shops.empty}" class="text-muted text-center py-4">
         <i class="fas fa-store fa-2x mb-2 d-block"></i>
         Магазины не добавлены. Введите имя магазина выше.
@@ -198,7 +267,8 @@
     <div th:each="shop : ${shops}" class="card shop-card"
          th:data-shop-name="${shop.shopName}" th:data-shop-id="${shop.id}">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="drag-handle text-muted" style="cursor:grab" title="Перетащить"><i class="fas fa-grip-vertical"></i></span>
                 <input type="checkbox" class="form-check-input shop-batch-cb me-1"
                        th:data-shop-id="${shop.id}"
                        title="Выбрать для batch-проверки">
@@ -224,12 +294,56 @@
                     <i class="fas fa-external-link-alt"></i> настройки
                 </a>
                 <a th:href="@{'/zoomos/check/history?shop=' + ${shop.shopName}}"
-                   class="ms-2 small text-decoration-none text-muted"
+                   class="small text-decoration-none text-muted"
                    title="История проверок этого магазина">
                     <i class="fas fa-history"></i> история
                 </a>
+                <!-- Статус-точка и результаты только в список-режиме -->
+                <span class="compact-status-dot" th:id="'status-dot-' + ${shop.id}"></span>
+                <span class="compact-result ms-1">
+                    <span class="badge bg-success d-none" th:id="'compact-ok-' + ${shop.id}"></span>
+                    <span class="badge bg-warning text-dark d-none" th:id="'compact-warn-' + ${shop.id}"></span>
+                    <span class="badge bg-danger d-none" th:id="'compact-err-' + ${shop.id}"></span>
+                    <a href="#" class="ms-1 small text-decoration-none compact-result-link d-none"
+                       th:id="'compact-link-' + ${shop.id}" title="Открыть результаты">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </span>
             </div>
             <div class="d-flex gap-2 align-items-center">
+                <!-- Кнопки только в список-режиме -->
+                <button type="button" class="compact-expand-btn btn btn-sm btn-outline-secondary"
+                        th:data-shop-id="${shop.id}" title="Развернуть / свернуть список сайтов">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <button type="button" class="compact-settings-btn btn btn-sm btn-outline-secondary"
+                        th:data-shop-id="${shop.id}" title="Настройки периода и порогов"
+                        data-bs-toggle="modal" data-bs-target="#compactShopSettingsModal">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button type="button" class="compact-run-btn btn btn-sm btn-outline-primary"
+                        th:data-shop-id="${shop.id}" title="Проверить" style="display:none">
+                    <i class="fas fa-play"></i>
+                </button>
+                <!-- Кнопки переупорядочивания -->
+                <div class="btn-group btn-group-sm shop-order-btns border-end pe-2" role="group">
+                    <button type="button" class="btn btn-outline-secondary btn-shop-move"
+                            th:data-shop-id="${shop.id}" data-direction="top" title="В начало">
+                        <i class="fas fa-angle-double-up"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-shop-move"
+                            th:data-shop-id="${shop.id}" data-direction="up" title="Вверх">
+                        <i class="fas fa-angle-up"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-shop-move"
+                            th:data-shop-id="${shop.id}" data-direction="down" title="Вниз">
+                        <i class="fas fa-angle-down"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-shop-move"
+                            th:data-shop-id="${shop.id}" data-direction="bottom" title="В конец">
+                        <i class="fas fa-angle-double-down"></i>
+                    </button>
+                </div>
                 <!-- Чекбокс расписания -->
                 <div th:with="sched=${schedulesMap != null ? schedulesMap[shop.id] : null}"
                      class="d-flex align-items-center gap-1 border-end pe-2">
@@ -290,7 +404,7 @@
         </div>
 
         <!-- Панель проверки: даты + кнопка настроек + кнопка запуска -->
-        <div class="px-3 py-2 border-bottom d-flex align-items-center gap-2 bg-light flex-wrap">
+        <div class="px-3 py-2 border-bottom d-flex align-items-center gap-2 bg-light flex-wrap check-action-row">
             <span class="small text-muted me-1"><i class="fas fa-calendar-alt me-1"></i>Проверка:</span>
             <input type="date" class="form-control form-control-sm check-date-from"
                    th:id="'dateFrom-' + ${shop.id}" style="width:140px;">
@@ -314,30 +428,53 @@
             </button>
         </div>
         <!-- Скрытая панель с порогами -->
-        <div th:id="'thresholds-' + ${shop.id}" class="collapse border-bottom">
-            <div class="px-3 py-1 bg-light d-flex align-items-center gap-2 flex-wrap">
-                <span class="small text-muted" title="Порог падения 'В наличии' (%)">Падение%</span>
-                <input type="number" class="form-control form-control-sm check-drop-threshold"
-                       th:id="'dropThreshold-' + ${shop.id}" value="10" min="1" max="100" style="width:60px;">
-                <span class="small text-muted" title="Порог роста ошибок (%)">Ошибки%</span>
-                <input type="number" class="form-control form-control-sm check-err-threshold"
-                       th:id="'errThreshold-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
-                <span class="small text-muted ms-2" title="Горизонт сравнения с историей (0 = без анализа)">Baseline</span>
-                <input type="number" class="form-control form-control-sm check-baseline-days"
-                       th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30" style="width:55px;">
-                <span class="small text-muted ms-2" title="Минимальное абсолютное число ошибок парсинга для варнинга. При значении 5: рост 1→2 — не варнинг, рост 5→15 — варнинг. Убирает шум на крупных сайтах.">Мин.ошибок <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
-                <input type="number" class="form-control form-control-sm check-min-abs-errors"
-                       th:id="'minAbsErrors-' + ${shop.id}" value="5" min="0" max="1000" style="width:60px;">
-                <span class="small text-muted ms-3 border-start ps-3"
-                      data-bs-toggle="tooltip" data-bs-placement="top"
-                      title="Тренд: порог замедления скорости выкачки (мин/1000 тов.) и падения доли «В наличии». Метрики нормализованы по числу товаров — рост ассортимента не вызывает ложных тревог. Дефолт 30%. Выше = меньше трендовых предупреждений.">Тренд пад% <i class="fas fa-info-circle" style="font-size:0.8em"></i></span>
-                <input type="number" class="form-control form-control-sm check-trend-drop"
-                       th:id="'trendDrop-' + ${shop.id}" value="30" min="1" max="500" style="width:60px;">
-                <span class="small text-muted"
-                      data-bs-toggle="tooltip" data-bs-placement="top"
-                      title="Тренд: порог роста доли ошибок от числа товаров. Дефолт 100%. Выше = меньше трендовых предупреждений.">Тренд ош% <i class="fas fa-info-circle" style="font-size:0.8em"></i></span><button type="button" class="btn btn-link p-0 ms-1 text-info align-baseline" style="font-size:0.8em; line-height:1;" data-bs-toggle="modal" data-bs-target="#trendErrHelpModal" title="Подробное объяснение с примерами"><i class="fas fa-question-circle"></i></button>
-                <input type="number" class="form-control form-control-sm check-trend-err"
-                       th:id="'trendErr-' + ${shop.id}" value="100" min="1" max="1000" style="width:65px;">
+        <div th:id="'thresholds-' + ${shop.id}" class="collapse px-3 py-2 border-bottom bg-light">
+            <!-- Ряд 1: основные пороги -->
+            <div class="row g-2 align-items-end">
+                <div class="col">
+                    <label class="form-label mb-0 small" th:for="'dropThreshold-' + ${shop.id}"
+                           title="Порог падения 'В наличии' (%)">Падение inStock, %</label>
+                    <input type="number" class="form-control form-control-sm check-drop-threshold"
+                           th:id="'dropThreshold-' + ${shop.id}" value="10" min="1" max="100">
+                </div>
+                <div class="col">
+                    <label class="form-label mb-0 small" th:for="'errThreshold-' + ${shop.id}"
+                           title="Порог роста ошибок (%)">Рост ошибок, %</label>
+                    <input type="number" class="form-control form-control-sm check-err-threshold"
+                           th:id="'errThreshold-' + ${shop.id}" value="30" min="1" max="500">
+                </div>
+                <div class="col">
+                    <label class="form-label mb-0 small" th:for="'baselineDays-' + ${shop.id}"
+                           title="Горизонт сравнения с историей (0 = без анализа)">Baseline, дней</label>
+                    <input type="number" class="form-control form-control-sm check-baseline-days"
+                           th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30">
+                </div>
+                <div class="col">
+                    <label class="form-label mb-0 small" th:for="'minAbsErrors-' + ${shop.id}"
+                           title="Минимальное абсолютное число ошибок парсинга для варнинга. При значении 5: рост 1→2 — не варнинг, рост 5→15 — варнинг.">Мин. ошибок <i class="fas fa-info-circle" style="font-size:0.8em"></i></label>
+                    <input type="number" class="form-control form-control-sm check-min-abs-errors"
+                           th:id="'minAbsErrors-' + ${shop.id}" value="5" min="0" max="1000">
+                </div>
+            </div>
+            <!-- Ряд 2: тренд-пороги -->
+            <div class="row g-2 align-items-end mt-1">
+                <div class="col">
+                    <label class="form-label mb-0 small text-muted" th:for="'trendDrop-' + ${shop.id}"
+                           data-bs-toggle="tooltip" data-bs-placement="top"
+                           title="Тренд: порог замедления скорости выкачки и падения доли «В наличии». Дефолт 30%. Выше = меньше трендовых предупреждений.">Тренд: падение, % <i class="fas fa-info-circle" style="font-size:0.8em"></i></label>
+                    <input type="number" class="form-control form-control-sm check-trend-drop"
+                           th:id="'trendDrop-' + ${shop.id}" value="30" min="1" max="500">
+                </div>
+                <div class="col">
+                    <label class="form-label mb-0 small text-muted" th:for="'trendErr-' + ${shop.id}"
+                           data-bs-toggle="tooltip" data-bs-placement="top"
+                           title="Тренд: порог роста доли ошибок от числа товаров. Дефолт 100%. Выше = меньше трендовых предупреждений.">Тренд: ошибки, % <i class="fas fa-info-circle" style="font-size:0.8em"></i>
+                        <button type="button" class="btn btn-link p-0 ms-1 text-info align-baseline" style="font-size:0.8em; line-height:1;" data-bs-toggle="modal" data-bs-target="#trendErrHelpModal" title="Подробное объяснение с примерами"><i class="fas fa-question-circle"></i></button>
+                    </label>
+                    <input type="number" class="form-control form-control-sm check-trend-err"
+                           th:id="'trendErr-' + ${shop.id}" value="100" min="1" max="1000">
+                </div>
+                <div class="col-4"></div>
             </div>
         </div>
 
@@ -353,15 +490,14 @@
         <!-- Результат проверки (скрыт по умолчанию) -->
         <div class="px-3 py-2 border-bottom bg-light" th:id="'check-result-' + ${shop.id}" style="display:none;">
             <div class="d-flex align-items-center gap-3 flex-wrap">
-                <span class="fw-semibold small"><i class="fas fa-check-circle text-success me-1"></i>Проверка завершена</span>
+                <span class="text-muted small"><i class="fas fa-check-circle text-success me-1"></i>Проверка завершена</span>
                 <span class="text-muted small" th:id="'result-started-' + ${shop.id}" style="display:none;"></span>
                 <span class="badge bg-light text-dark border small" th:id="'result-period-' + ${shop.id}"></span>
-                <span class="badge bg-success" th:id="'result-ok-' + ${shop.id}">0 OK</span>
-                <span class="badge bg-warning text-dark" th:id="'result-warn-' + ${shop.id}">0 Warn</span>
-                <span class="badge bg-danger" th:id="'result-err-' + ${shop.id}">0 Error</span>
-                <span class="badge bg-secondary" th:id="'result-na-' + ${shop.id}">0 N/A</span>
+                <span class="badge bg-success d-none" th:id="'result-ok-' + ${shop.id}"></span>
+                <span class="badge bg-warning text-dark d-none" th:id="'result-warn-' + ${shop.id}"></span>
+                <span class="badge bg-danger d-none" th:id="'result-err-' + ${shop.id}"></span>
                 <a href="#" class="btn btn-sm btn-outline-primary" th:id="'result-link-' + ${shop.id}">
-                    <i class="fas fa-table me-1"></i>Результаты
+                    <i class="fas fa-external-link-alt me-1"></i>Результаты
                 </a>
             </div>
         </div>
@@ -371,7 +507,7 @@
                 <div th:if="${entries == null or entries.empty}" class="text-muted small p-3">
                     Нет данных. Нажмите «Синхронизировать» для загрузки настроек.
                 </div>
-                <div th:unless="${entries == null or entries.empty}">
+                <div th:unless="${entries == null or entries.empty}" class="shop-sites-section">
                     <!-- Заголовок секции с кнопкой collapse -->
                     <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center">
                         <span class="fw-semibold small text-secondary">
@@ -507,6 +643,7 @@
             </div>
         </div>
     </div>
+    </div><!-- /shops-container -->
 
     <!-- Выключенные магазины -->
     <div th:unless="${disabledShops.empty}" class="mt-3">
@@ -781,6 +918,72 @@
         </div>
     </div>
 
+    <!-- Модалка настроек магазина в список-режиме -->
+    <div class="modal fade" id="compactShopSettingsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-cog me-2"></i>Настройки проверки: <span id="compactSettingsShopName"></span></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="compactSettingsShopId">
+                    <!-- Период -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small mb-1"><i class="fas fa-calendar-alt me-1"></i>Период проверки</label>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <input type="date" id="csDateFrom" class="form-control form-control-sm" style="width:145px;">
+                            <input type="time" id="csTimeFrom" class="form-control form-control-sm" style="width:110px;" title="Время начала">
+                            <span class="text-muted small">—</span>
+                            <input type="date" id="csDateTo" class="form-control form-control-sm" style="width:145px;">
+                            <input type="time" id="csTimeTo" class="form-control form-control-sm" style="width:110px;" title="Время окончания">
+                        </div>
+                    </div>
+                    <!-- Пороги ряд 1 -->
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold small mb-1"><i class="fas fa-sliders-h me-1"></i>Пороги</label>
+                        <div class="row g-2">
+                            <div class="col">
+                                <label class="form-label mb-0 small" title="Порог падения 'В наличии' (%)">Падение inStock, %</label>
+                                <input type="number" class="form-control form-control-sm" id="csDropThreshold" value="10" min="1" max="100">
+                            </div>
+                            <div class="col">
+                                <label class="form-label mb-0 small" title="Порог роста ошибок (%)">Рост ошибок, %</label>
+                                <input type="number" class="form-control form-control-sm" id="csErrThreshold" value="30" min="1" max="500">
+                            </div>
+                            <div class="col">
+                                <label class="form-label mb-0 small" title="Горизонт сравнения с историей (0 = без анализа)">Baseline, дней</label>
+                                <input type="number" class="form-control form-control-sm" id="csBaselineDays" value="7" min="0" max="30">
+                            </div>
+                            <div class="col">
+                                <label class="form-label mb-0 small" title="Минимальное абсолютное число ошибок для варнинга">Мин. ошибок</label>
+                                <input type="number" class="form-control form-control-sm" id="csMinAbsErrors" value="5" min="0" max="1000">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Пороги ряд 2: тренд -->
+                    <div class="row g-2">
+                        <div class="col">
+                            <label class="form-label mb-0 small text-muted" title="Тренд: порог замедления скорости выкачки и падения доли «В наличии»">Тренд: падение, %</label>
+                            <input type="number" class="form-control form-control-sm" id="csTrendDrop" value="30" min="1" max="500">
+                        </div>
+                        <div class="col">
+                            <label class="form-label mb-0 small text-muted" title="Тренд: порог роста доли ошибок от числа товаров">Тренд: ошибки, %</label>
+                            <input type="number" class="form-control form-control-sm" id="csTrendErr" value="100" min="1" max="1000">
+                        </div>
+                        <div class="col-4"></div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="compactSettingsSave">
+                        <i class="fas fa-save me-1"></i>Сохранить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Модалка редактирования адресов -->
     <div class="modal fade" id="addressModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-xl">
@@ -806,6 +1009,7 @@
 </th:block>
 
 <th:block th:fragment="scripts">
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script th:inline="javascript">
     /*<![CDATA[*/
     const cityNamesMap = /*[[${cityNamesMap}]]*/ {};
@@ -1493,6 +1697,12 @@
     function resetCheckBtn(btn) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-search me-1"></i>Проверить';
+        // Сбрасываем compact-кнопку того же магазина
+        const shopId = btn.dataset.shopId;
+        if (shopId) {
+            const cb = document.querySelector('.compact-run-btn[data-shop-id="' + shopId + '"]');
+            if (cb) { cb.disabled = false; cb.innerHTML = '<i class="fas fa-play"></i>'; }
+        }
     }
 
     function subscribeToCheck(shopId, operationId, btn) {
@@ -1570,10 +1780,30 @@
     }
 
     function showCheckResult(shopId, data) {
-        document.getElementById('result-ok-' + shopId).textContent = (data.okCount || 0) + ' OK';
-        document.getElementById('result-warn-' + shopId).textContent = (data.warningCount || 0) + ' Warn';
-        document.getElementById('result-err-' + shopId).textContent = (data.errorCount || 0) + ' Error';
-        document.getElementById('result-na-' + shopId).textContent = (data.notFoundCount || 0) + ' N/A';
+        function showBadge(id, count, label) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = count + ' ' + label;
+            el.classList.toggle('d-none', count === 0);
+        }
+        showBadge('result-ok-'   + shopId, data.okCount      || 0, 'OK');
+        showBadge('result-warn-' + shopId, data.warningCount || 0, 'Warn');
+        showBadge('result-err-'  + shopId, data.errorCount   || 0, 'Error');
+        // Compact-mode badges
+        showBadge('compact-ok-'   + shopId, data.okCount      || 0, 'OK');
+        showBadge('compact-warn-' + shopId, data.warningCount || 0, 'Warn');
+        showBadge('compact-err-'  + shopId, data.errorCount   || 0, 'Error');
+        // Compact result link
+        const compactLink = document.getElementById('compact-link-' + shopId);
+        if (compactLink) { compactLink.href = '/zoomos/check/results/' + data.runId; compactLink.classList.remove('d-none'); }
+        // Status dot
+        const dot = document.getElementById('status-dot-' + shopId);
+        if (dot) {
+            dot.classList.remove('status-ok', 'status-warn', 'status-err', 'status-loading');
+            if ((data.errorCount || 0) > 0) dot.classList.add('status-err');
+            else if ((data.warningCount || 0) > 0) dot.classList.add('status-warn');
+            else dot.classList.add('status-ok');
+        }
         const periodEl = document.getElementById('result-period-' + shopId);
         if (periodEl && data.dateFrom && data.dateTo) {
             periodEl.textContent = fmtDate(data.dateFrom) + ' — ' + fmtDate(data.dateTo);
@@ -1586,6 +1816,18 @@
         }
         document.getElementById('result-link-' + shopId).href = '/zoomos/check/results/' + data.runId;
         document.getElementById('check-result-' + shopId).style.display = 'block';
+        // Обновить метку "Обновлено:" в header карточки
+        const card = document.querySelector('.shop-card[data-shop-id="' + shopId + '"]');
+        if (card) {
+            const syncEl = card.querySelector('.sync-status');
+            if (syncEl) {
+                const now = new Date();
+                const p = n => String(n).padStart(2, '0');
+                const fmt = p(now.getDate()) + '.' + p(now.getMonth()+1) + '.' + now.getFullYear()
+                          + ' ' + p(now.getHours()) + ':' + p(now.getMinutes());
+                syncEl.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Обновлено: ' + fmt;
+            }
+        }
     }
 
     // ==================================================================
@@ -2080,6 +2322,227 @@
                 .catch(() => {});
         });
     }, 5000);
+
+    // ==================================================================
+    // Drag-and-drop сортировка карточек
+    // ==================================================================
+    (function initShopSortable() {
+        const container = document.getElementById('shops-container');
+        if (!container || typeof Sortable === 'undefined') return;
+
+        // Восстановить сохранённый порядок
+        const savedOrder = JSON.parse(localStorage.getItem('zoomosShopOrder') || 'null');
+        if (savedOrder) {
+            savedOrder.forEach(function(shopId) {
+                const el = container.querySelector('[data-shop-id="' + shopId + '"]');
+                if (el) container.appendChild(el);
+            });
+        }
+
+        Sortable.create(container, {
+            animation: 150,
+            handle: '.drag-handle',
+            ghostClass: 'sortable-ghost',
+            onEnd: function() {
+                const order = [...container.querySelectorAll('.shop-card')]
+                    .map(el => el.dataset.shopId);
+                localStorage.setItem('zoomosShopOrder', JSON.stringify(order));
+            }
+        });
+    })();
+
+    // ==================================================================
+    // Глобальная дата-панель (список-режим)
+    // ==================================================================
+    (function initGlobalDateBar() {
+        const gFrom = document.getElementById('globalDateFrom');
+        const gTo   = document.getElementById('globalDateTo');
+        const gTF   = document.getElementById('globalTimeFrom');
+        const gTT   = document.getElementById('globalTimeTo');
+        if (!gFrom) return;
+
+        // Инициализировать из первого магазина
+        const firstCard = document.querySelector('.shop-card[data-shop-id]');
+        if (firstCard) {
+            const sid = firstCard.dataset.shopId;
+            gFrom.value = document.getElementById('dateFrom-' + sid)?.value || '';
+            gTo.value   = document.getElementById('dateTo-'   + sid)?.value || '';
+            if (gTF) gTF.value = document.getElementById('timeFrom-' + sid)?.value || '';
+            if (gTT) gTT.value = document.getElementById('timeTo-'   + sid)?.value || '';
+        }
+
+        function syncToAll() {
+            document.querySelectorAll('.shop-card[data-shop-id]').forEach(card => {
+                const sid = card.dataset.shopId;
+                const setVal = (id, val, lsKey) => {
+                    const el = document.getElementById(id);
+                    if (el && val !== undefined) { el.value = val; localStorage.setItem(lsKey + sid, val); }
+                };
+                setVal('dateFrom-' + sid, gFrom.value, 'checkDateFrom-');
+                setVal('dateTo-'   + sid, gTo.value,   'checkDateTo-');
+                if (gTF) setVal('timeFrom-' + sid, gTF.value, 'checkTimeFrom-');
+                if (gTT) setVal('timeTo-'   + sid, gTT.value, 'checkTimeTo-');
+            });
+        }
+
+        gFrom.addEventListener('change', syncToAll);
+        gTo.addEventListener('change', syncToAll);
+        if (gTF) gTF.addEventListener('change', syncToAll);
+        if (gTT) gTT.addEventListener('change', syncToAll);
+    })();
+
+    // ==================================================================
+    // Стрелки сортировки карточек
+    // ==================================================================
+    document.querySelectorAll('.btn-shop-move').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const direction = this.dataset.direction;
+            const container = document.getElementById('shops-container');
+            const card = container.querySelector('[data-shop-id="' + shopId + '"]');
+            if (!card) return;
+            const cards = [...container.querySelectorAll('.shop-card')];
+            const idx = cards.indexOf(card);
+            if (direction === 'top' && idx > 0) container.insertBefore(card, cards[0]);
+            else if (direction === 'up' && idx > 0) container.insertBefore(card, cards[idx - 1]);
+            else if (direction === 'down' && idx < cards.length - 1) container.insertBefore(cards[idx + 1], card);
+            else if (direction === 'bottom' && idx < cards.length - 1) container.appendChild(card);
+            const order = [...container.querySelectorAll('.shop-card')].map(el => el.dataset.shopId);
+            localStorage.setItem('zoomosShopOrder', JSON.stringify(order));
+        });
+    });
+
+    // ==================================================================
+    // Compact-run-btn делегирует реальной кнопке
+    // ==================================================================
+    document.querySelectorAll('.compact-run-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const realBtn = document.querySelector('.btn-run-check[data-shop-id="' + shopId + '"]');
+            if (realBtn && !realBtn.disabled) {
+                this.disabled = true;
+                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                // Показываем статус-точку как загрузку
+                const dot = document.getElementById('status-dot-' + shopId);
+                if (dot) { dot.classList.remove('status-ok','status-warn','status-err'); dot.classList.add('status-loading'); }
+                realBtn.click();
+            }
+        });
+    });
+
+    // ==================================================================
+    // Compact expand button — раскрыть/свернуть карточку в compact режиме
+    // ==================================================================
+    document.querySelectorAll('.compact-expand-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const card = document.querySelector('.shop-card[data-shop-id="' + shopId + '"]');
+            if (!card) return;
+            const expanded = card.classList.toggle('compact-expanded');
+            this.innerHTML = expanded
+                ? '<i class="fas fa-chevron-up"></i>'
+                : '<i class="fas fa-chevron-down"></i>';
+            this.title = expanded ? 'Свернуть' : 'Развернуть / свернуть список сайтов';
+        });
+    });
+
+    // ==================================================================
+    // Compact settings modal — открытие и сохранение
+    // ==================================================================
+    (function initCompactSettingsModal() {
+        const modal = document.getElementById('compactShopSettingsModal');
+        if (!modal) return;
+
+        // Поля modal
+        const csShopId      = document.getElementById('compactSettingsShopId');
+        const csShopName    = document.getElementById('compactSettingsShopName');
+        const csDateFrom    = document.getElementById('csDateFrom');
+        const csDateTo      = document.getElementById('csDateTo');
+        const csTimeFrom    = document.getElementById('csTimeFrom');
+        const csTimeTo      = document.getElementById('csTimeTo');
+        const csDropThr     = document.getElementById('csDropThreshold');
+        const csErrThr      = document.getElementById('csErrThreshold');
+        const csBaseline    = document.getElementById('csBaselineDays');
+        const csMinAbs      = document.getElementById('csMinAbsErrors');
+        const csTrendDrop   = document.getElementById('csTrendDrop');
+        const csTrendErr    = document.getElementById('csTrendErr');
+
+        // Открытие: заполняем поля из скрытых инпутов карточки
+        document.querySelectorAll('.compact-settings-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const sid = this.dataset.shopId;
+                csShopId.value = sid;
+                const card = document.querySelector('.shop-card[data-shop-id="' + sid + '"]');
+                csShopName.textContent = card ? (card.dataset.shopName || '') : '';
+
+                const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+                csDateFrom.value  = getVal('dateFrom-'        + sid);
+                csDateTo.value    = getVal('dateTo-'          + sid);
+                csTimeFrom.value  = getVal('timeFrom-'        + sid);
+                csTimeTo.value    = getVal('timeTo-'          + sid);
+                csDropThr.value   = getVal('dropThreshold-'   + sid);
+                csErrThr.value    = getVal('errThreshold-'    + sid);
+                csBaseline.value  = getVal('baselineDays-'    + sid);
+                csMinAbs.value    = getVal('minAbsErrors-'    + sid);
+                csTrendDrop.value = getVal('trendDrop-'       + sid);
+                csTrendErr.value  = getVal('trendErr-'        + sid);
+            });
+        });
+
+        // Сохранение: записываем в инпуты карточки + localStorage
+        document.getElementById('compactSettingsSave').addEventListener('click', function() {
+            const sid = csShopId.value;
+            if (!sid) return;
+
+            const setVal = (id, val, lsKey) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val;
+                if (lsKey) localStorage.setItem(lsKey + sid, val);
+            };
+
+            setVal('dateFrom-'      + sid, csDateFrom.value,  'checkDateFrom-');
+            setVal('dateTo-'        + sid, csDateTo.value,    'checkDateTo-');
+            setVal('timeFrom-'      + sid, csTimeFrom.value,  'checkTimeFrom-');
+            setVal('timeTo-'        + sid, csTimeTo.value,    'checkTimeTo-');
+            setVal('dropThreshold-' + sid, csDropThr.value,   'checkDropThreshold-');
+            setVal('errThreshold-'  + sid, csErrThr.value,    'checkErrThreshold-');
+            setVal('baselineDays-'  + sid, csBaseline.value,  'checkBaselineDays-');
+            setVal('minAbsErrors-'  + sid, csMinAbs.value,    'checkMinAbsErrors-');
+            setVal('trendDrop-'     + sid, csTrendDrop.value, 'checkTrendDrop-');
+            setVal('trendErr-'      + sid, csTrendErr.value,  'checkTrendErr-');
+
+            bootstrap.Modal.getInstance(modal).hide();
+        });
+    })();
+
+    // ==================================================================
+    // Переключение компактного вида
+    // ==================================================================
+    (function initViewToggle() {
+        const container = document.getElementById('shops-container');
+        const btn = document.getElementById('viewToggleBtn');
+        if (!container || !btn) return;
+
+        const globalBar = document.getElementById('globalDateBar');
+
+        const saved = localStorage.getItem('zoomosCheckView') || 'standard';
+        if (saved === 'compact') {
+            container.classList.add('compact-mode');
+            btn.innerHTML = '<i class="fas fa-th-large"></i>';
+            btn.title = 'Стандартный вид';
+            if (globalBar) globalBar.classList.remove('d-none');
+        }
+
+        btn.addEventListener('click', function() {
+            const isCompact = container.classList.toggle('compact-mode');
+            localStorage.setItem('zoomosCheckView', isCompact ? 'compact' : 'standard');
+            btn.innerHTML = isCompact
+                ? '<i class="fas fa-th-large"></i>'
+                : '<i class="fas fa-th-list"></i>';
+            btn.title = isCompact ? 'Стандартный вид' : 'Компактный вид';
+            if (globalBar) globalBar.classList.toggle('d-none', !isCompact);
+        });
+    })();
 </script>
 </th:block>
 </html>

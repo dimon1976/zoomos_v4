@@ -642,6 +642,8 @@ public class ZoomosCheckService {
         // include: пустой = всё разрешено. Разделитель — точка с запятой (паттерны сами содержат запятые)
         // AND и OR — одинаковая фильтрация (include ANY), различие только в оценке завершённости.
         if (config.getParserInclude() != null && !config.getParserInclude().isBlank()) {
+            // Если parserDescription неизвестен — пропускаем строку (не фильтруем)
+            if (pd.isEmpty()) return true;
             List<String> parts = Arrays.stream(config.getParserInclude().split(";"))
                     .map(String::trim).filter(p -> !p.isEmpty())
                     .map(String::toLowerCase).collect(Collectors.toList());
@@ -650,10 +652,12 @@ public class ZoomosCheckService {
 
         // exclude: всегда OR — если хотя бы одна подстрока совпала, исключаем
         if (config.getParserExclude() != null && !config.getParserExclude().isBlank()) {
-            boolean excluded = Arrays.stream(config.getParserExclude().split(";"))
-                    .map(String::trim).filter(p -> !p.isEmpty())
-                    .anyMatch(p -> pd.contains(p.toLowerCase()));
-            if (excluded) return false;
+            if (!pd.isEmpty()) {
+                boolean excluded = Arrays.stream(config.getParserExclude().split(";"))
+                        .map(String::trim).filter(p -> !p.isEmpty())
+                        .anyMatch(p -> pd.contains(p.toLowerCase()));
+                if (excluded) return false;
+            }
         }
 
         return true;
@@ -671,7 +675,7 @@ public class ZoomosCheckService {
                     try {
                         parserPatternRepository.upsert(siteName, pd);
                     } catch (Exception e) {
-                        log.warn("Не удалось сохранить паттерн парсера '{}': {}", pd, e.getMessage());
+                        log.warn("Не удалось сохранить паттерн парсера для {}: {}", siteName, e.getMessage());
                     }
                 });
     }
@@ -1227,7 +1231,9 @@ public class ZoomosCheckService {
 
     private static Integer median(List<Integer> sorted) {
         if (sorted.isEmpty()) return null;
-        return sorted.get(sorted.size() / 2);
+        int n = sorted.size();
+        if (n % 2 == 0) return (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2;
+        return sorted.get(n / 2);
     }
 
     /**
