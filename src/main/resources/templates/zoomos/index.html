@@ -479,10 +479,15 @@
         </div>
 
         <!-- Мини-прогресс проверки (скрыт по умолчанию) -->
-        <div class="check-progress px-3 pt-2 pb-1 border-bottom" th:id="'check-progress-' + ${shop.id}" style="display:none;">
-            <div class="progress">
-                <div class="progress-bar progress-bar-striped progress-bar-animated"
-                     th:id="'check-bar-' + ${shop.id}" style="width:0%">0%</div>
+        <div class="check-progress px-3 py-2 border-bottom" th:id="'check-progress-' + ${shop.id}" style="display:none;">
+            <div class="position-relative" style="height:2rem;">
+                <div class="progress h-100">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                         th:id="'check-bar-' + ${shop.id}" style="width:0%"></div>
+                </div>
+                <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                     th:id="'check-bar-label-' + ${shop.id}"
+                     style="font-size:0.85rem;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.45);pointer-events:none;">0%</div>
             </div>
             <div class="text-muted small mt-1" th:id="'check-msg-' + ${shop.id}"></div>
         </div>
@@ -1640,11 +1645,12 @@
             const progressEl = document.getElementById('check-progress-' + shopId);
             const resultEl = document.getElementById('check-result-' + shopId);
             const barEl = document.getElementById('check-bar-' + shopId);
+            const labelEl = document.getElementById('check-bar-label-' + shopId);
             const msgEl = document.getElementById('check-msg-' + shopId);
             progressEl.style.display = 'block';
             resultEl.style.display = 'none';
             barEl.style.width = '0%';
-            barEl.textContent = '0%';
+            labelEl.textContent = '0%';
             barEl.classList.remove('bg-success', 'bg-danger');
             barEl.classList.add('progress-bar-animated');
             msgEl.textContent = 'Запуск...';
@@ -1707,6 +1713,7 @@
 
     function subscribeToCheck(shopId, operationId, btn) {
         const barEl = document.getElementById('check-bar-' + shopId);
+        const labelEl = document.getElementById('check-bar-label-' + shopId);
         const msgEl = document.getElementById('check-msg-' + shopId);
         const progressEl = document.getElementById('check-progress-' + shopId);
         const resultEl = document.getElementById('check-result-' + shopId);
@@ -1722,7 +1729,7 @@
                 const data = JSON.parse(msg.body);
                 const pct = data.percent || 0;
                 barEl.style.width = pct + '%';
-                barEl.textContent = pct + '%';
+                labelEl.textContent = pct + '%';
                 msgEl.textContent = data.message || '';
 
                 // Завершено — показываем блок результата, без авторедиректа
@@ -1730,7 +1737,7 @@
                     barEl.classList.remove('progress-bar-animated');
                     barEl.classList.add('bg-success');
                     barEl.style.width = '100%';
-                    barEl.textContent = '100%';
+                    labelEl.textContent = '100%';
                     msgEl.textContent = 'Завершено';
                     stompClient.disconnect();
 
