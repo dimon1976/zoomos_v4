@@ -1,6 +1,6 @@
 ---
 name: check
-description: "Pre-commit health check: compile, changed files, docs reminder, basic security scan."
+description: "Pre-commit health check: compile, changed files, docs reminder, basic security scan. Triggers: 'проверь перед коммитом', 'что изменилось', 'можно ли коммитить', 'pre-commit check'."
 disable-model-invocation: true
 context: fork
 agent: general-purpose

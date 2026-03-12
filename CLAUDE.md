@@ -37,11 +37,11 @@ mvn flyway:info
 
 | Агент | Когда использовать |
 |-------|-------------------|
-| `file-processing-expert` | Импорт/экспорт, даты, нулевые цены, EntityType, статистика, JDBC batch |
-| `websocket-async-architect` | WebSocket, прогресс-бары, executors, async паттерны, @Transactional |
-| `zoomos-check-expert` | Zoomos Check, evaluateGroup, Playwright, Redmine, расписания, баннер |
-| `database-maintenance-expert` | Flyway миграции, VACUUM, PostgreSQL производительность, DataCleanup |
-| `redirect-expert` | CurlStrategy, стратегии редиректов, прокси, антибот, SSRF |
+| `file-processing-expert` | Импорт/экспорт, Excel/CSV, даты, нулевые цены, EntityType, статистика, штрихкод/ШК/EAN, /handbook, DataMerger |
+| `websocket-async-architect` | WebSocket, прогресс-бары, executors, @Async, CompletableFuture, REQUIRES_NEW, фоновые задачи |
+| `zoomos-check-expert` | Zoomos Check, выкачка упала, evaluateGroup, Playwright, Redmine, расписания, баннер |
+| `database-maintenance-expert` | Flyway миграции, добавь колонку/таблицу, VACUUM, PostgreSQL, DataCleanup |
+| `redirect-expert` | Редиректы, финальный URL, стратегии, прокси, антибот, /utils/redirect-finder |
 
 Явный вызов: `"Используй zoomos-check-expert — баннер priority-alerts не обновляется"`
 

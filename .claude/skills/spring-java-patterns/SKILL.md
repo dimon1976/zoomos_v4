@@ -1,6 +1,6 @@
 ---
 name: spring-java-patterns
-description: "Java/Spring Boot patterns and conventions specific to Zoomos v4. Load when writing Java code, creating services, or implementing async operations."
+description: "Context skill: automatically loaded when writing Java/Spring Boot code in Zoomos v4. Provides patterns for services, controllers, async operations, transactions. Not user-invocable — loaded implicitly when creating/editing Java files."
 user-invocable: false
 disable-model-invocation: false
 ---

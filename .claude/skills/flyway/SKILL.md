@@ -1,6 +1,6 @@
 ---
 name: flyway
-description: "Create next numbered Flyway migration for Zoomos v4. Use for: new tables, columns, indexes, constraints."
+description: "Quickly create next numbered Flyway migration file (V*.sql) for Zoomos v4. Use for simple migrations: new tables, columns, indexes, constraints. For complex migrations requiring DB analysis use database-maintenance-expert agent instead. Triggers: '/flyway', 'создай миграцию', 'новая миграция', 'нужен SQL файл миграции'."
 disable-model-invocation: true
 argument-hint: "[migration description]"
 allowed-tools: Read, Glob, Write

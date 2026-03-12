@@ -1,6 +1,6 @@
 ---
 name: explain
-description: "Explain code with analogy, ASCII diagram, and step-by-step walkthrough. Use when user asks 'how does X work?' or 'explain this code'."
+description: "Explain code with analogy, ASCII diagram, and step-by-step walkthrough. Triggers: 'how does X work?', 'explain this code', 'объясни', 'как работает', 'что такое', 'разбери', 'покажи схему', 'покажи диаграмму'."
 user-invocable: true
 context: fork
 agent: Explore

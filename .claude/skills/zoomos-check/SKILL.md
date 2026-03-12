@@ -1,6 +1,6 @@
 ---
 name: zoomos-check
-description: "Trigger a Zoomos Check run for a specific shop or list available shops."
+description: "Show recent Zoomos Check results or list shops. Triggers: 'последние проверки для магазина', 'статус проверки', 'покажи историю проверок', 'list shops', '/zoomos-check'."
 disable-model-invocation: true
 argument-hint: "[shop-name | list]"
 allowed-tools: Bash, Read

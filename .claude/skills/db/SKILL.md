@@ -1,6 +1,6 @@
 ---
 name: db
-description: "Run quick PostgreSQL queries against zoomos_v4. Aliases: clients, shops, av_data, operations, migrations, vacuum, schedules, redmine, bloat."
+description: "Run quick PostgreSQL queries against zoomos_v4. Triggers: 'посмотри в БД', 'сколько записей', 'покажи данные из таблицы', 'запрос к базе', 'проверь таблицу'. Aliases: clients, shops, av_data, operations, migrations, vacuum, schedules, redmine, bloat."
 disable-model-invocation: true
 argument-hint: "[SQL query | alias: clients|shops|av_data|operations|migrations|vacuum|schedules|redmine|bloat]"
 allowed-tools: Bash
