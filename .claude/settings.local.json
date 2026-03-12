@@ -100,6 +100,11 @@
             "type": "command",
             "command": "cd /e/workspace/zoomos_v4 && CHANGED=$(git diff --name-only 2>/dev/null | wc -l) && STAGED=$(git diff --cached --name-only 2>/dev/null | wc -l) && UNTRACKED=$(git status --short 2>/dev/null | grep '^?' | wc -l) && [ $((CHANGED + STAGED + UNTRACKED)) -gt 0 ] && echo \"Modified files: $CHANGED unstaged, $STAGED staged, $UNTRACKED untracked\" || true",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "cd /e/workspace/zoomos_v4 && CHANGED=$(git diff --name-only 2>/dev/null | wc -l) && STAGED=$(git diff --cached --name-only 2>/dev/null | wc -l) && [ $((CHANGED + STAGED)) -gt 0 ] && echo \"AGENT ROUTING FEEDBACK: Нужный агент или скилл сработал? Если нет — опиши что пошло не так, я обновлю descriptions. (можно проигнорировать)\" || true",
+            "async": true
           }
         ]
       }
