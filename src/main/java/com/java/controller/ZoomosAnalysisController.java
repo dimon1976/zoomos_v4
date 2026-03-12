@@ -595,7 +595,8 @@ public class ZoomosAnalysisController {
                 .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
         Map<String, List<ZoomosParsingStats>> baselineByKey = new LinkedHashMap<>();
         for (ZoomosParsingStats s : baselineStatsList) {
-            String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
+            String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")
+                    + "|" + (s.getAddressId() != null ? s.getAddressId() : "");
             baselineByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
         }
 
@@ -696,7 +697,9 @@ public class ZoomosAnalysisController {
                 if (baselineDatesFrom != null) {
                     String siteForBl = group.get(0).getSiteName();
                     String cityForBl = group.get(0).getCityName();
-                    String blKey = siteForBl + "|" + (cityForBl != null ? cityForBl : "");
+                    String addrForBl = group.get(0).getAddressId();
+                    String blKey = siteForBl + "|" + (cityForBl != null ? cityForBl : "")
+                            + "|" + (addrForBl != null ? addrForBl : "");
                     List<ZoomosParsingStats> bl = baselineByKey.getOrDefault(blKey, Collections.emptyList());
                     groupBaseline = checkService.computeBaselineMedian(bl);
                 }
@@ -1239,9 +1242,27 @@ public class ZoomosAnalysisController {
         Map<String, String> parserIncludeBysite = new HashMap<>();
         cityIdBySite.forEach((site, cid) -> parserIncludeBysite.put(site, cid.getParserInclude()));
 
+        // Группируем mainIssues по сайту — для Block 2 (per-site collapsibles)
+        Map<String, List<Map<String, Object>>> issuesBySite = new LinkedHashMap<>();
+        for (Map<String, Object> issue : mainIssues) {
+            String site = (String) issue.get("site");
+            issuesBySite.computeIfAbsent(site, k -> new ArrayList<>()).add(issue);
+        }
+        // Счётчики для заголовков в Block 2
+        Map<String, Integer> errorCountBySite = new HashMap<>();
+        Map<String, Integer> warnCountBySite  = new HashMap<>();
+        for (Map<String, Object> issue : mainIssues) {
+            String site = (String) issue.get("site");
+            if ("ERROR".equals(issue.get("type"))) errorCountBySite.merge(site, 1, Integer::sum);
+            else                                    warnCountBySite.merge(site, 1, Integer::sum);
+        }
+
         model.addAttribute("run", run);
         model.addAttribute("groups", groups);
         model.addAttribute("issues", mainIssues);
+        model.addAttribute("issuesBySite", issuesBySite);
+        model.addAttribute("errorCountBySite", errorCountBySite);
+        model.addAttribute("warnCountBySite", warnCountBySite);
         model.addAttribute("trendIssues", trendIssues);
         model.addAttribute("parserIncludeBysite", parserIncludeBysite);
         model.addAttribute("prioritySiteNames", prioritySiteNames);

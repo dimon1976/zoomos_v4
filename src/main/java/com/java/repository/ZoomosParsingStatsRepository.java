@@ -36,12 +36,14 @@ public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsin
     @Query("SELECT s FROM ZoomosParsingStats s " +
            "WHERE s.siteName = :siteName " +
            "AND (:cityName IS NULL OR s.cityName = :cityName) " +
+           "AND (:addressId IS NULL OR s.addressId = :addressId) " +
            "AND s.startTime >= :from AND s.startTime < :to " +
            "AND s.isBaseline = true AND s.completionPercent >= 100 " +
            "ORDER BY s.startTime ASC")
     List<ZoomosParsingStats> findForBaseline(
             @Param("siteName") String siteName,
             @Param("cityName") String cityName,
+            @Param("addressId") String addressId,
             @Param("from") ZonedDateTime from,
             @Param("to") ZonedDateTime to);
 

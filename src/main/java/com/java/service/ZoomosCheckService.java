@@ -314,7 +314,8 @@ public class ZoomosCheckService {
         }
         List<ZoomosParsingStats> main = new ArrayList<>();
         for (ZoomosParsingStats s : stats) {
-            if (s.getStartTime() != null && s.getStartTime().toLocalDate().isBefore(mainDateFrom)) {
+            LocalDate sDate = s.getStartTime() != null ? s.getStartTime().toLocalDate() : null;
+            if (sDate != null && sDate.isBefore(mainDateFrom)) {
                 s.setIsBaseline(true);
                 baselineAccumulator.add(s);
             } else {
@@ -939,7 +940,7 @@ public class ZoomosCheckService {
 
             // Проверяем сколько исторических записей есть в БД
             List<ZoomosParsingStats> existing = parsingStatsRepository.findForBaseline(
-                    site, null, bFrom, bTo);
+                    site, null, null, bFrom, bTo);
 
             if (existing.size() >= 3) {
                 log.debug("Baseline для {}: {} записей в БД — парсинг не нужен", site, existing.size());
@@ -1207,8 +1208,9 @@ public class ZoomosCheckService {
                 if (baselineDatesFrom != null) {
                     String siteForBl = group.get(0).getSiteName();
                     String cityForBl = group.get(0).getCityName();
+                    String addrForBl = group.get(0).getAddressId();
                     List<ZoomosParsingStats> bl = parsingStatsRepository
-                            .findForBaseline(siteForBl, cityForBl, baselineDatesFrom, baselineDatesTo);
+                            .findForBaseline(siteForBl, cityForBl, addrForBl, baselineDatesFrom, baselineDatesTo);
                     baseline = computeBaselineMedian(bl);
                 }
                 status = evaluateGroup(group, run.getDropThreshold(), run.getErrorGrowthThreshold(),

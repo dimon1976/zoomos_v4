@@ -95,6 +95,17 @@ public class ZoomosRedmineController {
         }
     }
 
+    /** Удалить локальную запись задачи из БД (когда задача удалена в Redmine) */
+    @DeleteMapping("/local-delete/{site}")
+    public ResponseEntity<Map<String, Object>> localDelete(@PathVariable String site) {
+        try {
+            redmineService.deleteLocalIssue(site);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
     private String extractShortMessage(RedmineCreateRequest req) {
         // Явно переданное краткое описание проблемы ("В чем ошибка") с фронтенда
         if (req.getShortMessage() != null && !req.getShortMessage().isBlank()) {

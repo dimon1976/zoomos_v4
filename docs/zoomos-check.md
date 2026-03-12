@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-03 (baseline по check_run_id; Redmine findIssuesBySite auto-save)
+> Последнее обновление: 2026-03 (редизайн Block 2 + баг-фиксы v2: ручной collapse toggle без data-bs-toggle, CSS filter→background-color, site-issues по умолчанию закрыты + авто-раскрытие JS, кнопка «Проверено» сворачивает и маркирует, Phase 1 для edit-режима)
 
 ## Назначение
 
@@ -236,9 +236,20 @@ boolean canDeliver = issues.stream()
 **Особенность сервера**: HTTP 404 при POST/PUT, но операции выполняются успешно.
 Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `findRecentIssueBySubject()`.
 
-Эндпоинты: `/zoomos/redmine/check-batch`, `/zoomos/redmine/check`, `/zoomos/redmine/create`, `/zoomos/redmine/update/{id}`
+Эндпоинты: `/zoomos/redmine/check-batch`, `/zoomos/redmine/check`, `/zoomos/redmine/create`, `/zoomos/redmine/update/{id}`, `DELETE /zoomos/redmine/local-delete/{site}`
 
 **Auto-save**: `findIssuesBySite()` автоматически сохраняет первую найденную задачу в `zoomos_redmine_issues` — последующие загрузки страницы сразу показывают кнопку "Изменить" без async API-запроса.
+
+**UI (Block 2 — check-results.html)**:
+- Коллапс по сайту: `issuesBySite` (LinkedHashMap), `errorCountBySite`/`warnCountBySite` передаются в модель
+- Кнопка Redmine одна на сайт (`btn-redmine-site` / `btn-redmine-site-edit`). Коллапс сайта управляется через `data-collapse-target` + ручной JS-toggle в `site-issues-header.addEventListener('click')`, который игнорирует клики в `.ms-auto` и `.btn-mark-site-done`
+- Phase 1 выбор проблем: `#rmIssueSelect` → чекбоксы → `buildSiteDescription()` с collapse-тегами. Показывается и при редактировании (>1 issues): выбранные проблемы попадают в `rmNotes` (комментарий), а не в описание
+- Кнопка «Проверено» (`btn-mark-site-done`) в заголовке сайта — скрывает все проблемы сайта разом; JS `e.stopPropagation()` не даёт сворачиваться коллапсу
+- Verified-badge: localStorage `verified-sites-{runId}`, отображается иконка ✓ в заголовке сайта
+- Кнопка "Статусы Redmine": `#btnRefreshRedmine` → `runBatchCheck()` (отложен через `setTimeout` для быстрого рендера страницы)
+- Удалённая задача в Redmine: batch-check вызывает `DELETE /local-delete/{site}` + откатывает кнопку
+- `data-historyurl` и `data-matchingurl` убраны из DOM (раньше замедляли страницу); URL вычисляются в JS функциями `computeHistoryUrl()` / `computeMatchingUrl()` через глобальные переменные `BASE_URL`, `DATE_FROM`, `DATE_TO`, `SHOP_NAME`
+- Городское название (`cityDisplay`): в `buildGroupIssues` хранится только читаемая часть после " - " (null если ID без имени)
 
 Конфиг: `redmine.base-url`, `redmine.api-key`, `redmine.project-id`, и т.д. в `application.properties`.
 

@@ -390,6 +390,12 @@ public class RedmineService {
         return repo.findAllBySiteNameIn(siteNames);
     }
 
+    /** Удалить локальную запись задачи из БД (когда задача удалена в Redmine) */
+    @Transactional
+    public void deleteLocalIssue(String site) {
+        repo.findBySiteName(site).ifPresent(repo::delete);
+    }
+
     @Transactional
     public Map<String, ZoomosRedmineIssue> getIssuesMapForSites(Collection<String> siteNames) {
         if (!isEnabled() || siteNames.isEmpty()) return Collections.emptyMap();
