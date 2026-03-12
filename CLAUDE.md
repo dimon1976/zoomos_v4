@@ -31,6 +31,32 @@ mvn flyway:info
 - Закрывай запущенный сервер после тестирования
 - Принципы: KISS, YAGNI, MVP, итеративная разработка. Это pet проект — не усложняй.
 
+## Agents & Skills
+
+### Агенты (автоматически выбираются по контексту)
+
+| Агент | Когда использовать |
+|-------|-------------------|
+| `file-processing-expert` | Импорт/экспорт, даты, нулевые цены, EntityType, статистика, JDBC batch |
+| `websocket-async-architect` | WebSocket, прогресс-бары, executors, async паттерны, @Transactional |
+| `zoomos-check-expert` | Zoomos Check, evaluateGroup, Playwright, Redmine, расписания, баннер |
+| `database-maintenance-expert` | Flyway миграции, VACUUM, PostgreSQL производительность, DataCleanup |
+| `redirect-expert` | CurlStrategy, стратегии редиректов, прокси, антибот, SSRF |
+
+Явный вызов: `"Используй zoomos-check-expert — баннер priority-alerts не обновляется"`
+
+### Скилы (slash команды)
+
+| Команда | Назначение |
+|---------|-----------|
+| `/server [start\|stop\|restart\|status]` | Управление сервером на порту 8081 |
+| `/flyway [описание]` | Создать следующую Flyway миграцию |
+| `/db [SQL\|alias]` | Быстрые запросы к БД (aliases: clients, shops, vacuum, migrations...) |
+| `/commit [сообщение]` | Check → auto-fix → commit (цикл до чистого состояния) |
+| `/check` | Pre-commit проверка: компиляция, изменения, безопасность |
+| `/explain [класс/файл]` | Объяснение кода с аналогией и ASCII-диаграммой |
+| `/zoomos-check [shop\|list]` | Последние проверки для магазина |
+
 ## Documentation Rules (ОБЯЗАТЕЛЬНО)
 
 **Вся документация хранится в папке `docs/`** — один файл (или подпапка) на каждое функциональное направление.
