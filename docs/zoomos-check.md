@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-03 (редизайн Block 2 + баг-фиксы v2: ручной collapse toggle без data-bs-toggle, CSS filter→background-color, site-issues по умолчанию закрыты + авто-раскрытие JS, кнопка «Проверено» сворачивает и маркирует, Phase 1 для edit-режима)
+> Последнее обновление: 2026-03 (редизайн Block 2 + баг-фиксы v2: ручной collapse toggle без data-bs-toggle, CSS filter→background-color, site-issues по умолчанию закрыты + авто-раскрытие JS, кнопка «Проверено» сворачивает и маркирует, Phase 1 для edit-режима; блок «Проверено мной» — verified-сайты физически перемещаются в отдельный collapsible-блок; фикс isClosed для btn-class Redmine; currentSelectedIssues из Phase 1 скрываются после создания задачи; showCopyBlock при update использует shortMessage)
 
 ## Назначение
 
@@ -246,6 +246,10 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 - Phase 1 выбор проблем: `#rmIssueSelect` → чекбоксы → `buildSiteDescription()` с collapse-тегами. Показывается и при редактировании (>1 issues): выбранные проблемы попадают в `rmNotes` (комментарий), а не в описание
 - Кнопка «Проверено» (`btn-mark-site-done`) в заголовке сайта — скрывает все проблемы сайта разом; JS `e.stopPropagation()` не даёт сворачиваться коллапсу
 - Verified-badge: localStorage `verified-sites-{runId}`, отображается иконка ✓ в заголовке сайта
+- Блок «Проверено мной» (`#verifiedSitesBlock`): verified-сайты физически перемещаются в отдельный collapsible-блок через `moveSiteToVerified()` (работает при первой загрузке и при нажатии кнопки). Блок скрыт пока нет verified-сайтов. Восстановление из localStorage происходит ДО авто-раскрытия, чтобы verified-сайты не раскрывались в основном списке
+- Фикс: `btnClass` для Redmine-кнопки — `isClosed ? 'btn-success' : 'btn-danger'` (был инвертирован)
+- Фикс: `currentSelectedIssues` из Phase 1 скрываются через `hideIssue()` после успешного создания задачи
+- Фикс: `showCopyBlock` при update передаёт `body.shortMessage` вместо литерала 'обновлена'
 - Кнопка "Статусы Redmine": `#btnRefreshRedmine` → `runBatchCheck()` (отложен через `setTimeout` для быстрого рендера страницы)
 - Удалённая задача в Redmine: batch-check вызывает `DELETE /local-delete/{site}` + откатывает кнопку
 - `data-historyurl` и `data-matchingurl` убраны из DOM (раньше замедляли страницу); URL вычисляются в JS функциями `computeHistoryUrl()` / `computeMatchingUrl()` через глобальные переменные `BASE_URL`, `DATE_FROM`, `DATE_TO`, `SHOP_NAME`

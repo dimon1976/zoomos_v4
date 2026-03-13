@@ -307,6 +307,22 @@
             </div>
             </th:block>
 
+            <!-- Блок "Проверено мной" — сайты переданные в ТТ / отмеченные проверенными -->
+            <div id="verifiedSitesBlock" class="border-top" style="display:none">
+                <div class="d-flex justify-content-between align-items-center px-3 py-2"
+                     style="background:#d1e7dd; cursor:pointer"
+                     data-bs-toggle="collapse" data-bs-target="#verifiedSitesCollapse">
+                    <small class="fw-semibold text-success">
+                        <i class="fas fa-check-circle me-1"></i>Проверено мной
+                        <span id="verifiedSitesCount" class="badge bg-secondary ms-1">0</span>
+                    </small>
+                    <i class="fas fa-chevron-down" style="font-size:0.75rem; color:#198754;"></i>
+                </div>
+                <div id="verifiedSitesCollapse" class="collapse">
+                    <!-- site-issues-block'и переносятся сюда через JS -->
+                </div>
+            </div>
+
             <!-- Блок "Проверено мной" (скрытые строки) -->
             <div id="resolvedBlock" class="resolved-block px-3 py-2" style="display:none">
                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -1040,8 +1056,38 @@
     // Инициализация — применить сохранённые hidden
     applyHidden();
 
-    // Авто-раскрыть сайты у которых есть видимые проблемы
+    // ── Redmine: Verified-flag ──────────────────────────────────────
+    const VERIFIED_KEY = 'verified-sites-' + RUN_ID;
+
+    function moveSiteToVerified(site) {
+        const block = document.querySelector('.site-issues-block[data-site="' + CSS.escape(site) + '"]');
+        const container = document.getElementById('verifiedSitesCollapse');
+        const wrapper = document.getElementById('verifiedSitesBlock');
+        if (!block || !container || !wrapper) return;
+        if (block.closest('#verifiedSitesCollapse')) return; // уже перемещён
+        container.appendChild(block);
+        wrapper.style.display = '';
+        const countEl = document.getElementById('verifiedSitesCount');
+        if (countEl) countEl.textContent = container.querySelectorAll('.site-issues-block').length;
+    }
+
+    function markSiteVerified(site) {
+        const verified = JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]');
+        if (!verified.includes(site)) { verified.push(site); localStorage.setItem(VERIFIED_KEY, JSON.stringify(verified)); }
+        document.querySelectorAll('.verified-badge[data-site="' + CSS.escape(site) + '"]')
+            .forEach(function(el) { el.style.display = ''; });
+        moveSiteToVerified(site);
+    }
+
+    // Восстановить verified сайты ДО авто-раскрытия (чтобы они не раскрывались в основном списке)
+    (function() {
+        const verified = JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]');
+        verified.forEach(markSiteVerified);
+    })();
+
+    // Авто-раскрыть сайты у которых есть видимые проблемы (только не-verified)
     document.querySelectorAll('.site-issues-block').forEach(function(block) {
+        if (block.closest('#verifiedSitesCollapse')) return; // пропускаем verified
         const idx = block.dataset.siteIdx;
         if (idx === undefined) return;
         const hasVisible = block.querySelector('[data-issue-key]:not(.issue-hidden)');
@@ -1050,21 +1096,6 @@
             if (collapseEl) collapseEl.classList.add('show');
         }
     });
-
-    // ── Redmine: Verified-flag ──────────────────────────────────────
-    const VERIFIED_KEY = 'verified-sites-' + RUN_ID;
-
-    function markSiteVerified(site) {
-        const verified = JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]');
-        if (!verified.includes(site)) { verified.push(site); localStorage.setItem(VERIFIED_KEY, JSON.stringify(verified)); }
-        document.querySelectorAll('.verified-badge[data-site="' + CSS.escape(site) + '"]')
-            .forEach(function(el) { el.style.display = ''; });
-    }
-
-    (function restoreVerifiedBadges() {
-        const verified = JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]');
-        verified.forEach(markSiteVerified);
-    })();
 
     // ─── site-issues-header: ручной коллапс + chevron + кнопка "Проверено" ──
     document.querySelectorAll('.site-issues-header').forEach(function(header) {
@@ -1200,6 +1231,7 @@
         let currentIssueId = null;
         let rmOptions = null;
         let currentSiteIssues = []; // issues текущего сайта (для Phase 1)
+        let currentSelectedIssues = []; // issues выбранные в Phase 1 (скрываются после создания задачи)
 
         // ─── Утилиты ─────────────────────────────────────────────────
 
@@ -1244,6 +1276,7 @@
             document.getElementById('rmCommentsList').classList.add('d-none');
             document.getElementById('rmNotesBlock').classList.add('d-none');
             document.getElementById('rmNotes').value = '';
+            currentSelectedIssues = [];
         }
 
         /** Генерация ссылки на историю парсинга (вычисляется в JS — не хранится в DOM) */
@@ -1405,7 +1438,7 @@
 
         /** Заменяет кнопку создания для сайта на btn-group (ссылка + кнопка редактирования) */
         function replaceAllSiteBtns(site, issue, srcBtn) {
-            const btnClass = issue.btnClass || (issue.isClosed === false ? 'btn-danger' : 'btn-success');
+            const btnClass = issue.btnClass || (issue.isClosed ? 'btn-success' : 'btn-danger');
             function makeGroup(b) {
                 const group = document.createElement('div');
                 group.className = 'btn-group btn-group-sm';
@@ -1482,6 +1515,7 @@
         document.getElementById('rmNextBtn').addEventListener('click', function() {
             const selected = getSelectedIssues();
             if (!selected.length) return;
+            currentSelectedIssues = selected;
             const site = currentBtn ? currentBtn.dataset.site : '';
             document.getElementById('rmIssueSelect').classList.add('d-none');
             document.getElementById('rmNextBtn').classList.add('d-none');
@@ -1669,6 +1703,12 @@
             .then(function(data) {
                 if (data.success && data.issue) {
                     replaceAllSiteBtns(site, data.issue);
+                    // Скрыть выбранные issues (из Phase 1, или все если Phase 1 не было)
+                    const issuesToHide = currentSelectedIssues.length > 0 ? currentSelectedIssues : currentSiteIssues;
+                    issuesToHide.forEach(function(iss) {
+                        const key = site + '|' + (iss.city || '') + '|' + (iss.addressId || '') + '|' + iss.type;
+                        hideIssue(key);
+                    });
                     showCopyBlock(data.issue.site, data.issue.shortMessage, data.issue.url);
                 } else {
                     showError('Ошибка: ' + (data.error || 'неизвестная'));
@@ -1714,7 +1754,7 @@
                     }
                     const issueUrl = (data.issue && data.issue.url)
                         || document.querySelector('[data-rm-site="' + CSS.escape(site) + '"] a.btn')?.href || '';
-                    showCopyBlock(site, 'обновлена', issueUrl || '#' + currentIssueId, 'edit');
+                    showCopyBlock(site, body.shortMessage || site, issueUrl || '#' + currentIssueId, 'edit');
                 } else {
                     showError('Ошибка: ' + (data.error || 'неизвестная'));
                     btn.disabled = false; btn.innerHTML = orig;
