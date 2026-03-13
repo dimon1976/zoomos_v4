@@ -1375,11 +1375,17 @@
                     desc += badge + ' ' + msg + '\nГорода: ' + cities + '\n\n';
                 });
             });
-            const historyLinks = selectedIssues
-                .filter(function(i) { return i.historyUrl; })
-                .map(function(i) { return (i.city || '') + (i.addressId ? ' (' + i.addressId + ')' : '') + ': ' + i.historyUrl; })
-                .join('\n');
-            if (historyLinks) desc += '{{collapse(Ссылки на историю парсинга)\n' + historyLinks + '\n}}\n\n';
+            // Уникальные ссылки на историю (дедупликация по URL)
+            const seenHistoryUrls = new Set();
+            const historyLines = [];
+            selectedIssues.forEach(function(i) {
+                if (i.historyUrl && !seenHistoryUrls.has(i.historyUrl)) {
+                    seenHistoryUrls.add(i.historyUrl);
+                    historyLines.push((i.city || '') + (i.addressId ? ' (' + i.addressId + ')' : '') + ': ' + i.historyUrl);
+                }
+            });
+            if (historyLines.length) desc += '{{collapse(Ссылки на историю парсинга)\n' + historyLines.join('\n') + '\n}}\n\n';
+            // Ссылка на матчинг — одна на сайт (уже уникальна)
             const matchingUrl = selectedIssues.filter(function(i) { return i.matchingUrl; })[0];
             if (matchingUrl) desc += '{{collapse(Ссылка на матчинг)\n' + matchingUrl.matchingUrl + '\n}}\n';
             return desc;
