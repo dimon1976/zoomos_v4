@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="groupsBlock">
+
+    <!-- Тулбар -->
+    <div th:unless="${groups.isEmpty()}" class="mb-2 d-flex align-items-center gap-2 flex-wrap">
+        <small class="text-muted">Детали по сайтам:</small>
+        <button class="btn btn-sm btn-outline-secondary py-0" id="expandAll">
+            <i class="fas fa-expand-alt me-1"></i>Раскрыть всё
+        </button>
+        <button class="btn btn-sm btn-outline-secondary py-0" id="collapseAll">
+            <i class="fas fa-compress-alt me-1"></i>Свернуть всё
+        </button>
+        <button class="btn btn-sm btn-outline-secondary py-0" id="toggleParser">
+            <i class="fas fa-code me-1"></i>Парсер
+        </button>
+    </div>
+
+    <!-- Группы по сайтам -->
+    <div th:each="group, groupIter : ${groups}" class="card mb-2">
+        <!-- Заголовок -->
+        <div class="card-header py-2 group-header"
+             th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10' :
+                            (${group['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light')">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-1"
+                     style="cursor:pointer"
+                     data-bs-toggle="collapse"
+                     th:data-bs-target="'#grp-' + ${groupIter.index}"
+                     aria-expanded="false">
+                    <i class="fas fa-chevron-down chevron me-2"></i>
+                    <span class="badge me-1"
+                          th:classappend="${group['status'] == 'ERROR'} ? 'bg-danger' :
+                                         (${group['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
+                          th:text="${group['status']}">OK</span>
+                    <i th:if="${group['isPriority']}" class="fas fa-star text-warning me-1" title="Приоритетный сайт" style="font-size:0.8em;"></i>
+                    <strong th:text="${group['siteName']}">site.ru</strong>
+                    <span class="badge ms-2"
+                          th:classappend="${group['checkType'] == 'API'} ? 'badge-api' : 'badge-item'"
+                          th:text="${group['checkType']}">API</span>
+                    <span th:if="${group['count'] > 1}" class="text-muted ms-2 small" th:text="${group['count']} + ' выкач.'"></span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <!-- Ссылка на матчинг -->
+                    <a th:href="${baseUrl + '/shop/' + run.shop.shopName + '/sites-items-mapping?site=' + group['siteName'] + '&onlyAssociated=1&upd=' + #dates.createNow().getTime()}"
+                       target="_blank"
+                       class="btn btn-sm btn-outline-primary py-0 px-2"
+                       title="Матчинг на export.zoomos.by">
+                        <i class="fas fa-link"></i>
+                    </a>
+                    <!-- Ссылка на историю выкачки (зависит от типа) -->
+                    <a th:if="${group['checkType'] == 'API'}"
+                       th:href="${baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=&address=&accountId=&server='}"
+                       target="_blank"
+                       class="btn btn-sm btn-outline-secondary py-0 px-2"
+                       title="История парсинга (API)">
+                        <i class="fas fa-history"></i>
+                    </a>
+                    <a th:if="${group['checkType'] == 'ITEM'}"
+                       th:href="${baseUrl + '/shops-parser/' + group['siteName'] + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + run.shop.shopName + '&site=&cityId=&address=&accountId=&server='}"
+                       target="_blank"
+                       class="btn btn-sm btn-outline-secondary py-0 px-2"
+                       title="История парсинга (ITEM)">
+                        <i class="fas fa-history"></i>
+                    </a>
+                    <!-- Redmine (Block 3 — статус задачи) -->
+                    <th:block th:if="${redmineEnabled}">
+                        <th:block th:if="${redmineIssues[group['siteName']] != null}">
+                            <div class="btn-group btn-group-sm" role="group"
+                                 th:data-rm-site="${group['siteName']}">
+                                <a th:href="${redmineIssues[group['siteName']].issueUrl}"
+                                   target="_blank"
+                                   th:class="'btn py-0 px-2 ' + (${redmineIssues[group['siteName']].closed} ? 'btn-success' : 'btn-danger')"
+                                   th:title="'Redmine #' + ${redmineIssues[group['siteName']].issueId} + ' — ' + ${redmineIssues[group['siteName']].issueStatus}"
+                                   th:text="'#' + ${redmineIssues[group['siteName']].issueId}">
+                                </a>
+                                <button type="button"
+                                        class="btn btn-outline-secondary py-0 px-1 btn-redmine-site-edit"
+                                        th:data-issueid="${redmineIssues[group['siteName']].issueId}"
+                                        th:data-issueurl="${redmineIssues[group['siteName']].issueUrl}"
+                                        th:data-site="${group['siteName']}"
+                                        th:data-checktype="${group['checkType'] != null ? group['checkType'] : ''}"
+                                        title="Редактировать задачу в Redmine">
+                                    <i class="fas fa-pen" style="font-size:0.65rem"></i>
+                                </button>
+                            </div>
+                        </th:block>
+                        <button th:unless="${redmineIssues[group['siteName']] != null}"
+                                type="button"
+                                class="btn btn-sm btn-outline-danger py-0 px-2 btn-redmine-site"
+                                th:data-site="${group['siteName']}"
+                                th:data-checktype="${group['checkType'] != null ? group['checkType'] : ''}"
+                                title="Создать задачу в Redmine">
+                            <i class="fas fa-bug"></i>
+                        </button>
+                    </th:block>
+                </div>
+            </div>
+        </div>
+
+        <!-- Тело: подгруппы по городам -->
+        <div th:id="'grp-' + ${groupIter.index}" class="collapse" th:data-site="${group['siteName']}">
+            <div th:each="cg, cgIter : ${group['cityGroups']}">
+                <!-- Разделитель города (если > 1) -->
+                <div th:if="${group['cityGroups'].size() > 1}"
+                     class="px-3 py-1 small fw-semibold border-bottom"
+                     th:classappend="${cg['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10 text-danger' :
+                                    (${cg['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
+                    <i class="fas fa-map-marker-alt me-1"></i>
+                    <span th:text="${cg['cityName'] != null} ? ${cg['cityName']} : 'Без города'"></span>
+                    <span class="badge ms-1 small"
+                          th:classappend="${cg['status'] == 'ERROR'} ? 'bg-danger' : (${cg['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
+                          th:text="${cg['status']}"></span>
+                </div>
+                <!-- Подгруппы по адресу внутри города -->
+                <div th:each="ag : ${cg['addressGroups']}">
+                    <!-- Заголовок адреса (если для города настроены адреса) -->
+                    <div th:if="${ag['addressId'] != null}"
+                         class="px-3 py-1 small border-bottom d-flex align-items-center gap-2"
+                         th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10 text-danger' :
+                                        (${ag['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
+                        <i class="fas fa-map-pin"></i>
+                        <span th:text="${ag['addressName'] != null ? ag['addressName'] : ag['addressId']}"></span>
+                        <span class="badge ms-1"
+                              th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger' :
+                                             (${ag['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
+                              th:text="${ag['noData'] == true and ag['inProgressStat'] != null ? 'В процессе' : (ag['noData'] == true and ag['status'] == 'ERROR' ? 'Нет данных' : ag['status'])}"></span>
+                    </div>
+                    <!-- Нет данных (noData) — строка-заглушка вместо таблицы -->
+                    <div th:if="${ag['noData'] == true and ag['issueMessage'] != null}"
+                         class="px-3 py-2 border-bottom text-muted small"
+                         th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10' : 'bg-warning bg-opacity-10'">
+                        <i th:classappend="${ag['inProgressStat'] != null} ? 'fas fa-spinner me-1' : 'fas fa-ban me-1'"></i>
+                        <span th:text="${ag['issueMessage']}"></span>
+                    </div>
+                    <!-- Таблица выкачек (если данные есть) -->
+                    <div th:unless="${ag['stats'].isEmpty()}" class="table-responsive">
+                        <table class="table table-sm table-hover table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-center" style="width:110px">Старт</th>
+                                    <th class="text-center" style="width:110px">Финиш</th>
+                                    <th class="text-center d-none d-md-table-cell">Сервер</th>
+                                    <th class="text-center d-none d-md-table-cell">Клиент</th>
+                                    <th class="parser-col" style="max-width:200px">Парсер</th>
+                                    <th class="text-end">Товаров</th>
+                                    <th class="text-end">В наличии</th>
+                                    <th class="text-end">Ошибки</th>
+                                    <th class="text-center">Завершено</th>
+                                    <th class="text-center">Время</th>
+                                    <th class="text-center"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <th:block th:each="stat, si : ${ag['stats']}"
+                                    th:with="nextStat=${si.index + 1 < ag['stats'].size() ? ag['stats'][si.index + 1] : null},
+                                             prevStat=${si.index > 0 ? ag['stats'][si.index - 1] : null}">
+                                <!-- Разделитель: первая baseline-строка -->
+                                <tr th:if="${stat.isBaseline and (prevStat == null or !prevStat.isBaseline)}"
+                                    class="baseline-separator">
+                                    <td colspan="11">
+                                        <i class="fas fa-history me-1"></i>Baseline:
+                                        <span th:text="${baselineFrom} + ' – ' + ${baselineTo}"></span>
+                                    </td>
+                                </tr>
+                                <tr th:classappend="${stat.isBaseline ? 'baseline-row' : (si.first ? (ag['status'] == 'ERROR' ? 'table-danger' : (ag['status'] == 'WARNING' ? 'table-warning' : 'table-active')) + ' fw-semibold' : '')}">
+                                    <td class="text-center small"
+                                        th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
+                                    <td class="text-center small"
+                                        th:text="${stat.finishTime != null} ? ${#temporals.format(stat.finishTime, 'dd.MM HH:mm')} : '—'"></td>
+                                    <td class="text-center small d-none d-md-table-cell" th:text="${stat.serverName}"></td>
+                                    <td class="text-center small d-none d-md-table-cell" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
+                                    <td class="parser-col small"
+                                        th:with="raw=${stat.parserDescription},
+                                                 val=${raw != null and #strings.contains(raw, 'urls: - ') ? #strings.substringAfter(raw, 'urls: - ') : raw}"
+                                        th:title="${parserIncludeBysite[stat.siteName]}"
+                                        th:text="${val != null ? val : '—'}"></td>
+                                    <td class="text-end">
+                                        <span th:text="${stat.totalProducts != null} ? ${#numbers.formatInteger(stat.totalProducts, 1, 'COMMA')} : '—'"></span>
+                                        <span th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and stat.totalProducts != null and nextStat.totalProducts != null and nextStat.totalProducts > 0}"
+                                              th:with="pct=${(stat.totalProducts - nextStat.totalProducts) * 100 / nextStat.totalProducts}">
+                                            <small th:if="${pct < -10}" class="delta-drop"> &#9660;</small>
+                                            <small th:if="${pct > 10}"  class="delta-down"> &#9650;</small>
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span th:text="${stat.inStock != null} ? ${#numbers.formatInteger(stat.inStock, 1, 'COMMA')} : '—'"></span>
+                                        <span th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and stat.inStock != null and nextStat.inStock != null and nextStat.inStock > 0}"
+                                              th:with="pct=${(stat.inStock - nextStat.inStock) * 100 / nextStat.inStock}">
+                                            <small th:if="${stat.inStock == 0}" class="delta-drop"> &#9660;0</small>
+                                            <small th:if="${stat.inStock > 0 and pct < -10}" class="delta-drop"> &#9660;</small>
+                                            <small th:if="${pct > 10}" class="delta-down"> &#9650;</small>
+                                        </span>
+                                        <small th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and nextStat.inStock != null and nextStat.inStock > 0 and (stat.inStock == null or stat.inStock == 0)}"
+                                               class="delta-drop"> &#9660;0</small>
+                                    </td>
+                                    <td class="text-end"
+                                        th:classappend="${stat.errorCount != null and stat.errorCount > 0} ? 'text-danger' : ''">
+                                        <span th:text="${stat.errorCount != null} ? ${stat.errorCount} : '—'"></span>
+                                        <span th:if="${nextStat != null and nextStat.isBaseline == stat.isBaseline and stat.errorCount != null and nextStat.errorCount != null and nextStat.errorCount > 0}"
+                                              th:with="pct=${(stat.errorCount - nextStat.errorCount) * 100 / nextStat.errorCount}">
+                                            <small th:if="${pct > 30}" class="delta-up"> &#9650;</small>
+                                            <small th:if="${pct < -30}" class="delta-down"> &#9660;</small>
+                                        </span>
+                                    </td>
+                                    <td class="text-center small" th:text="${stat.completionTotal != null} ? ${stat.completionTotal} : '—'"></td>
+                                    <td class="text-center small" th:text="${stat.parsingDuration != null} ? ${stat.parsingDuration} : '—'"></td>
+                                    <td class="text-center"
+                                        th:with="cid=${stat.cityName != null and stat.cityName.contains(' - ') ? stat.cityName.substring(0, stat.cityName.indexOf(' - ')).trim() : (stat.cityName != null ? stat.cityName.trim() : '')}">
+                                        <a th:if="${baseUrl != null and stat.checkType == 'API'}"
+                                           th:href="${baseUrl + '/shops-parser/' + stat.siteName + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=-&site=&cityId=' + cid + '&addressId=' + (stat.addressId != null ? stat.addressId : '') + '&accountId=&server='}"
+                                           target="_blank"
+                                           class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                           title="История парсинга">
+                                            <i class="fas fa-history"></i>
+                                        </a>
+                                        <a th:if="${baseUrl != null and (stat.checkType == 'ITEM' or stat.checkType == null)}"
+                                           th:href="${baseUrl + '/shops-parser/' + stat.siteName + '/parsing-history?upd=' + #dates.createNow().getTime() + '&dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&launchDate=&shop=' + run.shop.shopName + '&site=&cityId=' + cid + '&addressId=' + (stat.addressId != null ? stat.addressId : '') + '&accountId=&server='}"
+                                           target="_blank"
+                                           class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                           title="История парсинга">
+                                            <i class="fas fa-history"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                </th:block>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div th:if="${groups.isEmpty()}" class="text-center text-muted py-4">
+        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+        Нет данных за указанный период
+    </div>
+
+</th:block>
+</body>
+</html>
