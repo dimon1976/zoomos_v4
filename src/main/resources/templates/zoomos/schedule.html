@@ -607,12 +607,9 @@
             .then(r => r.json())
             .then(d => {
                 if (!d.runId || !d.startedAt) return;
-                const dt = new Date(d.startedAt);
-                const formatted = dt.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'2-digit'})
-                    + ' ' + dt.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
                 document.querySelectorAll('tr.sched-row[data-shop-id="' + shopId + '"] .sched-last-run-cell').forEach(cell => {
                     const spinnerEl = cell.querySelector('.sched-running-indicator');
-                    cell.innerHTML = '<a href="/zoomos/check/results/' + d.runId + '" class="text-decoration-none">' + formatted + '</a>';
+                    cell.innerHTML = '<a href="/zoomos/check/results/' + d.runId + '" class="text-decoration-none">' + d.startedAt + '</a>';
                     if (spinnerEl) { spinnerEl.classList.add('d-none'); cell.appendChild(spinnerEl); }
                 });
             })
