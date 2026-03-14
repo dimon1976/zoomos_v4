@@ -171,10 +171,10 @@
                     </span>
                     <!-- Кнопка "Проверено все" -->
                     <button type="button"
-                            class="btn btn-sm btn-outline-success py-0 px-2 btn-mark-site-done"
+                            class="btn btn-sm btn-outline-secondary py-0 px-2 btn-mark-site-done"
                             th:data-siteidx="${entryStat.index}"
                             title="Пометить весь сайт как проверенный">
-                        <i class="fas fa-check me-1"></i>Сайт проверен
+                        <i class="far fa-circle me-1"></i>Сайт проверен
                     </button>
                     <!-- Кнопка Redmine — одна на сайт -->
                     <div class="ms-auto" th:if="${redmineEnabled}">
@@ -295,10 +295,10 @@
                                 </a>
                                 <!-- Ошибка проверена -->
                                 <button type="button"
-                                        class="btn btn-sm btn-outline-success py-0 px-2 btn-hide-issue"
+                                        class="btn btn-sm btn-outline-secondary py-0 px-2 btn-hide-issue"
                                         title="Ошибка проверена"
                                         th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type'] + '|' + (issue['message'] != null ? issue['message'] : '')}">
-                                    <i class="fas fa-check me-1"></i>Ошибка проверена
+                                    <i class="far fa-circle me-1"></i>Ошибка проверена
                                 </button>
                             </div>
                         </div>
@@ -904,6 +904,24 @@
         localStorage.setItem(LS_KEY, JSON.stringify([...hiddenIssues]));
     }
 
+    function setIssueBtnVerified(btn, isVerified) {
+        if (!btn) return;
+        if (isVerified) {
+            btn.classList.replace('btn-outline-secondary', 'btn-success');
+            const i = btn.querySelector('i');
+            if (i) i.className = 'fas fa-check-circle me-1';
+        } else {
+            btn.classList.replace('btn-success', 'btn-outline-secondary');
+            const i = btn.querySelector('i');
+            if (i) i.className = 'far fa-circle me-1';
+        }
+    }
+
+    function setSiteBtnVerified(siteBlock, isVerified) {
+        if (!siteBlock) return;
+        setIssueBtnVerified(siteBlock.querySelector('.btn-mark-site-done'), isVerified);
+    }
+
     // Переместить строку ошибки в блок "Проверено мной" (в группу по сайту)
     function moveRowToPartialGroup(row) {
         const site = row.dataset.site;
@@ -924,6 +942,7 @@
         }
         row.classList.remove('issue-hidden');
         group.appendChild(row);
+        setIssueBtnVerified(row.querySelector('.btn-hide-issue'), true);
         wrapper.style.display = '';
         // Раскрыть collapse если он закрыт
         const collapseEl = document.getElementById('verifiedSitesCollapse');
@@ -939,7 +958,10 @@
         const siteBlock = document.querySelector('.site-issues-block[data-site="' + CSS.escape(site) + '"]');
         if (!siteBlock) return;
         const issuesContainer = document.getElementById('siteIssues-' + siteBlock.dataset.siteIdx);
-        if (issuesContainer) issuesContainer.appendChild(row);
+        if (issuesContainer) {
+            issuesContainer.appendChild(row);
+            setIssueBtnVerified(row.querySelector('.btn-hide-issue'), false);
+        }
         const group = document.querySelector('.verified-partial-group[data-site="' + CSS.escape(site) + '"]');
         if (group && !group.querySelectorAll('.list-group-item[data-issue-key]').length) group.remove();
         updateVerifiedCount();
@@ -983,6 +1005,7 @@
                 }
             } else {
                 el.classList.remove('issue-hidden');
+                setIssueBtnVerified(el.querySelector('.btn-hide-issue'), false);
                 if (inPartialGroup) restoreRowToSiteBlock(el);
             }
         });
@@ -1129,6 +1152,7 @@
             if (chevron) chevron.style.transform = 'rotate(-90deg)';
         }
         container.appendChild(block);
+        setSiteBtnVerified(block, true);
         wrapper.style.display = '';
         // Раскрыть collapse если закрыт
         if (!container.classList.contains('show')) container.classList.add('show');
@@ -1163,6 +1187,7 @@
             }
         }
         if (!inserted) issuesCollapse.appendChild(block);
+        setSiteBtnVerified(block, false);
         updateVerifiedCount();
         updateVerifiedBlockVisibility();
     }
