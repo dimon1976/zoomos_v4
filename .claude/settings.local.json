@@ -44,5 +44,70 @@
     ],
     "deny": [],
     "ask": []
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /e/workspace/zoomos_v4 && echo '=== Zoomos v4 ===' && git log --oneline -3 && echo '' && (netstat -ano 2>/dev/null | findstr ':8081' | findstr 'LISTENING' > /dev/null && echo 'Server: RUNNING :8081' || echo 'Server: stopped') && echo ''",
+            "statusMessage": "Loading project status...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'INPUT=$(cat); echo \"$INPUT\" | grep -q \"spring-boot:run\" && (netstat -ano 2>/dev/null | findstr \":8081\" | findstr \"LISTENING\" > /dev/null && echo \"WARNING: Port 8081 is already occupied! Stop the existing server first with /server stop\" >&2 || true) || true'",
+            "statusMessage": "Checking port 8081..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'INPUT=$(cat); echo \"$INPUT\" | grep -q \"db/migration/V\" && echo \"DOCS REMINDER: New Flyway migration created. Required: 1) Update CLAUDE.md Recent Changes 2) Update relevant docs/ file (if functional change)\" || true'",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'INPUT=$(cat); echo \"$INPUT\" | grep -q \"git commit\" && echo \"REMINDER (from CLAUDE.md): After any functional change — update docs/ file. Mandatory last step alongside commit.\" || true'",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /e/workspace/zoomos_v4 && CHANGED=$(git diff --name-only 2>/dev/null | wc -l) && STAGED=$(git diff --cached --name-only 2>/dev/null | wc -l) && UNTRACKED=$(git status --short 2>/dev/null | grep '^?' | wc -l) && [ $((CHANGED + STAGED + UNTRACKED)) -gt 0 ] && echo \"Modified files: $CHANGED unstaged, $STAGED staged, $UNTRACKED untracked\" || true",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "cd /e/workspace/zoomos_v4 && CHANGED=$(git diff --name-only 2>/dev/null | wc -l) && STAGED=$(git diff --cached --name-only 2>/dev/null | wc -l) && [ $((CHANGED + STAGED)) -gt 0 ] && echo \"AGENT ROUTING FEEDBACK: Нужный агент или скилл сработал? Если нет — опиши что пошло не так, я обновлю descriptions. (можно проигнорировать)\" || true",
+            "async": true
+          }
+        ]
+      }
+    ]
   }
 }

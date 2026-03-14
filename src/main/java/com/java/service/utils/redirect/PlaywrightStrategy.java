@@ -6,9 +6,11 @@ import com.java.model.utils.PageStatus;
 import com.java.model.utils.RedirectResult;
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.LoadState;
+import io.github.kihdev.playwright.stealth4j.Stealth4j;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -35,10 +37,10 @@ public class PlaywrightStrategy implements RedirectStrategy {
     }
     
     private static final Set<String> BLOCK_KEYWORDS = Set.of(
-        "captcha", "recaptcha", "cloudflare", "access denied", 
-        "доступ ограничен", "доступ запрещен", "проверка безопасности",
-        "security check", "bot detection", "too many requests",
-        "rate limit", "temporarily unavailable"
+        "captcha", "recaptcha", "cloudflare", "access denied",
+        "доступ ограничен", "доступ запрещен", "временно ограничен",
+        "проверка безопасности", "security check", "bot detection",
+        "too many requests", "rate limit", "temporarily unavailable"
     );
     
     private static final String USER_AGENT = ApplicationConstants.Playwright.DEFAULT_USER_AGENT;
@@ -61,7 +63,8 @@ public class PlaywrightStrategy implements RedirectStrategy {
         try (Playwright playwright = Playwright.create()) {
             // Настройка launch options с поддержкой proxy
             BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
-                .setHeadless(true);
+                .setHeadless(true)
+                .setArgs(List.of("--disable-blink-features=AutomationControlled"));
 
             // Добавить proxy если включен
             ProxyPoolManager.ProxyServer proxyServer = getProxyForUrl(url);
@@ -79,8 +82,9 @@ public class PlaywrightStrategy implements RedirectStrategy {
                     ApplicationConstants.Playwright.DEFAULT_VIEWPORT_HEIGHT
                 ));
                 
-            Page page = context.newPage();
-            
+            // Stealth4j: патчит ~20 fingerprint-полей (webdriver, WebGL, plugins, navigator.languages и др.)
+            Page page = Stealth4j.newStealthPage(context);
+
             // Настройка таймаутов из интерфейса
             page.setDefaultTimeout(timeoutMs);
             page.setDefaultNavigationTimeout(timeoutMs);
@@ -514,8 +518,13 @@ public class PlaywrightStrategy implements RedirectStrategy {
     }
     
     @Override
+    public boolean isBrowserBased() {
+        return true;
+    }
+
+    @Override
     public int getPriority() {
-        return 2; // Вторая по приоритету после curl
+        return 3; // Priority 3: после curl и WebClient
     }
     
     @Override

@@ -114,9 +114,8 @@ public class RedirectFinderService {
             byte[] resultData = generateResultFile(results, dto, metadata);
             
             // Уведомляем о завершении
-            String fileName = "redirect-finder-result_" + 
-                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + 
-                (".csv".equalsIgnoreCase(dto.getOutputFormat()) ? ".csv" : ".xlsx");
+            String fileName = "redirect-finder-result_" +
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".csv";
             sendCompletionNotification(operationId, fileName, results.size());
             
             return resultData;
@@ -287,8 +286,6 @@ public class RedirectFinderService {
     }
     
     private RedirectResult processUrl(String url, List<RedirectStrategy> strategies, RedirectFinderDto dto) {
-        RedirectResult lastResult = null;
-
         // Если принудительно выбран Playwright, используем только его
         if (Boolean.TRUE.equals(dto.getUsePlaywright())) {
             log.debug("Принудительное использование Playwright для URL: {}", url);
@@ -304,9 +301,24 @@ public class RedirectFinderService {
             }
         }
 
-        for (RedirectStrategy strategy : strategies) {
-            PageStatus previousStatus = lastResult != null ? lastResult.getStatus() : null;
+        return applyStrategies(url, strategies, dto.getMaxRedirects(), dto.getTimeoutMs());
+    }
 
+    /**
+     * Единая fallback-логика перебора стратегий.
+     * REDIRECT, NOT_FOUND → возвращаем сразу.
+     * OK + URL изменился → возвращаем (HTTP-редирект найден).
+     * OK + URL не изменился + non-browser → продолжаем (возможен JS/meta-refresh).
+     * OK + URL не изменился + browser + HTTP 3xx → продолжаем (аномалия: сайт детектировал браузер).
+     * OK + URL не изменился + browser + HTTP 2xx → возвращаем (редиректов точно нет).
+     * BLOCKED или ERROR → пробуем следующую стратегию.
+     */
+    private RedirectResult applyStrategies(String url, List<RedirectStrategy> sortedStrategies,
+                                           int maxRedirects, int timeoutMs) {
+        RedirectResult lastResult = null;
+        PageStatus previousStatus = null;
+
+        for (RedirectStrategy strategy : sortedStrategies) {
             if (!strategy.canHandle(url, previousStatus)) {
                 log.debug("Стратегия {} не может обработать URL: {} (предыдущий статус: {})",
                         strategy.getStrategyName(), url, previousStatus);
@@ -315,49 +327,49 @@ public class RedirectFinderService {
 
             log.debug("Пробуем стратегию: {} для URL: {}", strategy.getStrategyName(), url);
 
-            RedirectResult result = strategy.followRedirects(url, dto.getMaxRedirects(), dto.getTimeoutMs());
-            lastResult = result;
+            try {
+                RedirectResult result = strategy.followRedirects(url, maxRedirects, timeoutMs);
+                lastResult = result;
+                previousStatus = result.getStatus();
 
-            // Если получили успешный результат или не можем улучшить - возвращаем
-            if (result.getStatus() == PageStatus.REDIRECT ||
-                result.getStatus() == PageStatus.NOT_FOUND) {
-                return result;
-            }
-
-            // Для статуса OK проверяем: если это curl и URL не изменился,
-            // возможно есть JavaScript-редирект - пробуем Playwright
-            if (result.getStatus() == PageStatus.OK) {
-                if ("curl".equals(strategy.getStrategyName()) &&
-                    url.equals(result.getFinalUrl())) {
-                    log.debug("Curl вернул OK без изменения URL, возможен JS-редирект. Пробуем Playwright.");
-                    continue; // Продолжаем к следующей стратегии (Playwright)
+                if (result.getStatus() == PageStatus.REDIRECT || result.getStatus() == PageStatus.NOT_FOUND) {
+                    return result;
                 }
-                return result;
-            }
 
-            // Если заблокированы, пробуем следующую стратегию
-            if (result.getStatus() == PageStatus.BLOCKED) {
-                log.debug("URL заблокирован стратегией {}, пробуем следующую", strategy.getStrategyName());
-                continue;
-            }
+                if (result.getStatus() == PageStatus.OK) {
+                    // URL изменился → редирект найден, возвращаем
+                    if (!url.equals(result.getFinalUrl())) {
+                        return result;
+                    }
+                    // Non-browser стратегия (curl, webclient, httpclient, jsoup) вернула OK без изменения URL →
+                    // возможен JS-редирект или meta-refresh, пробуем следующую стратегию
+                    if (!strategy.isBrowserBased()) {
+                        log.debug("{} вернул OK без изменения URL, пробуем следующую стратегию (возможен JS/meta-refresh)",
+                                strategy.getStrategyName());
+                        continue;
+                    }
+                    // Browser стратегия: URL не изменился, но HTTP код — редирект (3xx) →
+                    // сайт обнаружил браузер и вернул его обратно; пробуем следующий браузер
+                    Integer httpCode = result.getHttpCode();
+                    if (httpCode != null && httpCode >= 300 && httpCode < 400) {
+                        log.debug("{} вернул HTTP {} без изменения URL — аномальный редирект, пробуем следующую стратегию",
+                                strategy.getStrategyName(), httpCode);
+                        continue;
+                    }
+                    // Browser подтвердил: URL не изменился, HTTP 2xx → редиректов нет
+                    return result;
+                }
 
-            // При других ошибках тоже пробуем следующую стратегию
-            log.debug("Стратегия {} вернула статус {}, пробуем следующую",
-                    strategy.getStrategyName(), result.getStatus());
+                // BLOCKED или ERROR → пробуем следующую стратегию
+                log.debug("Стратегия {} вернула статус {}, пробуем следующую",
+                        strategy.getStrategyName(), result.getStatus());
+            } catch (Exception e) {
+                log.warn("Стратегия {} не смогла обработать {}: {}",
+                        strategy.getStrategyName(), url, e.getMessage());
+            }
         }
 
-        // Если все стратегии не сработали, возвращаем последний результат
-        return lastResult != null ? lastResult :
-                RedirectResult.builder()
-                        .originalUrl(url)
-                        .finalUrl(url)
-                        .redirectCount(0)
-                        .status(PageStatus.ERROR)
-                        .errorMessage("Все стратегии обработки не сработали")
-                        .startTime(System.currentTimeMillis())
-                        .endTime(System.currentTimeMillis())
-                        .strategy("none")
-                        .build();
+        return lastResult != null ? lastResult : buildErrorResult(url, "Все стратегии не сработали");
     }
     
     String getColumnValue(List<String> row, Integer columnIndex) {
@@ -398,17 +410,7 @@ public class RedirectFinderService {
     
     private byte[] generateResultFile(List<RedirectResult> results, RedirectFinderDto dto, FileMetadata metadata) {
         try {
-            log.debug("Генерируем результирующий файл в формате: {}", dto.getOutputFormat());
-            
-            // Простое создание CSV для MVP
-            if ("csv".equalsIgnoreCase(dto.getOutputFormat())) {
-                return generateCsvFile(results);
-            } else {
-                // Для Excel пока возвращаем CSV
-                log.warn("Excel формат пока не реализован, возвращаем CSV");
-                return generateCsvFile(results);
-            }
-            
+            return generateCsvFile(results);
         } catch (Exception e) {
             log.error("Ошибка генерации результирующего файла", e);
             throw new RuntimeException("Не удалось сгенерировать результат", e);
@@ -580,7 +582,7 @@ public class RedirectFinderService {
                 log.error("Ошибка обработки URL {}: {}", i + 1, e.getMessage(), e);
                 
                 // Добавляем результат с ошибкой
-                RedirectResult errorResult = buildAsyncErrorResult(urlData.getUrl(), e.getMessage());
+                RedirectResult errorResult = buildErrorResult(urlData.getUrl(), e.getMessage());
                 errorResult.setId(urlData.getId());
                 errorResult.setModel(urlData.getModel());
                 results.add(errorResult);
@@ -596,26 +598,13 @@ public class RedirectFinderService {
     }
 
     /**
-     * Обработка одного URL с параметрами
+     * Обработка одного URL с параметрами (async-путь) — делегирует в applyStrategies
      */
     private RedirectResult processUrlWithStrategies(String url, List<RedirectStrategy> strategies, int maxRedirects, int timeoutMs) {
-        for (RedirectStrategy strategy : strategies) {
-            if (!strategy.canHandle(url, null)) {
-                continue;
-            }
-            
-            try {
-                return strategy.followRedirects(url, maxRedirects, timeoutMs);
-            } catch (Exception e) {
-                log.warn("Стратегия {} не смогла обработать URL {}: {}", 
-                        strategy.getStrategyName(), url, e.getMessage());
-            }
-        }
-        
-        return buildAsyncErrorResult(url, "Все стратегии не смогли обработать URL");
+        return applyStrategies(url, strategies, maxRedirects, timeoutMs);
     }
 
-    private RedirectResult buildAsyncErrorResult(String url, String errorMessage) {
+    private RedirectResult buildErrorResult(String url, String errorMessage) {
         return RedirectResult.builder()
                 .originalUrl(url)
                 .finalUrl(url)
@@ -624,7 +613,7 @@ public class RedirectFinderService {
                 .errorMessage(errorMessage)
                 .startTime(System.currentTimeMillis())
                 .endTime(System.currentTimeMillis())
-                .strategy("error")
+                .strategy("none")
                 .build();
     }
 

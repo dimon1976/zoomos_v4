@@ -2,28 +2,31 @@
     "java.compile.nullAnalysis.mode": "automatic",
     "java.debug.settings.onBuildFailureProceed": true,
     "java.configuration.updateBuildConfiguration": "automatic",
-
     // Terminal settings for UTF-8 support
     "terminal.integrated.defaultProfile.windows": "Command Prompt",
     "terminal.integrated.profiles.windows": {
         "Command Prompt": {
             "path": "C:\\Windows\\System32\\cmd.exe",
-            "args": ["/k", "chcp 65001"],
+            "args": [
+                "/k",
+                "chcp 65001"
+            ],
             "icon": "terminal-cmd"
         },
         "PowerShell": {
             "source": "PowerShell",
-            "args": ["-Command", "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8"]
+            "args": [
+                "-Command",
+                "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8"
+            ]
         }
     },
     "terminal.integrated.env.windows": {
         "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dconsole.encoding=UTF-8"
     },
-
     // File encoding
     "files.encoding": "utf8",
     "files.autoGuessEncoding": true,
-
     // Java settings
     "java.home": "c:\\java\\jdk17",
     "java.configuration.runtimes": [
@@ -36,14 +39,13 @@
     "java.debug.logLevel": "INFO",
     "java.debug.settings.console": "integratedTerminal",
     "java.debug.settings.forceBuildBeforeLaunch": false,
-
     // Maven settings
     "maven.terminal.useJavaHome": true,
     "maven.executable.path": "mvn",
     "java.compile.sourceCompatibility": "17",
     "java.compile.targetCompatibility": "17",
-
     // Spring Boot settings
     "spring-boot.ls.problem.application-properties.UNKNOWN_PROPERTY": "ignore",
-    "claudeCode.useTerminal": true
+    "claudeCode.useTerminal": true,
+    "claudeCodeChat.permissions.yoloMode": false
 }

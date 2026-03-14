@@ -190,14 +190,8 @@ public class RedirectFinderController {
             
             // Формирование имени файла и типа контента
             String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
-            String fileName;
+            String fileName = "redirect-finder-result_" + timestamp + ".csv";
             MediaType contentType = MediaType.APPLICATION_OCTET_STREAM;
-            
-            if ("csv".equalsIgnoreCase(dto.getOutputFormat())) {
-                fileName = "redirect-finder-result_" + timestamp + ".csv";
-            } else {
-                fileName = "redirect-finder-result_" + timestamp + ".xlsx";
-            }
             
             log.info("Обработка редиректов завершена. Отдаем файл: {}", fileName);
             

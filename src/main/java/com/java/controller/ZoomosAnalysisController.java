@@ -17,6 +17,8 @@ import com.java.service.ZoomosParserService;
 import com.java.service.ZoomosSchedulerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +32,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.Comparator;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -60,10 +63,16 @@ public class ZoomosAnalysisController {
     private final ZoomosParserPatternRepository parserPatternRepository;
     private final RedmineService redmineService;
 
+    @Autowired
+    @Qualifier("zoomosCheckExecutor")
+    private java.util.concurrent.Executor zoomosCheckExecutor;
+
     @GetMapping({"", "/"})
     public String index(Model model) {
         List<ZoomosShop> allShops = parserService.getAllShops();
-        List<ZoomosShop> shops = allShops.stream().filter(ZoomosShop::isEnabled).collect(Collectors.toList());
+        List<ZoomosShop> shops = allShops.stream().filter(ZoomosShop::isEnabled)
+                .sorted(Comparator.comparing(ZoomosShop::isPriority).reversed())
+                .collect(Collectors.toList());
         List<ZoomosShop> disabledShops = allShops.stream().filter(s -> !s.isEnabled()).collect(Collectors.toList());
 
         Map<Long, List<ZoomosCityId>> cityIdsMap = new java.util.LinkedHashMap<>();
@@ -99,6 +108,14 @@ public class ZoomosAnalysisController {
         model.addAttribute("prioritySiteNames", prioritySiteNames);
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
         return "zoomos/index";
+    }
+
+    /** AJAX-toggle приоритетности магазина */
+    @PostMapping("/shops/{shopId}/priority")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> toggleShopPriority(@PathVariable Long shopId) {
+        boolean isPriority = parserService.togglePriority(shopId);
+        return ResponseEntity.ok(Map.of("success", true, "isPriority", isPriority));
     }
 
     /** AJAX-toggle расписания (для index.html без перезагрузки) — переключает ВСЕ расписания магазина */
@@ -477,7 +494,7 @@ public class ZoomosAnalysisController {
         try {
             String operationId = UUID.randomUUID().toString();
 
-            // Запускаем в фоне, чтобы не блокировать HTTP
+            // Запускаем в фоне через выделенный пул (для параллельного запуска нескольких магазинов)
             CompletableFuture.runAsync(() -> {
                 try {
                     checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, mae, tdt, tet, operationId);
@@ -490,7 +507,7 @@ public class ZoomosAnalysisController {
                 } catch (Exception e) {
                     log.error("Ошибка фоновой проверки: {}", e.getMessage(), e);
                 }
-            });
+            }, zoomosCheckExecutor);
 
             return ResponseEntity.ok(Map.of(
                     "success", true,
@@ -556,10 +573,32 @@ public class ZoomosAnalysisController {
         int errorGrowthThreshold = run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30;
         int minAbsoluteErrors = run.getMinAbsoluteErrors() != null ? run.getMinAbsoluteErrors() : 5;
 
+        // Baseline: вычисляем диапазон дат заранее (используется и в оценке групп, и в тренд-анализе)
+        int baselineDays = run.getBaselineDays() != null ? run.getBaselineDays() : 0;
+        ZonedDateTime baselineDatesFrom = null, baselineDatesTo = null;
+        if (baselineDays > 0) {
+            LocalDate blFrom = run.getDateFrom().minusDays(baselineDays);
+            LocalDate blTo   = run.getDateFrom().minusDays(1);
+            baselineDatesFrom = blFrom.atStartOfDay(ZoneOffset.UTC);
+            baselineDatesTo   = blTo.atTime(23, 59).atZone(ZoneOffset.UTC);
+        }
+
         Set<String> ignoreStockSites = knownSiteRepository.findAllByIgnoreStockTrue()
                 .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
         Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue()
                 .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+
+        // Предзагружаем baseline-записи текущего run один раз.
+        // Фильтруем по check_run_id — иначе findForBaseline включает записи других run
+        // в те же даты, что даёт неверную медиану.
+        List<ZoomosParsingStats> baselineStatsList = parsingStatsRepository
+                .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
+        Map<String, List<ZoomosParsingStats>> baselineByKey = new LinkedHashMap<>();
+        for (ZoomosParsingStats s : baselineStatsList) {
+            String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")
+                    + "|" + (s.getAddressId() != null ? s.getAddressId() : "");
+            baselineByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
+        }
 
         // Группируем по site+city+address для оценки динамики.
         // Строки с addressId → отдельная группа внутри города (address-level проверка).
@@ -651,14 +690,24 @@ public class ZoomosAnalysisController {
                     }
                 }
             } else {
-                // Без фильтра: стандартный evaluateGroup
+                // Без фильтра: evaluateGroup с baseline-медианой
                 boolean ignoreStock = group.get(0).getSiteName() != null
                         && ignoreStockSites.contains(group.get(0).getSiteName());
+                ZoomosCheckService.MedianStats groupBaseline = null;
+                if (baselineDatesFrom != null) {
+                    String siteForBl = group.get(0).getSiteName();
+                    String cityForBl = group.get(0).getCityName();
+                    String addrForBl = group.get(0).getAddressId();
+                    String blKey = siteForBl + "|" + (cityForBl != null ? cityForBl : "")
+                            + "|" + (addrForBl != null ? addrForBl : "");
+                    List<ZoomosParsingStats> bl = baselineByKey.getOrDefault(blKey, Collections.emptyList());
+                    groupBaseline = checkService.computeBaselineMedian(bl);
+                }
                 status = checkService.evaluateGroup(group, dropThreshold, errorGrowthThreshold,
-                        minAbsoluteErrors, ignoreStock);
+                        minAbsoluteErrors, ignoreStock, groupBaseline);
                 if (!"OK".equals(status)) {
                     buildGroupIssues(group, status, dropThreshold, errorGrowthThreshold,
-                            minAbsoluteErrors, ignoreStock, issues, run.getShop().getShopName());
+                            minAbsoluteErrors, ignoreStock, groupBaseline, issues, run.getShop().getShopName());
                 }
             }
             siteCityStatuses.put(groupKey, status);
@@ -697,6 +746,29 @@ public class ZoomosAnalysisController {
                         a.getStartTime() != null && b.getStartTime() != null
                                 && a.getStartTime().isAfter(b.getStartTime()) ? a : b);
             }
+        }
+
+        // Batch pre-load для NOT_FOUND lookup — избегаем N+1 SQL
+        String[] expectedSiteNames = allCityIds.stream().map(ZoomosCityId::getSiteName)
+                .distinct().toArray(String[]::new);
+        Set<String> allExpectedAddrIds = new HashSet<>();
+        for (ZoomosCityId cid : allCityIds) {
+            allExpectedAddrIds.addAll(ZoomosCheckService.flattenAddressIds(
+                    ZoomosCheckService.parseAddressMapping(cid.getAddressIds())));
+        }
+        Map<String, ZoomosParsingStats> lastFinishedByAddrKey = new HashMap<>();
+        if (expectedSiteNames.length > 0 && !allExpectedAddrIds.isEmpty()) {
+            parsingStatsRepository.findLatestFinishedBySiteAndAddressIds(
+                    expectedSiteNames, allExpectedAddrIds.toArray(String[]::new))
+                    .forEach(s -> lastFinishedByAddrKey.put(s.getSiteName() + "|" + s.getAddressId(), s));
+        }
+        Map<String, ZoomosParsingStats> lastFinishedByCityBatchKey = new HashMap<>();
+        if (expectedSiteNames.length > 0) {
+            parsingStatsRepository.findLatestFinishedBySites(expectedSiteNames)
+                    .forEach(s -> {
+                        String cId = ZoomosCheckService.extractCityId(s.getCityName());
+                        if (cId != null) lastFinishedByCityBatchKey.putIfAbsent(s.getSiteName() + "|" + cId, s);
+                    });
         }
 
         for (ZoomosCityId cid : allCityIds) {
@@ -745,8 +817,8 @@ public class ZoomosAnalysisController {
                 if (ip == null && addrCity != null) {
                     ip = inProgressByCityKey.get(site + "|" + addrCity);
                 }
-                ZoomosParsingStats lastKnownAddr = (ip == null && addrCity != null)
-                        ? parsingStatsRepository.findLatestFinishedBySiteAndCityId(site, addrCity).orElse(null)
+                ZoomosParsingStats lastKnownAddr = (ip == null && aid != null)
+                        ? lastFinishedByAddrKey.get(site + "|" + aid)
                         : null;
                 addIssueStatus(issue, ip, lastKnownAddr);
                 if (ip == null && addrCity != null) {
@@ -771,7 +843,7 @@ public class ZoomosAnalysisController {
 
                 ZoomosParsingStats ip = inProgressByCityKey.get(site + "|" + cityId);
                 ZoomosParsingStats lastKnownCity = (ip == null)
-                        ? parsingStatsRepository.findLatestFinishedBySiteAndCityId(site, cityId).orElse(null)
+                        ? lastFinishedByCityBatchKey.get(site + "|" + cityId)
                         : null;
                 addIssueStatus(issue, ip, lastKnownCity);
                 if (ip == null) {
@@ -810,215 +882,14 @@ public class ZoomosAnalysisController {
             issues.add(issue);
         }
 
-        // Группируем по сайту (верхний уровень)
-        // Внутри каждой группы — по городу (для правильного отображения стрелок динамики)
-        Map<String, List<ZoomosParsingStats>> bySite = stats.stream()
-                .collect(Collectors.groupingBy(ZoomosParsingStats::getSiteName));
-        // Для сайтов с парсер-фильтром: добавляем незавершённые выкачки в таблицу,
-        // только если для сайта уже есть завершённые данные (чтобы не создавать дублей)
-        for (ZoomosParsingStats ip : inProgressStats) {
-            if (ip.getSiteName() != null
-                    && cityIdBySite.containsKey(ip.getSiteName())
-                    && bySite.containsKey(ip.getSiteName())) {
-                bySite.get(ip.getSiteName()).add(ip);
-            }
-        }
-
-        List<Map<String, Object>> groups = new ArrayList<>();
-
-        bySite.forEach((siteName, siteStats) -> {
-            // Худший статус по всем city в этом сайте (с учётом addressId в ключе)
-            String worstStatus = siteStats.stream()
-                    .map(s -> {
-                        String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
-                        if (s.getAddressId() != null && !s.getAddressId().isBlank()) key += "|" + s.getAddressId();
-                        return siteCityStatuses.getOrDefault(key, "OK");
-                    })
-                    .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
-                    .orElse("OK");
-
-            String checkType = siteStats.get(0).getCheckType();
-
-            // Подгруппы по городу, каждая отсортирована DESC по startTime
-            // Сохраняем порядок: худшие города первыми
-            Map<String, List<ZoomosParsingStats>> byCity = siteStats.stream()
-                    .collect(Collectors.groupingBy(
-                            s -> s.getCityName() != null ? s.getCityName() : "",
-                            LinkedHashMap::new, Collectors.toList()));
-
-            List<Map<String, Object>> cityGroups = new ArrayList<>();
-            byCity.forEach((cityName, cityStats) -> {
-                cityStats.sort(Comparator.comparing(
-                        (ZoomosParsingStats s) -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now())
-                        .reversed());
-
-                // Подгруппируем по addressId внутри города
-                // "" — строки без адреса (city-level), остальные — отдельные адреса
-                Map<String, List<ZoomosParsingStats>> byAddress = new LinkedHashMap<>();
-                for (ZoomosParsingStats s : cityStats) {
-                    String addrKey = s.getAddressId() != null && !s.getAddressId().isBlank()
-                            ? s.getAddressId() : "";
-                    byAddress.computeIfAbsent(addrKey, k -> new ArrayList<>()).add(s);
-                }
-
-                List<Map<String, Object>> addressGroups = new ArrayList<>();
-                byAddress.forEach((addrId, addrStats) -> {
-                    addrStats.sort(Comparator.comparing(
-                            (ZoomosParsingStats s) -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now())
-                            .reversed());
-                    String addrStatusKey = siteName + "|" + cityName
-                            + (addrId.isEmpty() ? "" : "|" + addrId);
-                    String addrStatus = siteCityStatuses.getOrDefault(addrStatusKey, "OK");
-                    // Имя адреса из первой строки с addressName
-                    String addrName = addrStats.stream()
-                            .filter(s -> s.getAddressName() != null)
-                            .findFirst().map(ZoomosParsingStats::getAddressName).orElse(null);
-                    Map<String, Object> ag = new LinkedHashMap<>();
-                    ag.put("addressId", addrId.isEmpty() ? null : addrId);
-                    ag.put("addressName", addrName);
-                    ag.put("status", addrStatus);
-                    ag.put("stats", addrStats);
-                    addressGroups.add(ag);
-                });
-                // Сортируем адресные группы: ERROR первыми
-                addressGroups.sort(Comparator.comparingInt(ag -> statusPriority((String) ag.get("status"))));
-
-                // Если в городе есть хотя бы один адрес с 100% завершением → город OK
-                boolean anyFullyComplete = cityStats.stream()
-                        .anyMatch(s -> Boolean.TRUE.equals(s.getIsFinished())
-                                && s.getCompletionPercent() != null && s.getCompletionPercent() == 100
-                                && s.getAddressId() != null);
-                String cityStatus = anyFullyComplete ? "OK"
-                        : addressGroups.stream()
-                                .map(ag -> (String) ag.get("status"))
-                                .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
-                                .orElse(siteCityStatuses.getOrDefault(siteName + "|" + cityName, "OK"));
-
-                Map<String, Object> cg = new LinkedHashMap<>();
-                cg.put("cityName", cityName.isEmpty() ? null : cityName);
-                cg.put("status", cityStatus);
-                cg.put("stats", cityStats);
-                cg.put("addressGroups", addressGroups);
-                cityGroups.add(cg);
-            });
-            // Сортируем города: ERROR первыми
-            cityGroups.sort(Comparator.comparingInt(cg -> statusPriority((String) cg.get("status"))));
-
-            Map<String, Object> g = new LinkedHashMap<>();
-            g.put("siteName", siteName);
-            g.put("checkType", checkType);
-            g.put("status", worstStatus);
-            g.put("count", siteStats.size());
-            g.put("cityGroups", cityGroups);
-            g.put("isPriority", prioritySiteNames.contains(siteName));
-            groups.add(g);
-        });
-
-        // Сортируем группы: приоритетные первые, затем ERROR → WARNING → OK, внутри — по имени сайта
-        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> Boolean.TRUE.equals(g.get("isPriority")) ? 0 : 1)
-                .thenComparingInt(g -> statusPriority((String) g.get("status")))
-                .thenComparing(g -> (String) g.get("siteName")));
-
-        // Добавляем NOT_FOUND/IN_PROGRESS пары в groups для отображения в Блоке 3
-        Map<String, Map<String, Object>> groupBySite = new LinkedHashMap<>();
-        for (Map<String, Object> g : groups) {
-            groupBySite.put((String) g.get("siteName"), g);
-        }
-        for (Map<String, Object> issue : issues) {
-            String iType = (String) issue.get("type");
-            if (!"NOT_FOUND".equals(iType) && !"IN_PROGRESS".equals(iType)) continue;
-            String iSite      = (String) issue.get("site");
-            String iCity      = (String) issue.get("city");
-            String iCityId    = (String) issue.get("cityId");
-            String iAddrId    = (String) issue.get("addressId");
-            String iAddrName  = (String) issue.get("addressName");
-            String iMsg       = (String) issue.get("message");
-            String iCheckType = (String) issue.get("checkType");
-
-            // Найти или создать site group
-            Map<String, Object> siteGroup = groupBySite.computeIfAbsent(iSite, k -> {
-                Map<String, Object> ng = new LinkedHashMap<>();
-                ng.put("siteName", iSite);
-                ng.put("checkType", iCheckType);
-                ng.put("status", iType);
-                ng.put("count", 0);
-                ng.put("cityGroups", new ArrayList<>());
-                groups.add(ng);
-                return ng;
-            });
-
-            // Найти или создать city group по cityId
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> siteGroupCityGroups = (List<Map<String, Object>>) siteGroup.get("cityGroups");
-            Map<String, Object> cityGroup = siteGroupCityGroups.stream()
-                    .filter(cg -> {
-                        String cgCityName = (String) cg.get("cityName");
-                        String cgCityId = ZoomosCheckService.extractCityId(cgCityName);
-                        return iCityId.equals(cgCityId) || iCityId.equals(cgCityName) || iCity.equals(cgCityName);
-                    })
-                    .findFirst()
-                    .orElseGet(() -> {
-                        Map<String, Object> ncg = new LinkedHashMap<>();
-                        ncg.put("cityName", iCity);
-                        ncg.put("status", iType);
-                        ncg.put("stats", new ArrayList<>());
-                        ncg.put("addressGroups", new ArrayList<>());
-                        siteGroupCityGroups.add(ncg);
-                        return ncg;
-                    });
-
-            // Добавить address group с пустыми stats и issueMessage (если нет дубля)
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> cityGroupAddrGroups = (List<Map<String, Object>>) cityGroup.get("addressGroups");
-            boolean alreadyExists = cityGroupAddrGroups.stream().anyMatch(ag ->
-                    iAddrId != null ? iAddrId.equals(ag.get("addressId")) : ag.get("addressId") == null);
-            if (!alreadyExists) {
-                Map<String, Object> ag = new LinkedHashMap<>();
-                ag.put("addressId", iAddrId);
-                ag.put("addressName", iAddrName);
-                ag.put("status", iType);
-                ag.put("stats", new ArrayList<>());
-                ag.put("issueMessage", iMsg);
-                ag.put("inProgressStat", issue.get("inProgress"));
-                cityGroupAddrGroups.add(ag);
-            }
-        }
-
-        // Пересортировать все уровни с учётом новых записей
-        for (Map<String, Object> g : groups) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> cgs = (List<Map<String, Object>>) g.get("cityGroups");
-            for (Map<String, Object> cg : cgs) {
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> ags = (List<Map<String, Object>>) cg.get("addressGroups");
-                ags.sort(Comparator.comparingInt(ag -> statusPriority((String) ag.get("status"))));
-                String worstCityStatus = ags.stream().map(ag -> (String) ag.get("status"))
-                        .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
-                        .orElse((String) cg.get("status"));
-                cg.put("status", worstCityStatus);
-            }
-            cgs.sort(Comparator.comparingInt(cg -> statusPriority((String) cg.get("status"))));
-            String worstSiteStatus = cgs.stream().map(cg -> (String) cg.get("status"))
-                    .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
-                    .orElse((String) g.get("status"));
-            g.put("status", worstSiteStatus);
-        }
-        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> Boolean.TRUE.equals(g.get("isPriority")) ? 0 : 1)
-                .thenComparingInt(g -> statusPriority((String) g.get("status")))
-                .thenComparing(g -> (String) g.get("siteName")));
-
         boolean canDeliver = issues.stream()
-                .noneMatch(i -> "ERROR".equals(i.get("type"))
-                        || "NOT_FOUND".equals(i.get("type"))
-                        || "IN_PROGRESS".equals(i.get("type")));
+                .noneMatch(i -> "ERROR".equals(i.get("type")));
 
-        // ---- Исторический baseline-анализ ----
-        int baselineDays = run.getBaselineDays() != null ? run.getBaselineDays() : 0;
+        // ---- Исторический baseline-анализ (тренды) ----
+        // baselineDays и baselineDatesFrom/To уже вычислены выше
         if (baselineDays > 0) {
             LocalDate baselineFrom = run.getDateFrom().minusDays(baselineDays);
             LocalDate baselineTo   = run.getDateFrom().minusDays(1);
-            ZonedDateTime bFrom = baselineFrom.atStartOfDay(ZoneOffset.UTC);
-            ZonedDateTime bTo   = baselineTo.atTime(23, 59).atZone(ZoneOffset.UTC);
 
             model.addAttribute("baselineDays", baselineDays);
             model.addAttribute("baselineFrom", baselineFrom.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
@@ -1038,9 +909,9 @@ public class ZoomosAnalysisController {
                 String siteName = current.getSiteName();
                 String cityName = current.getCityName();
 
-                // Загружаем исторические данные для данного сайта+города
-                List<ZoomosParsingStats> historical = parsingStatsRepository
-                        .findForBaseline(siteName, cityName, bFrom, bTo);
+                // Используем предзагруженные baseline-записи текущего run
+                String blKey = siteName + "|" + (cityName != null ? cityName : "");
+                List<ZoomosParsingStats> historical = baselineByKey.getOrDefault(blKey, Collections.emptyList());
 
                 if (historical.size() < 3) continue; // недостаточно данных
 
@@ -1065,109 +936,18 @@ public class ZoomosAnalysisController {
                 }
             }
 
-            // Добавляем baseline-записи в таблицы деталей (Блок 3)
-            List<ZoomosParsingStats> baselineStatsList = parsingStatsRepository
-                    .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
-            if (!baselineStatsList.isEmpty()) {
-                // Группируем по site|cityName|addressId
-                Map<String, List<ZoomosParsingStats>> blBySca = new LinkedHashMap<>();
-                for (ZoomosParsingStats s : baselineStatsList) {
-                    String key = s.getSiteName() + "|"
-                            + (s.getCityName() != null ? s.getCityName() : "") + "|"
-                            + (s.getAddressId() != null ? s.getAddressId() : "");
-                    blBySca.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
-                }
-                // Прикрепляем к соответствующим address-группам
-                for (Map<String, Object> g : groups) {
-                    String sn = (String) g.get("siteName");
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> cgs = (List<Map<String, Object>>) g.get("cityGroups");
-                    for (Map<String, Object> cg : cgs) {
-                        String cn = cg.get("cityName") != null ? (String) cg.get("cityName") : "";
-                        @SuppressWarnings("unchecked")
-                        List<Map<String, Object>> ags = (List<Map<String, Object>>) cg.get("addressGroups");
-                        for (Map<String, Object> ag : ags) {
-                            String aid = ag.get("addressId") != null ? (String) ag.get("addressId") : "";
-                            List<ZoomosParsingStats> bl = blBySca.get(sn + "|" + cn + "|" + aid);
-                            if (bl != null && !bl.isEmpty()) {
-                                @SuppressWarnings("unchecked")
-                                List<ZoomosParsingStats> agStats = (List<ZoomosParsingStats>) ag.get("stats");
-                                agStats.addAll(bl);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // CSV для ИТ: сайт;город;тип;сообщение;ссылка_на_историю
-        DateTimeFormatter itDateFmt = DateTimeFormatter.ofPattern("dd.MM.yyyy");
-        String dateFromStr = run.getDateFrom().format(itDateFmt);
-        String dateToStr   = run.getDateTo().format(itDateFmt);
-        long ts = System.currentTimeMillis();
-
-        // Блочный формат: группируем по типу проблемы
-        List<Map<String, Object>> itErrors    = new ArrayList<>();
-        List<Map<String, Object>> itNotFound  = new ArrayList<>();
-        List<Map<String, Object>> itWarnings  = new ArrayList<>();
-        for (Map<String, Object> issue : issues) {
-            String t = (String) issue.get("type");
-            if ("TREND_WARNING".equals(t)) continue;
-            if ("ERROR".equals(t))                          itErrors.add(issue);
-            else if ("NOT_FOUND".equals(t) || "IN_PROGRESS".equals(t)) itNotFound.add(issue);
-            else if ("WARNING".equals(t))                   itWarnings.add(issue);
-        }
-
-        StringBuilder itText = new StringBuilder();
-        for (Map.Entry<String, List<Map<String, Object>>> block : java.util.Arrays.asList(
-                Map.entry("ОШИБКИ", itErrors),
-                Map.entry("НЕТ ДАННЫХ", itNotFound),
-                Map.entry("ПРЕДУПРЕЖДЕНИЯ", itWarnings)
-        )) {
-            if (block.getValue().isEmpty()) continue;
-            if (itText.length() > 0) itText.append("\n");
-            itText.append(block.getKey()).append("\n");
-
-            for (Map<String, Object> issue : block.getValue()) {
-                String site      = (String) issue.get("site");
-                String city      = (String) issue.get("city");
-                String msg       = (String) issue.get("message");
-                String type      = (String) issue.get("type");
-                String checkType = (String) issue.get("checkType");
-                String shopName  = (String) issue.get("shopName");
-                String cityId    = (String) issue.get("cityId");
-                String addressId = (String) issue.get("addressId");
-                if (cityId == null) cityId = "";
-                String addrParam = (addressId != null && !addressId.isBlank()) ? addressId : "";
-
-                String historyUrl = zoomosConfig.getBaseUrl()
-                        + "/shops-parser/" + site + "/parsing-history"
-                        + "?upd=" + ts
-                        + "&dateFrom=" + dateFromStr + "&dateTo=" + dateToStr
-                        + "&launchDate=&shop=" + ("API".equals(checkType) ? "-" : shopName)
-                        + "&site=&cityId=" + cityId + "&addressId=" + addrParam + "&accountId=&server=";
-
-                // Город с ID (например "3509 - Вологда") + адрес если задан
-                String cityDisplay = (city != null && !city.isBlank()) ? city.trim() : "";
-                if (!addrParam.isBlank()) cityDisplay += " (адрес " + addrParam + ")";
-
-                String shortMsg = buildShortItMessage(type, msg, addrParam);
-
-                // Строка: site — Город (ID)[ — проблема]
-                StringBuilder line = new StringBuilder(site != null ? site : "");
-                if (!cityDisplay.isBlank()) line.append(" — ").append(cityDisplay);
-                if (!shortMsg.isBlank()) line.append(" — ").append(shortMsg);
-                itText.append(line).append("\n");
-                itText.append("  ").append(historyUrl).append("\n");
-            }
         }
 
         // Считаем счётчики динамически из текущей оценки, чтобы не зависеть от устаревших run.warningCount
-        long liveOkCount      = siteCityStatuses.values().stream().filter("OK"::equals).count();
-        long liveWarnCount    = siteCityStatuses.values().stream().filter("WARNING"::equals).count();
-        long liveErrCount     = siteCityStatuses.values().stream().filter("ERROR"::equals).count();
+        long liveOkCount = 0, liveWarnCount = 0, liveErrCount = 0;
+        for (String s : siteCityStatuses.values()) {
+            if ("OK".equals(s))           liveOkCount++;
+            else if ("WARNING".equals(s)) liveWarnCount++;
+            else if ("ERROR".equals(s))   liveErrCount++;
+        }
+        // liveNotFoundCount — число городов/адресов, по которым нет данных (IN_PROGRESS или совсем нет)
         long liveNotFoundCount = issues.stream()
-                .filter(i -> "NOT_FOUND".equals(i.get("type")) || "IN_PROGRESS".equals(i.get("type")))
+                .filter(i -> Boolean.TRUE.equals(i.get("noData")))
                 .count();
 
         // Помечаем приоритетные сайты в issues
@@ -1176,47 +956,70 @@ public class ZoomosAnalysisController {
             issue.put("isPriority", site != null && prioritySiteNames.contains(site));
         }
 
-        // Сортируем issues: приоритетные первые, затем ERROR → WARNING → IN_PROGRESS → NOT_FOUND → TREND_WARNING
+        // Сортируем issues: приоритетные первые, затем ERROR → WARNING → TREND_WARNING
         issues.sort(Comparator.comparingInt((Map<?, ?> issue) -> Boolean.TRUE.equals(issue.get("isPriority")) ? 0 : 1)
                 .thenComparingInt(issue -> {
                     String t = (String) issue.get("type");
                     if ("ERROR".equals(t)) return 0;
                     if ("WARNING".equals(t)) return 1;
-                    if ("IN_PROGRESS".equals(t)) return 2;
-                    if ("NOT_FOUND".equals(t)) return 3;
-                    return 4; // TREND_WARNING
+                    return 2; // TREND_WARNING
                 }));
+
+        // Разделяем issues: главные (ERROR/WARNING) и тренды (TREND_WARNING)
+        List<Map<String, Object>> mainIssues  = issues.stream()
+                .filter(i -> !"TREND_WARNING".equals(i.get("type"))).toList();
+        List<Map<String, Object>> trendIssues = issues.stream()
+                .filter(i ->  "TREND_WARNING".equals(i.get("type"))).toList();
 
         // Карта siteName → parserInclude для отображения в колонке "Парсер" (только фильтр, не полный parserDescription)
         Map<String, String> parserIncludeBysite = new HashMap<>();
         cityIdBySite.forEach((site, cid) -> parserIncludeBysite.put(site, cid.getParserInclude()));
 
+        // Группируем mainIssues по сайту — для Block 2 (per-site collapsibles)
+        Map<String, List<Map<String, Object>>> issuesBySite = new LinkedHashMap<>();
+        for (Map<String, Object> issue : mainIssues) {
+            String site = (String) issue.get("site");
+            issuesBySite.computeIfAbsent(site, k -> new ArrayList<>()).add(issue);
+        }
+        // Счётчики для заголовков в Block 2
+        Map<String, Integer> errorCountBySite = new HashMap<>();
+        Map<String, Integer> warnCountBySite  = new HashMap<>();
+        for (Map<String, Object> issue : mainIssues) {
+            String site = (String) issue.get("site");
+            if ("ERROR".equals(issue.get("type"))) errorCountBySite.merge(site, 1, Integer::sum);
+            else                                    warnCountBySite.merge(site, 1, Integer::sum);
+        }
+
         model.addAttribute("run", run);
-        model.addAttribute("groups", groups);
-        model.addAttribute("issues", issues);
+        model.addAttribute("issues", mainIssues);
+        model.addAttribute("issuesBySite", issuesBySite);
+        model.addAttribute("errorCountBySite", errorCountBySite);
+        model.addAttribute("warnCountBySite", warnCountBySite);
+        model.addAttribute("trendIssues", trendIssues);
         model.addAttribute("parserIncludeBysite", parserIncludeBysite);
         model.addAttribute("prioritySiteNames", prioritySiteNames);
         model.addAttribute("canDeliver", canDeliver);
-        model.addAttribute("itText", itText.toString().trim());
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
         model.addAttribute("liveOkCount", liveOkCount);
         model.addAttribute("liveWarnCount", liveWarnCount);
         model.addAttribute("liveErrCount", liveErrCount);
         model.addAttribute("liveNotFoundCount", liveNotFoundCount);
 
-        // Redmine: только из БД (статусы обновляются async через JS /check-batch после загрузки страницы)
+        // Redmine: загружаем из БД для всех сайтов (mainIssues + groups)
+        // Статусы обновляются async через JS /check-batch после загрузки страницы
         model.addAttribute("redmineEnabled", redmineService.isEnabled());
-        if (redmineService.isEnabled() && !issues.isEmpty()) {
-            Set<String> siteNames = issues.stream()
-                    .map(i -> (String) i.get("site"))
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
-            // Без refreshStatuses — только БД, быстро
-            List<com.java.model.entity.ZoomosRedmineIssue> existing =
-                    redmineService.findAllBySiteNames(siteNames);
-            model.addAttribute("redmineIssues",
-                    existing.stream().collect(Collectors.toMap(
-                            com.java.model.entity.ZoomosRedmineIssue::getSiteName, e -> e)));
+        if (redmineService.isEnabled()) {
+            Set<String> allSiteNames = new LinkedHashSet<>();
+            mainIssues.forEach(i -> { String s = (String) i.get("site"); if (s != null) allSiteNames.add(s); });
+            if (!allSiteNames.isEmpty()) {
+                List<com.java.model.entity.ZoomosRedmineIssue> existing =
+                        redmineService.findAllBySiteNames(allSiteNames);
+                model.addAttribute("redmineIssues",
+                        existing.stream().collect(Collectors.toMap(
+                                com.java.model.entity.ZoomosRedmineIssue::getSiteName, e -> e)));
+            } else {
+                model.addAttribute("redmineIssues", Collections.emptyMap());
+            }
         } else {
             model.addAttribute("redmineIssues", Collections.emptyMap());
         }
@@ -1224,18 +1027,291 @@ public class ZoomosAnalysisController {
         return "zoomos/check-results";
     }
 
+    /**
+     * Lazy-load endpoint: возвращает Thymeleaf-фрагмент "groupsBlock" со всеми деталями выкачки.
+     * Вызывается из JS при первом раскрытии блока деталей.
+     */
+    @GetMapping("/check/results/{runId}/groups")
+    public String checkResultsGroups(@PathVariable Long runId, Model model) {
+        ZoomosCheckRun run = checkRunRepository.findById(runId)
+                .orElseThrow(() -> new IllegalArgumentException("Проверка не найдена: " + runId));
+
+        List<ZoomosParsingStats> allStatsList = parsingStatsRepository
+                .findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(runId);
+
+        List<ZoomosParsingStats> stats = allStatsList.stream()
+                .filter(s -> !Boolean.FALSE.equals(s.getIsFinished()))
+                .collect(Collectors.toCollection(ArrayList::new));
+        List<ZoomosParsingStats> inProgressStats = allStatsList.stream()
+                .filter(s -> Boolean.FALSE.equals(s.getIsFinished()))
+                .collect(Collectors.toList());
+
+        LocalTime tFromTime = (run.getTimeFrom() != null && !run.getTimeFrom().isBlank())
+                ? LocalTime.parse(run.getTimeFrom()) : LocalTime.MIDNIGHT;
+        ZonedDateTime effectiveRangeStart = run.getDateFrom().atTime(tFromTime).atZone(ZoneOffset.UTC);
+        LocalDate checkDateTo = run.getDateTo();
+        inProgressStats.stream()
+                .filter(ip -> ip.getCompletionPercent() != null && ip.getCompletionPercent() >= 100
+                        && ip.getStartTime() != null
+                        && !ip.getStartTime().isBefore(effectiveRangeStart)
+                        && !ip.getStartTime().toLocalDate().isAfter(checkDateTo))
+                .forEach(stats::add);
+        ZonedDateTime effectiveRangeEnd = null;
+        if (run.getTimeTo() != null && !run.getTimeTo().isBlank()) {
+            effectiveRangeEnd = run.getDateTo().atTime(LocalTime.parse(run.getTimeTo())).atZone(ZoneOffset.UTC);
+        }
+        final ZonedDateTime finalRangeEnd = effectiveRangeEnd;
+        inProgressStats = inProgressStats.stream()
+                .filter(ip -> (ip.getCompletionPercent() == null || ip.getCompletionPercent() < 100)
+                        && (ip.getStartTime() == null
+                            || !ip.getStartTime().toLocalDate().isBefore(run.getDateFrom()))
+                        && (finalRangeEnd == null || ip.getStartTime() == null
+                            || !ip.getStartTime().isAfter(finalRangeEnd)))
+                .collect(Collectors.toList());
+
+        int dropThreshold = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
+        int errorGrowthThreshold = run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30;
+        int minAbsoluteErrors = run.getMinAbsoluteErrors() != null ? run.getMinAbsoluteErrors() : 5;
+
+        int baselineDays = run.getBaselineDays() != null ? run.getBaselineDays() : 0;
+        ZonedDateTime baselineDatesFrom = null;
+        if (baselineDays > 0) {
+            baselineDatesFrom = run.getDateFrom().minusDays(baselineDays).atStartOfDay(ZoneOffset.UTC);
+        }
+
+        Set<String> ignoreStockSites = knownSiteRepository.findAllByIgnoreStockTrue()
+                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+        Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue()
+                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+
+        List<ZoomosParsingStats> baselineStatsList = parsingStatsRepository
+                .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
+        Map<String, List<ZoomosParsingStats>> baselineByKey = new LinkedHashMap<>();
+        for (ZoomosParsingStats s : baselineStatsList) {
+            String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")
+                    + "|" + (s.getAddressId() != null ? s.getAddressId() : "");
+            baselineByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
+        }
+
+        Map<String, List<ZoomosParsingStats>> bySiteCity = stats.stream()
+                .collect(Collectors.groupingBy(s -> {
+                    String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
+                    if (s.getAddressId() != null && !s.getAddressId().isBlank()) key += "|" + s.getAddressId();
+                    return key;
+                }));
+
+        List<Map<String, Object>> issues = new ArrayList<>();
+
+        List<ZoomosCityId> allCityIds = parserService.getCityIds(run.getShop().getId())
+                .stream().filter(c -> Boolean.TRUE.equals(c.getIsActive()))
+                .collect(Collectors.toList());
+        Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
+                .filter(c -> c.getParserInclude() != null && !c.getParserInclude().isBlank())
+                .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
+
+        // Evaluate siteCityStatuses
+        Map<String, String> siteCityStatuses = new LinkedHashMap<>();
+        for (Map.Entry<String, List<ZoomosParsingStats>> entry : bySiteCity.entrySet()) {
+            List<ZoomosParsingStats> group = new ArrayList<>(entry.getValue());
+            group.sort(Comparator.comparing(s -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now(),
+                    Comparator.naturalOrder()));
+            String groupKey = entry.getKey();
+            String siteName = groupKey.split("\\|")[0];
+            ZoomosCityId cidConfig = cityIdBySite.get(siteName);
+            String status;
+            if (cidConfig != null) {
+                List<ZoomosParsingStats> groupExt = new ArrayList<>(group);
+                final String siteNameForFilter = siteName;
+                inProgressStats.stream().filter(ip -> siteNameForFilter.equals(ip.getSiteName())).forEach(groupExt::add);
+                List<Map<String, Object>> incomplete = checkService.checkParserCompleteness(
+                        groupExt, cidConfig.getParserInclude(), cidConfig.getParserIncludeMode());
+                status = (incomplete == null || incomplete.isEmpty()) ? "OK" : "ERROR";
+            } else {
+                boolean ignoreStock = group.get(0).getSiteName() != null
+                        && ignoreStockSites.contains(group.get(0).getSiteName());
+                ZoomosCheckService.MedianStats groupBaseline = null;
+                if (baselineDatesFrom != null) {
+                    String siteForBl = group.get(0).getSiteName();
+                    String cityForBl = group.get(0).getCityName();
+                    String addrForBl = group.get(0).getAddressId();
+                    String blKey = siteForBl + "|" + (cityForBl != null ? cityForBl : "")
+                            + "|" + (addrForBl != null ? addrForBl : "");
+                    groupBaseline = checkService.computeBaselineMedian(
+                            baselineByKey.getOrDefault(blKey, Collections.emptyList()));
+                }
+                status = checkService.evaluateGroup(group, dropThreshold, errorGrowthThreshold,
+                        minAbsoluteErrors, ignoreStock, groupBaseline);
+                if (!"OK".equals(status)) {
+                    buildGroupIssues(group, status, dropThreshold, errorGrowthThreshold,
+                            minAbsoluteErrors, ignoreStock, groupBaseline, issues, run.getShop().getShopName());
+                }
+            }
+            siteCityStatuses.put(groupKey, status);
+        }
+
+        // Batch pre-load NOT_FOUND
+        String[] expectedSiteNames = allCityIds.stream().map(ZoomosCityId::getSiteName)
+                .distinct().toArray(String[]::new);
+        Set<String> allExpectedAddrIds = new HashSet<>();
+        for (ZoomosCityId cid : allCityIds) {
+            allExpectedAddrIds.addAll(ZoomosCheckService.flattenAddressIds(
+                    ZoomosCheckService.parseAddressMapping(cid.getAddressIds())));
+        }
+        Map<String, ZoomosParsingStats> lastFinishedByAddrKey = new HashMap<>();
+        if (expectedSiteNames.length > 0 && !allExpectedAddrIds.isEmpty()) {
+            parsingStatsRepository.findLatestFinishedBySiteAndAddressIds(
+                    expectedSiteNames, allExpectedAddrIds.toArray(String[]::new))
+                    .forEach(s -> lastFinishedByAddrKey.put(s.getSiteName() + "|" + s.getAddressId(), s));
+        }
+        Map<String, ZoomosParsingStats> lastFinishedByCityBatchKey = new HashMap<>();
+        if (expectedSiteNames.length > 0) {
+            parsingStatsRepository.findLatestFinishedBySites(expectedSiteNames)
+                    .forEach(s -> {
+                        String cId = ZoomosCheckService.extractCityId(s.getCityName());
+                        if (cId != null) lastFinishedByCityBatchKey.putIfAbsent(s.getSiteName() + "|" + cId, s);
+                    });
+        }
+
+        // Collect NOT_FOUND issues (same logic as checkResults)
+        Set<String> foundCityKeys = new HashSet<>();
+        Set<String> foundAddressKeys = new HashSet<>();
+        Map<String, String> addressToCityFromData = new HashMap<>();
+        for (ZoomosParsingStats s : stats) {
+            String cId = ZoomosCheckService.extractCityId(s.getCityName());
+            if (cId != null) foundCityKeys.add(s.getSiteName() + "|" + cId);
+            if (s.getAddressId() != null && !s.getAddressId().isBlank()) {
+                foundAddressKeys.add(s.getSiteName() + "|" + s.getAddressId());
+                if (cId != null) addressToCityFromData.put(s.getSiteName() + "|" + s.getAddressId(), cId);
+            }
+        }
+        Map<String, ZoomosParsingStats> inProgressByCityKey = new HashMap<>();
+        for (ZoomosParsingStats ip : inProgressStats) {
+            String cId = ZoomosCheckService.extractCityId(ip.getCityName());
+            if (cId != null) {
+                String key = ip.getSiteName() + "|" + cId;
+                inProgressByCityKey.merge(key, ip, (a, b) ->
+                        a.getStartTime() != null && b.getStartTime() != null
+                                && a.getStartTime().isAfter(b.getStartTime()) ? a : b);
+            }
+        }
+        Map<String, ZoomosParsingStats> inProgressByAddrKey = new HashMap<>();
+        for (ZoomosParsingStats ip : inProgressStats) {
+            if (ip.getAddressId() != null && !ip.getAddressId().isBlank()) {
+                String key = ip.getSiteName() + "|" + ip.getAddressId();
+                inProgressByAddrKey.merge(key, ip, (a, b) ->
+                        a.getStartTime() != null && b.getStartTime() != null
+                                && a.getStartTime().isAfter(b.getStartTime()) ? a : b);
+            }
+        }
+        for (ZoomosCityId cid : allCityIds) {
+            String site = cid.getSiteName();
+            Set<String> expectedCities = ZoomosCheckService.parseCommaSeparated(cid.getCityIds());
+            Map<String, Set<String>> addrMapping = ZoomosCheckService.parseAddressMapping(cid.getAddressIds());
+            Set<String> addressCoveredCities = new HashSet<>();
+            Map<String, String> addrToCityResolved = new HashMap<>();
+            for (Map.Entry<String, Set<String>> addrEntry : addrMapping.entrySet()) {
+                String mappedCity = addrEntry.getKey();
+                for (String aid : addrEntry.getValue()) {
+                    String resolvedCity = !mappedCity.isEmpty() ? mappedCity
+                            : addressToCityFromData.get(site + "|" + aid);
+                    if (resolvedCity != null) {
+                        addrToCityResolved.put(aid, resolvedCity);
+                        addressCoveredCities.add(resolvedCity);
+                    }
+                }
+            }
+            Set<String> allExpectedAddresses = ZoomosCheckService.flattenAddressIds(addrMapping);
+            for (String aid : allExpectedAddresses) {
+                if (foundAddressKeys.contains(site + "|" + aid)) continue;
+                String addrCity = addrToCityResolved.get(aid);
+                Map<String, Object> issue = new LinkedHashMap<>();
+                issue.put("site", site); issue.put("city", addrCity != null ? addrCity : "");
+                issue.put("cityId", addrCity != null ? addrCity : "");
+                issue.put("addressId", aid);
+                issue.put("checkType", cid.getCheckType()); issue.put("shopName", run.getShop().getShopName());
+                ZoomosParsingStats ip = inProgressByAddrKey.get(site + "|" + aid);
+                if (ip == null && addrCity != null) ip = inProgressByCityKey.get(site + "|" + addrCity);
+                ZoomosParsingStats lastKnownAddr = ip == null ? lastFinishedByAddrKey.get(site + "|" + aid) : null;
+                addIssueStatus(issue, ip, lastKnownAddr);
+                if (ip == null && addrCity != null) {
+                    parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, addrCity)
+                            .filter(curIp -> curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)
+                            .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
+                }
+                issues.add(issue);
+            }
+            for (String cityId : expectedCities) {
+                if (addressCoveredCities.contains(cityId)) continue;
+                if (foundCityKeys.contains(site + "|" + cityId)) continue;
+                Map<String, Object> issue = new LinkedHashMap<>();
+                issue.put("site", site); issue.put("city", cityId); issue.put("cityId", cityId);
+                issue.put("checkType", cid.getCheckType()); issue.put("shopName", run.getShop().getShopName());
+                ZoomosParsingStats ip = inProgressByCityKey.get(site + "|" + cityId);
+                ZoomosParsingStats lastKnownCity = ip == null ? lastFinishedByCityBatchKey.get(site + "|" + cityId) : null;
+                addIssueStatus(issue, ip, lastKnownCity);
+                if (ip == null) {
+                    parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, cityId)
+                            .filter(curIp -> curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)
+                            .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
+                }
+                issues.add(issue);
+            }
+        }
+
+        List<Map<String, Object>> groups = buildGroups(stats, inProgressStats, cityIdBySite,
+                siteCityStatuses, issues, prioritySiteNames, baselineStatsList);
+
+        // Baseline dates for separator in table
+        if (baselineDays > 0) {
+            model.addAttribute("baselineFrom",
+                    run.getDateFrom().minusDays(baselineDays).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
+            model.addAttribute("baselineTo",
+                    run.getDateFrom().minusDays(1).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
+        }
+
+        Map<String, String> parserIncludeBysite = new HashMap<>();
+        cityIdBySite.forEach((site, cid) -> parserIncludeBysite.put(site, cid.getParserInclude()));
+
+        model.addAttribute("run", run);
+        model.addAttribute("groups", groups);
+        model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
+        model.addAttribute("parserIncludeBysite", parserIncludeBysite);
+        model.addAttribute("prioritySiteNames", prioritySiteNames);
+        model.addAttribute("redmineEnabled", redmineService.isEnabled());
+        if (redmineService.isEnabled()) {
+            Set<String> allSiteNames = groups.stream()
+                    .map(g -> (String) g.get("siteName"))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            if (!allSiteNames.isEmpty()) {
+                List<com.java.model.entity.ZoomosRedmineIssue> existing =
+                        redmineService.findAllBySiteNames(allSiteNames);
+                model.addAttribute("redmineIssues",
+                        existing.stream().collect(Collectors.toMap(
+                                com.java.model.entity.ZoomosRedmineIssue::getSiteName, e -> e)));
+            } else {
+                model.addAttribute("redmineIssues", Collections.emptyMap());
+            }
+        } else {
+            model.addAttribute("redmineIssues", Collections.emptyMap());
+        }
+
+        return "zoomos/check-results-groups :: groupsBlock";
+    }
+
     private void buildGroupIssues(List<ZoomosParsingStats> sortedAsc, String groupStatus,
                                     int dropThreshold, int errorGrowthThreshold,
                                     int minAbsoluteErrors, boolean ignoreStock,
+                                    ZoomosCheckService.MedianStats baseline,
                                     List<Map<String, Object>> issues, String shopName) {
         ZoomosParsingStats newest = sortedAsc.get(sortedAsc.size() - 1);
+        ZoomosParsingStats prev   = sortedAsc.size() >= 2 ? sortedAsc.get(sortedAsc.size() - 2) : null;
 
-        String siteName   = newest.getSiteName();
-        String cityName   = newest.getCityName();
-        String checkType  = newest.getCheckType();
-        String addressId  = newest.getAddressId();
+        String siteName    = newest.getSiteName();
+        String cityName    = newest.getCityName();
+        String checkType   = newest.getCheckType();
+        String addressId   = newest.getAddressId();
         String addressName = newest.getAddressName();
-        // Извлекаем числовой ID города из "3509 - Вологда"
         String cityId = cityName != null && cityName.contains(" - ")
                 ? cityName.substring(0, cityName.indexOf(" - ")).trim()
                 : (cityName != null ? cityName.trim() : "");
@@ -1255,110 +1331,122 @@ public class ZoomosAnalysisController {
             issues.add(issue);
         }
 
-        // ERROR: одиночная запись, есть товары, но в наличии 0
-        if (!ignoreStock && sortedAsc.size() < 2
+        // WARNING (одиночная запись без baseline): товары есть, но в наличии 0 — нет с чем сравнить
+        if (!ignoreStock && prev == null && baseline == null
                 && newest.getInStock() != null && newest.getInStock() == 0
                 && newest.getTotalProducts() != null && newest.getTotalProducts() > 0) {
             Map<String, Object> issue = new LinkedHashMap<>();
             issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
             issue.put("addressId", addressId); issue.put("addressName", addressName);
             issue.put("checkType", checkType); issue.put("shopName", shopName);
-            issue.put("type", "ERROR");
-            issue.put("message", "В наличии: 0 из " + newest.getTotalProducts() + " товаров");
+            issue.put("type", "WARNING");
+            issue.put("message", "В наличии: 0 из " + newest.getTotalProducts() + " товаров (первая запись)");
             issues.add(issue);
         }
 
-        if (sortedAsc.size() < 2) return;
-        // Оцениваем только последнюю пару (текущее состояние)
-        ZoomosParsingStats prev = sortedAsc.get(sortedAsc.size() - 2);
+        if (prev == null && baseline == null) return;
 
-        // --- inStock-анализ (пропускается для сайтов с ignoreStock) ---
-        if (!ignoreStock) {
-            boolean alwaysZeroStock = sortedAsc.stream()
-                    .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
-            Integer prevStock = prev.getInStock();
+        boolean alwaysZeroInStock = sortedAsc.stream()
+                .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
+
+        // --- inStock-анализ (первичная метрика) ---
+        if (!ignoreStock && !alwaysZeroInStock) {
+            // Референс: медиана или предыдущая запись
+            Integer refInStock = (baseline != null && baseline.inStock() != null)
+                    ? baseline.inStock()
+                    : (prev != null ? prev.getInStock() : null);
+            boolean usingBaseline = baseline != null && baseline.inStock() != null;
             Integer newStock = newest.getInStock();
 
-            if (!alwaysZeroStock && newStock != null && newStock == 0) {
-                // Ищем последнее ненулевое значение в истории
-                int lastNonZero = sortedAsc.subList(0, sortedAsc.size() - 1).stream()
-                        .filter(s -> s.getInStock() != null && s.getInStock() > 0)
-                        .mapToInt(ZoomosParsingStats::getInStock).max().orElse(0);
-                String msg = lastNonZero > 0
-                        ? String.format("В наличии: %d → 0 (−100%%)", lastNonZero)
-                        : "В наличии: 0 (нет товаров в наличии)";
-                Map<String, Object> issue = new LinkedHashMap<>();
-                issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                issue.put("addressId", addressId); issue.put("addressName", addressName);
-                issue.put("checkType", checkType); issue.put("shopName", shopName);
-                issue.put("type", "ERROR");
-                issue.put("message", msg);
-                issues.add(issue);
-            } else if (!alwaysZeroStock && prevStock != null && prevStock > 0 && newStock != null) {
-                double drop = (double)(prevStock - newStock) / prevStock * 100;
-                if (drop > dropThreshold) {
+            if (refInStock != null && refInStock > 0 && newStock != null) {
+                if (newStock == 0) {
+                    // Ищем последнее ненулевое значение для сообщения
+                    int lastNonZero = usingBaseline ? refInStock
+                            : sortedAsc.subList(0, sortedAsc.size() - 1).stream()
+                                    .filter(s -> s.getInStock() != null && s.getInStock() > 0)
+                                    .mapToInt(ZoomosParsingStats::getInStock).max().orElse(refInStock);
+                    String prefix = usingBaseline ? String.format("[медиана: %d]", refInStock) : String.valueOf(lastNonZero);
                     Map<String, Object> issue = new LinkedHashMap<>();
                     issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
                     issue.put("addressId", addressId); issue.put("addressName", addressName);
                     issue.put("checkType", checkType); issue.put("shopName", shopName);
                     issue.put("type", "ERROR");
-                    issue.put("message", String.format("Падение 'В наличии': %d → %d (−%.0f%%)", prevStock, newStock, drop));
+                    issue.put("message", String.format("В наличии: %s → 0 (−100%%)", prefix));
                     issues.add(issue);
-                }
-            } else if (alwaysZeroStock) {
-                boolean hasAnyProducts = sortedAsc.stream()
-                        .anyMatch(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0);
-                if (hasAnyProducts) {
-                    Map<String, Object> issue = new LinkedHashMap<>();
-                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                    issue.put("addressId", addressId); issue.put("addressName", addressName);
-                    issue.put("checkType", checkType); issue.put("shopName", shopName);
-                    issue.put("type", "WARNING");
-                    issue.put("message", "В наличии: всегда 0 — нужна проверка");
-                    issues.add(issue);
+                } else {
+                    double drop = (double)(refInStock - newStock) / refInStock * 100;
+                    if (drop > dropThreshold) {
+                        String refLabel = usingBaseline ? String.format("[медиана: %d]", refInStock) : String.valueOf(refInStock);
+                        Map<String, Object> issue = new LinkedHashMap<>();
+                        issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                        issue.put("addressId", addressId); issue.put("addressName", addressName);
+                        issue.put("checkType", checkType); issue.put("shopName", shopName);
+                        issue.put("type", "ERROR");
+                        issue.put("message", String.format("Падение 'В наличии': %s → %d (−%.0f%%)", refLabel, newStock, drop));
+                        issues.add(issue);
+                    }
                 }
             }
-        }
-
-        // WARNING: рост ошибок (только если достигнут минимальный абсолютный порог)
-        int prevErr = prev.getErrorCount() != null ? prev.getErrorCount() : 0;
-        int newErr = newest.getErrorCount() != null ? newest.getErrorCount() : 0;
-        if (newErr >= minAbsoluteErrors) {
-            if (prevErr > 0 && newErr > prevErr) {
-                double growth = (double)(newErr - prevErr) / prevErr * 100;
-                if (growth > errorGrowthThreshold) {
-                    Map<String, Object> issue = new LinkedHashMap<>();
-                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                    issue.put("addressId", addressId); issue.put("addressName", addressName);
-                    issue.put("checkType", checkType); issue.put("shopName", shopName);
-                    issue.put("type", "WARNING");
-                    issue.put("message", String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErr, newErr, growth));
-                    issues.add(issue);
-                }
-            } else if (prevErr == 0) {
+            // alwaysZeroInStock=false но конкретной записи нет — предупреждаем только если есть товары
+        } else if (!ignoreStock && alwaysZeroInStock) {
+            boolean hasAnyProducts = sortedAsc.stream()
+                    .anyMatch(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0);
+            if (hasAnyProducts) {
                 Map<String, Object> issue = new LinkedHashMap<>();
                 issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
                 issue.put("addressId", addressId); issue.put("addressName", addressName);
                 issue.put("checkType", checkType); issue.put("shopName", shopName);
                 issue.put("type", "WARNING");
-                issue.put("message", String.format("Ошибки парсинга: 0 → %d", newErr));
+                issue.put("message", "В наличии: всегда 0 — нужна проверка");
                 issues.add(issue);
             }
         }
 
-        // WARNING: падение товаров
-        Integer prevTotal = prev.getTotalProducts();
-        Integer newTotal = newest.getTotalProducts();
-        if (prevTotal != null && newTotal != null && prevTotal > 0) {
-            double drop = (double)(prevTotal - newTotal) / prevTotal * 100;
-            if (drop > dropThreshold) {
-                Map<String, Object> issue = new LinkedHashMap<>();
-                issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                issue.put("addressId", addressId); issue.put("addressName", addressName);
-                issue.put("checkType", checkType); issue.put("shopName", shopName);
-                issue.put("type", "WARNING");
-                issue.put("message", String.format("Падение товаров: %d → %d (−%.0f%%)", prevTotal, newTotal, drop));
-                issues.add(issue);
+        // --- totalProducts (запасная метрика — только если inStock недоступен) ---
+        if (ignoreStock || alwaysZeroInStock) {
+            Integer refTotal = (baseline != null && baseline.totalProducts() != null)
+                    ? baseline.totalProducts()
+                    : (prev != null ? prev.getTotalProducts() : null);
+            boolean usingBaseline = baseline != null && baseline.totalProducts() != null;
+            Integer newTotal = newest.getTotalProducts();
+            if (refTotal != null && refTotal > 0 && newTotal != null) {
+                double drop = (double)(refTotal - newTotal) / refTotal * 100;
+                if (drop > dropThreshold) {
+                    String refLabel = usingBaseline ? String.format("[медиана: %d]", refTotal) : String.valueOf(refTotal);
+                    Map<String, Object> issue = new LinkedHashMap<>();
+                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                    issue.put("addressId", addressId); issue.put("addressName", addressName);
+                    issue.put("checkType", checkType); issue.put("shopName", shopName);
+                    issue.put("type", "ERROR");
+                    issue.put("message", String.format("Падение товаров: %s → %d (−%.0f%%)", refLabel, newTotal, drop));
+                    issues.add(issue);
+                }
+            }
+
+            // Ошибки парсинга — только когда inStock недоступен
+            int prevErr = prev != null && prev.getErrorCount() != null ? prev.getErrorCount() : 0;
+            int newErr  = newest.getErrorCount() != null ? newest.getErrorCount() : 0;
+            if (newErr >= minAbsoluteErrors) {
+                if (prevErr > 0 && newErr > prevErr) {
+                    double growth = (double)(newErr - prevErr) / prevErr * 100;
+                    if (growth > errorGrowthThreshold) {
+                        Map<String, Object> issue = new LinkedHashMap<>();
+                        issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                        issue.put("addressId", addressId); issue.put("addressName", addressName);
+                        issue.put("checkType", checkType); issue.put("shopName", shopName);
+                        issue.put("type", "WARNING");
+                        issue.put("message", String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErr, newErr, growth));
+                        issues.add(issue);
+                    }
+                } else if (prevErr == 0) {
+                    Map<String, Object> issue = new LinkedHashMap<>();
+                    issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
+                    issue.put("addressId", addressId); issue.put("addressName", addressName);
+                    issue.put("checkType", checkType); issue.put("shopName", shopName);
+                    issue.put("type", "WARNING");
+                    issue.put("message", String.format("Ошибки парсинга: 0 → %d", newErr));
+                    issues.add(issue);
+                }
             }
         }
     }
@@ -1381,8 +1469,9 @@ public class ZoomosAnalysisController {
      * NOT_FOUND:   данных нет совсем. Если есть lastKnown — добавляет историческую информацию.
      */
     private void addIssueStatus(Map<String, Object> issue, ZoomosParsingStats ip, ZoomosParsingStats lastKnown) {
+        issue.put("noData", true); // маркер: нет данных (бывший NOT_FOUND/IN_PROGRESS)
         if (ip == null) {
-            issue.put("type", "NOT_FOUND");
+            issue.put("type", "ERROR");
             String aid = (String) issue.get("addressId");
             String cityId = (String) issue.get("cityId");
             if (aid != null && !aid.isBlank()) {
@@ -1398,7 +1487,7 @@ public class ZoomosAnalysisController {
         } else {
             boolean frozen = ip.getUpdatedTime() != null &&
                     ip.getUpdatedTime().isBefore(ZonedDateTime.now().minusHours(2));
-            issue.put("type", frozen ? "NOT_FOUND" : "IN_PROGRESS");
+            issue.put("type", "WARNING"); // IN_PROGRESS и frozen → WARNING (не блокирует canDeliver)
             issue.put("inProgress", ip);
             String pct = ip.getCompletionTotal() != null ? ip.getCompletionTotal() : "?";
             String startStr = ip.getStartTime() != null
@@ -1424,11 +1513,230 @@ public class ZoomosAnalysisController {
 
     private static int statusPriority(String st) {
         return switch (st != null ? st : "") {
-            case "ERROR", "NOT_FOUND" -> 0;
-            case "IN_PROGRESS" -> 1;
-            case "WARNING" -> 2;
-            default -> 3; // OK
+            case "ERROR" -> 0;
+            case "WARNING" -> 1;
+            default -> 2; // OK
         };
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> buildGroups(
+            List<ZoomosParsingStats> stats,
+            List<ZoomosParsingStats> inProgressStats,
+            Map<String, ZoomosCityId> cityIdBySite,
+            Map<String, String> siteCityStatuses,
+            List<Map<String, Object>> issues,
+            Set<String> prioritySiteNames,
+            List<ZoomosParsingStats> baselineStatsList) {
+
+        // Группируем по сайту (верхний уровень)
+        Map<String, List<ZoomosParsingStats>> bySite = stats.stream()
+                .collect(Collectors.groupingBy(ZoomosParsingStats::getSiteName));
+        // Для сайтов с парсер-фильтром: добавляем незавершённые выкачки в таблицу,
+        // только если для сайта уже есть завершённые данные (чтобы не создавать дублей)
+        for (ZoomosParsingStats ip : inProgressStats) {
+            if (ip.getSiteName() != null
+                    && cityIdBySite.containsKey(ip.getSiteName())
+                    && bySite.containsKey(ip.getSiteName())) {
+                bySite.get(ip.getSiteName()).add(ip);
+            }
+        }
+
+        List<Map<String, Object>> groups = new ArrayList<>();
+
+        bySite.forEach((siteName, siteStats) -> {
+            String worstStatus = siteStats.stream()
+                    .map(s -> {
+                        String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "");
+                        if (s.getAddressId() != null && !s.getAddressId().isBlank()) key += "|" + s.getAddressId();
+                        return siteCityStatuses.getOrDefault(key, "OK");
+                    })
+                    .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
+                    .orElse("OK");
+
+            String checkType = siteStats.get(0).getCheckType();
+
+            Map<String, List<ZoomosParsingStats>> byCity = siteStats.stream()
+                    .collect(Collectors.groupingBy(
+                            s -> s.getCityName() != null ? s.getCityName() : "",
+                            LinkedHashMap::new, Collectors.toList()));
+
+            List<Map<String, Object>> cityGroups = new ArrayList<>();
+            byCity.forEach((cityName, cityStats) -> {
+                cityStats.sort(Comparator.comparing(
+                        (ZoomosParsingStats s) -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now())
+                        .reversed());
+
+                Map<String, List<ZoomosParsingStats>> byAddress = new LinkedHashMap<>();
+                for (ZoomosParsingStats s : cityStats) {
+                    String addrKey = s.getAddressId() != null && !s.getAddressId().isBlank()
+                            ? s.getAddressId() : "";
+                    byAddress.computeIfAbsent(addrKey, k -> new ArrayList<>()).add(s);
+                }
+
+                List<Map<String, Object>> addressGroups = new ArrayList<>();
+                byAddress.forEach((addrId, addrStats) -> {
+                    addrStats.sort(Comparator.comparing(
+                            (ZoomosParsingStats s) -> s.getStartTime() != null ? s.getStartTime() : ZonedDateTime.now())
+                            .reversed());
+                    String addrStatusKey = siteName + "|" + cityName
+                            + (addrId.isEmpty() ? "" : "|" + addrId);
+                    String addrStatus = siteCityStatuses.getOrDefault(addrStatusKey, "OK");
+                    String addrName = addrStats.stream()
+                            .filter(s -> s.getAddressName() != null)
+                            .findFirst().map(ZoomosParsingStats::getAddressName).orElse(null);
+                    Map<String, Object> ag = new LinkedHashMap<>();
+                    ag.put("addressId", addrId.isEmpty() ? null : addrId);
+                    ag.put("addressName", addrName);
+                    ag.put("status", addrStatus);
+                    ag.put("stats", addrStats);
+                    addressGroups.add(ag);
+                });
+                addressGroups.sort(Comparator.comparingInt(ag -> statusPriority((String) ag.get("status"))));
+
+                boolean anyFullyComplete = cityStats.stream()
+                        .anyMatch(s -> Boolean.TRUE.equals(s.getIsFinished())
+                                && s.getCompletionPercent() != null && s.getCompletionPercent() == 100
+                                && s.getAddressId() != null);
+                String cityStatus = anyFullyComplete ? "OK"
+                        : addressGroups.stream()
+                                .map(ag -> (String) ag.get("status"))
+                                .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
+                                .orElse(siteCityStatuses.getOrDefault(siteName + "|" + cityName, "OK"));
+
+                Map<String, Object> cg = new LinkedHashMap<>();
+                cg.put("cityName", cityName.isEmpty() ? null : cityName);
+                cg.put("status", cityStatus);
+                cg.put("stats", cityStats);
+                cg.put("addressGroups", addressGroups);
+                cityGroups.add(cg);
+            });
+            cityGroups.sort(Comparator.comparingInt(cg -> statusPriority((String) cg.get("status"))));
+
+            Map<String, Object> g = new LinkedHashMap<>();
+            g.put("siteName", siteName);
+            g.put("checkType", checkType);
+            g.put("status", worstStatus);
+            g.put("count", siteStats.size());
+            g.put("cityGroups", cityGroups);
+            g.put("isPriority", prioritySiteNames.contains(siteName));
+            groups.add(g);
+        });
+
+        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> Boolean.TRUE.equals(g.get("isPriority")) ? 0 : 1)
+                .thenComparingInt(g -> statusPriority((String) g.get("status")))
+                .thenComparing(g -> (String) g.get("siteName")));
+
+        // Добавляем noData-пары для отображения в Блоке 3
+        Map<String, Map<String, Object>> groupBySite = new LinkedHashMap<>();
+        for (Map<String, Object> g : groups) {
+            groupBySite.put((String) g.get("siteName"), g);
+        }
+        for (Map<String, Object> issue : issues) {
+            if (!Boolean.TRUE.equals(issue.get("noData"))) continue;
+            String iType     = (String) issue.get("type");
+            String iSite     = (String) issue.get("site");
+            String iCity     = (String) issue.get("city");
+            String iCityId   = (String) issue.get("cityId");
+            String iAddrId   = (String) issue.get("addressId");
+            String iAddrName = (String) issue.get("addressName");
+            String iMsg      = (String) issue.get("message");
+            String iCheckType = (String) issue.get("checkType");
+
+            Map<String, Object> siteGroup = groupBySite.computeIfAbsent(iSite, k -> {
+                Map<String, Object> ng = new LinkedHashMap<>();
+                ng.put("siteName", iSite);
+                ng.put("checkType", iCheckType);
+                ng.put("status", iType);
+                ng.put("count", 0);
+                ng.put("cityGroups", new ArrayList<>());
+                groups.add(ng);
+                return ng;
+            });
+
+            List<Map<String, Object>> siteGroupCityGroups = (List<Map<String, Object>>) siteGroup.get("cityGroups");
+            Map<String, Object> cityGroup = siteGroupCityGroups.stream()
+                    .filter(cg -> {
+                        String cgCityName = (String) cg.get("cityName");
+                        String cgCityId = ZoomosCheckService.extractCityId(cgCityName);
+                        return iCityId.equals(cgCityId) || iCityId.equals(cgCityName) || iCity.equals(cgCityName);
+                    })
+                    .findFirst()
+                    .orElseGet(() -> {
+                        Map<String, Object> ncg = new LinkedHashMap<>();
+                        ncg.put("cityName", iCity);
+                        ncg.put("status", iType);
+                        ncg.put("stats", new ArrayList<>());
+                        ncg.put("addressGroups", new ArrayList<>());
+                        siteGroupCityGroups.add(ncg);
+                        return ncg;
+                    });
+
+            List<Map<String, Object>> cityGroupAddrGroups = (List<Map<String, Object>>) cityGroup.get("addressGroups");
+            boolean alreadyExists = cityGroupAddrGroups.stream().anyMatch(ag ->
+                    iAddrId != null ? iAddrId.equals(ag.get("addressId")) : ag.get("addressId") == null);
+            if (!alreadyExists) {
+                Map<String, Object> ag = new LinkedHashMap<>();
+                ag.put("addressId", iAddrId);
+                ag.put("addressName", iAddrName);
+                ag.put("status", iType);
+                ag.put("stats", new ArrayList<>());
+                ag.put("issueMessage", iMsg);
+                ag.put("inProgressStat", issue.get("inProgress"));
+                ag.put("noData", true);
+                cityGroupAddrGroups.add(ag);
+            }
+        }
+
+        // Пересортировать все уровни с учётом новых записей
+        for (Map<String, Object> g : groups) {
+            List<Map<String, Object>> cgs = (List<Map<String, Object>>) g.get("cityGroups");
+            for (Map<String, Object> cg : cgs) {
+                List<Map<String, Object>> ags = (List<Map<String, Object>>) cg.get("addressGroups");
+                ags.sort(Comparator.comparingInt(ag -> statusPriority((String) ag.get("status"))));
+                String worstCityStatus = ags.stream().map(ag -> (String) ag.get("status"))
+                        .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
+                        .orElse((String) cg.get("status"));
+                cg.put("status", worstCityStatus);
+            }
+            cgs.sort(Comparator.comparingInt(cg -> statusPriority((String) cg.get("status"))));
+            String worstSiteStatus = cgs.stream().map(cg -> (String) cg.get("status"))
+                    .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
+                    .orElse((String) g.get("status"));
+            g.put("status", worstSiteStatus);
+        }
+        groups.sort(Comparator.comparingInt((Map<String, Object> g) -> Boolean.TRUE.equals(g.get("isPriority")) ? 0 : 1)
+                .thenComparingInt(g -> statusPriority((String) g.get("status")))
+                .thenComparing(g -> (String) g.get("siteName")));
+
+        // Прикрепляем baseline-записи к таблицам деталей
+        if (!baselineStatsList.isEmpty()) {
+            Map<String, List<ZoomosParsingStats>> blBySca = new LinkedHashMap<>();
+            for (ZoomosParsingStats s : baselineStatsList) {
+                String key = s.getSiteName() + "|"
+                        + (s.getCityName() != null ? s.getCityName() : "") + "|"
+                        + (s.getAddressId() != null ? s.getAddressId() : "");
+                blBySca.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
+            }
+            for (Map<String, Object> g : groups) {
+                String sn = (String) g.get("siteName");
+                List<Map<String, Object>> cgs = (List<Map<String, Object>>) g.get("cityGroups");
+                for (Map<String, Object> cg : cgs) {
+                    String cn = cg.get("cityName") != null ? (String) cg.get("cityName") : "";
+                    List<Map<String, Object>> ags = (List<Map<String, Object>>) cg.get("addressGroups");
+                    for (Map<String, Object> ag : ags) {
+                        String aid = ag.get("addressId") != null ? (String) ag.get("addressId") : "";
+                        List<ZoomosParsingStats> bl = blBySca.get(sn + "|" + cn + "|" + aid);
+                        if (bl != null && !bl.isEmpty()) {
+                            List<ZoomosParsingStats> agStats = (List<ZoomosParsingStats>) ag.get("stats");
+                            agStats.addAll(bl);
+                        }
+                    }
+                }
+            }
+        }
+
+        return groups;
     }
 
     @GetMapping("/check/latest")
@@ -1791,60 +2099,4 @@ public class ZoomosAnalysisController {
         return ResponseEntity.ok(Map.of("success", true, "isPriority", site.isPriority()));
     }
 
-    /**
-     * Краткое человечное описание проблемы для "Текст для ИТ".
-     * Убирает технические фразы ("всегда", "нужна проверка"), упрощает стрелки.
-     */
-    private static String buildShortItMessage(String type, String msg, String addrParam) {
-        if ("NOT_FOUND".equals(type)) {
-            return ""; // адрес уже в части "город (адрес X)" выше
-        }
-        if ("IN_PROGRESS".equals(type)) {
-            if (msg != null) {
-                java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)%").matcher(msg);
-                if (m.find()) return "выкачка в процессе (" + m.group(1) + "%)";
-            }
-            return "выкачка в процессе";
-        }
-        if (msg == null || msg.isBlank()) return "";
-
-        // "В наличии: 500 → 0 (−100%)" → "в наличии 0 (было 500)"
-        java.util.regex.Matcher mStock = java.util.regex.Pattern
-                .compile("В наличии: (\\d+) → 0").matcher(msg);
-        if (mStock.find()) return "в наличии 0 (было " + mStock.group(1) + ")";
-
-        // "В наличии: 0 ..." → "в наличии 0"
-        if (msg.startsWith("В наличии: 0")) return "в наличии 0";
-
-        // "Падение 'В наличии': 500 → 300 (−40%)" → "в наличии: 500 → 300 (−40%)"
-        if (msg.startsWith("Падение 'В наличии':")) {
-            return "в наличии:" + msg.substring("Падение 'В наличии':".length());
-        }
-
-        // "Рост ошибок: 5 → 50 (+900%)" → "ошибки: 5 → 50"
-        if (msg.startsWith("Рост ошибок:")) {
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+) → (\\d+)").matcher(msg);
-            if (m.find()) return "ошибки: " + m.group(1) + " → " + m.group(2);
-        }
-
-        // "Ошибки парсинга: 0 → N" → "ошибки: N"
-        if (msg.startsWith("Ошибки парсинга:")) {
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile("→ (\\d+)").matcher(msg);
-            if (m.find()) return "ошибки: " + m.group(1);
-        }
-
-        // "Падение товаров: 1000 → 500 (−50%)" → "товаров: 1000 → 500 (−50%)"
-        if (msg.startsWith("Падение товаров:")) {
-            return "товаров:" + msg.substring("Падение товаров:".length());
-        }
-
-        // "100% выкачка, нет товаров — нужна проверка" → "нет товаров"
-        if (msg.contains("нет товаров")) return "нет товаров";
-
-        // "В наличии: всегда 0 — нужна проверка" → "в наличии 0"
-        if (msg.contains("всегда 0")) return "в наличии 0";
-
-        // Прочее: отдаём как есть, строчная первая буква
-        return Character.toLowerCase(msg.charAt(0)) + msg.substring(1);
-    }
 }

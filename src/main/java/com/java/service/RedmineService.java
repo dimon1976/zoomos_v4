@@ -98,8 +98,11 @@ public class RedmineService {
             if (memberships != null && memberships.isArray()) {
                 for (JsonNode m : memberships) {
                     JsonNode user = m.get("user");
+                    JsonNode group = m.get("group");
                     if (user != null) {
                         users.add(Map.of("id", user.get("id").asInt(), "name", user.path("name").asText("")));
+                    } else if (group != null) {
+                        users.add(Map.of("id", group.get("id").asInt(), "name", "[Группа] " + group.path("name").asText("")));
                     }
                 }
             }
@@ -223,10 +226,32 @@ public class RedmineService {
                     + "&subject=~" + encoded
                     + "&status_id=*"
                     + "&limit=25";
-            return parseIssuesList(get(url));
+            List<RedmineIssueDto> found = parseIssuesList(get(url));
+            if (!found.isEmpty()) {
+                saveIssueToDb(siteName, found.get(0));
+            }
+            return found;
         } catch (Exception e) {
             log.warn("Redmine findIssuesBySite '{}': {}", siteName, e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    /** Сохраняет/обновляет найденную задачу в локальной БД. */
+    @Transactional
+    public void saveIssueToDb(String site, RedmineIssueDto dto) {
+        try {
+            ZoomosRedmineIssue entity = repo.findBySiteName(site)
+                    .orElseGet(() -> ZoomosRedmineIssue.builder().siteName(site).build());
+            entity.setIssueId(dto.getId());
+            entity.setIssueStatus(dto.getStatusName());
+            entity.setClosed(dto.isClosed());
+            entity.setIssueUrl(dto.getUrl());
+            entity.setUpdatedAt(LocalDateTime.now());
+            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+            repo.save(entity);
+        } catch (Exception e) {
+            log.warn("Redmine saveIssueToDb '{}': {}", site, e.getMessage());
         }
     }
 
@@ -303,7 +328,7 @@ public class RedmineService {
     // ──────────────────────────────────────────────────────────────────
 
     @Transactional
-    public void updateIssue(int issueId, RedmineCreateRequest req) {
+    public ZoomosRedmineIssue updateIssue(int issueId, RedmineCreateRequest req) {
         String base = config.getBaseUrlNormalized();
         String url = base + "/issues/" + issueId + ".json";
 
@@ -322,14 +347,33 @@ public class RedmineService {
 
             String json = objectMapper.writeValueAsString(Map.of("issue", issue));
             log.info("Redmine PUT → {} | status={}", url, req.getStatusId());
-            // Сервер возвращает 404 даже при успешном обновлении — игнорируем
             putIgnoring404(url, json);
 
-            // Обновляем время в нашей БД
-            repo.findBySiteName(req.getSite()).ifPresent(entity -> {
-                entity.setUpdatedAt(LocalDateTime.now());
-                repo.save(entity);
-            });
+            // Получаем актуальный статус и обновляем нашу БД
+            String issueUrl = base + "/issues/" + issueId;
+            ZoomosRedmineIssue entity = repo.findBySiteName(req.getSite())
+                    .orElseGet(() -> ZoomosRedmineIssue.builder()
+                            .siteName(req.getSite())
+                            .issueId(issueId)
+                            .issueUrl(issueUrl)
+                            .build());
+            entity.setIssueUrl(issueUrl);
+
+            try {
+                JsonNode updatedRoot = objectMapper.readTree(get(base + "/issues/" + issueId + ".json"));
+                JsonNode updatedIssue = updatedRoot.path("issue");
+                String newStatus = updatedIssue.path("status").path("name").asText("");
+                boolean isClosed = updatedIssue.path("status").path("is_closed").asBoolean(false);
+                if (!newStatus.isBlank()) entity.setIssueStatus(newStatus);
+                entity.setClosed(isClosed);
+            } catch (Exception fe) {
+                log.warn("Redmine: не удалось получить обновлённый статус #{}: {}", issueId, fe.getMessage());
+            }
+
+            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+            entity.setUpdatedAt(LocalDateTime.now());
+            return repo.save(entity);
+
         } catch (Exception e) {
             log.error("Redmine updateIssue #{}: {}", issueId, e.getMessage());
             throw new RuntimeException("Не удалось обновить задачу в Redmine: " + e.getMessage(), e);
@@ -344,6 +388,12 @@ public class RedmineService {
     public List<ZoomosRedmineIssue> findAllBySiteNames(Collection<String> siteNames) {
         if (siteNames == null || siteNames.isEmpty()) return Collections.emptyList();
         return repo.findAllBySiteNameIn(siteNames);
+    }
+
+    /** Удалить локальную запись задачи из БД (когда задача удалена в Redmine) */
+    @Transactional
+    public void deleteLocalIssue(String site) {
+        repo.findBySiteName(site).ifPresent(repo::delete);
     }
 
     @Transactional
@@ -387,9 +437,8 @@ public class RedmineService {
     /**
      * Параллельная проверка Redmine для списка сайтов.
      * Возвращает Map<siteName, latestIssue> — только для сайтов, у которых нашлась задача.
-     * Также сохраняет/обновляет найденные задачи в БД.
+     * Также сохраняет/обновляет найденные задачи в БД (вторичная операция — ошибка save не теряет результат).
      */
-    @Transactional
     public Map<String, Object> checkBatch(List<String> sites) {
         if (!isEnabled() || sites == null || sites.isEmpty()) return Collections.emptyMap();
 
@@ -397,23 +446,48 @@ public class RedmineService {
                 .map(site -> CompletableFuture.supplyAsync(() -> {
                     try {
                         List<RedmineIssueDto> found = findIssuesBySite(site);
-                        if (found.isEmpty()) return null;
+                        if (found.isEmpty()) {
+                            // API-поиск не дал результатов — возвращаем данные из БД как fallback
+                            try {
+                                return repo.findBySiteName(site)
+                                        .map(entity -> {
+                                            Map<String, Object> data = new LinkedHashMap<>();
+                                            data.put("id", entity.getIssueId());
+                                            data.put("url", entity.getIssueUrl());
+                                            data.put("statusName", entity.getIssueStatus());
+                                            data.put("isClosed", entity.isClosed());
+                                            return Map.entry(site, (Object) data);
+                                        })
+                                        .orElse(null);
+                            } catch (Exception dbEx) {
+                                log.warn("Redmine checkBatch DB fallback '{}': {}", site, dbEx.getMessage());
+                                return null;
+                            }
+                        }
                         RedmineIssueDto latest = found.get(0);
-                        // Сохраняем/обновляем в БД
-                        ZoomosRedmineIssue entity = repo.findBySiteName(site)
-                                .orElseGet(() -> ZoomosRedmineIssue.builder().siteName(site).build());
-                        entity.setIssueId(latest.getId());
-                        entity.setIssueStatus(latest.getStatusName());
-                        entity.setClosed(latest.isClosed());
-                        entity.setIssueUrl(latest.getUrl());
-                        entity.setUpdatedAt(LocalDateTime.now());
-                        if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
-                        repo.save(entity);
+
+                        // Результат API — всегда возвращаем независимо от состояния БД
                         Map<String, Object> data = new LinkedHashMap<>();
                         data.put("id", latest.getId());
                         data.put("url", latest.getUrl());
                         data.put("statusName", latest.getStatusName());
                         data.put("isClosed", latest.isClosed());
+
+                        // Сохраняем/обновляем в БД — вторичная операция, ошибка не теряет данные
+                        try {
+                            ZoomosRedmineIssue entity = repo.findBySiteName(site)
+                                    .orElseGet(() -> ZoomosRedmineIssue.builder().siteName(site).build());
+                            entity.setIssueId(latest.getId());
+                            entity.setIssueStatus(latest.getStatusName());
+                            entity.setClosed(latest.isClosed());
+                            entity.setIssueUrl(latest.getUrl());
+                            entity.setUpdatedAt(LocalDateTime.now());
+                            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+                            repo.save(entity);
+                        } catch (Exception dbEx) {
+                            log.warn("Redmine checkBatch DB save '{}': {}", site, dbEx.getMessage());
+                        }
+
                         return Map.entry(site, (Object) data);
                     } catch (Exception e) {
                         log.warn("Redmine checkBatch '{}': {}", site, e.getMessage());
@@ -425,7 +499,8 @@ public class RedmineService {
         Map<String, Object> result = new LinkedHashMap<>();
         for (CompletableFuture<Map.Entry<String, Object>> f : futures) {
             try {
-                Map.Entry<String, Object> entry = f.get();
+                Map.Entry<String, Object> entry = f.get(30, java.util.concurrent.TimeUnit.SECONDS);
+                // Включаем и null-записи (задача удалена из TT) — JS откатит кнопку к "создать"
                 if (entry != null) result.put(entry.getKey(), entry.getValue());
             } catch (Exception e) {
                 log.warn("Redmine checkBatch future: {}", e.getMessage());
@@ -525,14 +600,35 @@ public class RedmineService {
     }
 
     /**
-     * Выполняет POST или PUT без следования редиректам.
+     * Выполняет POST или PUT с retry до 3 раз при transient-ошибках (timeout, connection reset).
+     * Задержка между попытками — 2 секунды.
+     */
+    private String sendMutating(String method, String url, String json, boolean ignore404EmptyBody) throws Exception {
+        int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return doSendMutating(method, url, json, ignore404EmptyBody);
+            } catch (Exception e) {
+                String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+                boolean isTransient = msg.contains("timed out") || msg.contains("connection reset")
+                        || msg.contains("connection refused");
+                if (!isTransient || attempt == maxAttempts) throw e;
+                log.warn("Redmine {} попытка {}/{}: {}. Повтор через 2с...", method, attempt, maxAttempts, e.getMessage());
+                Thread.sleep(2000);
+            }
+        }
+        throw new RuntimeException("sendMutating: все попытки исчерпаны");
+    }
+
+    /**
+     * Один HTTP-запрос POST/PUT без следования редиректам.
      * Аутентификация через ?key= (URL-параметр) — надёжнее заголовка.
      *
      * @param ignore404EmptyBody если true — 404 с пустым телом не считается ошибкой
      *                           (этот Redmine-сервер всегда возвращает 404 на мутирующих операциях,
      *                           при этом операция фактически выполняется)
      */
-    private String sendMutating(String method, String url, String json, boolean ignore404EmptyBody) throws Exception {
+    private String doSendMutating(String method, String url, String json, boolean ignore404EmptyBody) throws Exception {
         String urlWithKey = url.contains("?")
                 ? url + "&key=" + config.getApiKey()
                 : url + "?key=" + config.getApiKey();

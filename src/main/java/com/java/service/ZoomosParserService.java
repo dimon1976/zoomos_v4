@@ -74,6 +74,18 @@ public class ZoomosParserService {
     }
 
     /**
+     * Переключить флаг приоритетности магазина
+     */
+    @Transactional
+    public boolean togglePriority(Long shopId) {
+        ZoomosShop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopId));
+        shop.setPriority(!shop.isPriority());
+        shopRepository.save(shop);
+        return shop.isPriority();
+    }
+
+    /**
      * Переключить активность строки city_ids
      */
     @Transactional
