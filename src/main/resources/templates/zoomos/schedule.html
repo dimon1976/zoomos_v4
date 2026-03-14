@@ -338,66 +338,70 @@
      Модал: Настройки порогов / baseline / трендов
 ══════════════════════════════════════════════════════ -->
 <div class="modal fade" id="schedSettingsModal" tabindex="-1">
-    <div class="modal-dialog modal-sm">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
         <div class="modal-content">
-            <div class="modal-header py-2">
+            <div class="modal-header py-2 border-bottom">
                 <h6 class="modal-title mb-0">
                     <i class="fas fa-sliders-h me-2 text-secondary"></i>Настройки расписания
                 </h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body py-3">
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold mb-1">Пороги срабатывания</label>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label class="form-label small text-muted mb-0">Падение «в наличии» %</label>
-                            <input type="number" id="ms-drop" class="form-control form-control-sm text-center"
-                                   min="1" max="100" title="Порог падения товаров/«в наличии»">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small text-muted mb-0">Рост ошибок %</label>
-                            <input type="number" id="ms-err" class="form-control form-control-sm text-center"
-                                   min="1" max="500" title="Порог роста ошибок парсинга">
-                        </div>
+            <div class="modal-body py-3 px-4">
+
+                <!-- Пороги срабатывания -->
+                <p class="small fw-semibold text-uppercase text-muted mb-2" style="letter-spacing:.04em">Пороги срабатывания</p>
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small mb-1">Падение «в наличии» %</label>
+                        <input type="number" id="ms-drop" class="form-control form-control-sm text-center"
+                               min="1" max="100" title="Порог падения товаров/«в наличии»">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1">Рост ошибок %</label>
+                        <input type="number" id="ms-err" class="form-control form-control-sm text-center"
+                               min="1" max="500" title="Порог роста ошибок парсинга">
                     </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold mb-1">Baseline-анализ</label>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label class="form-label small text-muted mb-0">Дней (0=откл.)</label>
-                            <input type="number" id="ms-baseline" class="form-control form-control-sm text-center"
-                                   min="0" max="90" title="Дней для baseline-анализа">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small text-muted mb-0">Мин. ошибок</label>
-                            <input type="number" id="ms-min-abs-errors" class="form-control form-control-sm text-center"
-                                   min="0" max="1000" title="Мин. абсолютное число ошибок">
-                        </div>
+
+                <hr class="my-2">
+
+                <!-- Baseline-анализ -->
+                <p class="small fw-semibold text-uppercase text-muted mb-2 mt-3" style="letter-spacing:.04em">Baseline-анализ</p>
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small mb-1">Дней <span class="text-muted">(0 = откл.)</span></label>
+                        <input type="number" id="ms-baseline" class="form-control form-control-sm text-center"
+                               min="0" max="90" title="Дней для baseline-анализа">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1">Мин. ошибок</label>
+                        <input type="number" id="ms-min-abs-errors" class="form-control form-control-sm text-center"
+                               min="0" max="1000" title="Мин. абсолютное число ошибок">
                     </div>
                 </div>
-                <div class="mb-2">
-                    <label class="form-label small fw-semibold mb-1">
-                        Пороги TREND_WARNING
-                        <i class="fas fa-chart-line text-muted ms-1" style="font-size:0.85em"></i>
-                    </label>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label class="form-label small text-muted mb-0">Падение тренда %</label>
-                            <input type="number" id="ms-trend-drop" class="form-control form-control-sm text-center"
-                                   min="1" max="500">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small text-muted mb-0">Рост ошибок тренда %</label>
-                            <input type="number" id="ms-trend-err" class="form-control form-control-sm text-center"
-                                   min="1" max="1000">
-                        </div>
+
+                <hr class="my-2">
+
+                <!-- Тренды -->
+                <p class="small fw-semibold text-uppercase text-muted mb-2 mt-3" style="letter-spacing:.04em">
+                    Тренды <span class="badge bg-secondary fw-normal" style="font-size:.7em">TREND_WARNING</span>
+                </p>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label small mb-1">Падение тренда %</label>
+                        <input type="number" id="ms-trend-drop" class="form-control form-control-sm text-center"
+                               min="1" max="500">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1">Рост ошибок тренда %</label>
+                        <input type="number" id="ms-trend-err" class="form-control form-control-sm text-center"
+                               min="1" max="1000">
                     </div>
                 </div>
+
             </div>
             <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-sm btn-primary" id="ms-save-btn">
                     <i class="fas fa-save me-1"></i>Сохранить
                 </button>
