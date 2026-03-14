@@ -201,14 +201,27 @@ boolean canDeliver = issues.stream()
 | Блок | ID | Описание |
 |------|----|----------|
 | 1 | — | Вердикт (`canDeliver`), счётчики OK/Warn/Error/Нет-Идёт |
-| 2 | `issuesCollapse` | "На что обратить внимание" — ERROR + WARNING (без TREND) |
+| 2 | `issuesCollapse` | "На что обратить внимание" — ERROR + WARNING (без TREND), авто-раскрыт если ≤ 2 сайта |
 | 2.5 | `trendsCollapse` | Тренды — TREND_WARNING (свёрнут по умолчанию) |
-| 3 | — | Детали по сайтам (expandable cards, таблицы статистики) |
+| 3 | `groups-section` | Детали по сайтам — **lazy-loaded** через `GET /check/results/{runId}/groups` → фрагмент `check-results-groups.html :: groupsBlock` |
 
-Данные модели:
+Данные модели (`checkResults()`):
 - `issues` — mainIssues (без TREND_WARNING)
 - `trendIssues` — только TREND_WARNING
 - `canDeliver`, `liveOkCount`, `liveWarnCount`, `liveErrCount`, `liveNotFoundCount`
+- `groups` НЕ передаётся в основной странице — только в `checkResultsGroups()`
+
+**Lazy loading БЛОКА 3**:
+
+- При клике "Показать детали" → `loadGroups()` делает `fetch('/check/results/{runId}/groups')`
+- Кнопка ↓ в БЛОКЕ 2 → `scrollToGroup(siteName)` сначала вызывает `loadGroups()`, затем скроллит
+- После загрузки: `initGroupsJs()` инициализирует chevron, expandAll/collapseAll, Redmine batch-check
+
+**N+1 SQL оптимизация** (NOT_FOUND detection):
+
+- `findLatestFinishedBySiteAndAddressIds()` — batch PostgreSQL `DISTINCT ON` по всем адресам
+- `findLatestFinishedBySites()` — batch по всем сайтам/городам
+- Результат: N+1 → 2 SQL запроса
 
 ---
 

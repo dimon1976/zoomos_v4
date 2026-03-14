@@ -91,4 +91,28 @@ public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsin
     Optional<ZoomosParsingStats> findLatestInProgressBySiteAndCityId(
             @Param("siteName") String siteName,
             @Param("cityId") String cityId);
+
+    /**
+     * Batch: последняя завершённая по каждой паре (site_name, address_id).
+     * Заменяет N вызовов findLatestFinishedBySiteAndAddressId.
+     */
+    @Query(value = "SELECT DISTINCT ON (site_name, address_id) * FROM zoomos_parsing_stats " +
+                   "WHERE site_name = ANY(:siteNames) AND address_id = ANY(:addressIds) " +
+                   "AND completion_percent >= 100 " +
+                   "ORDER BY site_name, address_id, start_time DESC",
+           nativeQuery = true)
+    List<ZoomosParsingStats> findLatestFinishedBySiteAndAddressIds(
+            @Param("siteNames") String[] siteNames,
+            @Param("addressIds") String[] addressIds);
+
+    /**
+     * Batch: последняя завершённая по каждой паре (site_name, city_name) для заданных сайтов.
+     * Заменяет N вызовов findLatestFinishedBySiteAndCityId.
+     */
+    @Query(value = "SELECT DISTINCT ON (site_name, city_name) * FROM zoomos_parsing_stats " +
+                   "WHERE site_name = ANY(:siteNames) AND completion_percent >= 100 " +
+                   "ORDER BY site_name, city_name, start_time DESC",
+           nativeQuery = true)
+    List<ZoomosParsingStats> findLatestFinishedBySites(
+            @Param("siteNames") String[] siteNames);
 }
