@@ -13,6 +13,7 @@
 | URL | Описание |
 |-----|----------|
 | `/zoomos` | Список магазинов, запуск проверки |
+| `/zoomos/clients` | Проверки по клиентам (магазины, привязанные к кабинетам) |
 | `/zoomos/check/results/{runId}` | Страница результатов (вердикт, issues, тренды, детали) |
 | `/zoomos/check/history` | История всех запусков |
 | `/zoomos/sites` | Справочник сайтов (checkType, ignoreStock, isPriority) |
@@ -21,7 +22,7 @@
 
 ---
 
-## Структура БД (Flyway V23–V40)
+## Структура БД (Flyway V23–V42)
 
 ```sql
 zoomos_check_runs
@@ -55,6 +56,10 @@ zoomos_shop_schedules
 zoomos_redmine_issues
   id, site_name (UNIQUE), issue_id, issue_status, is_closed, issue_url
   created_at, updated_at
+
+-- V42: привязка магазина к клиенту
+zoomos_shops
+  ...client_id BIGINT FK → clients(id) ON DELETE SET NULL
 ```
 
 ---

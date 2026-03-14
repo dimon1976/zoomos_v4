@@ -1776,6 +1776,40 @@ public class ZoomosAnalysisController {
     }
 
     // =========================================================================
+    // Страница проверок по клиентам /zoomos/clients
+    // =========================================================================
+
+    @GetMapping("/clients")
+    public String clientsCheckPage(Model model) {
+        List<ZoomosShop> shops = shopRepository.findAllByClientIsNotNull().stream()
+                .filter(ZoomosShop::isEnabled)
+                .sorted(Comparator.comparing(s -> s.getClient().getName()))
+                .collect(Collectors.toList());
+
+        Map<Long, ZoomosShopSchedule> schedulesMap = new LinkedHashMap<>();
+        Map<Long, Long> lastRunIds = new LinkedHashMap<>();
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+        Map<Long, String> lastRunFormatted = new LinkedHashMap<>();
+
+        for (ZoomosShop shop : shops) {
+            scheduleRepository.findFirstByShopId(shop.getId())
+                    .ifPresent(s -> schedulesMap.put(shop.getId(), s));
+            checkRunRepository.findFirstByShopIdOrderByStartedAtDesc(shop.getId()).ifPresent(run -> {
+                lastRunIds.put(shop.getId(), run.getId());
+                if (run.getStartedAt() != null) {
+                    lastRunFormatted.put(shop.getId(), run.getStartedAt().format(fmt));
+                }
+            });
+        }
+
+        model.addAttribute("shops", shops);
+        model.addAttribute("schedulesMap", schedulesMap);
+        model.addAttribute("lastRunIds", lastRunIds);
+        model.addAttribute("lastRunFormatted", lastRunFormatted);
+        return "zoomos/clients";
+    }
+
+    // =========================================================================
     // Справочник сайтов /zoomos/sites
     // =========================================================================
 
@@ -2005,7 +2039,13 @@ public class ZoomosAnalysisController {
                     String rawName = group.get(0).getSiteName();
                     ZoomosKnownSite ks = priorityByNameLower.get(rawName.toLowerCase());
                     String canonical = ks != null ? ks.getSiteName() : rawName;
-                    mergePriorityAlert(siteAlerts, canonical, status);
+                    String city = group.get(0).getCityName();
+                    String briefMsg = buildBriefAlertMessage(group, status, drop, errGrowth, minAbsErr, ignoreStk);
+                    Map<String, Object> detail = new LinkedHashMap<>();
+                    detail.put("city", city != null ? city : "");
+                    detail.put("message", briefMsg);
+                    detail.put("runId", run.getId());
+                    mergePriorityAlert(siteAlerts, canonical, status, detail);
                 }
 
                 // NOT_FOUND: ожидаемые приоритетные сайты без данных в этом run
@@ -2024,7 +2064,11 @@ public class ZoomosAnalysisController {
 
                     ZoomosKnownSite ks = priorityByNameLower.get(nameLower);
                     String canonical = ks != null ? ks.getSiteName() : cid.getSiteName();
-                    mergePriorityAlert(siteAlerts, canonical, "NOT_FOUND");
+                    Map<String, Object> notFoundDetail = new LinkedHashMap<>();
+                    notFoundDetail.put("city", "");
+                    notFoundDetail.put("message", "Нет данных в выкачке");
+                    notFoundDetail.put("runId", run.getId());
+                    mergePriorityAlert(siteAlerts, canonical, "NOT_FOUND", notFoundDetail);
                 }
             }
 
@@ -2036,13 +2080,16 @@ public class ZoomosAnalysisController {
     }
 
     private void mergePriorityAlert(Map<String, Map<String, Object>> siteAlerts,
-                                    String siteName, String status) {
+                                    String siteName, String status, Map<String, Object> issueDetail) {
         siteAlerts.compute(siteName, (k, existing) -> {
             if (existing == null) {
                 Map<String, Object> alert = new LinkedHashMap<>();
                 alert.put("siteName", siteName);
                 alert.put("severity", status);
                 alert.put("issueCount", 1);
+                List<Map<String, Object>> issues = new ArrayList<>();
+                if (issueDetail != null) issues.add(issueDetail);
+                alert.put("issues", issues);
                 return alert;
             } else {
                 existing.put("issueCount", (int) existing.get("issueCount") + 1);
@@ -2053,9 +2100,66 @@ public class ZoomosAnalysisController {
                         || ("WARNING".equals(status) && "OK".equals(cur))) {
                     existing.put("severity", status);
                 }
+                if (issueDetail != null) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> issues = (List<Map<String, Object>>) existing.get("issues");
+                    issues.add(issueDetail);
+                }
                 return existing;
             }
         });
+    }
+
+    private String buildBriefAlertMessage(List<ZoomosParsingStats> sortedAsc, String status,
+                                          int dropThreshold, int errGrowthThreshold,
+                                          int minAbsoluteErrors, boolean ignoreStock) {
+        ZoomosParsingStats newest = sortedAsc.get(sortedAsc.size() - 1);
+        ZoomosParsingStats prev = sortedAsc.size() >= 2 ? sortedAsc.get(sortedAsc.size() - 2) : null;
+
+        boolean alwaysZeroInStock = sortedAsc.stream()
+                .allMatch(s -> s.getInStock() == null || s.getInStock() == 0);
+
+        if (!ignoreStock && !alwaysZeroInStock) {
+            Integer refInStock = prev != null ? prev.getInStock() : null;
+            Integer newStock = newest.getInStock();
+            if (refInStock != null && refInStock > 0 && newStock != null) {
+                if (newStock == 0) {
+                    return String.format("В наличии: %d → 0 (−100%%)", refInStock);
+                }
+                double drop = (double)(refInStock - newStock) / refInStock * 100;
+                if (drop > dropThreshold) {
+                    return String.format("В наличии: %d → %d (−%.0f%%)", refInStock, newStock, drop);
+                }
+            }
+        }
+
+        if (ignoreStock || alwaysZeroInStock) {
+            Integer refTotal = prev != null ? prev.getTotalProducts() : null;
+            Integer newTotal = newest.getTotalProducts();
+            if (refTotal != null && refTotal > 0 && newTotal != null) {
+                double drop = (double)(refTotal - newTotal) / refTotal * 100;
+                if (drop > dropThreshold) {
+                    return String.format("Падение товаров: %d → %d (−%.0f%%)", refTotal, newTotal, drop);
+                }
+            }
+            int prevErr = prev != null && prev.getErrorCount() != null ? prev.getErrorCount() : 0;
+            int newErr = newest.getErrorCount() != null ? newest.getErrorCount() : 0;
+            if (newErr >= minAbsoluteErrors) {
+                if (prevErr > 0 && newErr > prevErr) {
+                    double growth = (double)(newErr - prevErr) / prevErr * 100;
+                    if (growth > errGrowthThreshold) {
+                        return String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErr, newErr, growth);
+                    }
+                } else if (prevErr == 0) {
+                    return String.format("Ошибки парсинга: 0 → %d", newErr);
+                }
+            }
+        }
+
+        if (newest.getCompletionPercent() != null && newest.getCompletionPercent() < 100) {
+            return String.format("Выкачка: %.0f%%", newest.getCompletionPercent());
+        }
+        return "ERROR".equals(status) ? "Проблема с выкачкой" : "Нужна проверка";
     }
 
     // =========================================================================

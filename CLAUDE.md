@@ -87,6 +87,7 @@ mvn flyway:info
 ## Recent Changes (2026)
 
 ### 2026-03
+- **Zoomos Check — Привязка к клиентам** — `ZoomosShop.client_id` FK → `clients`, страница `/zoomos/clients`, автосвязка по имени. Flyway V42. Priority alerts детализированы (город, сообщение, runId).
 - **Redmine интеграция** — Создание/редактирование задач в tt.zoomos.by со страницы результатов. Flyway V39–V40.
 
 ### 2026-02

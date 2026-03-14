@@ -116,6 +116,14 @@
                                 </a>
                             </div>
                         </div>
+                        <div class="col-md-2 col-sm-6 mb-2">
+                            <div class="d-grid">
+                                <a th:href="@{/clients/{id}/zoomos(id=${client.id})}"
+                                   class="btn btn-outline-info">
+                                    <i class="fas fa-search me-1"></i>Zoomos Check
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -124,7 +132,7 @@
 
     <!-- Краткая статистика -->
     <div class="row mb-4">
-        <div class="col-md-3 mb-3">
+        <div class="col mb-3">
             <div class="card section-card text-center">
                 <div class="card-body">
                     <div class="stats-value" id="totalOperations">
@@ -134,7 +142,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3 mb-3">
+        <div class="col mb-3">
             <div class="card section-card text-center">
                 <div class="card-body">
                     <div class="stats-value" id="totalRecords">
@@ -144,7 +152,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3 mb-3">
+        <div class="col mb-3">
             <div class="card section-card text-center">
                 <div class="card-body">
                     <div class="stats-value" id="totalTemplates">
@@ -154,13 +162,21 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3 mb-3">
+        <div class="col mb-3">
             <div class="card section-card text-center">
                 <div class="card-body">
                     <div class="stats-value text-warning" id="activeOperations">
                         <i class="fas fa-spinner fa-spin"></i>
                     </div>
                     <div class="stats-label">Активных операций</div>
+                </div>
+            </div>
+        </div>
+        <div class="col mb-3">
+            <div class="card section-card text-center h-100">
+                <div class="card-body d-flex flex-column justify-content-center" id="zoomosWidget">
+                    <i class="fas fa-spinner fa-spin stats-value"></i>
+                    <div class="stats-label mt-1">Выкачка</div>
                 </div>
             </div>
         </div>
@@ -245,6 +261,7 @@
         
         // Загружаем данные обзора при загрузке страницы
         loadOverviewData();
+        loadZoomosWidget(clientId);
 
         // Автообновление каждые 30 секунд
         setInterval(loadOverviewData, 30000);
@@ -443,6 +460,33 @@
             case 'FAILED': return 'bg-danger';
             default: return 'bg-secondary';
         }
+    }
+
+    function loadZoomosWidget(clientId) {
+        fetch(`/clients/${clientId}/zoomos/widget`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                const w = document.getElementById('zoomosWidget');
+                if (!data || !data.shopId) {
+                    w.innerHTML = `<div class="stats-value text-muted"><i class="fas fa-unlink"></i></div>
+                        <div class="stats-label mt-1">Выкачка</div>
+                        <small class="text-muted">Не настроено</small>
+                        <a href="/clients/${clientId}/zoomos" class="btn btn-outline-info btn-sm mt-2">Настроить</a>`;
+                    return;
+                }
+                const statusMap = {COMPLETED: ['bg-success','Готово'], RUNNING: ['bg-primary','Идёт проверка'],
+                    FAILED: ['bg-danger','Ошибка'], null: ['bg-secondary','Нет данных']};
+                const [cls, lbl] = statusMap[data.lastRunStatus] || ['bg-secondary', data.lastRunStatus || 'Нет данных'];
+                const ok = data.okCount || 0, warn = data.warnCount || 0, err = data.errorCount || 0;
+                const runLink = data.lastRunId ? `/zoomos/check/results/${data.lastRunId}` : `/clients/${clientId}/zoomos`;
+                w.innerHTML = `<span class="badge ${cls} mb-1">${lbl}</span>
+                    <div class="stats-label">${data.lastRunAt || ''}</div>
+                    <small class="text-muted"><span class="text-success">${ok} OK</span> · <span class="text-warning">${warn} предупр.</span> · <span class="text-danger">${err} ошиб.</span></small>
+                    <div class="mt-2"><a href="${runLink}" class="btn btn-outline-info btn-sm">Подробнее</a></div>`;
+            }).catch(() => {
+                const w = document.getElementById('zoomosWidget');
+                w.innerHTML = `<div class="stats-value text-muted"><i class="fas fa-question"></i></div><div class="stats-label mt-1">Выкачка</div>`;
+            });
     }
 
     function formatDateTime(dateTime) {

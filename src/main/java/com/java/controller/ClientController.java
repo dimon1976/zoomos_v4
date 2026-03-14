@@ -1,6 +1,13 @@
 package com.java.controller;
 
 import com.java.dto.ClientDto;
+import com.java.model.entity.ZoomosCheckRun;
+import com.java.model.entity.ZoomosShop;
+import com.java.model.entity.ZoomosShopSchedule;
+import com.java.repository.ZoomosCheckRunRepository;
+import com.java.repository.ZoomosShopRepository;
+import com.java.repository.ZoomosShopScheduleRepository;
+import com.java.service.ZoomosParserService;
 import com.java.service.client.ClientService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -8,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.unit.DataSize;
@@ -15,8 +23,8 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.util.Arrays;
-import java.util.List;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Controller
@@ -26,6 +34,10 @@ import java.util.stream.Collectors;
 public class ClientController {
 
     private final ClientService clientService;
+    private final ZoomosCheckRunRepository checkRunRepository;
+    private final ZoomosShopScheduleRepository scheduleRepository;
+    private final ZoomosShopRepository shopRepository;
+    private final ZoomosParserService parserService;
 
     @Value("${spring.servlet.multipart.max-request-size}")
     private DataSize maxRequestSize;
@@ -87,6 +99,16 @@ public class ClientController {
         return clientService.getClientById(id)
                 .map(client -> {
                     model.addAttribute("client", client);
+                    // Последний run с проблемами для кнопки Zoomos Check
+                    if (client.getLinkedShopId() != null) {
+                        checkRunRepository.findByShopIdOrderByStartedAtDesc(client.getLinkedShopId())
+                                .stream()
+                                .filter(r -> "COMPLETED".equals(r.getStatus())
+                                        && ((r.getErrorCount() != null && r.getErrorCount() > 0)
+                                        || (r.getWarningCount() != null && r.getWarningCount() > 0)))
+                                .findFirst()
+                                .ifPresent(run -> model.addAttribute("lastZoomosRunId", run.getId()));
+                    }
                     return "clients/details";
                 })
                 .orElseGet(() -> {
@@ -282,5 +304,100 @@ public class ClientController {
         model.addAttribute("clients", clientService.searchClients(query));
         model.addAttribute("searchQuery", query);
         return "clients/list";
+    }
+
+    // =========================================================================
+    // Zoomos Check интеграция
+    // =========================================================================
+
+    /**
+     * Страница Zoomos Check для клиента
+     */
+    @GetMapping("/{id}/zoomos")
+    public String clientZoomosPage(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
+        return clientService.getClientById(id)
+                .map(client -> {
+                    model.addAttribute("client", client);
+                    Optional<ZoomosShop> linkedShop = clientService.getLinkedShop(id);
+                    model.addAttribute("linkedShop", linkedShop.orElse(null));
+                    if (linkedShop.isPresent()) {
+                        Long shopId = linkedShop.get().getId();
+                        List<ZoomosCheckRun> runs = checkRunRepository
+                                .findByShopIdOrderByStartedAtDesc(shopId)
+                                .stream().limit(10).collect(Collectors.toList());
+                        model.addAttribute("checkRuns", runs);
+                        List<ZoomosShopSchedule> schedules = scheduleRepository.findAllByShopId(shopId);
+                        model.addAttribute("schedules", schedules);
+                    } else {
+                        model.addAttribute("checkRuns", List.of());
+                        model.addAttribute("schedules", List.of());
+                        model.addAttribute("allShops", parserService.getAllShops());
+                    }
+                    return "clients/zoomos";
+                })
+                .orElseGet(() -> {
+                    redirectAttributes.addFlashAttribute("errorMessage", "Клиент с ID " + id + " не найден");
+                    return "redirect:/clients";
+                });
+    }
+
+    /**
+     * API: данные виджета Zoomos Check для клиента (async)
+     */
+    @GetMapping("/{id}/zoomos/widget")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> zoomosWidget(@PathVariable Long id) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Optional<ZoomosShop> shopOpt = clientService.getLinkedShop(id);
+        if (shopOpt.isEmpty()) {
+            result.put("shopId", null);
+            return ResponseEntity.ok(result);
+        }
+        ZoomosShop shop = shopOpt.get();
+        result.put("shopId", shop.getId());
+        result.put("shopName", shop.getShopName());
+        checkRunRepository.findFirstByShopIdOrderByStartedAtDesc(shop.getId()).ifPresent(run -> {
+            result.put("lastRunId", run.getId());
+            result.put("lastRunStatus", run.getStatus());
+            result.put("lastRunAt", run.getStartedAt() != null
+                    ? run.getStartedAt().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) : null);
+            result.put("okCount", run.getOkCount());
+            result.put("warnCount", run.getWarningCount());
+            result.put("errorCount", run.getErrorCount());
+        });
+        result.put("hasSchedule", scheduleRepository.findFirstByShopId(shop.getId())
+                .map(ZoomosShopSchedule::isEnabled).orElse(false));
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Привязать магазин Zoomos Check к клиенту
+     */
+    @PostMapping("/{id}/zoomos/link")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> linkShop(@PathVariable Long id, @RequestParam Long shopId) {
+        try {
+            clientService.linkShopToClient(id, shopId);
+            ZoomosShop shop = shopRepository.findById(shopId).orElseThrow();
+            return ResponseEntity.ok(Map.of("success", true, "shopName", shop.getShopName()));
+        } catch (Exception e) {
+            log.error("Ошибка привязки магазина {} к клиенту {}: {}", shopId, id, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Отвязать магазин Zoomos Check от клиента
+     */
+    @PostMapping("/{id}/zoomos/unlink")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> unlinkShop(@PathVariable Long id) {
+        try {
+            clientService.getLinkedShop(id).ifPresent(shop -> clientService.unlinkShopFromClient(shop.getId()));
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            log.error("Ошибка отвязки магазина от клиента {}: {}", id, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
     }
 }
