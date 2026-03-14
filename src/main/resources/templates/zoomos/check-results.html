@@ -173,8 +173,8 @@
                     <button type="button"
                             class="btn btn-sm btn-outline-success py-0 px-2 btn-mark-site-done"
                             th:data-siteidx="${entryStat.index}"
-                            title="Скрыть все проблемы сайта">
-                        <i class="fas fa-check me-1"></i>Проверено
+                            title="Пометить весь сайт как проверенный">
+                        <i class="fas fa-check me-1"></i>Сайт проверен
                     </button>
                     <!-- Кнопка Redmine — одна на сайт -->
                     <div class="ms-auto" th:if="${redmineEnabled}">
@@ -214,7 +214,7 @@
                 <div th:id="'siteIssues-' + ${entryStat.index}" class="collapse">
                     <div th:each="issue : ${entry.value}" class="list-group-item py-2 px-3 ps-4"
                          th:data-site="${issue['site']}"
-                         th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type']}"
+                         th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type'] + '|' + (issue['message'] != null ? issue['message'] : '')}"
                          th:data-type="${issue['type']}"
                          th:data-city="${issue['city'] != null ? issue['city'] : ''}"
                          th:data-addressid="${issue['addressId'] != null ? issue['addressId'] : ''}"
@@ -293,12 +293,12 @@
                                    title="История парсинга (ITEM)">
                                     <i class="fas fa-history"></i>
                                 </a>
-                                <!-- Скрыть (отметить как проверено) -->
+                                <!-- Ошибка проверена -->
                                 <button type="button"
                                         class="btn btn-sm btn-outline-success py-0 px-2 btn-hide-issue"
-                                        title="Скрыть из списка"
-                                        th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type']}">
-                                    <i class="fas fa-check"></i>
+                                        title="Ошибка проверена"
+                                        th:data-issue-key="${issue['site'] + '|' + (issue['city'] != null ? issue['city'] : '') + '|' + (issue['addressId'] != null ? issue['addressId'] : '') + '|' + issue['type'] + '|' + (issue['message'] != null ? issue['message'] : '')}">
+                                    <i class="fas fa-check me-1"></i>Ошибка проверена
                                 </button>
                             </div>
                         </div>
@@ -307,7 +307,7 @@
             </div>
             </th:block>
 
-            <!-- Блок "Проверено мной" — сайты переданные в ТТ / отмеченные проверенными -->
+            <!-- Блок "Проверено мной" — сайты отмеченные как проверенные -->
             <div id="verifiedSitesBlock" class="border-top" style="display:none">
                 <div class="d-flex justify-content-between align-items-center px-3 py-2"
                      style="background:#d1e7dd; cursor:pointer"
@@ -316,25 +316,17 @@
                         <i class="fas fa-check-circle me-1"></i>Проверено мной
                         <span id="verifiedSitesCount" class="badge bg-secondary ms-1">0</span>
                     </small>
-                    <i class="fas fa-chevron-down" style="font-size:0.75rem; color:#198754;"></i>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" id="clearVerifiedBtn"
+                                onclick="event.stopPropagation()" title="Сбросить все проверенные">
+                            <i class="fas fa-undo me-1"></i>Сбросить всё
+                        </button>
+                        <i class="fas fa-chevron-down" style="font-size:0.75rem; color:#198754;"></i>
+                    </div>
                 </div>
                 <div id="verifiedSitesCollapse" class="collapse">
                     <!-- site-issues-block'и переносятся сюда через JS -->
                 </div>
-            </div>
-
-            <!-- Блок "Проверено мной" (скрытые строки) -->
-            <div id="resolvedBlock" class="resolved-block px-3 py-2" style="display:none">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <small class="text-muted fw-semibold">
-                        <i class="fas fa-check-circle me-1 text-success"></i>Проверено мной
-                        <span class="badge bg-secondary ms-1" id="resolvedCountBadge">0</span>
-                    </small>
-                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" id="clearResolvedBtn">
-                        <i class="fas fa-undo me-1"></i>Сбросить всё
-                    </button>
-                </div>
-                <div id="resolvedSitesList" class="d-flex flex-wrap gap-1"></div>
             </div>
 
             <!-- Текст для ИТ -->
@@ -904,6 +896,7 @@
     // Ключ: site|city|addressId|type — уникален для каждой строки
     // ═══════════════════════════════════════════════
     const LS_KEY = 'hidden-issues-' + RUN_ID;
+    const VERIFIED_KEY = 'verified-sites-' + RUN_ID;
     let hiddenIssues = new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]'));
     const originalItText = document.getElementById('itTextBlock')?.textContent || '';
 
@@ -911,64 +904,95 @@
         localStorage.setItem(LS_KEY, JSON.stringify([...hiddenIssues]));
     }
 
-    function applyHidden() {
-        // Скрыть/показать issues по составному ключу
-        const allItems = document.querySelectorAll('#issuesCollapse .list-group-item[data-issue-key]');
-        let visibleCount = 0;
-        allItems.forEach(el => {
-            const key = el.dataset.issueKey;
-            if (hiddenIssues.has(key)) {
-                el.classList.add('issue-hidden');
-            } else {
-                el.classList.remove('issue-hidden');
-                visibleCount++;
-            }
-        });
-
-        // Обновить счётчик в заголовке
-        const badge = document.getElementById('issuesCountBadge');
-        if (badge) badge.textContent = visibleCount;
-
-        // Обновить блок "Проверено мной"
-        updateResolvedBlock();
-
-        // Пересчитать itText
-        rebuildItText();
+    // Переместить строку ошибки в блок "Проверено мной" (в группу по сайту)
+    function moveRowToPartialGroup(row) {
+        const site = row.dataset.site;
+        const container = document.getElementById('verifiedSitesCollapse');
+        const wrapper = document.getElementById('verifiedSitesBlock');
+        if (!container || !wrapper || !site) return;
+        let group = container.querySelector('.verified-partial-group[data-site="' + CSS.escape(site) + '"]');
+        if (!group) {
+            group = document.createElement('div');
+            group.className = 'verified-partial-group border-bottom';
+            group.dataset.site = site;
+            const hdr = document.createElement('div');
+            hdr.className = 'px-3 py-1 d-flex align-items-center gap-2';
+            hdr.style.background = 'var(--bs-light)';
+            hdr.innerHTML = '<i class="fas fa-chevron-right text-muted" style="font-size:0.7rem"></i><span class="fw-semibold small">' + site + '</span>';
+            group.appendChild(hdr);
+            container.insertBefore(group, container.firstChild);
+        }
+        row.classList.remove('issue-hidden');
+        group.appendChild(row);
+        wrapper.style.display = '';
+        // Раскрыть collapse если он закрыт
+        const collapseEl = document.getElementById('verifiedSitesCollapse');
+        if (collapseEl && !collapseEl.classList.contains('show')) {
+            collapseEl.classList.add('show');
+        }
+        updateVerifiedCount();
     }
 
-    function updateResolvedBlock() {
-        const block = document.getElementById('resolvedBlock');
-        const list = document.getElementById('resolvedSitesList');
-        const countBadge = document.getElementById('resolvedCountBadge');
-        if (!block || !list) return;
+    // Вернуть строку ошибки из partial group обратно в site block
+    function restoreRowToSiteBlock(row) {
+        const site = row.dataset.site;
+        const siteBlock = document.querySelector('.site-issues-block[data-site="' + CSS.escape(site) + '"]');
+        if (!siteBlock) return;
+        const issuesContainer = document.getElementById('siteIssues-' + siteBlock.dataset.siteIdx);
+        if (issuesContainer) issuesContainer.appendChild(row);
+        const group = document.querySelector('.verified-partial-group[data-site="' + CSS.escape(site) + '"]');
+        if (group && !group.querySelectorAll('.list-group-item[data-issue-key]').length) group.remove();
+        updateVerifiedCount();
+        updateVerifiedBlockVisibility();
+    }
 
-        if (hiddenIssues.size === 0) {
-            block.style.display = 'none';
-            return;
-        }
-        block.style.display = '';
-        if (countBadge) countBadge.textContent = hiddenIssues.size;
+    function updateMainIssueCount() {
+        const badge = document.getElementById('issuesCountBadge');
+        if (badge) badge.textContent = document.querySelectorAll('#issuesCollapse .list-group-item[data-issue-key]').length;
+    }
 
-        list.innerHTML = '';
-        hiddenIssues.forEach(key => {
-            const parts = key.split('|');
-            const site = parts[0] || '';
-            const city = parts[1] || '';
-            const label = city ? site + ' (' + city + ')' : site;
-            const span = document.createElement('span');
-            span.className = 'badge bg-secondary d-inline-flex align-items-center gap-1 px-2 py-1';
-            span.innerHTML =
-                '<span>' + label + '</span>' +
-                '<button type="button" class="btn-close btn-close-white" style="font-size:0.6em" ' +
-                'onclick="restoreIssue(\'' + key.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" title="Восстановить"></button>';
-            list.appendChild(span);
+    function updateVerifiedCount() {
+        const container = document.getElementById('verifiedSitesCollapse');
+        const countEl = document.getElementById('verifiedSitesCount');
+        if (!container || !countEl) return;
+        countEl.textContent = container.querySelectorAll('.site-issues-block, .verified-partial-group').length;
+    }
+
+    function updateVerifiedBlockVisibility() {
+        const container = document.getElementById('verifiedSitesCollapse');
+        const wrapper = document.getElementById('verifiedSitesBlock');
+        if (!wrapper || !container) return;
+        wrapper.style.display = container.querySelector('.site-issues-block, .verified-partial-group') ? '' : 'none';
+    }
+
+    function applyHidden() {
+        // При инициализации: скрытые строки физически переносим в partial groups,
+        // строки из fully-verified сайтов пропускаем (они уедут целиком через markSiteVerified)
+        const verifiedSites = new Set(JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]'));
+        document.querySelectorAll('.list-group-item[data-issue-key]').forEach(function(el) {
+            const key = el.dataset.issueKey;
+            const site = el.dataset.site || key.split('|')[0];
+            const inPartialGroup = !!el.closest('.verified-partial-group');
+            const inVerifiedBlock = !!el.closest('#verifiedSitesCollapse');
+            if (hiddenIssues.has(key)) {
+                if (verifiedSites.has(site) || inVerifiedBlock) {
+                    // Полностью проверенный сайт — строки остаются, .issue-hidden убираем
+                    el.classList.remove('issue-hidden');
+                } else if (!inPartialGroup) {
+                    moveRowToPartialGroup(el);
+                }
+            } else {
+                el.classList.remove('issue-hidden');
+                if (inPartialGroup) restoreRowToSiteBlock(el);
+            }
         });
+        updateMainIssueCount();
+        rebuildItText();
     }
 
     function hideIssue(key) {
         hiddenIssues.add(key);
         saveHidden();
-        applyHidden();
     }
 
     function restoreIssue(key) {
@@ -1041,23 +1065,51 @@
         el.textContent = cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim();
     }
 
-    // Навешиваем кнопки "Скрыть"
-    document.querySelectorAll('.btn-hide-issue').forEach(btn => {
-        btn.addEventListener('click', () => hideIssue(btn.dataset.issueKey));
-    });
-
-    // Кнопка "Сбросить всё"
-    document.getElementById('clearResolvedBtn')?.addEventListener('click', () => {
-        hiddenIssues.clear();
-        saveHidden();
-        applyHidden();
+    // Навешиваем кнопки "Ошибка проверена" (toggle: перенести строку / вернуть обратно)
+    document.querySelectorAll('.btn-hide-issue').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const key = this.dataset.issueKey;
+            const site = key.split('|')[0];
+            const row = this.closest('.list-group-item');
+            if (hiddenIssues.has(key)) {
+                // Восстановить: убрать из hiddenIssues
+                hiddenIssues.delete(key);
+                saveHidden();
+                // Если сайт был полностью в verified — вернуть весь блок в основной список
+                const verified = JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]');
+                if (verified.includes(site)) {
+                    const idx2 = verified.indexOf(site);
+                    verified.splice(idx2, 1);
+                    localStorage.setItem(VERIFIED_KEY, JSON.stringify(verified));
+                    document.querySelectorAll('.verified-badge[data-site="' + CSS.escape(site) + '"]')
+                        .forEach(function(el) { el.style.display = 'none'; });
+                    moveSiteBack(site);
+                    // Раскрыть collapse сайта
+                    const sb = document.querySelector('.site-issues-block[data-site="' + CSS.escape(site) + '"]');
+                    if (sb && sb.dataset.siteIdx !== undefined) {
+                        const ce = document.getElementById('siteIssues-' + sb.dataset.siteIdx);
+                        if (ce) bootstrap.Collapse.getOrCreateInstance(ce).show();
+                    }
+                }
+                // applyHidden вернёт оставшиеся скрытые строки и восстановит эту строку на месте
+                applyHidden();
+            } else {
+                // Пометить как проверено: добавить в hiddenIssues и физически перенести строку
+                hideIssue(key);
+                if (row) moveRowToPartialGroup(row);
+                updateMainIssueCount();
+                rebuildItText();
+                // Если это была последняя ошибка сайта — переместить сайт целиком
+                checkAndAutoVerifySite(site);
+            }
+        });
     });
 
     // Инициализация — применить сохранённые hidden
     applyHidden();
 
     // ── Redmine: Verified-flag ──────────────────────────────────────
-    const VERIFIED_KEY = 'verified-sites-' + RUN_ID;
 
     function moveSiteToVerified(site) {
         const block = document.querySelector('.site-issues-block[data-site="' + CSS.escape(site) + '"]');
@@ -1065,10 +1117,26 @@
         const wrapper = document.getElementById('verifiedSitesBlock');
         if (!block || !container || !wrapper) return;
         if (block.closest('#verifiedSitesCollapse')) return; // уже перемещён
+        // Закрыть внутренний collapse перед перемещением
+        const siteIdx = block.dataset.siteIdx;
+        if (siteIdx !== undefined) {
+            const innerCollapse = document.getElementById('siteIssues-' + siteIdx);
+            if (innerCollapse) {
+                bootstrap.Collapse.getOrCreateInstance(innerCollapse).hide();
+                innerCollapse.classList.remove('show');
+            }
+            const chevron = block.querySelector('.chevron-site');
+            if (chevron) chevron.style.transform = 'rotate(-90deg)';
+        }
         container.appendChild(block);
         wrapper.style.display = '';
-        const countEl = document.getElementById('verifiedSitesCount');
-        if (countEl) countEl.textContent = container.querySelectorAll('.site-issues-block').length;
+        // Раскрыть collapse если закрыт
+        if (!container.classList.contains('show')) container.classList.add('show');
+        // После переезда — снять .issue-hidden (в verified-блоке issues всегда видны)
+        block.querySelectorAll('[data-issue-key].issue-hidden').forEach(function(el) {
+            el.classList.remove('issue-hidden');
+        });
+        updateVerifiedCount();
     }
 
     function markSiteVerified(site) {
@@ -1078,6 +1146,97 @@
             .forEach(function(el) { el.style.display = ''; });
         moveSiteToVerified(site);
     }
+
+    function moveSiteBack(site) {
+        const block = document.querySelector('#verifiedSitesCollapse .site-issues-block[data-site="' + CSS.escape(site) + '"]');
+        const issuesCollapse = document.getElementById('issuesCollapse');
+        if (!block || !issuesCollapse) return;
+        // Вставить в правильную позицию по data-site-idx
+        const siteIdx = parseInt(block.dataset.siteIdx || '0');
+        const blocks = issuesCollapse.querySelectorAll('.site-issues-block[data-site-idx]');
+        let inserted = false;
+        for (const b of blocks) {
+            if (parseInt(b.dataset.siteIdx) > siteIdx) {
+                issuesCollapse.insertBefore(block, b);
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted) issuesCollapse.appendChild(block);
+        updateVerifiedCount();
+        updateVerifiedBlockVisibility();
+    }
+
+    function unmarkSiteVerified(site) {
+        // Удалить из localStorage
+        const verified = JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]');
+        const idx2 = verified.indexOf(site);
+        if (idx2 !== -1) { verified.splice(idx2, 1); localStorage.setItem(VERIFIED_KEY, JSON.stringify(verified)); }
+        // Скрыть verified badge
+        document.querySelectorAll('.verified-badge[data-site="' + CSS.escape(site) + '"]')
+            .forEach(function(el) { el.style.display = 'none'; });
+        // Вернуть блок в основной список
+        moveSiteBack(site);
+        // Восстановить все скрытые issues этого сайта
+        [...hiddenIssues].filter(function(k) { return k.split('|')[0] === site; })
+            .forEach(function(k) { hiddenIssues.delete(k); });
+        saveHidden();
+        applyHidden();
+        // Раскрыть collapse сайта чтобы issues были видны
+        const siteBlock2 = document.querySelector('.site-issues-block[data-site="' + CSS.escape(site) + '"]');
+        if (siteBlock2) {
+            const idx2 = siteBlock2.dataset.siteIdx;
+            if (idx2 !== undefined) {
+                const collapseEl2 = document.getElementById('siteIssues-' + idx2);
+                if (collapseEl2) bootstrap.Collapse.getOrCreateInstance(collapseEl2).show();
+            }
+        }
+    }
+
+    function checkAndAutoVerifySite(site) {
+        const allIssues = document.querySelectorAll('[data-issue-key][data-site="' + CSS.escape(site) + '"]');
+        if (!allIssues.length) return;
+        const allHidden = [...allIssues].every(function(el) { return hiddenIssues.has(el.dataset.issueKey); });
+        if (!allHidden) return;
+        // Все ошибки проверены — растворяем partial group, возвращаем строки в site block, затем перемещаем весь блок
+        const group = document.querySelector('.verified-partial-group[data-site="' + CSS.escape(site) + '"]');
+        if (group) {
+            const siteBlock = document.querySelector('.site-issues-block[data-site="' + CSS.escape(site) + '"]');
+            if (siteBlock) {
+                const issuesContainer = document.getElementById('siteIssues-' + siteBlock.dataset.siteIdx);
+                if (issuesContainer) {
+                    [...group.querySelectorAll('.list-group-item[data-issue-key]')].forEach(function(r) { issuesContainer.appendChild(r); });
+                }
+            }
+            group.remove();
+        }
+        markSiteVerified(site);
+    }
+
+    // Кнопка "Сбросить всё" — вернуть все verified сайты и partial groups
+    document.getElementById('clearVerifiedBtn')?.addEventListener('click', function(e) {
+        e.stopPropagation();
+        // 1. Сбросить полностью проверенные сайты
+        const verified = JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]');
+        [...verified].forEach(function(site) { unmarkSiteVerified(site); });
+        // 2. Вернуть строки из partial groups в их site blocks
+        document.querySelectorAll('.verified-partial-group').forEach(function(group) {
+            const site = group.dataset.site;
+            const siteBlock = document.querySelector('.site-issues-block[data-site="' + CSS.escape(site) + '"]');
+            if (siteBlock) {
+                const issuesContainer = document.getElementById('siteIssues-' + siteBlock.dataset.siteIdx);
+                if (issuesContainer) {
+                    [...group.querySelectorAll('.list-group-item[data-issue-key]')].forEach(function(r) { issuesContainer.appendChild(r); });
+                }
+            }
+            group.remove();
+        });
+        hiddenIssues.clear();
+        saveHidden();
+        updateVerifiedBlockVisibility();
+        updateMainIssueCount();
+        rebuildItText();
+    });
 
     // Восстановить verified сайты ДО авто-раскрытия (чтобы они не раскрывались в основном списке)
     (function() {
@@ -1121,26 +1280,31 @@
         });
     });
 
-    // ─── "Проверено" — скрыть все проблемы сайта и свернуть ──────────
+    // ─── "Проверено" — toggle: пометить/снять весь сайт как проверенный ──────────
     document.querySelectorAll('.btn-mark-site-done').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            const siteIdx = this.dataset.siteidx;
-            if (siteIdx === undefined || siteIdx === '') return;
-
-            document.querySelectorAll('#siteIssues-' + siteIdx + ' [data-issue-key]').forEach(function(row) {
-                if (!row.classList.contains('issue-hidden')) {
-                    hideIssue(row.dataset.issueKey);
-                }
-            });
-
-            // Свернуть collapse
-            const collapseEl = document.getElementById('siteIssues-' + siteIdx);
-            if (collapseEl) bootstrap.Collapse.getOrCreateInstance(collapseEl).hide();
-
-            // Отметить как проверено
             const siteBlock = this.closest('[data-site]');
-            if (siteBlock && siteBlock.dataset.site) markSiteVerified(siteBlock.dataset.site);
+            if (!siteBlock || !siteBlock.dataset.site) return;
+            const site = siteBlock.dataset.site;
+
+            const verified = JSON.parse(localStorage.getItem(VERIFIED_KEY) || '[]');
+            if (verified.includes(site)) {
+                // Сайт уже проверен — убрать из verified
+                unmarkSiteVerified(site);
+            } else {
+                // Пометить как проверенный: скрыть все issues и переместить
+                const siteIdx = this.dataset.siteidx;
+                if (siteIdx !== undefined && siteIdx !== '') {
+                    document.querySelectorAll('#siteIssues-' + siteIdx + ' [data-issue-key]').forEach(function(row) {
+                        hiddenIssues.add(row.dataset.issueKey);
+                    });
+                    saveHidden();
+                    const collapseEl = document.getElementById('siteIssues-' + siteIdx);
+                    if (collapseEl) bootstrap.Collapse.getOrCreateInstance(collapseEl).hide();
+                }
+                markSiteVerified(site);
+            }
         });
     });
 
