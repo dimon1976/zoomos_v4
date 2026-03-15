@@ -56,4 +56,14 @@ public class ZoomosSettingsService {
     public void saveAll(Map<String, String> settings) {
         settings.forEach(this::set);
     }
+
+    /** Возвращает все настройки, ключ которых начинается с prefix. Один SQL-запрос. */
+    public Map<String, String> getByPrefix(String prefix) {
+        Map<String, String> map = new HashMap<>();
+        jdbcTemplate.query(
+                "SELECT key, value FROM zoomos_settings WHERE key LIKE ?",
+                rs -> { map.put(rs.getString("key"), rs.getString("value")); },
+                prefix + "%");
+        return map;
+    }
 }

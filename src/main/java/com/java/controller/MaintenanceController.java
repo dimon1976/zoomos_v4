@@ -521,10 +521,8 @@ public class MaintenanceController {
         }
         try {
             maintenanceSchedulerService.triggerTask(taskKey);
-            String lastRunAt = settingsService.getString("maint." + taskKey + ".lastRunAt", "");
             return ResponseEntity.ok(Map.of("success", true,
-                    "message", "Задача запущена: " + TASK_NAMES.getOrDefault(taskKey, taskKey),
-                    "lastRunAt", lastRunAt));
+                    "message", "Задача запущена: " + TASK_NAMES.getOrDefault(taskKey, taskKey)));
         } catch (Exception e) {
             log.error("Ошибка ручного запуска задачи {}", taskKey, e);
             return ResponseEntity.internalServerError().body(Map.of("success", false, "message", e.getMessage()));

@@ -617,8 +617,9 @@ public class FileManagementService {
             
             result.put("success", deletedFiles.get() > 0);
             result.put("deletedFiles", deletedFiles.get());
+            result.put("freedSpaceBytes", freedSpace.get());
             result.put("formattedFreedSpace", FileUtils.formatBytes(freedSpace.get()));
-            
+
             log.info("Очистка директории {} завершена. Удалено файлов: {}", directoryType, deletedFiles.get());
             
         } catch (Exception e) {
@@ -645,13 +646,10 @@ public class FileManagementService {
             
             for (String directoryType : directoryTypes) {
                 Map<String, Object> dirResult = cleanDirectory(directoryType);
-                if ((Boolean) dirResult.get("success")) {
+                if (Boolean.TRUE.equals(dirResult.get("success"))) {
                     totalDeletedFiles.addAndGet((Integer) dirResult.get("deletedFiles"));
+                    totalFreedSpace.addAndGet((Long) dirResult.get("freedSpaceBytes"));
                     cleanedDirectories.incrementAndGet();
-                    
-                    // Парсим размер из строки (упрощенно)
-                    String formattedSpace = (String) dirResult.get("formattedFreedSpace");
-                    // Здесь можно было бы парсить, но для простоты просто инкрементируем
                 }
             }
             

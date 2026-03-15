@@ -59,10 +59,11 @@ public class MaintenanceSchedulerService {
      * Вызывается при старте и после сохранения настроек через UI.
      */
     public void rescheduleAll() {
+        Map<String, String> settings = settingsService.getByPrefix("maint.");
         TASK_KEYS.forEach(key -> {
             unscheduleTask(key);
-            if ("true".equals(settingsService.getString("maint." + key + ".enabled", "false"))) {
-                String cron = settingsService.getString("maint." + key + ".cron", "");
+            if ("true".equals(settings.getOrDefault("maint." + key + ".enabled", "false"))) {
+                String cron = settings.getOrDefault("maint." + key + ".cron", "");
                 if (!cron.isBlank()) {
                     scheduleTask(key, cron);
                 }

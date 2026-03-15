@@ -30,7 +30,7 @@ public class DatabaseMaintenanceService {
     private long slowQueryThresholdMs;
 
     // Кэшируем результат проверки наличия pg_stat_statements
-    private Boolean pgStatStatementsAvailable = null;
+    private volatile Boolean pgStatStatementsAvailable = null;
 
     public Map<String, Object> performVacuumFull() {
         log.info("Запуск VACUUM FULL для всех таблиц");
@@ -39,13 +39,10 @@ public class DatabaseMaintenanceService {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
 
-            // Отключаем автокоммит для получения размера БД
-            connection.setAutoCommit(false);
+            // VACUUM требует autoCommit=true (не может выполняться в транзакции)
+            connection.setAutoCommit(true);
 
             long startSize = getDatabaseSizeViaJdbc(statement);
-
-            // Включаем автокоммит для VACUUM (требует отдельных транзакций)
-            connection.setAutoCommit(true);
 
             // Получаем список всех таблиц
             List<String> tables = new ArrayList<>();
@@ -73,9 +70,7 @@ public class DatabaseMaintenanceService {
             }
 
             // Получаем размер после очистки
-            connection.setAutoCommit(false);
             long endSize = getDatabaseSizeViaJdbc(statement);
-            connection.setAutoCommit(true);
 
             long freedBytes = startSize - endSize;
 
