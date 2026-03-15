@@ -285,6 +285,7 @@
     let autoRefreshEnabled = true;
     const activeSubscriptions = {}; // operationId → STOMP subscription
     let pendingSubscriptions = [];  // операции, ожидающие подключения WS
+    let isLoading = false;
 
     document.addEventListener('DOMContentLoaded', function() {
         connectWebSocket();
@@ -311,7 +312,7 @@
             stompClient.subscribe('/topic/dashboard-stats', function(message) {
                 if (autoRefreshEnabled) {
                     const stats = JSON.parse(message.body);
-                    updateStats(stats);
+                    updateStats(stats, true);
                     showUpdateIndicator();
                 }
             });
@@ -322,7 +323,8 @@
 
         }, function(error) {
             console.error('WebSocket connection error:', error);
-            // Повторное подключение через 5 секунд
+            // Сбрасываем подписки — stompClient невалиден после ошибки соединения
+            Object.keys(activeSubscriptions).forEach(id => delete activeSubscriptions[id]);
             setTimeout(connectWebSocket, 5000);
         });
     }
@@ -331,7 +333,9 @@
     function subscribeToOperationProgress(op) {
         if (activeSubscriptions[op.id]) return; // уже подписаны
         if (!stompClient || !stompClient.connected) {
-            pendingSubscriptions.push(op);
+            if (!pendingSubscriptions.some(p => p.id === op.id)) {
+                pendingSubscriptions.push(op);
+            }
             return;
         }
         const topic = op.operationType === 'EXPORT'
@@ -444,6 +448,8 @@
     }
 
     function loadOperations(page = 0) {
+        if (isLoading) return;
+        isLoading = true;
         showLoading(true);
 
         const params = new URLSearchParams({
@@ -469,12 +475,24 @@
                 console.error('Ошибка загрузки операций:', error);
                 showError();
                 showLoading(false);
+            })
+            .finally(() => {
+                isLoading = false;
             });
     }
 
     function displayOperations(operations) {
         const tbody = document.getElementById('operationsTableBody');
         const emptyState = document.getElementById('emptyState');
+
+        // Отписываемся от операций вне текущего набора (включая пустой список)
+        const currentIds = new Set((operations || []).map(op => op.id));
+        Object.keys(activeSubscriptions).forEach(id => {
+            if (!currentIds.has(Number(id))) {
+                activeSubscriptions[id].unsubscribe();
+                delete activeSubscriptions[id];
+            }
+        });
 
         if (!operations || operations.length === 0) {
             tbody.innerHTML = '';
@@ -484,33 +502,24 @@
 
         emptyState.style.display = 'none';
 
-        // Отписываемся от завершённых операций
-        const currentIds = new Set(operations.map(op => op.id));
-        Object.keys(activeSubscriptions).forEach(id => {
-            if (!currentIds.has(Number(id))) {
-                activeSubscriptions[id].unsubscribe();
-                delete activeSubscriptions[id];
-            }
-        });
-
         tbody.innerHTML = operations.map(op => `
             <tr class="operation-row" data-op-id="${op.id}">
                 <td>${op.id}</td>
                 <td>
                     <a href="/clients/${op.clientId}" class="text-decoration-none">
-                        ${op.clientName}
+                        ${escapeHtml(op.clientName)}
                     </a>
                 </td>
                 <td>
                     <i class="fas fa-${getOperationIcon(op.operationType)} me-1"></i>
-                    ${op.operationTypeDisplay}
+                    ${escapeHtml(op.operationTypeDisplay)}
                 </td>
-                <td class="text-truncate" style="max-width: 200px;" title="${op.fileName}">
-                    ${op.fileName}
+                <td class="text-truncate" style="max-width: 200px;" title="${escapeHtml(op.fileName)}">
+                    ${escapeHtml(op.fileName)}
                 </td>
                 <td>
                     <span class="badge status-badge ${getStatusClass(op.status)}">
-                        ${op.statusDisplay}
+                        ${escapeHtml(op.statusDisplay)}
                     </span>
                 </td>
                 <td>
@@ -523,7 +532,7 @@
                            </div>`
             : (op.processingProgress !== null ? op.processingProgress + '%' : '-')}
                 </td>
-                <td class="file-size">${op.fileSizeFormatted || '-'}</td>
+                <td class="file-size">${escapeHtml(op.fileSizeFormatted) || '-'}</td>
                 <td>${formatDateTime(op.startedAt)}</td>
                 <td>
                     <div class="btn-group btn-group-sm">
@@ -648,6 +657,13 @@
     }
 
     // Вспомогательные функции
+    function escapeHtml(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function getOperationIcon(type) {
         switch(type) {
             case 'IMPORT': return 'file-import';
@@ -696,6 +712,8 @@
 
     // Отключение WebSocket при уходе со страницы
     window.addEventListener('beforeunload', function() {
+        Object.keys(activeSubscriptions).forEach(id => delete activeSubscriptions[id]);
+        pendingSubscriptions = [];
         if (stompClient && stompClient.connected) {
             stompClient.disconnect();
         }

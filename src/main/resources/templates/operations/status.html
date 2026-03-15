@@ -164,7 +164,7 @@
                             <div class="progress">
                                 <div class="progress-bar progress-bar-striped progress-bar-animated"
                                      role="progressbar" id="progressBar"
-                                     th:style="'width: ' + ${operation.processingProgress ?: 0} + '%'">
+                                     th:style="${operation.status.name() == 'PENDING'} ? 'width: 100%' : 'width: ' + ${operation.processingProgress ?: 0} + '%'">
                                 </div>
                             </div>
                             <div class="text-center mt-1">
@@ -193,36 +193,32 @@
                                     <div class="fw-bold text-warning" data-stat="duplicateRows"
                                          th:text="${importSession.duplicateRows ?: 0}">0</div>
                                 </div>
-                                <div class="col-md-3">
-                                    <small class="text-muted">Статус</small>
-                                    <div class="fw-bold" id="currentOperation">Обработка...</div>
-                                </div>
                             </div>
                         </div>
 
                         <!-- Статистика экспорта -->
                         <div th:if="${exportSession}" class="mt-3">
                             <div class="row text-center">
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <small class="text-muted">Экспортировано</small>
-                                    <div class="fw-bold text-success" data-stat="processedRows"
+                                    <div class="fw-bold text-success" data-stat="exportedRows"
                                          th:text="${exportSession.exportedRows ?: 0}">0</div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <small class="text-muted">Отфильтровано</small>
                                     <div class="fw-bold text-warning" data-stat="filteredRows"
                                          th:text="${exportSession.filteredRows ?: 0}">0</div>
                                 </div>
-                                <div class="col-md-4">
-                                    <small class="text-muted">Статус</small>
-                                    <div class="fw-bold" id="currentOperation">Инициализация...</div>
-                                </div>
                             </div>
                         </div>
 
-                        <!-- Fallback когда сессия ещё не создана -->
-                        <div th:if="${importSession == null and exportSession == null}" class="mt-3 text-center">
-                            <div class="fw-bold text-muted" id="currentOperation">Инициализация...</div>
+                        <!-- Текущая операция — единственный элемент с id="currentOperation" -->
+                        <div class="mt-2 text-center">
+                            <small class="text-muted">Статус:</small>
+                            <div class="fw-bold" id="currentOperation"
+                                 th:text="${importSession != null} ? 'Обработка...' : 'Инициализация...'">
+                                Инициализация...
+                            </div>
                         </div>
                     </div>
 
@@ -433,6 +429,7 @@
 
         // ✅ ПОДДЕРЖКА ЭКСПОРТА
         if (progress.exportedRows !== undefined) {
+            updateStatValue('exportedRows', progress.exportedRows);
             updateStatValue('processedRows', progress.exportedRows);
             var remaining = (progress.totalRows || 0) - progress.exportedRows;
             updateStatValue('remainingRows', remaining);

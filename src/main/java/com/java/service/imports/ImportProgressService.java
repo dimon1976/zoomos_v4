@@ -133,8 +133,11 @@ public class ImportProgressService extends BaseProgressService<ImportSession, Im
      * Вычисляет прогресс с учетом того, что totalRows может быть оценкой
      */
     private Integer calculateProgressPercentage(ImportSession session) {
+        if (session.getStatus() == ImportStatus.INITIALIZING) {
+            return 5; // Явная фаза инициализации — симметрично с ExportProgressService
+        }
         if (session.getTotalRows() == null || session.getProcessedRows() == null) {
-            return 10; // Фаза инициализации — начало обработки
+            return 10; // Данные ещё не известны — начало обработки
         }
         if (session.getTotalRows() == 0) {
             return 0;
@@ -195,6 +198,9 @@ public class ImportProgressService extends BaseProgressService<ImportSession, Im
         }
 
         Duration elapsed = Duration.between(session.getStartedAt(), ZonedDateTime.now());
+        if (elapsed.getSeconds() == 0) {
+            return "Вычисление...";
+        }
         double rowsPerSecond = session.getProcessedRows() / (double) elapsed.getSeconds();
 
         if (rowsPerSecond == 0) {
