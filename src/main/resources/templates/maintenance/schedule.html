@@ -93,7 +93,7 @@
                         <td class="text-center">
                             <button class="btn btn-sm btn-outline-secondary"
                                     th:data-key="${entry.key}"
-                                    th:onclick="'triggerTask(\'' + ${entry.key} + '\', this)'">
+                                    onclick="triggerTask(this.dataset.key, this)">
                                 <i class="fas fa-play me-1"></i>Запустить
                             </button>
                         </td>
