@@ -8,9 +8,8 @@
 |-----|-------|-----------|
 | `/maintenance` | GET | Главный дашборд обслуживания |
 | `/maintenance/files` | GET | Управление файлами |
+| `/maintenance/files/archives` | GET | JSON: список ZIP-архивов |
 | `/maintenance/database` | GET | Обслуживание БД |
-| `/maintenance/system` | GET | Диагностика системы |
-| `/maintenance/operations` | GET | Ручные операции |
 | `/maintenance/schedule` | GET | Страница расписания задач |
 | `/maintenance/schedule/save` | POST | Сохранить настройки расписания |
 | `/maintenance/schedule/trigger/{key}` | POST | Ручной запуск задачи |
@@ -39,6 +38,8 @@
 | `dbCleanup` | Очистка базы данных | `0 0 3 * * SUN` (воскресенье 03:00) |
 | `healthCheck` | Проверка здоровья системы | `0 0 * * * *` (ежечасно) |
 | `perfAnalysis` | Анализ производительности | `0 0 1 * * MON` (понедельник 01:00) |
+| `vacuum` | VACUUM FULL (дефрагментация) | `0 0 3 * * SUN` (воскресенье 03:00) |
+| `reindex` | REINDEX (перестройка индексов) | `0 0 4 * * SUN` (воскресенье 04:00) |
 | `fullMaintenance` | Полное обслуживание | `0 0 4 1 * *` (1-е число месяца 04:00) |
 
 ### Ключевые классы
