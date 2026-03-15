@@ -1165,10 +1165,15 @@ async function analyzePerformance() {
 
             resultDiv.innerHTML = performanceHtml;
         } else {
-            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.className = 'mt-3 alert alert-info';
             resultDiv.innerHTML = `
-                <h6><i class="fas fa-check-circle"></i> Анализ завершен</h6>
-                <p class="mb-0">Проблем с производительностью не обнаружено. Активные запросы отсутствуют.</p>
+                <h6><i class="fas fa-info-circle"></i> Нет активных запросов</h6>
+                <p class="mb-1">Сейчас нет медленных или проблемных запросов.</p>
+                <p class="mb-0 text-muted"><small>
+                    <i class="fas fa-lightbulb me-1"></i>
+                    Для исторической статистики по всем запросам установите расширение PostgreSQL:<br>
+                    <code>CREATE EXTENSION pg_stat_statements;</code>
+                </small></p>
             `;
         }
 

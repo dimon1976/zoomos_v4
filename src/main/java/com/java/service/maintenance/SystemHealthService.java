@@ -12,13 +12,11 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
-import java.lang.management.ThreadMXBean;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -43,7 +41,6 @@ public class SystemHealthService {
     
     private final OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
     private final MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
-    private final ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
     private final RuntimeMXBean runtimeBean = ManagementFactory.getRuntimeMXBean();
     
     public SystemHealthDto checkSystemHealth() {
@@ -185,106 +182,6 @@ public class SystemHealthService {
                  String.format("%.1f", resources.getDiskUsagePercent()));
         
         return resources;
-    }
-    
-    public PerformanceMetricsDto getPerformanceMetrics() {
-        log.debug("Сбор метрик производительности");
-        
-        PerformanceMetricsDto metrics = new PerformanceMetricsDto();
-        metrics.setMeasurementStart(LocalDateTime.now().minusMinutes(5));
-        metrics.setMeasurementEnd(LocalDateTime.now());
-        metrics.setMeasurementDurationSeconds(300);
-        
-        // Информация о потоках
-        int activeThreads = threadBean.getThreadCount();
-        metrics.setActiveThreads(activeThreads);
-        metrics.setThreadPoolUsagePercent((double) activeThreads / 50 * 100); // Примерный максимум
-        
-        // Базовые метрики (в реальном приложении будут собираться из метрик Spring)
-        metrics.setAvgResponseTimeMs(150.0);
-        metrics.setMaxResponseTimeMs(2500.0);
-        metrics.setTotalRequests(1000L);
-        metrics.setErrorCount(5L);
-        metrics.setErrorRatePercent((double) metrics.getErrorCount() / metrics.getTotalRequests() * 100);
-        metrics.setThroughputRequestsPerSecond((double) metrics.getTotalRequests() / metrics.getMeasurementDurationSeconds());
-        
-        // Метрики по эндпоинтам
-        Map<String, Double> endpointTimes = new HashMap<>();
-        endpointTimes.put("/clients", 120.0);
-        endpointTimes.put("/import", 300.0);
-        endpointTimes.put("/export", 250.0);
-        metrics.setEndpointResponseTimes(endpointTimes);
-        
-        Map<String, Long> endpointCounts = new HashMap<>();
-        endpointCounts.put("/clients", 400L);
-        endpointCounts.put("/import", 200L);
-        endpointCounts.put("/export", 150L);
-        metrics.setEndpointRequestCounts(endpointCounts);
-        
-        log.debug("Метрики производительности собраны. Средний отклик: {}мс, Активных потоков: {}", 
-                 metrics.getAvgResponseTimeMs(), activeThreads);
-        
-        return metrics;
-    }
-    
-    public HealthCheckResultDto generateDiagnosticReport() {
-        log.info("Генерация диагностического отчета системы");
-        
-        HealthCheckResultDto report = new HealthCheckResultDto();
-        report.setComponentName("SYSTEM_OVERALL");
-        report.setCheckTime(LocalDateTime.now());
-        
-        long startTime = System.currentTimeMillis();
-        
-        try {
-            SystemHealthDto health = checkSystemHealth();
-            SystemResourcesDto resources = getSystemResources();
-            DatabaseHealthDto dbHealth = checkDatabaseHealth();
-            
-            boolean allHealthy = health.getOverallStatus().equals("HEALTHY");
-            report.setHealthy(allHealthy);
-            report.setStatus(health.getOverallStatus());
-            report.setScore(health.getSystemScore());
-            
-            StringBuilder details = new StringBuilder();
-            details.append("=== СИСТЕМНЫЙ ДИАГНОСТИЧЕСКИЙ ОТЧЕТ ===\n");
-            details.append("Время проверки: ").append(health.getCheckTime().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"))).append("\n");
-            details.append("Время работы: ").append(health.getFormattedUptime()).append("\n\n");
-            
-            details.append("--- БАЗА ДАННЫХ ---\n");
-            details.append("Статус: ").append(dbHealth.getConnectionStatus()).append("\n");
-            details.append("Время подключения: ").append(dbHealth.getConnectionTimeMs()).append("мс\n");
-            details.append("Активных подключений: ").append(dbHealth.getActiveConnections()).append("\n\n");
-            
-            details.append("--- СИСТЕМНЫЕ РЕСУРСЫ ---\n");
-            details.append("CPU: ").append(String.format("%.1f%%", resources.getCpuUsagePercent())).append("\n");
-            details.append("Память: ").append(String.format("%.1f%% (%s из %s)", 
-                    resources.getMemoryUsagePercent(), 
-                    resources.getFormattedUsedMemory(), 
-                    resources.getFormattedTotalMemory())).append("\n");
-            details.append("Диск: ").append(String.format("%.1f%% (%s свободно)", 
-                    resources.getDiskUsagePercent(), 
-                    resources.getFormattedFreeDisk())).append("\n");
-            
-            report.setDetails(details.toString());
-            report.setMessage(allHealthy ? "Система работает нормально" : "Обнаружены проблемы");
-            report.setSeverity(allHealthy ? "INFO" : "WARNING");
-            report.setRecommendation(health.getRecommendation());
-            
-            log.info("Диагностический отчет сгенерирован. Статус: {}, Оценка: {}", 
-                    report.getStatus(), report.getScore());
-            
-        } catch (Exception e) {
-            log.error("Ошибка генерации диагностического отчета: {}", e.getMessage());
-            report.setHealthy(false);
-            report.setStatus("ERROR");
-            report.setMessage("Ошибка при генерации отчета: " + e.getMessage());
-            report.setSeverity("ERROR");
-            report.setScore(0.0);
-        }
-        
-        report.setCheckDurationMs(System.currentTimeMillis() - startTime);
-        return report;
     }
     
     private double calculateSystemScore(DatabaseHealthDto dbHealth, SystemResourcesDto resources) {

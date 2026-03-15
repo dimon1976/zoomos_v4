@@ -145,6 +145,39 @@ public class FileManagementService {
         }
     }
 
+    public List<Map<String, Object>> getArchivedFiles() {
+        Path archiveDir = pathResolver.getAbsoluteUploadDir().resolve("archive");
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (!Files.exists(archiveDir)) {
+            return result;
+        }
+        try (var stream = Files.list(archiveDir)) {
+            stream.filter(p -> p.getFileName().toString().endsWith(".zip"))
+                  .sorted(Comparator.comparing(p -> {
+                      try { return Files.getLastModifiedTime(p); }
+                      catch (IOException e) { return java.nio.file.attribute.FileTime.fromMillis(0); }
+                  }, Comparator.reverseOrder()))
+                  .forEach(p -> {
+                      try {
+                          Map<String, Object> entry = new LinkedHashMap<>();
+                          entry.put("name", p.getFileName().toString());
+                          long size = Files.size(p);
+                          entry.put("size", FileUtils.formatBytes(size));
+                          entry.put("sizeBytes", size);
+                          entry.put("modified", Files.getLastModifiedTime(p).toInstant()
+                                  .atZone(java.time.ZoneId.systemDefault())
+                                  .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")));
+                          result.add(entry);
+                      } catch (IOException e) {
+                          log.warn("Ошибка чтения файла архива {}: {}", p, e.getMessage());
+                      }
+                  });
+        } catch (IOException e) {
+            log.error("Ошибка при чтении директории архивов", e);
+        }
+        return result;
+    }
+
     public List<DuplicateFileDto> findDuplicateFiles() {
         log.info("Запуск поиска дублирующихся файлов");
         

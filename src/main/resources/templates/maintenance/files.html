@@ -92,7 +92,7 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p>Архивирование старых файлов (старше <span th:text="${fileArchiveOldFilesDays}">30</span> дней) для освобождения дискового пространства.</p>
+                        <p>Архивирует файлы из <code>data/upload/exports/</code> и <code>data/upload/imports/</code> старше <span th:text="${fileArchiveOldFilesDays}">30</span> дней в ZIP-архив в папку <code>data/upload/archive/</code>.</p>
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-success action-button" onclick="archiveFiles()">
                                 <i class="fas fa-archive"></i> Архивировать файлы
@@ -210,6 +210,41 @@
             </div>
         </div>
 
+        <!-- Список архивов -->
+        <div class="row mt-2 mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-file-archive text-secondary"></i>
+                            Архивы
+                        </h5>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadArchives()">
+                            <i class="fas fa-sync-alt"></i> Обновить
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="archivesLoading" class="text-center p-3 text-muted">
+                            <i class="fas fa-spinner fa-spin"></i> Загрузка...
+                        </div>
+                        <div id="archivesEmpty" class="text-center p-3 text-muted d-none">
+                            <i class="fas fa-inbox"></i> Архивы не найдены. Запустите архивирование файлов.
+                        </div>
+                        <table id="archivesTable" class="table table-sm table-hover mb-0 d-none">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Файл</th>
+                                    <th style="width:120px">Размер</th>
+                                    <th style="width:160px">Дата</th>
+                                </tr>
+                            </thead>
+                            <tbody id="archivesList"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Результаты операций -->
         <div class="row" id="operationResults" style="display: none;">
             <div class="col-12">
@@ -237,6 +272,7 @@ window.fileArchiveOldFilesDays = /*[[${fileArchiveOldFilesDays}]]*/ 30;
 // Загрузка статистики при загрузке страницы
 document.addEventListener('DOMContentLoaded', function() {
     loadFileStats();
+    loadArchives();
 });
 
 // Загрузка статистики файлов
@@ -293,6 +329,32 @@ async function loadFileStats() {
     }
 }
 
+// Загрузка списка архивов
+async function loadArchives() {
+    document.getElementById('archivesLoading').classList.remove('d-none');
+    document.getElementById('archivesEmpty').classList.add('d-none');
+    document.getElementById('archivesTable').classList.add('d-none');
+    try {
+        const response = await fetch('/maintenance/files/archives');
+        const archives = await response.json();
+        document.getElementById('archivesLoading').classList.add('d-none');
+        if (archives.length === 0) {
+            document.getElementById('archivesEmpty').classList.remove('d-none');
+        } else {
+            const tbody = document.getElementById('archivesList');
+            tbody.innerHTML = archives.map(a => `
+                <tr>
+                    <td><i class="fas fa-file-archive text-secondary me-1"></i>${a.name}</td>
+                    <td>${a.size}</td>
+                    <td><small class="text-muted">${a.modified}</small></td>
+                </tr>`).join('');
+            document.getElementById('archivesTable').classList.remove('d-none');
+        }
+    } catch (e) {
+        document.getElementById('archivesLoading').innerHTML = '<div class="p-3 text-danger">Ошибка загрузки архивов</div>';
+    }
+}
+
 // Архивирование файлов
 async function archiveFiles() {
     const button = event.target;
@@ -328,8 +390,9 @@ async function archiveFiles() {
         }
         
         resultDiv.classList.remove('d-none');
-        loadFileStats(); // Обновляем статистику
-        
+        loadFileStats();
+        loadArchives(); // Обновляем список архивов
+
     } catch (error) {
         console.error('Ошибка архивирования:', error);
         const resultDiv = document.getElementById('archiveResult');

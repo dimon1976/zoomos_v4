@@ -43,7 +43,7 @@ public class MaintenanceSchedulerService {
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     public static final List<String> TASK_KEYS = List.of(
-            "fileArchive", "dbCleanup", "healthCheck", "perfAnalysis", "fullMaintenance");
+            "fileArchive", "dbCleanup", "healthCheck", "perfAnalysis", "vacuum", "reindex", "fullMaintenance");
 
     private final Map<String, ScheduledFuture<?>> scheduleMap = new ConcurrentHashMap<>();
 
@@ -133,6 +133,8 @@ public class MaintenanceSchedulerService {
             case "dbCleanup"       -> this::scheduleDatabaseCleanup;
             case "healthCheck"     -> this::scheduleHealthCheck;
             case "perfAnalysis"    -> this::schedulePerformanceAnalysis;
+            case "vacuum"          -> this::scheduleVacuum;
+            case "reindex"         -> this::scheduleReindex;
             case "fullMaintenance" -> this::scheduleFullMaintenance;
             default -> () -> log.warn("MaintenanceSchedulerService: неизвестная задача '{}'", key);
         };
@@ -259,6 +261,50 @@ public class MaintenanceSchedulerService {
             notificationService.sendMaintenanceNotification(
                     "Ошибка анализа производительности",
                     "Ошибка при выполнении анализа производительности БД: " + e.getMessage(),
+                    "error");
+        }
+    }
+
+    public void scheduleVacuum() {
+        log.info("Запуск планового VACUUM FULL: {}", LocalDateTime.now().format(FORMATTER));
+        recordLastRun("vacuum");
+        try {
+            var result = databaseMaintenanceService.performVacuumFull();
+            if (Boolean.TRUE.equals(result.get("success"))) {
+                log.info("Плановый VACUUM FULL завершён. Освобождено: {}", result.get("freedSpace"));
+                notificationService.sendMaintenanceNotification(
+                        "VACUUM FULL",
+                        String.format("Завершён успешно. Обработано таблиц: %s, освобождено: %s",
+                                result.get("tablesProcessed"), result.get("freedSpace")),
+                        "success");
+            }
+        } catch (Exception e) {
+            log.error("Ошибка планового VACUUM FULL", e);
+            notificationService.sendMaintenanceNotification(
+                    "Ошибка VACUUM FULL",
+                    "Ошибка при выполнении VACUUM FULL: " + e.getMessage(),
+                    "error");
+        }
+    }
+
+    public void scheduleReindex() {
+        log.info("Запуск планового REINDEX: {}", LocalDateTime.now().format(FORMATTER));
+        recordLastRun("reindex");
+        try {
+            var result = databaseMaintenanceService.performReindex();
+            if (Boolean.TRUE.equals(result.get("success"))) {
+                log.info("Плановый REINDEX завершён. Обработано индексов: {}/{}", result.get("processedIndexes"), result.get("totalIndexes"));
+                notificationService.sendMaintenanceNotification(
+                        "REINDEX",
+                        String.format("Завершён успешно. Обработано индексов: %s/%s",
+                                result.get("processedIndexes"), result.get("totalIndexes")),
+                        "success");
+            }
+        } catch (Exception e) {
+            log.error("Ошибка планового REINDEX", e);
+            notificationService.sendMaintenanceNotification(
+                    "Ошибка REINDEX",
+                    "Ошибка при выполнении REINDEX: " + e.getMessage(),
                     "error");
         }
     }

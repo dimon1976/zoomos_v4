@@ -100,19 +100,6 @@ public class MaintenanceController {
         return "maintenance/database";
     }
     
-    @GetMapping("/system")
-    public String systemPage(Model model) {
-        log.debug("GET request to system health page");
-        model.addAttribute("pageTitle", "Диагностика системы");
-        return "maintenance/system";
-    }
-    
-    @GetMapping("/operations")
-    public String operationsPage(Model model) {
-        log.debug("GET request to manual operations page");
-        model.addAttribute("pageTitle", "Ручные операции");
-        return "maintenance/operations";
-    }
     
     // === FILE MANAGEMENT ENDPOINTS ===
     
@@ -144,6 +131,18 @@ public class MaintenanceController {
         }
     }
     
+    @GetMapping("/files/archives")
+    @ResponseBody
+    public ResponseEntity<List<Map<String, Object>>> getArchivedFiles() {
+        log.debug("Запрос списка архивов");
+        try {
+            return ResponseEntity.ok(fileManagementService.getArchivedFiles());
+        } catch (Exception e) {
+            log.error("Ошибка получения списка архивов: {}", e.getMessage());
+            return ResponseEntity.ok(List.of());
+        }
+    }
+
     @GetMapping("/files/duplicates")
     @ResponseBody
     public ResponseEntity<List<DuplicateFileDto>> findDuplicates() {
@@ -375,21 +374,6 @@ public class MaintenanceController {
         }
     }
     
-    @GetMapping("/system/report")
-    @ResponseBody
-    public ResponseEntity<HealthCheckResultDto> getSystemReport() {
-        log.info("Генерация диагностического отчета через API");
-        try {
-            HealthCheckResultDto report = systemHealthService.generateDiagnosticReport();
-            log.info("Диагностический отчет сгенерирован. Статус: {}, Время проверки: {}мс", 
-                    report.getStatus(), report.getCheckDurationMs());
-            return ResponseEntity.ok(report);
-        } catch (Exception e) {
-            log.error("Ошибка генерации диагностического отчета: {}", e.getMessage());
-            return createErrorResponse("getSystemReport", e);
-        }
-    }
-    
     // === ОБЩИЙ CLEANUP ENDPOINT ===
     
     @PostMapping("/cleanup")
@@ -496,6 +480,8 @@ public class MaintenanceController {
             "dbCleanup",       "Очистка базы данных",
             "healthCheck",     "Проверка здоровья системы",
             "perfAnalysis",    "Анализ производительности",
+            "vacuum",          "VACUUM FULL (дефрагментация)",
+            "reindex",         "REINDEX (перестройка индексов)",
             "fullMaintenance", "Полное обслуживание");
 
     @GetMapping("/schedule")
