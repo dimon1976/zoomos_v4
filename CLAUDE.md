@@ -74,8 +74,9 @@ mvn flyway:info
 ### Текущие файлы документации
 
 | Файл | Направление |
-|------|-------------|
+| --- | --- |
 | [`docs/zoomos-check.md`](docs/zoomos-check.md) | Zoomos Check — проверка выкачки, evaluateGroup, тренды, Redmine |
+| [`docs/maintenance.md`](docs/maintenance.md) | Система обслуживания — расписание, очистка БД, файлы, диагностика |
 
 ### Правила
 
