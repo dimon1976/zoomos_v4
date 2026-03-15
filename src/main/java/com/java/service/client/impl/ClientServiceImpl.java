@@ -167,6 +167,29 @@ public class ClientServiceImpl implements ClientService {
         return shopRepository.findByClientId(clientId);
     }
 
+    @Override
+    @Transactional
+    public void toggleActive(Long id) {
+        Client client = clientRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Клиент " + id + " не найден"));
+        client.setActive(!client.isActive());
+        clientRepository.save(client);
+        log.info("Client id={} isActive={}", id, client.isActive());
+    }
+
+    @Override
+    @Transactional
+    public void reorder(List<Long> orderedIds) {
+        for (int i = 0; i < orderedIds.size(); i++) {
+            final int order = i;
+            clientRepository.findById(orderedIds.get(i)).ifPresent(c -> {
+                c.setSortOrder(order);
+                clientRepository.save(c);
+            });
+        }
+        log.info("Reordered {} clients", orderedIds.size());
+    }
+
     // Маппер из entity в DTO
     private ClientDto mapToDto(Client client, Integer fileOperationsCount) {
         ClientDto.ClientDtoBuilder builder = ClientDto.builder()
@@ -175,6 +198,8 @@ public class ClientServiceImpl implements ClientService {
                 .description(client.getDescription())
                 .regionCode(client.getRegionCode())
                 .regionName(client.getRegionName())
+                .isActive(client.isActive())
+                .sortOrder(client.getSortOrder())
                 .fileOperationsCount(fileOperationsCount);
         shopRepository.findByClientId(client.getId()).ifPresent(shop -> {
             builder.linkedShopId(shop.getId());

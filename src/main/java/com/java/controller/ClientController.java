@@ -8,6 +8,7 @@ import com.java.repository.ZoomosCheckRunRepository;
 import com.java.repository.ZoomosShopRepository;
 import com.java.repository.ZoomosShopScheduleRepository;
 import com.java.service.ZoomosParserService;
+import com.java.service.ZoomosSettingsService;
 import com.java.service.client.ClientService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,6 +39,7 @@ public class ClientController {
     private final ZoomosShopScheduleRepository scheduleRepository;
     private final ZoomosShopRepository shopRepository;
     private final ZoomosParserService parserService;
+    private final ZoomosSettingsService settingsService;
 
     @Value("${spring.servlet.multipart.max-request-size}")
     private DataSize maxRequestSize;
@@ -306,6 +308,29 @@ public class ClientController {
         return "clients/list";
     }
 
+    /**
+     * Переключить активность клиента
+     */
+    @PostMapping("/{id}/toggle-active")
+    public String toggleActive(@PathVariable Long id, RedirectAttributes redirectAttributes) {
+        try {
+            clientService.toggleActive(id);
+        } catch (Exception e) {
+            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
+        }
+        return "redirect:/clients";
+    }
+
+    /**
+     * Сохранить порядок клиентов
+     */
+    @PostMapping("/reorder")
+    @ResponseBody
+    public ResponseEntity<Void> reorder(@RequestBody List<Long> ids) {
+        clientService.reorder(ids);
+        return ResponseEntity.ok().build();
+    }
+
     // =========================================================================
     // Zoomos Check интеграция
     // =========================================================================
@@ -333,6 +358,7 @@ public class ClientController {
                         model.addAttribute("schedules", List.of());
                         model.addAttribute("allShops", parserService.getAllShops());
                     }
+                    model.addAttribute("defaultThresholds", settingsService.getAllSettings());
                     return "clients/zoomos";
                 })
                 .orElseGet(() -> {

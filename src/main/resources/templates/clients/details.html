@@ -30,6 +30,18 @@
             color: #6c757d;
             font-size: 0.875rem;
         }
+        /* Равные пропорции для всех карточек статистики */
+        .stat-card-body {
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        /* Компактный текст в виджете Zoomos */
+        #zoomosWidget .badge { font-size: 0.75rem; }
+        #zoomosWidget .stats-label { font-size: 0.8rem; }
+        #zoomosWidget small { font-size: 0.72rem; }
     </style>
 </head>
 <body>
@@ -52,6 +64,9 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
+                    <p th:if="${!client.isActive}" class="mb-2">
+                        <span class="badge bg-secondary">Неактивен</span>
+                    </p>
                     <p class="mb-1"><strong>Код региона:</strong>
                         <span th:text="${client.regionCode != null && !client.regionCode.isEmpty() ? client.regionCode : 'Не указан'}">77</span>
                     </p>
@@ -119,7 +134,7 @@
                         <div class="col-md-2 col-sm-6 mb-2">
                             <div class="d-grid">
                                 <a th:href="@{/clients/{id}/zoomos(id=${client.id})}"
-                                   class="btn btn-outline-info">
+                                   class="btn btn-outline-primary">
                                     <i class="fas fa-search me-1"></i>Zoomos Check
                                 </a>
                             </div>
@@ -131,10 +146,10 @@
     </div>
 
     <!-- Краткая статистика -->
-    <div class="row mb-4">
+    <div class="row mb-4 align-items-stretch">
         <div class="col mb-3">
-            <div class="card section-card text-center">
-                <div class="card-body">
+            <div class="card section-card text-center h-100">
+                <div class="card-body stat-card-body">
                     <div class="stats-value" id="totalOperations">
                         <i class="fas fa-spinner fa-spin"></i>
                     </div>
@@ -143,8 +158,8 @@
             </div>
         </div>
         <div class="col mb-3">
-            <div class="card section-card text-center">
-                <div class="card-body">
+            <div class="card section-card text-center h-100">
+                <div class="card-body stat-card-body">
                     <div class="stats-value" id="totalRecords">
                         <i class="fas fa-spinner fa-spin"></i>
                     </div>
@@ -153,8 +168,8 @@
             </div>
         </div>
         <div class="col mb-3">
-            <div class="card section-card text-center">
-                <div class="card-body">
+            <div class="card section-card text-center h-100">
+                <div class="card-body stat-card-body">
                     <div class="stats-value" id="totalTemplates">
                         <i class="fas fa-spinner fa-spin"></i>
                     </div>
@@ -163,8 +178,8 @@
             </div>
         </div>
         <div class="col mb-3">
-            <div class="card section-card text-center">
-                <div class="card-body">
+            <div class="card section-card text-center h-100">
+                <div class="card-body stat-card-body">
                     <div class="stats-value text-warning" id="activeOperations">
                         <i class="fas fa-spinner fa-spin"></i>
                     </div>
@@ -174,7 +189,7 @@
         </div>
         <div class="col mb-3">
             <div class="card section-card text-center h-100">
-                <div class="card-body d-flex flex-column justify-content-center" id="zoomosWidget">
+                <div class="card-body stat-card-body" id="zoomosWidget">
                     <i class="fas fa-spinner fa-spin stats-value"></i>
                     <div class="stats-label mt-1">Выкачка</div>
                 </div>
@@ -471,7 +486,7 @@
                     w.innerHTML = `<div class="stats-value text-muted"><i class="fas fa-unlink"></i></div>
                         <div class="stats-label mt-1">Выкачка</div>
                         <small class="text-muted">Не настроено</small>
-                        <a href="/clients/${clientId}/zoomos" class="btn btn-outline-info btn-sm mt-2">Настроить</a>`;
+                        <a href="/clients/${clientId}/zoomos" class="btn btn-outline-primary btn-sm mt-2">Настроить</a>`;
                     return;
                 }
                 const statusMap = {COMPLETED: ['bg-success','Готово'], RUNNING: ['bg-primary','Идёт проверка'],
@@ -479,10 +494,10 @@
                 const [cls, lbl] = statusMap[data.lastRunStatus] || ['bg-secondary', data.lastRunStatus || 'Нет данных'];
                 const ok = data.okCount || 0, warn = data.warnCount || 0, err = data.errorCount || 0;
                 const runLink = data.lastRunId ? `/zoomos/check/results/${data.lastRunId}` : `/clients/${clientId}/zoomos`;
-                w.innerHTML = `<span class="badge ${cls} mb-1">${lbl}</span>
-                    <div class="stats-label">${data.lastRunAt || ''}</div>
-                    <small class="text-muted"><span class="text-success">${ok} OK</span> · <span class="text-warning">${warn} предупр.</span> · <span class="text-danger">${err} ошиб.</span></small>
-                    <div class="mt-2"><a href="${runLink}" class="btn btn-outline-info btn-sm">Подробнее</a></div>`;
+                w.innerHTML = `<span class="badge ${cls}">${lbl}</span>
+                    <div class="stats-label mt-1" style="font-size:0.78rem">${data.lastRunAt || ''}</div>
+                    <div style="font-size:0.72rem;line-height:1.3" class="text-muted mt-1"><span class="text-success">${ok} OK</span> · <span class="text-warning">${warn} пред.</span> · <span class="text-danger">${err} ош.</span></div>
+                    <a href="${runLink}" class="btn btn-outline-primary btn-sm mt-2" style="font-size:0.75rem;padding:2px 8px">Подробнее</a>`;
             }).catch(() => {
                 const w = document.getElementById('zoomosWidget');
                 w.innerHTML = `<div class="stats-value text-muted"><i class="fas fa-question"></i></div><div class="stats-label mt-1">Выкачка</div>`;

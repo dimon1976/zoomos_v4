@@ -52,12 +52,10 @@
                     <strong th:text="${shop.shopName}">shop.ru</strong>
                     <span class="text-muted small">
                         <i class="fas fa-user ms-2 me-1"></i>
-                        <span th:text="${shop.client.name}">Клиент</span>
+                        <a th:href="@{/clients/{id}(id=${shop.client.id})}"
+                           class="text-decoration-none text-muted"
+                           th:text="${shop.client.name}">Клиент</a>
                     </span>
-                    <a th:href="@{/clients/{id}/zoomos(id=${shop.client.id})}"
-                       class="btn btn-sm btn-outline-secondary ms-2" title="Страница клиента">
-                        <i class="fas fa-external-link-alt"></i>
-                    </a>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <!-- Расписание -->
@@ -107,23 +105,37 @@
 
             <!-- Скрытая панель порогов -->
             <div th:id="'thresholds-' + ${shop.id}" class="collapse px-3 py-2 border-bottom bg-light">
-                <div class="row g-2">
+                <div class="row g-2 align-items-end">
                     <div class="col-sm-3">
                         <label class="form-label mb-0 small">Падение inStock, %</label>
-                        <input type="number" th:id="'dropThreshold-' + ${shop.id}" class="form-control form-control-sm" value="10" min="1" max="100">
+                        <input type="number" th:id="'dropThreshold-' + ${shop.id}" class="form-control form-control-sm"
+                               th:value="${defDropThreshold}" min="1" max="100">
                     </div>
                     <div class="col-sm-3">
                         <label class="form-label mb-0 small">Рост ошибок, %</label>
-                        <input type="number" th:id="'errThreshold-' + ${shop.id}" class="form-control form-control-sm" value="30" min="1" max="500">
+                        <input type="number" th:id="'errThreshold-' + ${shop.id}" class="form-control form-control-sm"
+                               th:value="${defErrThreshold}" min="1" max="500">
                     </div>
                     <div class="col-sm-3">
                         <label class="form-label mb-0 small">Baseline, дней</label>
-                        <input type="number" th:id="'baselineDays-' + ${shop.id}" class="form-control form-control-sm" value="7" min="0" max="30">
+                        <input type="number" th:id="'baselineDays-' + ${shop.id}" class="form-control form-control-sm"
+                               th:value="${defBaselineDays}" min="0" max="30">
                     </div>
                     <div class="col-sm-3">
                         <label class="form-label mb-0 small">Мин. ошибок</label>
-                        <input type="number" th:id="'minAbsErrors-' + ${shop.id}" class="form-control form-control-sm" value="5" min="0" max="1000">
+                        <input type="number" th:id="'minAbsErrors-' + ${shop.id}" class="form-control form-control-sm"
+                               th:value="${defMinAbsErrors}" min="0" max="1000">
                     </div>
+                </div>
+                <input type="hidden" th:id="'trendDrop-' + ${shop.id}" th:value="${defTrendDrop}">
+                <input type="hidden" th:id="'trendErr-'  + ${shop.id}" th:value="${defTrendErr}">
+                <div class="mt-2">
+                    <button type="button" class="btn btn-xs btn-outline-secondary btn-save-defaults"
+                            th:data-shop-id="${shop.id}"
+                            style="font-size:0.75rem;padding:1px 8px;">
+                        <i class="fas fa-save me-1"></i>Установить по умолчанию
+                    </button>
+                    <span class="ms-2 small text-success saved-msg" style="display:none;">Сохранено</span>
                 </div>
             </div>
 
@@ -227,8 +239,8 @@ document.addEventListener('DOMContentLoaded', function() {
             fd.append('errorGrowthThreshold', errThreshold);
             fd.append('baselineDays', baselineDays);
             fd.append('minAbsoluteErrors', minAbsErrors);
-            fd.append('trendDropThreshold', '30');
-            fd.append('trendErrorThreshold', '100');
+            fd.append('trendDropThreshold', (document.getElementById('trendDrop-' + shopId) || {}).value || '30');
+            fd.append('trendErrorThreshold', (document.getElementById('trendErr-'  + shopId) || {}).value || '100');
 
             const btnRef = this;
             fetch('/zoomos/check/run', { method: 'POST', body: fd })
@@ -304,6 +316,24 @@ document.addEventListener('DOMContentLoaded', function() {
             resetBtn(btn);
         });
     }
+
+    // ── Сохранить настройки по умолчанию ─────────────────────────────
+    document.querySelectorAll('.btn-save-defaults').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const body = new URLSearchParams({
+                'default.drop_threshold':          document.getElementById('dropThreshold-' + shopId)?.value || '',
+                'default.error_growth_threshold':  document.getElementById('errThreshold-'  + shopId)?.value || '',
+                'default.baseline_days':           document.getElementById('baselineDays-'  + shopId)?.value || '',
+                'default.min_absolute_errors':     document.getElementById('minAbsErrors-'  + shopId)?.value || '',
+                'default.trend_drop_threshold':    document.getElementById('trendDrop-'     + shopId)?.value || '',
+                'default.trend_error_threshold':   document.getElementById('trendErr-'      + shopId)?.value || ''
+            });
+            const msg = this.closest('.collapse').querySelector('.saved-msg');
+            fetch('/zoomos/settings', { method: 'POST', body, headers: {'Content-Type': 'application/x-www-form-urlencoded'} })
+                .then(r => { if (r.ok || r.redirected) { if (msg) { msg.style.display=''; setTimeout(() => msg.style.display='none', 2000); } } });
+        });
+    });
 
     function showResult(shopId, d) {
         const resultEl = document.getElementById('check-result-' + shopId);

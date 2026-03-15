@@ -102,20 +102,36 @@
                             <div class="row g-2">
                                 <div class="col-sm-3">
                                     <label class="form-label mb-0 small">Падение inStock, %</label>
-                                    <input type="number" id="client-dropThreshold" class="form-control form-control-sm" value="10" min="1" max="100">
+                                    <input type="number" id="client-dropThreshold" class="form-control form-control-sm"
+                                           th:value="${defaultThresholds != null ? defaultThresholds['default.drop_threshold'] : '10'}" value="10" min="1" max="100">
                                 </div>
                                 <div class="col-sm-3">
                                     <label class="form-label mb-0 small">Рост ошибок, %</label>
-                                    <input type="number" id="client-errThreshold" class="form-control form-control-sm" value="30" min="1" max="500">
+                                    <input type="number" id="client-errThreshold" class="form-control form-control-sm"
+                                           th:value="${defaultThresholds != null ? defaultThresholds['default.error_growth_threshold'] : '30'}" value="30" min="1" max="500">
                                 </div>
                                 <div class="col-sm-3">
                                     <label class="form-label mb-0 small">Baseline, дней</label>
-                                    <input type="number" id="client-baselineDays" class="form-control form-control-sm" value="7" min="0" max="30">
+                                    <input type="number" id="client-baselineDays" class="form-control form-control-sm"
+                                           th:value="${defaultThresholds != null ? defaultThresholds['default.baseline_days'] : '7'}" value="7" min="0" max="30">
                                 </div>
                                 <div class="col-sm-3">
                                     <label class="form-label mb-0 small">Мин. ошибок</label>
-                                    <input type="number" id="client-minAbsErrors" class="form-control form-control-sm" value="5" min="0" max="1000">
+                                    <input type="number" id="client-minAbsErrors" class="form-control form-control-sm"
+                                           th:value="${defaultThresholds != null ? defaultThresholds['default.min_absolute_errors'] : '5'}" value="5" min="0" max="1000">
                                 </div>
+                            </div>
+                            <input type="hidden" id="client-trendDrop"
+                                   th:value="${defaultThresholds != null ? defaultThresholds['default.trend_drop_threshold'] : '30'}">
+                            <input type="hidden" id="client-trendErr"
+                                   th:value="${defaultThresholds != null ? defaultThresholds['default.trend_error_threshold'] : '100'}">
+                            <div class="mt-2">
+                                <button type="button" id="btnSaveThresholdDefaults"
+                                        style="font-size:0.75rem;padding:1px 8px;"
+                                        class="btn btn-outline-secondary">
+                                    <i class="fas fa-save me-1"></i>Установить по умолчанию
+                                </button>
+                                <span id="thresholdSavedMsg" class="ms-2 small text-success" style="display:none;">Сохранено</span>
                             </div>
                         </div>
                     </div>
@@ -259,6 +275,21 @@
             el.addEventListener('change', () => localStorage.setItem(key + '-' + shopId, el.value));
         });
 
+        // ── Сохранить настройки по умолчанию ─────────────────────────────
+        document.getElementById('btnSaveThresholdDefaults')?.addEventListener('click', function() {
+            const body = new URLSearchParams({
+                'default.drop_threshold':         document.getElementById('client-dropThreshold')?.value || '',
+                'default.error_growth_threshold': document.getElementById('client-errThreshold')?.value  || '',
+                'default.baseline_days':          document.getElementById('client-baselineDays')?.value  || '',
+                'default.min_absolute_errors':    document.getElementById('client-minAbsErrors')?.value  || '',
+                'default.trend_drop_threshold':   document.getElementById('client-trendDrop')?.value     || '',
+                'default.trend_error_threshold':  document.getElementById('client-trendErr')?.value      || ''
+            });
+            const msg = document.getElementById('thresholdSavedMsg');
+            fetch('/zoomos/settings', { method: 'POST', body, headers: {'Content-Type': 'application/x-www-form-urlencoded'} })
+                .then(r => { if (r.ok || r.redirected) { if (msg) { msg.style.display=''; setTimeout(() => msg.style.display='none', 2000); } } });
+        });
+
         // ── Запуск проверки ───────────────────────────────────────────────
         const btnRun = document.getElementById('btnRunCheck');
         if (btnRun && shopId) {
@@ -273,6 +304,8 @@
                 const errThreshold   = document.getElementById('client-errThreshold').value   || '30';
                 const baselineDays   = document.getElementById('client-baselineDays').value   || '7';
                 const minAbsErrors   = document.getElementById('client-minAbsErrors').value   || '5';
+                const trendDrop      = document.getElementById('client-trendDrop')?.value     || '30';
+                const trendErr       = document.getElementById('client-trendErr')?.value      || '100';
 
                 btnRun.disabled = true;
                 btnRun.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Запуск...';
@@ -298,8 +331,8 @@
                 fd.append('errorGrowthThreshold', errThreshold);
                 fd.append('baselineDays', baselineDays);
                 fd.append('minAbsoluteErrors', minAbsErrors);
-                fd.append('trendDropThreshold', '30');
-                fd.append('trendErrorThreshold', '100');
+                fd.append('trendDropThreshold', trendDrop);
+                fd.append('trendErrorThreshold', trendErr);
 
                 fetch('/zoomos/check/run', { method: 'POST', body: fd })
                     .then(r => r.json())

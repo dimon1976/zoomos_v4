@@ -69,6 +69,16 @@ public interface ClientService {
     Optional<Client> findClientEntityById(Long id);
 
     /**
+     * Переключить признак активности клиента
+     */
+    void toggleActive(Long id);
+
+    /**
+     * Сохранить порядок клиентов
+     */
+    void reorder(List<Long> orderedIds);
+
+    /**
      * Привязать магазин Zoomos Check к клиенту
      */
     void linkShopToClient(Long clientId, Long shopId);

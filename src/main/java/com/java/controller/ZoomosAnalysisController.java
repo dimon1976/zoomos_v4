@@ -15,6 +15,7 @@ import com.java.repository.ZoomosShopScheduleRepository;
 import com.java.service.ZoomosCheckService;
 import com.java.service.ZoomosParserService;
 import com.java.service.ZoomosSchedulerService;
+import com.java.service.ZoomosSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,6 +63,7 @@ public class ZoomosAnalysisController {
     private final ZoomosSchedulerService schedulerService;
     private final ZoomosParserPatternRepository parserPatternRepository;
     private final RedmineService redmineService;
+    private final ZoomosSettingsService settingsService;
 
     @Autowired
     @Qualifier("zoomosCheckExecutor")
@@ -107,7 +109,30 @@ public class ZoomosAnalysisController {
         model.addAttribute("schedulesMap", schedulesMap);
         model.addAttribute("prioritySiteNames", prioritySiteNames);
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
+        Map<String, String> dt = settingsService.getAllSettings();
+        model.addAttribute("defaultThresholds", dt);
+        model.addAttribute("defDropThreshold",      dt.getOrDefault("default.drop_threshold", "10"));
+        model.addAttribute("defErrThreshold",       dt.getOrDefault("default.error_growth_threshold", "30"));
+        model.addAttribute("defBaselineDays",       dt.getOrDefault("default.baseline_days", "7"));
+        model.addAttribute("defMinAbsErrors",       dt.getOrDefault("default.min_absolute_errors", "5"));
+        model.addAttribute("defTrendDrop",          dt.getOrDefault("default.trend_drop_threshold", "30"));
+        model.addAttribute("defTrendErr",           dt.getOrDefault("default.trend_error_threshold", "100"));
         return "zoomos/index";
+    }
+
+    @PostMapping("/settings")
+    public String saveSettings(@RequestParam Map<String, String> params, RedirectAttributes ra) {
+        Map<String, String> allowed = Map.of(
+                "default.drop_threshold",         params.getOrDefault("default.drop_threshold", "10"),
+                "default.error_growth_threshold", params.getOrDefault("default.error_growth_threshold", "30"),
+                "default.baseline_days",          params.getOrDefault("default.baseline_days", "7"),
+                "default.min_absolute_errors",    params.getOrDefault("default.min_absolute_errors", "5"),
+                "default.trend_drop_threshold",   params.getOrDefault("default.trend_drop_threshold", "30"),
+                "default.trend_error_threshold",  params.getOrDefault("default.trend_error_threshold", "100")
+        );
+        settingsService.saveAll(allowed);
+        ra.addFlashAttribute("success", "Настройки по умолчанию сохранены");
+        return "redirect:/zoomos";
     }
 
     /** AJAX-toggle приоритетности магазина */
@@ -1775,13 +1800,25 @@ public class ZoomosAnalysisController {
         return "zoomos/check-history";
     }
 
+    @PostMapping("/check/history/delete")
+    @Transactional
+    public String deleteCheckHistory(@RequestParam List<Long> ids,
+                                     org.springframework.web.servlet.mvc.support.RedirectAttributes ra) {
+        for (Long id : ids) {
+            parsingStatsRepository.deleteByCheckRunId(id);
+            checkRunRepository.deleteById(id);
+        }
+        ra.addFlashAttribute("success", "Удалено записей: " + ids.size());
+        return "redirect:/zoomos/check/history";
+    }
+
     // =========================================================================
     // Страница проверок по клиентам /zoomos/clients
     // =========================================================================
 
     @GetMapping("/clients")
     public String clientsCheckPage(Model model) {
-        List<ZoomosShop> shops = shopRepository.findAllByClientIsNotNull().stream()
+        List<ZoomosShop> shops = shopRepository.findAllByClientIsNotNullWithClient().stream()
                 .filter(ZoomosShop::isEnabled)
                 .sorted(Comparator.comparing(s -> s.getClient().getName()))
                 .collect(Collectors.toList());
@@ -1801,6 +1838,14 @@ public class ZoomosAnalysisController {
                 }
             });
         }
+
+        Map<String, String> dt = settingsService.getAllSettings();
+        model.addAttribute("defDropThreshold", dt.getOrDefault("default.drop_threshold", "10"));
+        model.addAttribute("defErrThreshold",  dt.getOrDefault("default.error_growth_threshold", "30"));
+        model.addAttribute("defBaselineDays",  dt.getOrDefault("default.baseline_days", "7"));
+        model.addAttribute("defMinAbsErrors",  dt.getOrDefault("default.min_absolute_errors", "5"));
+        model.addAttribute("defTrendDrop",     dt.getOrDefault("default.trend_drop_threshold", "30"));
+        model.addAttribute("defTrendErr",      dt.getOrDefault("default.trend_error_threshold", "100"));
 
         model.addAttribute("shops", shops);
         model.addAttribute("schedulesMap", schedulesMap);
@@ -1911,11 +1956,19 @@ public class ZoomosAnalysisController {
         return "zoomos/schedule";
     }
 
-    /** Создать новое расписание для магазина с дефолтными значениями */
+    /** Создать новое расписание для магазина с дефолтными значениями из zoomos_settings */
     @PostMapping("/schedule/{shopId}/new")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> createSchedule(@PathVariable Long shopId) {
-        ZoomosShopSchedule s = ZoomosShopSchedule.builder().shopId(shopId).build();
+        ZoomosShopSchedule s = ZoomosShopSchedule.builder()
+                .shopId(shopId)
+                .dropThreshold(settingsService.getInt("default.drop_threshold", 10))
+                .errorGrowthThreshold(settingsService.getInt("default.error_growth_threshold", 30))
+                .baselineDays(settingsService.getInt("default.baseline_days", 7))
+                .minAbsoluteErrors(settingsService.getInt("default.min_absolute_errors", 5))
+                .trendDropThreshold(settingsService.getInt("default.trend_drop_threshold", 30))
+                .trendErrorThreshold(settingsService.getInt("default.trend_error_threshold", 100))
+                .build();
         schedulerService.saveAndReschedule(s);
         return ResponseEntity.ok(Map.of("success", true, "scheduleId", s.getId()));
     }

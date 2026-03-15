@@ -2,6 +2,7 @@ package com.java.repository;
 
 import com.java.model.entity.ZoomosShop;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -17,6 +18,9 @@ public interface ZoomosShopRepository extends JpaRepository<ZoomosShop, Long> {
     Optional<ZoomosShop> findByClientId(Long clientId);
 
     List<ZoomosShop> findAllByClientIsNotNull();
+
+    @Query("SELECT s FROM ZoomosShop s JOIN FETCH s.client WHERE s.client IS NOT NULL")
+    List<ZoomosShop> findAllByClientIsNotNullWithClient();
 
     boolean existsByShopName(String shopName);
 }

@@ -23,7 +23,7 @@ public interface ClientRepository extends JpaRepository<Client, Long> {
     @Query("SELECT DISTINCT c FROM Client c JOIN c.fileOperations")
     List<Client> findClientsWithFileOperations();
 
-    // Получить список клиентов с количеством файловых операций
-    @Query("SELECT c, COUNT(fo) FROM Client c LEFT JOIN c.fileOperations fo GROUP BY c")
+    // Получить список клиентов с количеством файловых операций, сортировка по sort_order
+    @Query("SELECT c, COUNT(fo) FROM Client c LEFT JOIN c.fileOperations fo GROUP BY c ORDER BY c.sortOrder ASC, c.id ASC")
     List<Object[]> findClientsWithFileOperationCount();
 }

@@ -9,6 +9,8 @@ import com.java.model.entity.ZoomosRedmineIssue;
 import com.java.repository.ZoomosRedmineIssueRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +51,9 @@ public class RedmineService {
 
     // Пул для параллельных запросов к Redmine (batch-check)
     private final ExecutorService batchExecutor = Executors.newFixedThreadPool(8);
+
+    // Self-injection для корректной работы @Transactional при вызове saveIssueToDb внутри класса
+    @Autowired @Lazy private RedmineService self;
 
     public boolean isEnabled() {
         return config.isEnabled();
@@ -228,7 +233,7 @@ public class RedmineService {
                     + "&limit=25";
             List<RedmineIssueDto> found = parseIssuesList(get(url));
             if (!found.isEmpty()) {
-                saveIssueToDb(siteName, found.get(0));
+                self.saveIssueToDb(siteName, found.get(0));
             }
             return found;
         } catch (Exception e) {
@@ -473,17 +478,9 @@ public class RedmineService {
                         data.put("statusName", latest.getStatusName());
                         data.put("isClosed", latest.isClosed());
 
-                        // Сохраняем/обновляем в БД — вторичная операция, ошибка не теряет данные
+                        // Сохраняем/обновляем в БД через Spring proxy (@Transactional применяется корректно)
                         try {
-                            ZoomosRedmineIssue entity = repo.findBySiteName(site)
-                                    .orElseGet(() -> ZoomosRedmineIssue.builder().siteName(site).build());
-                            entity.setIssueId(latest.getId());
-                            entity.setIssueStatus(latest.getStatusName());
-                            entity.setClosed(latest.isClosed());
-                            entity.setIssueUrl(latest.getUrl());
-                            entity.setUpdatedAt(LocalDateTime.now());
-                            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
-                            repo.save(entity);
+                            self.saveIssueToDb(site, latest);
                         } catch (Exception dbEx) {
                             log.warn("Redmine checkBatch DB save '{}': {}", site, dbEx.getMessage());
                         }

@@ -20,6 +20,9 @@
             transition: all 0.3s ease;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
+        .client-card.inactive {
+            opacity: 0.5;
+        }
         .empty-state {
             text-align: center;
             padding: 3rem;
@@ -31,11 +34,39 @@
             color: #6c757d;
             font-size: 0.9rem;
         }
+        /* Drag-and-drop */
+        #clientsGrid.sort-mode .client-card {
+            cursor: grab;
+        }
+        #clientsGrid.sort-mode .client-card:active {
+            cursor: grabbing;
+        }
+        #clientsGrid.sort-mode .drag-handle {
+            display: inline-block !important;
+        }
+        .drag-handle {
+            display: none;
+            color: #adb5bd;
+            margin-right: 6px;
+            cursor: grab;
+        }
+        .sortable-ghost {
+            opacity: 0.4;
+        }
     </style>
 </head>
 <body>
 <!-- Действия страницы (кнопки справа от заголовка) -->
 <div class="page-actions">
+    <button type="button" id="btnSortMode" class="btn btn-outline-secondary me-2">
+        <i class="fas fa-grip-vertical me-1"></i>Настройки
+    </button>
+    <button type="button" id="btnSaveOrder" class="btn btn-primary me-2" style="display:none">
+        <i class="fas fa-save me-1"></i>Сохранить порядок
+    </button>
+    <button type="button" id="btnCancelSort" class="btn btn-outline-secondary me-2" style="display:none">
+        Отмена
+    </button>
     <a th:href="@{/clients/create}" class="btn btn-primary">
         <i class="fas fa-plus me-1"></i>Новый клиент
     </a>
@@ -53,6 +84,14 @@
                 </button>
             </div>
         </form>
+    </div>
+
+    <!-- Фильтр активных/неактивных -->
+    <div class="mb-3 d-flex align-items-center gap-3">
+        <button type="button" id="btnToggleInactive" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-eye-slash me-1"></i>Показать неактивных
+        </button>
+        <span id="inactiveCount" class="text-muted small" style="display:none"></span>
     </div>
 
     <!-- Результаты поиска -->
@@ -77,14 +116,21 @@
     </div>
 
     <!-- Список клиентов -->
-    <div th:unless="${#lists.isEmpty(clients)}" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-        <div th:each="client : ${clients}" class="col">
-            <div class="card h-100 client-card">
+    <div th:unless="${#lists.isEmpty(clients)}" id="clientsGrid" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        <div th:each="client : ${clients}"
+             class="col"
+             th:classappend="${!client.isActive} ? ' client-inactive' : ''"
+             th:data-client-id="${client.id}"
+             th:style="${!client.isActive} ? 'display:none' : ''">
+            <div th:classappend="${!client.isActive} ? ' inactive' : ''"
+                 class="card h-100 client-card">
                 <div class="card-body">
-                    <h5 class="card-title">
+                    <h5 class="card-title d-flex align-items-center">
+                        <i class="fas fa-grip-vertical drag-handle me-1"></i>
                         <a th:href="@{/clients/{id}(id=${client.id})}" class="text-decoration-none">
                             <span th:text="${client.name}">Имя клиента</span>
                         </a>
+                        <span th:if="${!client.isActive}" class="badge bg-secondary ms-2" style="font-size:0.65rem">Неактивен</span>
                     </h5>
                     <p class="card-text text-muted" th:if="${client.description}" th:text="${client.description}">Описание клиента</p>
                     <p class="card-text text-muted" th:unless="${client.description}">Нет описания</p>
@@ -107,13 +153,38 @@
                         <a th:href="@{/clients/{id}/edit(id=${client.id})}" class="btn btn-outline-secondary btn-sm">
                             <i class="fas fa-edit me-1"></i>Изменить
                         </a>
-                        <!-- Исправленная кнопка удаления - используем data-атрибуты вместо прямого th:onclick -->
+                        <button type="button" class="btn btn-outline-secondary btn-sm client-toggle-btn"
+                                th:data-client-id="${client.id}"
+                                th:title="${client.isActive} ? 'Деактивировать' : 'Активировать'">
+                            <i th:class="${client.isActive} ? 'fas fa-toggle-on' : 'fas fa-toggle-off'"></i>
+                        </button>
                         <button type="button" class="btn btn-outline-danger btn-sm client-delete-btn"
                                 th:data-client-id="${client.id}"
                                 th:data-client-name="${client.name}">
-                            <i class="fas fa-trash me-1"></i>Удалить
+                            <i class="fas fa-trash"></i>
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения деактивации -->
+    <div class="modal fade" id="toggleActiveModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Подтверждение</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="toggleActiveText"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <form id="toggleActiveForm" method="post">
+                        <button type="submit" id="toggleActiveSubmit" class="btn btn-warning">Деактивировать</button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -142,35 +213,119 @@
     </div>
 </section>
 
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('Страница клиентов загружена');
+        const grid = document.getElementById('clientsGrid');
+        const btnSort = document.getElementById('btnSortMode');
+        const btnSave = document.getElementById('btnSaveOrder');
+        const btnCancel = document.getElementById('btnCancelSort');
+        const btnToggleInactive = document.getElementById('btnToggleInactive');
+        const inactiveCount = document.getElementById('inactiveCount');
 
-        // Находим все кнопки удаления и добавляем обработчик события
+        // Подсчёт и отображение количества неактивных
+        const inactiveCols = grid ? Array.from(grid.querySelectorAll('.client-inactive')) : [];
+        if (inactiveCols.length > 0) {
+            inactiveCount.textContent = `Скрыто: ${inactiveCols.length}`;
+            inactiveCount.style.display = '';
+        }
+
+        let showInactive = false;
+        btnToggleInactive.addEventListener('click', function() {
+            showInactive = !showInactive;
+            inactiveCols.forEach(col => col.style.display = showInactive ? '' : 'none');
+            this.innerHTML = showInactive
+                ? '<i class="fas fa-eye-slash me-1"></i>Скрыть неактивных'
+                : '<i class="fas fa-eye me-1"></i>Показать неактивных';
+        });
+
+        // Кнопки удаления
         document.querySelectorAll('.client-delete-btn').forEach(button => {
             button.addEventListener('click', function() {
-                // Получаем данные из data-атрибутов
                 const clientId = this.getAttribute('data-client-id');
                 const clientName = this.getAttribute('data-client-name');
-
-                // Показываем модальное окно подтверждения
-                showDeleteConfirmation(clientId, clientName);
+                document.getElementById('deleteClientForm').action = '/clients/' + clientId + '/delete';
+                document.getElementById('clientNameToDelete').textContent = clientName;
+                new bootstrap.Modal(document.getElementById('deleteClientModal')).show();
             });
         });
+
+        // Кнопки toggle-active — с подтверждением
+        document.querySelectorAll('.client-toggle-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const clientId = this.getAttribute('data-client-id');
+                const isActive = this.querySelector('i').classList.contains('fa-toggle-on');
+                const clientName = this.closest('.card').querySelector('.card-title a').textContent.trim();
+
+                document.getElementById('toggleActiveForm').action = '/clients/' + clientId + '/toggle-active';
+                const submitBtn = document.getElementById('toggleActiveSubmit');
+
+                if (isActive) {
+                    document.getElementById('toggleActiveText').textContent =
+                        `Вы уверены, что хотите деактивировать клиента "${clientName}"? Карточка будет скрыта со страницы.`;
+                    submitBtn.textContent = 'Деактивировать';
+                    submitBtn.className = 'btn btn-warning';
+                } else {
+                    document.getElementById('toggleActiveText').textContent =
+                        `Активировать клиента "${clientName}"?`;
+                    submitBtn.textContent = 'Активировать';
+                    submitBtn.className = 'btn btn-success';
+                }
+                new bootstrap.Modal(document.getElementById('toggleActiveModal')).show();
+            });
+        });
+
+        // Drag-and-drop sort mode
+        if (!grid) return;
+        let sortable = null;
+        let originalOrder = null;
+
+        btnSort.addEventListener('click', function() {
+            grid.classList.add('sort-mode');
+            btnSort.style.display = 'none';
+            btnSave.style.display = '';
+            btnCancel.style.display = '';
+            originalOrder = Array.from(grid.querySelectorAll('[data-client-id]')).map(el => el.getAttribute('data-client-id'));
+            sortable = Sortable.create(grid, {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                handle: '.client-card',
+                filter: 'a, button',
+                preventOnFilter: false
+            });
+        });
+
+        btnCancel.addEventListener('click', function() {
+            exitSortMode();
+            // Восстановить оригинальный порядок в DOM
+            if (originalOrder) {
+                originalOrder.forEach(id => {
+                    const col = grid.querySelector(`[data-client-id="${id}"]`);
+                    if (col) grid.appendChild(col);
+                });
+            }
+        });
+
+        btnSave.addEventListener('click', function() {
+            const ids = Array.from(grid.querySelectorAll('[data-client-id]'))
+                .map(el => parseInt(el.getAttribute('data-client-id')));
+            fetch('/clients/reorder', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(ids)
+            }).then(r => {
+                if (r.ok) exitSortMode();
+            });
+        });
+
+        function exitSortMode() {
+            grid.classList.remove('sort-mode');
+            btnSort.style.display = '';
+            btnSave.style.display = 'none';
+            btnCancel.style.display = 'none';
+            if (sortable) { sortable.destroy(); sortable = null; }
+        }
     });
-
-    // Функция для отображения модального окна подтверждения удаления
-    function showDeleteConfirmation(clientId, clientName) {
-        // Обновляем форму удаления
-        document.getElementById('deleteClientForm').action = '/clients/' + clientId + '/delete';
-
-        // Обновляем текст подтверждения
-        document.getElementById('clientNameToDelete').textContent = clientName;
-
-        // Показываем модальное окно
-        var modal = new bootstrap.Modal(document.getElementById('deleteClientModal'));
-        modal.show();
-    }
 </script>
 </body>
 </html>
