@@ -25,9 +25,8 @@
 
 | Ключ | Тип | Описание |
 |------|-----|---------|
-| `maint.enabled` | boolean | Глобальное включение планировщика |
 | `maint.{key}.enabled` | boolean | Включение конкретной задачи |
-| `maint.{key}.cron` | string | Cron-выражение (Spring 6-field или Unix 5-field) |
+| `maint.{key}.cron` | string | Cron-выражение (6 полей). День недели: 1=Вс, 2=Пн, 3=Вт, 4=Ср, 5=Чт, 6=Пт, 7=Сб |
 | `maint.{key}.lastRunAt` | string | Дата/время последнего запуска (`yyyy-MM-dd HH:mm:ss`) |
 
 ### Задачи планировщика

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import com.java.util.CronUtils;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,10 +59,9 @@ public class MaintenanceSchedulerService {
      * Вызывается при старте и после сохранения настроек через UI.
      */
     public void rescheduleAll() {
-        boolean globalEnabled = "true".equals(settingsService.getString("maint.enabled", "false"));
         TASK_KEYS.forEach(key -> {
             unscheduleTask(key);
-            if (globalEnabled && "true".equals(settingsService.getString("maint." + key + ".enabled", "true"))) {
+            if ("true".equals(settingsService.getString("maint." + key + ".enabled", "false"))) {
                 String cron = settingsService.getString("maint." + key + ".cron", "");
                 if (!cron.isBlank()) {
                     scheduleTask(key, cron);
@@ -79,34 +79,15 @@ public class MaintenanceSchedulerService {
         taskScheduler.execute(getTaskRunnable(taskKey));
     }
 
-    /** Возвращает true если глобальный планировщик включён */
-    public boolean isEnabled() {
-        return "true".equals(settingsService.getString("maint.enabled", "false"));
-    }
-
-    /** Возвращает true если конкретная задача сейчас активно запланирована */
-    public boolean isTaskScheduled(String taskKey) {
-        return scheduleMap.containsKey(taskKey);
-    }
-
     private void scheduleTask(String key, String cron) {
         try {
-            String springCron = toSpringCron(cron);
+            String springCron = CronUtils.toSpringCron(cron);
             ScheduledFuture<?> future = taskScheduler.schedule(getTaskRunnable(key), new CronTrigger(springCron));
             scheduleMap.put(key, future);
             log.info("MaintenanceSchedulerService: задача '{}' запланирована по cron='{}'", key, springCron);
         } catch (Exception e) {
             log.error("MaintenanceSchedulerService: ошибка планирования задачи '{}' cron='{}': {}", key, cron, e.getMessage());
         }
-    }
-
-    /** Конвертирует 5-польный Unix cron в 6-польный Spring cron (добавляет секунды). */
-    private String toSpringCron(String raw) {
-        String[] parts = raw.trim().split("\\s+");
-        if (parts.length == 5) {
-            parts = ("0 " + raw.trim()).split("\\s+");
-        }
-        return String.join(" ", parts);
     }
 
     private DataCleanupRequestDto buildCleanupRequest(String initiatedBy) {

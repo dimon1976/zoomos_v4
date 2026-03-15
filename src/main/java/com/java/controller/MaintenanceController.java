@@ -486,7 +486,6 @@ public class MaintenanceController {
 
     @GetMapping("/schedule")
     public String schedulePage(Model model) {
-        model.addAttribute("globalEnabled", maintenanceSchedulerService.isEnabled());
         Map<String, Map<String, String>> tasks = new LinkedHashMap<>();
         for (String key : MaintenanceSchedulerService.TASK_KEYS) {
             Map<String, String> t = new HashMap<>();
@@ -494,7 +493,6 @@ public class MaintenanceController {
             t.put("enabled",   settingsService.getString("maint." + key + ".enabled", "true"));
             t.put("cron",      settingsService.getString("maint." + key + ".cron", ""));
             t.put("lastRunAt", settingsService.getString("maint." + key + ".lastRunAt", ""));
-            t.put("scheduled", maintenanceSchedulerService.isTaskScheduled(key) ? "true" : "false");
             tasks.put(key, t);
         }
         model.addAttribute("tasks", tasks);

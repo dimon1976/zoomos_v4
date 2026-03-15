@@ -17,7 +17,6 @@
         .task-row td { vertical-align: middle; }
         .cron-input { font-family: monospace; font-size: 0.9rem; }
         .last-run { font-size: 0.8rem; color: #6c757d; }
-        .global-toggle-section { background: #f8f9fa; border-radius: 8px; padding: 1rem 1.5rem; }
     </style>
 </th:block>
 
@@ -30,22 +29,15 @@
 <th:block th:fragment="content">
 <div class="container-fluid">
 
-    <!-- Глобальный переключатель -->
-    <div class="global-toggle-section mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <!-- Заголовок и кнопка сохранения -->
+    <div class="mb-4 d-flex align-items-center justify-content-between">
         <div>
             <h5 class="mb-1">Планировщик обслуживания</h5>
             <small class="text-muted">Расписание хранится в БД и применяется без перезапуска приложения.</small>
         </div>
-        <div class="d-flex align-items-center gap-3">
-            <div class="form-check form-switch mb-0">
-                <input class="form-check-input" type="checkbox" id="globalEnabled"
-                       th:checked="${globalEnabled}" role="switch" style="width:3em;height:1.5em;">
-                <label class="form-check-label fw-semibold" for="globalEnabled">Включён</label>
-            </div>
-            <button class="btn btn-primary" onclick="saveAll()">
-                <i class="fas fa-save me-1"></i>Сохранить
-            </button>
-        </div>
+        <button class="btn btn-primary" onclick="saveAll()">
+            <i class="fas fa-save me-1"></i>Сохранить
+        </button>
     </div>
 
     <!-- Таблица задач -->
@@ -58,7 +50,6 @@
                         <th style="width:70px" class="text-center">Вкл</th>
                         <th>Cron-выражение</th>
                         <th style="width:180px">Последний запуск</th>
-                        <th style="width:100px" class="text-center">Статус</th>
                         <th style="width:110px" class="text-center">Действие</th>
                     </tr>
                 </thead>
@@ -85,12 +76,6 @@
                             </span>
                         </td>
                         <td class="text-center">
-                            <span th:id="'badge-' + ${entry.key}"
-                                  th:class="${entry.value['scheduled'] == 'true'} ? 'badge text-bg-success' : 'badge text-bg-secondary'"
-                                  th:text="${entry.value['scheduled'] == 'true'} ? 'активна' : 'не активна'">
-                            </span>
-                        </td>
-                        <td class="text-center">
                             <button class="btn btn-sm btn-outline-secondary"
                                     th:data-key="${entry.key}"
                                     onclick="triggerTask(this.dataset.key, this)">
@@ -107,12 +92,14 @@
     <div class="alert alert-secondary mt-3 py-2" role="alert">
         <small>
             <i class="fas fa-info-circle me-1"></i>
-            <strong>Формат cron</strong> (Spring, 6 полей): <code>сек мин час день_месяца месяц день_недели</code>
+            <strong>Формат cron</strong> (6 полей): <code>сек мин час день_месяца месяц день_недели</code>
+            &nbsp;&nbsp;|&nbsp;&nbsp;
+            <strong>День недели:</strong> 1=Вс, 2=Пн, 3=Вт, 4=Ср, 5=Чт, 6=Пт, 7=Сб (или SUN/MON/TUE/WED/THU/FRI/SAT)
             &nbsp;&nbsp;|&nbsp;&nbsp;
             Примеры: <code>0 0 2 * * *</code> — каждый день 02:00,
-            <code>0 0 3 * * SUN</code> — воскресенье 03:00,
+            <code>0 0 3 * * 1</code> — воскресенье 03:00,
             <code>0 0 * * * *</code> — каждый час,
-            <code>0 0 1 * * MON</code> — понедельник 01:00
+            <code>0 0 1 * * 2</code> — понедельник 01:00
         </small>
     </div>
 
@@ -142,7 +129,6 @@
 
     function collectSettings() {
         const s = {};
-        s['maint.enabled'] = document.getElementById('globalEnabled').checked ? 'true' : 'false';
         document.querySelectorAll('.task-enabled').forEach(el => {
             s['maint.' + el.dataset.key + '.enabled'] = el.checked ? 'true' : 'false';
         });

@@ -19,6 +19,23 @@ psql -d zoomos_v4 -c "SELECT COUNT(*) FROM clients;"
 mvn flyway:info
 ```
 
+## Server Management (Windows — ОБЯЗАТЕЛЬНЫЕ правила)
+
+**НИКОГДА не использовать** `taskkill /F /IM java.exe` — убивает все JVM в системе.
+
+```bash
+# Найти PID процесса на порту 8081
+netstat -ano | findstr :8081
+
+# Остановить конкретный процесс
+taskkill /F /PID <PID>
+
+# Запустить сервер
+mvn spring-boot:run -Dspring-boot.run.profiles=silent
+```
+
+Запускать только **один** экземпляр сервера — не запускать несколько фоновых процессов параллельно.
+
 **URLs**: localhost:8081 | `/utils` | `/handbook` | `/maintenance` | `/statistics/setup` | `/zoomos`
 
 **Профили**: `silent` (рекомендуется) · `dev` · `verbose` · `prod`
