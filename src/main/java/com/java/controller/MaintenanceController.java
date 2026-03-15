@@ -486,13 +486,14 @@ public class MaintenanceController {
 
     @GetMapping("/schedule")
     public String schedulePage(Model model) {
+        Map<String, String> settings = settingsService.getByPrefix("maint.");
         Map<String, Map<String, String>> tasks = new LinkedHashMap<>();
         for (String key : MaintenanceSchedulerService.TASK_KEYS) {
             Map<String, String> t = new HashMap<>();
             t.put("name",      TASK_NAMES.getOrDefault(key, key));
-            t.put("enabled",   settingsService.getString("maint." + key + ".enabled", "true"));
-            t.put("cron",      settingsService.getString("maint." + key + ".cron", ""));
-            t.put("lastRunAt", settingsService.getString("maint." + key + ".lastRunAt", ""));
+            t.put("enabled",   settings.getOrDefault("maint." + key + ".enabled", "true"));
+            t.put("cron",      settings.getOrDefault("maint." + key + ".cron", ""));
+            t.put("lastRunAt", settings.getOrDefault("maint." + key + ".lastRunAt", ""));
             tasks.put(key, t);
         }
         model.addAttribute("tasks", tasks);

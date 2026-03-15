@@ -590,6 +590,7 @@ public class FileManagementService {
             if (!Files.exists(targetDirectory)) {
                 result.put("success", false);
                 result.put("deletedFiles", 0);
+                result.put("freedSpaceBytes", 0L);
                 result.put("formattedFreedSpace", "0 B");
                 return result;
             }
