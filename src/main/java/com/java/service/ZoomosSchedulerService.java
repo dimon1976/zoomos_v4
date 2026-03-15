@@ -1,5 +1,6 @@
 package com.java.service;
 
+import com.java.util.CronUtils;
 import com.java.model.entity.ZoomosCheckRun;
 import com.java.model.entity.ZoomosShopSchedule;
 import com.java.repository.ZoomosCheckRunRepository;
@@ -14,13 +15,12 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
-import java.util.stream.Collectors;
+
 
 @Service
 @Slf4j
@@ -104,7 +104,7 @@ public class ZoomosSchedulerService {
 
     private void scheduleCheck(ZoomosShopSchedule s) {
         try {
-            String springCron = toSpringCron(s.getCronExpression());
+            String springCron = CronUtils.toSpringCron(s.getCronExpression());
             ScheduledFuture<?> future = taskScheduler.schedule(
                     () -> runCheck(s), new CronTrigger(springCron));
             scheduleMap.put(s.getId(), future);
@@ -112,44 +112,6 @@ public class ZoomosSchedulerService {
         } catch (Exception e) {
             log.error("Ошибка при планировании id={} shopId={}: {}", s.getId(), s.getShopId(), e.getMessage());
         }
-    }
-
-    /**
-     * Конвертирует пользовательское cron-выражение в Spring-формат.
-     * Пользователь вводит Quartz-нумерацию дня недели (1=Вс, 2=Пн, 3=Вт ... 7=Сб).
-     * Spring CronExpression использует Unix (0=Вс, 1=Пн ... 6=Сб).
-     * Конвертация: значение - 1 (кроме * и шагов).
-     */
-    private String toSpringCron(String raw) {
-        String[] parts = raw.trim().split("\\s+");
-        if (parts.length == 5) {
-            // 5-полное Unix-выражение без секунд — добавляем "0 " в начало
-            parts = ("0 " + raw.trim()).split("\\s+");
-        }
-        if (parts.length == 6) {
-            parts[5] = convertDowField(parts[5]);
-        }
-        return String.join(" ", parts);
-    }
-
-    /** Конвертирует поле дня недели: вычитает 1 из каждого числового значения. */
-    private String convertDowField(String field) {
-        if (field.equals("*")) return field;
-        return Arrays.stream(field.split(","))
-                .map(part -> {
-                    if (part.contains("-")) {
-                        String[] bounds = part.split("-", 2);
-                        try {
-                            int from = Integer.parseInt(bounds[0]) - 1;
-                            int to   = Integer.parseInt(bounds[1]) - 1;
-                            return from + "-" + to;
-                        } catch (NumberFormatException e) { return part; }
-                    }
-                    if (part.startsWith("*/")) return part;
-                    try { return String.valueOf(Integer.parseInt(part) - 1); }
-                    catch (NumberFormatException e) { return part; } // MON, TUE и т.д. — без изменений
-                })
-                .collect(Collectors.joining(","));
     }
 
     private void runCheck(ZoomosShopSchedule s) {

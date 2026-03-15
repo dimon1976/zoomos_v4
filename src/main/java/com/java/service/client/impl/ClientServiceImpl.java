@@ -1,7 +1,9 @@
 package com.java.service.client.impl;
 
 import com.java.model.Client;
+import com.java.model.entity.ZoomosShop;
 import com.java.repository.ClientRepository;
+import com.java.repository.ZoomosShopRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ import java.util.stream.Collectors;
 public class ClientServiceImpl implements ClientService {
 
     private final ClientRepository clientRepository;
+    private final ZoomosShopRepository shopRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -64,6 +67,13 @@ public class ClientServiceImpl implements ClientService {
 
         Client client = mapToEntity(clientDto);
         Client savedClient = clientRepository.save(client);
+
+        // Автосвязка: если есть ZoomosShop с таким же именем — привязать
+        shopRepository.findByShopNameIgnoreCase(savedClient.getName()).ifPresent(shop -> {
+            shop.setClient(savedClient);
+            shopRepository.save(shop);
+            log.info("Auto-linked ZoomosShop '{}' to new client id={}", shop.getShopName(), savedClient.getId());
+        });
 
         log.info("Created new client with id: {}", savedClient.getId());
         return mapToDto(savedClient, 0);
@@ -129,16 +139,73 @@ public class ClientServiceImpl implements ClientService {
         return clientRepository.findById(id);
     }
 
+    @Override
+    @Transactional
+    public void linkShopToClient(Long clientId, Long shopId) {
+        Client client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new EntityNotFoundException("Клиент " + clientId + " не найден"));
+        ZoomosShop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> new EntityNotFoundException("Магазин " + shopId + " не найден"));
+        shop.setClient(client);
+        shopRepository.save(shop);
+        log.info("Linked ZoomosShop id={} to client id={}", shopId, clientId);
+    }
+
+    @Override
+    @Transactional
+    public void unlinkShopFromClient(Long shopId) {
+        shopRepository.findById(shopId).ifPresent(shop -> {
+            shop.setClient(null);
+            shopRepository.save(shop);
+            log.info("Unlinked ZoomosShop id={} from client", shopId);
+        });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ZoomosShop> getLinkedShop(Long clientId) {
+        return shopRepository.findByClientId(clientId);
+    }
+
+    @Override
+    @Transactional
+    public void toggleActive(Long id) {
+        Client client = clientRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Клиент " + id + " не найден"));
+        client.setActive(!client.isActive());
+        clientRepository.save(client);
+        log.info("Client id={} isActive={}", id, client.isActive());
+    }
+
+    @Override
+    @Transactional
+    public void reorder(List<Long> orderedIds) {
+        for (int i = 0; i < orderedIds.size(); i++) {
+            final int order = i;
+            clientRepository.findById(orderedIds.get(i)).ifPresent(c -> {
+                c.setSortOrder(order);
+                clientRepository.save(c);
+            });
+        }
+        log.info("Reordered {} clients", orderedIds.size());
+    }
+
     // Маппер из entity в DTO
     private ClientDto mapToDto(Client client, Integer fileOperationsCount) {
-        return ClientDto.builder()
+        ClientDto.ClientDtoBuilder builder = ClientDto.builder()
                 .id(client.getId())
                 .name(client.getName())
                 .description(client.getDescription())
                 .regionCode(client.getRegionCode())
                 .regionName(client.getRegionName())
-                .fileOperationsCount(fileOperationsCount)
-                .build();
+                .isActive(client.isActive())
+                .sortOrder(client.getSortOrder())
+                .fileOperationsCount(fileOperationsCount);
+        shopRepository.findByClientId(client.getId()).ifPresent(shop -> {
+            builder.linkedShopId(shop.getId());
+            builder.linkedShopName(shop.getShopName());
+        });
+        return builder.build();
     }
 
     // Маппер из DTO в entity

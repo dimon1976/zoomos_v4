@@ -1,10 +1,12 @@
 package com.java.model.entity;
 
+import com.java.model.Client;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.ToString;
 
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -38,6 +40,11 @@ public class ZoomosShop {
 
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "client_id")
+    @ToString.Exclude
+    private Client client;
 
     @OneToMany(mappedBy = "shop", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default

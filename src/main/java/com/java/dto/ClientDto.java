@@ -28,4 +28,12 @@ public class ClientDto {
 
     // Количество файловых операций (для отображения в списке)
     private Integer fileOperationsCount;
+
+    private boolean isActive;
+
+    private int sortOrder;
+
+    // Привязка к Zoomos Check
+    private Long linkedShopId;
+    private String linkedShopName;
 }

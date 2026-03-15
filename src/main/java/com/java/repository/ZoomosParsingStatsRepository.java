@@ -13,6 +13,8 @@ import java.util.Optional;
 @Repository
 public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsingStats, Long> {
 
+    void deleteByCheckRunId(Long checkRunId);
+
     // Только не-baseline записи (для отображения результатов проверки)
     List<ZoomosParsingStats> findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(Long checkRunId);
 

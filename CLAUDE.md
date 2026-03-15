@@ -19,6 +19,23 @@ psql -d zoomos_v4 -c "SELECT COUNT(*) FROM clients;"
 mvn flyway:info
 ```
 
+## Server Management (Windows — ОБЯЗАТЕЛЬНЫЕ правила)
+
+**НИКОГДА не использовать** `taskkill /F /IM java.exe` — убивает все JVM в системе.
+
+```bash
+# Найти PID процесса на порту 8081
+netstat -ano | findstr :8081
+
+# Остановить конкретный процесс
+taskkill /F /PID <PID>
+
+# Запустить сервер
+mvn spring-boot:run -Dspring-boot.run.profiles=silent
+```
+
+Запускать только **один** экземпляр сервера — не запускать несколько фоновых процессов параллельно.
+
 **URLs**: localhost:8081 | `/utils` | `/handbook` | `/maintenance` | `/statistics/setup` | `/zoomos`
 
 **Профили**: `silent` (рекомендуется) · `dev` · `verbose` · `prod`
@@ -74,8 +91,9 @@ mvn flyway:info
 ### Текущие файлы документации
 
 | Файл | Направление |
-|------|-------------|
+| --- | --- |
 | [`docs/zoomos-check.md`](docs/zoomos-check.md) | Zoomos Check — проверка выкачки, evaluateGroup, тренды, Redmine |
+| [`docs/maintenance.md`](docs/maintenance.md) | Система обслуживания — расписание, очистка БД, файлы, диагностика |
 
 ### Правила
 
@@ -87,6 +105,10 @@ mvn flyway:info
 ## Recent Changes (2026)
 
 ### 2026-03
+
+- **Maintenance: рефакторинг + vacuum/reindex в расписание** — убран балласт (mock-данные, integrity-check, неиспользуемые эндпоинты), добавлены задачи `vacuum` и `reindex` в `MaintenanceSchedulerService`, настройки в `zoomos_settings`. Flyway V45.
+- **Клиенты: is_active + sort_order; Zoomos Settings** — поля `is_active`, `sort_order` в `clients`, таблица `zoomos_settings` (key-value глобальные настройки Zoomos Check). Flyway V43. `ZoomosSettingsService`.
+- **Zoomos Check — Привязка к клиентам** — `ZoomosShop.client_id` FK → `clients`, страница `/zoomos/clients`, автосвязка по имени. Flyway V42. Priority alerts детализированы (город, сообщение, runId).
 - **Redmine интеграция** — Создание/редактирование задач в tt.zoomos.by со страницы результатов. Flyway V39–V40.
 
 ### 2026-02

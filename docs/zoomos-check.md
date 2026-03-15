@@ -13,6 +13,7 @@
 | URL | Описание |
 |-----|----------|
 | `/zoomos` | Список магазинов, запуск проверки |
+| `/zoomos/clients` | Проверки по клиентам (магазины, привязанные к кабинетам) |
 | `/zoomos/check/results/{runId}` | Страница результатов (вердикт, issues, тренды, детали) |
 | `/zoomos/check/history` | История всех запусков |
 | `/zoomos/sites` | Справочник сайтов (checkType, ignoreStock, isPriority) |
@@ -21,7 +22,7 @@
 
 ---
 
-## Структура БД (Flyway V23–V40)
+## Структура БД (Flyway V23–V42)
 
 ```sql
 zoomos_check_runs
@@ -55,6 +56,22 @@ zoomos_shop_schedules
 zoomos_redmine_issues
   id, site_name (UNIQUE), issue_id, issue_status, is_closed, issue_url
   created_at, updated_at
+
+-- V42: привязка магазина к клиенту
+zoomos_shops
+  ...client_id BIGINT FK → clients(id) ON DELETE SET NULL
+
+-- V43: глобальные настройки Zoomos Check
+zoomos_settings
+  key VARCHAR(100) PRIMARY KEY, value VARCHAR(255), description VARCHAR(500)
+  -- Ключи: default.drop_threshold, default.error_growth_threshold,
+  --         default.baseline_days, default.min_absolute_errors,
+  --         default.trend_drop_threshold, default.trend_error_threshold
+
+-- V43: клиенты — признак активности и порядок сортировки
+clients
+  ...is_active BOOLEAN NOT NULL DEFAULT TRUE
+  ...sort_order INTEGER NOT NULL DEFAULT 0
 ```
 
 ---
@@ -281,6 +298,7 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | `ZoomosParserService.java` | Магазины и city_ids |
 | `ZoomosSchedulerService.java` | Cron-расписания |
 | `ZoomosKnownSite.java` | `@Table zoomos_sites`, поля `isPriority`, `ignoreStock` |
+| `ZoomosSettingsService.java` | Глобальные настройки (таблица `zoomos_settings`, key-value) |
 | `RedmineService.java` | Вся бизнес-логика Redmine |
 | `ZoomosRedmineController.java` | REST endpoints `/zoomos/redmine/*` |
 | `check-results.html` | Страница результатов (4 блока + тренды) |

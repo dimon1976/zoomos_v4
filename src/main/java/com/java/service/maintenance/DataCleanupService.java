@@ -4,6 +4,7 @@ import com.java.dto.*;
 import com.java.model.entity.DataCleanupHistory;
 import com.java.model.entity.DataCleanupSettings;
 import com.java.repository.*;
+import com.java.util.FileUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -86,7 +87,7 @@ public class DataCleanupService {
 
             // Оценка освобождаемого места
             preview.setEstimatedFreeSpaceBytes(preview.getTotalRecordsToDelete() * BYTES_PER_RECORD_ESTIMATE);
-            preview.setFormattedEstimatedSpace(formatBytes(preview.getEstimatedFreeSpaceBytes()));
+            preview.setFormattedEstimatedSpace(FileUtils.formatBytes(preview.getEstimatedFreeSpaceBytes()));
 
             // Добавляем предупреждения
             addWarnings(preview, request);
@@ -179,7 +180,7 @@ public class DataCleanupService {
 
             result.setSuccess(true);
             result.setFreedSpaceBytes(result.getTotalRecordsDeleted() * BYTES_PER_RECORD_ESTIMATE);
-            result.setFormattedFreedSpace(formatBytes(result.getFreedSpaceBytes()));
+            result.setFormattedFreedSpace(FileUtils.formatBytes(result.getFreedSpaceBytes()));
 
         } catch (Exception e) {
             log.error("Критическая ошибка при очистке данных", e);
@@ -261,7 +262,7 @@ public class DataCleanupService {
             }
 
             long totalDeleted = 0;
-            int batchSize = Math.min(request.getBatchSize(), 5000);
+            int batchSize = request.getBatchSize();
             int iterationCount = 0;
             long startTime = System.currentTimeMillis();
 
@@ -804,16 +805,6 @@ public class DataCleanupService {
                 log.warn("Неизвестный тип сущности для VACUUM: {}", entityType);
                 return null;
         }
-    }
-
-    /**
-     * Форматирование размера в байтах
-     */
-    private String formatBytes(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
-        if (bytes < 1024 * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
-        return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
     }
 
     /**

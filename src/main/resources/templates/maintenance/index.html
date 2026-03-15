@@ -77,14 +77,14 @@
         <!-- Модули обслуживания -->
         <div class="row">
             <!-- Управление файлами -->
-            <div class="col-md-6 col-lg-3 mb-4">
+            <div class="col-md-4 mb-4">
                 <div class="card maintenance-card h-100">
                     <div class="card-body text-center">
                         <div class="mb-3">
                             <i class="fas fa-folder-open fa-3x text-primary"></i>
                         </div>
                         <h5 class="card-title">Управление файлами</h5>
-                        <p class="card-text">Анализ дискового пространства, архивирование старых файлов и поиск дубликатов</p>
+                        <p class="card-text">Анализ дискового пространства, архивирование старых файлов, просмотр архивов</p>
                         <a href="/maintenance/files" class="btn btn-primary">
                             <i class="fas fa-arrow-right"></i> Перейти
                         </a>
@@ -99,14 +99,14 @@
             </div>
 
             <!-- Обслуживание БД -->
-            <div class="col-md-6 col-lg-3 mb-4">
+            <div class="col-md-4 mb-4">
                 <div class="card maintenance-card h-100">
                     <div class="card-body text-center">
                         <div class="mb-3">
                             <i class="fas fa-database fa-3x text-success"></i>
                         </div>
                         <h5 class="card-title">Обслуживание БД</h5>
-                        <p class="card-text">Очистка старых данных, анализ производительности запросов и оптимизация</p>
+                        <p class="card-text">Очистка старых данных, VACUUM, REINDEX, анализ запросов и раздутых таблиц</p>
                         <a href="/maintenance/database" class="btn btn-success">
                             <i class="fas fa-arrow-right"></i> Перейти
                         </a>
@@ -120,45 +120,23 @@
                 </div>
             </div>
 
-            <!-- Диагностика системы -->
-            <div class="col-md-6 col-lg-3 mb-4">
+            <!-- Расписание -->
+            <div class="col-md-4 mb-4">
                 <div class="card maintenance-card h-100">
                     <div class="card-body text-center">
                         <div class="mb-3">
-                            <i class="fas fa-stethoscope fa-3x text-info"></i>
+                            <i class="fas fa-calendar-alt fa-3x text-secondary"></i>
                         </div>
-                        <h5 class="card-title">Диагностика системы</h5>
-                        <p class="card-text">Мониторинг состояния системы, проверка ресурсов и генерация отчетов</p>
-                        <a href="/maintenance/system" class="btn btn-info">
+                        <h5 class="card-title">Расписание</h5>
+                        <p class="card-text">Настройка автоматических задач: cron-выражения, включение/отключение, ручной запуск</p>
+                        <a href="/maintenance/schedule" class="btn btn-secondary">
                             <i class="fas fa-arrow-right"></i> Перейти
                         </a>
                     </div>
                     <div class="card-footer bg-light">
                         <small class="text-muted">
                             <span class="status-indicator status-healthy"></span>
-                            Активно
-                        </small>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Ручные операции -->
-            <div class="col-md-6 col-lg-3 mb-4">
-                <div class="card maintenance-card h-100">
-                    <div class="card-body text-center">
-                        <div class="mb-3">
-                            <i class="fas fa-tools fa-3x text-warning"></i>
-                        </div>
-                        <h5 class="card-title">Ручные операции</h5>
-                        <p class="card-text">Выполнение операций обслуживания в ручном режиме и мониторинг процессов</p>
-                        <a href="/maintenance/operations" class="btn btn-warning">
-                            <i class="fas fa-arrow-right"></i> Перейти
-                        </a>
-                    </div>
-                    <div class="card-footer bg-light">
-                        <small class="text-muted">
-                            <span class="status-indicator status-healthy"></span>
-                            Активно
+                            Настраивается через UI
                         </small>
                     </div>
                 </div>
@@ -179,13 +157,13 @@
                         <div class="row">
                             <div class="col-md-8">
                                 <p><strong>Система обслуживания готова к работе</strong></p>
-                                <p class="mb-1">Доступные модули: управление файлами, обслуживание БД, диагностика системы</p>
+                                <p class="mb-1">Доступные модули: управление файлами, обслуживание БД, расписание задач</p>
                                 <p class="mb-0">Для выполнения операций перейдите в соответствующий модуль или используйте кнопку "Полная очистка"</p>
                             </div>
                             <div class="col-md-4 text-end">
                                 <div class="d-grid gap-2">
-                                    <a href="/maintenance/operations" class="btn btn-outline-primary">
-                                        <i class="fas fa-cogs"></i> Все операции
+                                    <a href="/maintenance/schedule" class="btn btn-outline-primary">
+                                        <i class="fas fa-calendar-alt"></i> Расписание
                                     </a>
                                     <button type="button" class="btn btn-outline-secondary" onclick="loadSystemHealth()">
                                         <i class="fas fa-chart-line"></i> Обновить статус

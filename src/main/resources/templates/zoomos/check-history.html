@@ -21,12 +21,18 @@
 <th:block th:fragment="content">
 <div class="container-fluid">
 
+    <!-- Flash-сообщение -->
+    <div th:if="${success}" class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+        <i class="fas fa-check-circle me-2"></i><span th:text="${success}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
     <div th:if="${runs.empty}" class="text-muted text-center py-4">
         <i class="fas fa-history fa-2x mb-2 d-block"></i>
         Проверок ещё не было. Перейдите на страницу проверки.
     </div>
 
-    <div th:unless="${runs.empty}" class="mb-3 d-flex align-items-center gap-2">
+    <div th:unless="${runs.empty}" class="mb-3 d-flex align-items-center gap-2 flex-wrap">
         <input type="text" id="historySearch" class="form-control form-control-sm w-auto"
                placeholder="Фильтр по магазину..." style="min-width:220px"
                th:value="${shopFilter}">
@@ -34,7 +40,14 @@
             <i class="fas fa-times"></i>
         </button>
         <span id="historyCount" class="text-muted small"></span>
+
+        <button type="button" id="btnDeleteSelected" class="btn btn-sm btn-danger ms-auto" style="display:none">
+            <i class="fas fa-trash me-1"></i>Удалить выбранные (<span id="selectedCount">0</span>)
+        </button>
     </div>
+
+    <!-- Форма удаления (скрытая) -->
+    <form id="deleteForm" th:action="@{/zoomos/check/history/delete}" method="post" style="display:none"></form>
 
     <div th:unless="${runs.empty}" class="card">
         <div class="card-body p-0">
@@ -42,6 +55,9 @@
                 <table class="table table-sm table-hover table-bordered mb-0">
                     <thead class="table-light">
                         <tr>
+                            <th class="text-center" style="width:36px">
+                                <input type="checkbox" id="checkAll" class="form-check-input">
+                            </th>
                             <th class="text-center">#</th>
                             <th>Клиент</th>
                             <th class="text-center">Период</th>
@@ -58,6 +74,10 @@
                     <tbody>
                         <tr th:each="r : ${runs}"
                             th:classappend="${r.status == 'FAILED'} ? 'table-danger' : (${r.status == 'RUNNING'} ? 'table-warning' : '')">
+                            <td class="text-center">
+                                <input type="checkbox" class="form-check-input row-check"
+                                       th:value="${r.id}">
+                            </td>
                             <td class="text-center" th:text="${r.id}">1</td>
                             <td th:text="${r.shop.shopName}">shop.ru</td>
                             <td class="text-center small">
@@ -89,30 +109,63 @@
         </div>
     </div>
 
+    <!-- Модал подтверждения удаления -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Подтверждение удаления</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    Вы уверены, что хотите удалить <strong id="deleteCountText"></strong> записей истории?
+                    Все связанные данные проверок будут удалены безвозвратно.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" id="btnConfirmDelete" class="btn btn-danger">Удалить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 </th:block>
 
 <th:block th:fragment="scripts">
 <script>
-    const histSearch = document.getElementById('historySearch');
-    const histCount  = document.getElementById('historyCount');
-    const histClear  = document.getElementById('historySearchClear');
+    const histSearch  = document.getElementById('historySearch');
+    const histCount   = document.getElementById('historyCount');
+    const histClear   = document.getElementById('historySearchClear');
+    const checkAll    = document.getElementById('checkAll');
+    const btnDelete   = document.getElementById('btnDeleteSelected');
+    const selectedCnt = document.getElementById('selectedCount');
+    const deleteForm  = document.getElementById('deleteForm');
 
     function filterHistory() {
         const q = histSearch ? histSearch.value.trim().toLowerCase() : '';
         const rows = document.querySelectorAll('tbody tr');
         rows.forEach(r => {
-            const name = r.cells[1]?.textContent.toLowerCase() || '';
+            const name = r.cells[2]?.textContent.toLowerCase() || '';
             r.style.display = (!q || name.includes(q)) ? '' : 'none';
         });
         const total = rows.length;
         const visible = Array.from(rows).filter(r => r.style.display !== 'none').length;
         if (histCount) histCount.textContent = q ? `Показано: ${visible} из ${total}` : '';
+        updateDeleteBtn();
+    }
+
+    function updateDeleteBtn() {
+        const checked = document.querySelectorAll('.row-check:checked');
+        const count = checked.length;
+        if (btnDelete) {
+            btnDelete.style.display = count > 0 ? '' : 'none';
+            if (selectedCnt) selectedCnt.textContent = count;
+        }
     }
 
     if (histSearch) {
         histSearch.addEventListener('input', filterHistory);
-        // Применяем фильтр сразу (если пришли с ?shop=...)
         if (histSearch.value.trim()) filterHistory();
     }
     if (histClear) {
@@ -120,6 +173,42 @@
             if (histSearch) { histSearch.value = ''; filterHistory(); }
         });
     }
+
+    if (checkAll) {
+        checkAll.addEventListener('change', function() {
+            document.querySelectorAll('.row-check').forEach(cb => {
+                const row = cb.closest('tr');
+                if (!row || row.style.display !== 'none') cb.checked = this.checked;
+            });
+            updateDeleteBtn();
+        });
+    }
+
+    document.querySelectorAll('.row-check').forEach(cb => {
+        cb.addEventListener('change', updateDeleteBtn);
+    });
+
+    if (btnDelete) {
+        btnDelete.addEventListener('click', function() {
+            const count = document.querySelectorAll('.row-check:checked').length;
+            document.getElementById('deleteCountText').textContent = count;
+            new bootstrap.Modal(document.getElementById('deleteConfirmModal')).show();
+        });
+    }
+
+    document.getElementById('btnConfirmDelete')?.addEventListener('click', function() {
+        const checked = document.querySelectorAll('.row-check:checked');
+        // Добавляем hidden inputs в форму
+        deleteForm.innerHTML = '';
+        checked.forEach(cb => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'ids';
+            inp.value = cb.value;
+            deleteForm.appendChild(inp);
+        });
+        deleteForm.submit();
+    });
 </script>
 </th:block>
 </html>

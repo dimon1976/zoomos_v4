@@ -2,6 +2,7 @@ package com.java.service.client;
 
 import com.java.dto.ClientDto;
 import com.java.model.Client;
+import com.java.model.entity.ZoomosShop;
 
 import java.util.List;
 import java.util.Optional;
@@ -66,4 +67,29 @@ public interface ClientService {
      * @return Entity клиента или empty, если не найден
      */
     Optional<Client> findClientEntityById(Long id);
+
+    /**
+     * Переключить признак активности клиента
+     */
+    void toggleActive(Long id);
+
+    /**
+     * Сохранить порядок клиентов
+     */
+    void reorder(List<Long> orderedIds);
+
+    /**
+     * Привязать магазин Zoomos Check к клиенту
+     */
+    void linkShopToClient(Long clientId, Long shopId);
+
+    /**
+     * Отвязать магазин Zoomos Check от клиента
+     */
+    void unlinkShopFromClient(Long shopId);
+
+    /**
+     * Получить привязанный магазин Zoomos Check для клиента
+     */
+    Optional<ZoomosShop> getLinkedShop(Long clientId);
 }

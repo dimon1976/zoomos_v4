@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Сервис уведомлений для системы обслуживания
@@ -21,7 +22,7 @@ public class MaintenanceNotificationService {
 
     private final SimpMessagingTemplate messagingTemplate;
     
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
     
     /**
      * Отправка уведомления о результатах обслуживания
@@ -33,9 +34,10 @@ public class MaintenanceNotificationService {
     public void sendMaintenanceNotification(String title, String message, String type) {
         try {
             Map<String, Object> notification = new HashMap<>();
+            notification.put("id", UUID.randomUUID().toString());
             notification.put("title", title);
             notification.put("message", message);
-            notification.put("type", type);
+            notification.put("type", type.toUpperCase());
             notification.put("timestamp", LocalDateTime.now().format(FORMATTER));
             notification.put("category", "maintenance");
             

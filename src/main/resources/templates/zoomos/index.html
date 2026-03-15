@@ -185,6 +185,9 @@
     <a th:href="@{/zoomos/check/history}" class="btn btn-sm btn-outline-info">
         <i class="fas fa-history me-1"></i>История проверок
     </a>
+    <a th:href="@{/zoomos/clients}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-users me-1"></i>По клиентам
+    </a>
 </th:block>
 
 <th:block th:fragment="content">
@@ -215,7 +218,74 @@
                         <i class="fas fa-plus me-1"></i>Добавить
                     </button>
                 </div>
+                <div class="col-auto ms-auto">
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            data-bs-toggle="modal" data-bs-target="#defaultsModal">
+                        <i class="fas fa-sliders-h me-1"></i>Настройки по умолчанию
+                    </button>
+                </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Модал: настройки по умолчанию -->
+    <div class="modal fade" id="defaultsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-sliders-h me-2"></i>Настройки по умолчанию</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form th:action="@{/zoomos/settings}" method="post">
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3">Значения используются при создании нового расписания и запуске проверки вручную.</p>
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Падение inStock, %</label>
+                                <input type="number" name="default.drop_threshold" class="form-control form-control-sm"
+                                       min="1" max="100"
+                                       th:value="${defDropThreshold}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Рост ошибок, %</label>
+                                <input type="number" name="default.error_growth_threshold" class="form-control form-control-sm"
+                                       min="1" max="1000"
+                                       th:value="${defErrThreshold}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Дней для baseline</label>
+                                <input type="number" name="default.baseline_days" class="form-control form-control-sm"
+                                       min="0" max="90"
+                                       th:value="${defBaselineDays}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Мин. ошибок для WARNING</label>
+                                <input type="number" name="default.min_absolute_errors" class="form-control form-control-sm"
+                                       min="0"
+                                       th:value="${defMinAbsErrors}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Тренд: падение, %</label>
+                                <input type="number" name="default.trend_drop_threshold" class="form-control form-control-sm"
+                                       min="1" max="100"
+                                       th:value="${defTrendDrop}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Тренд: рост ошибок, %</label>
+                                <input type="number" name="default.trend_error_threshold" class="form-control form-control-sm"
+                                       min="1" max="1000"
+                                       th:value="${defTrendErr}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Сохранить
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -435,25 +505,27 @@
                     <label class="form-label mb-0 small" th:for="'dropThreshold-' + ${shop.id}"
                            title="Порог падения 'В наличии' (%)">Падение inStock, %</label>
                     <input type="number" class="form-control form-control-sm check-drop-threshold"
-                           th:id="'dropThreshold-' + ${shop.id}" value="10" min="1" max="100">
+                           th:id="'dropThreshold-' + ${shop.id}"
+                           th:value="${defDropThreshold}" min="1" max="100">
                 </div>
                 <div class="col">
                     <label class="form-label mb-0 small" th:for="'errThreshold-' + ${shop.id}"
                            title="Порог роста ошибок (%)">Рост ошибок, %</label>
                     <input type="number" class="form-control form-control-sm check-err-threshold"
-                           th:id="'errThreshold-' + ${shop.id}" value="30" min="1" max="500">
+                           th:id="'errThreshold-' + ${shop.id}"
+                           th:value="${defErrThreshold}" min="1" max="500">
                 </div>
                 <div class="col">
                     <label class="form-label mb-0 small" th:for="'baselineDays-' + ${shop.id}"
                            title="Горизонт сравнения с историей (0 = без анализа)">Baseline, дней</label>
                     <input type="number" class="form-control form-control-sm check-baseline-days"
-                           th:id="'baselineDays-' + ${shop.id}" value="7" min="0" max="30">
+                           th:id="'baselineDays-' + ${shop.id}" th:value="${defBaselineDays}" min="0" max="30">
                 </div>
                 <div class="col">
                     <label class="form-label mb-0 small" th:for="'minAbsErrors-' + ${shop.id}"
                            title="Минимальное абсолютное число ошибок парсинга для варнинга. При значении 5: рост 1→2 — не варнинг, рост 5→15 — варнинг.">Мин. ошибок <i class="fas fa-info-circle" style="font-size:0.8em"></i></label>
                     <input type="number" class="form-control form-control-sm check-min-abs-errors"
-                           th:id="'minAbsErrors-' + ${shop.id}" value="5" min="0" max="1000">
+                           th:id="'minAbsErrors-' + ${shop.id}" th:value="${defMinAbsErrors}" min="0" max="1000">
                 </div>
             </div>
             <!-- Ряд 2: тренд-пороги -->
@@ -463,7 +535,7 @@
                            data-bs-toggle="tooltip" data-bs-placement="top"
                            title="Тренд: порог замедления скорости выкачки и падения доли «В наличии». Дефолт 30%. Выше = меньше трендовых предупреждений.">Тренд: падение, % <i class="fas fa-info-circle" style="font-size:0.8em"></i></label>
                     <input type="number" class="form-control form-control-sm check-trend-drop"
-                           th:id="'trendDrop-' + ${shop.id}" value="30" min="1" max="500">
+                           th:id="'trendDrop-' + ${shop.id}" th:value="${defTrendDrop}" min="1" max="500">
                 </div>
                 <div class="col">
                     <label class="form-label mb-0 small text-muted" th:for="'trendErr-' + ${shop.id}"
@@ -472,7 +544,7 @@
                         <button type="button" class="btn btn-link p-0 ms-1 text-info align-baseline" style="font-size:0.8em; line-height:1;" data-bs-toggle="modal" data-bs-target="#trendErrHelpModal" title="Подробное объяснение с примерами"><i class="fas fa-question-circle"></i></button>
                     </label>
                     <input type="number" class="form-control form-control-sm check-trend-err"
-                           th:id="'trendErr-' + ${shop.id}" value="100" min="1" max="1000">
+                           th:id="'trendErr-' + ${shop.id}" th:value="${defTrendErr}" min="1" max="1000">
                 </div>
                 <div class="col-4"></div>
             </div>
@@ -942,19 +1014,19 @@
                         <div class="row g-2">
                             <div class="col">
                                 <label class="form-label mb-0 small" title="Порог падения 'В наличии' (%)">Падение inStock, %</label>
-                                <input type="number" class="form-control form-control-sm" id="csDropThreshold" value="10" min="1" max="100">
+                                <input type="number" class="form-control form-control-sm" id="csDropThreshold" th:value="${defDropThreshold}" min="1" max="100">
                             </div>
                             <div class="col">
                                 <label class="form-label mb-0 small" title="Порог роста ошибок (%)">Рост ошибок, %</label>
-                                <input type="number" class="form-control form-control-sm" id="csErrThreshold" value="30" min="1" max="500">
+                                <input type="number" class="form-control form-control-sm" id="csErrThreshold" th:value="${defErrThreshold}" min="1" max="500">
                             </div>
                             <div class="col">
                                 <label class="form-label mb-0 small" title="Горизонт сравнения с историей (0 = без анализа)">Baseline, дней</label>
-                                <input type="number" class="form-control form-control-sm" id="csBaselineDays" value="7" min="0" max="30">
+                                <input type="number" class="form-control form-control-sm" id="csBaselineDays" th:value="${defBaselineDays}" min="0" max="30">
                             </div>
                             <div class="col">
                                 <label class="form-label mb-0 small" title="Минимальное абсолютное число ошибок для варнинга">Мин. ошибок</label>
-                                <input type="number" class="form-control form-control-sm" id="csMinAbsErrors" value="5" min="0" max="1000">
+                                <input type="number" class="form-control form-control-sm" id="csMinAbsErrors" th:value="${defMinAbsErrors}" min="0" max="1000">
                             </div>
                         </div>
                     </div>
@@ -962,11 +1034,11 @@
                     <div class="row g-2">
                         <div class="col">
                             <label class="form-label mb-0 small text-muted" title="Тренд: порог замедления скорости выкачки и падения доли «В наличии»">Тренд: падение, %</label>
-                            <input type="number" class="form-control form-control-sm" id="csTrendDrop" value="30" min="1" max="500">
+                            <input type="number" class="form-control form-control-sm" id="csTrendDrop" th:value="${defTrendDrop}" min="1" max="500">
                         </div>
                         <div class="col">
                             <label class="form-label mb-0 small text-muted" title="Тренд: порог роста доли ошибок от числа товаров">Тренд: ошибки, %</label>
-                            <input type="number" class="form-control form-control-sm" id="csTrendErr" value="100" min="1" max="1000">
+                            <input type="number" class="form-control form-control-sm" id="csTrendErr" th:value="${defTrendErr}" min="1" max="1000">
                         </div>
                         <div class="col-4"></div>
                     </div>
@@ -1044,42 +1116,42 @@
 
         const dropThresholdEl = document.getElementById('dropThreshold-' + shopId);
         if (dropThresholdEl) {
-            dropThresholdEl.value = localStorage.getItem('checkDropThreshold-' + shopId) || '10';
+            dropThresholdEl.value = localStorage.getItem('checkDropThreshold-' + shopId) || dropThresholdEl.value;
             dropThresholdEl.addEventListener('change', () =>
                 localStorage.setItem('checkDropThreshold-' + shopId, dropThresholdEl.value));
         }
 
         const errThresholdEl = document.getElementById('errThreshold-' + shopId);
         if (errThresholdEl) {
-            errThresholdEl.value = localStorage.getItem('checkErrThreshold-' + shopId) || '30';
+            errThresholdEl.value = localStorage.getItem('checkErrThreshold-' + shopId) || errThresholdEl.value;
             errThresholdEl.addEventListener('change', () =>
                 localStorage.setItem('checkErrThreshold-' + shopId, errThresholdEl.value));
         }
 
         const baselineDaysEl = document.getElementById('baselineDays-' + shopId);
         if (baselineDaysEl) {
-            baselineDaysEl.value = localStorage.getItem('checkBaselineDays-' + shopId) || '7';
+            baselineDaysEl.value = localStorage.getItem('checkBaselineDays-' + shopId) || baselineDaysEl.value;
             baselineDaysEl.addEventListener('change', () =>
                 localStorage.setItem('checkBaselineDays-' + shopId, baselineDaysEl.value));
         }
 
         const minAbsErrorsEl = document.getElementById('minAbsErrors-' + shopId);
         if (minAbsErrorsEl) {
-            minAbsErrorsEl.value = localStorage.getItem('checkMinAbsErrors-' + shopId) || '5';
+            minAbsErrorsEl.value = localStorage.getItem('checkMinAbsErrors-' + shopId) || minAbsErrorsEl.value;
             minAbsErrorsEl.addEventListener('change', () =>
                 localStorage.setItem('checkMinAbsErrors-' + shopId, minAbsErrorsEl.value));
         }
 
         const trendDropEl = document.getElementById('trendDrop-' + shopId);
         if (trendDropEl) {
-            trendDropEl.value = localStorage.getItem('checkTrendDrop-' + shopId) || '30';
+            trendDropEl.value = localStorage.getItem('checkTrendDrop-' + shopId) || trendDropEl.value;
             trendDropEl.addEventListener('change', () =>
                 localStorage.setItem('checkTrendDrop-' + shopId, trendDropEl.value));
         }
 
         const trendErrEl = document.getElementById('trendErr-' + shopId);
         if (trendErrEl) {
-            trendErrEl.value = localStorage.getItem('checkTrendErr-' + shopId) || '100';
+            trendErrEl.value = localStorage.getItem('checkTrendErr-' + shopId) || trendErrEl.value;
             trendErrEl.addEventListener('change', () =>
                 localStorage.setItem('checkTrendErr-' + shopId, trendErrEl.value));
         }
