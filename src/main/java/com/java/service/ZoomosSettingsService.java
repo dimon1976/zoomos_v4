@@ -26,6 +26,16 @@ public class ZoomosSettingsService {
         return map;
     }
 
+    public String getString(String key, String defaultValue) {
+        try {
+            String val = jdbcTemplate.queryForObject(
+                    "SELECT value FROM zoomos_settings WHERE key = ?", String.class, key);
+            return (val == null || val.isBlank()) ? defaultValue : val;
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
     public int getInt(String key, int defaultValue) {
         try {
             String val = jdbcTemplate.queryForObject(

@@ -2,6 +2,7 @@ package com.java.service.maintenance;
 
 import com.java.dto.*;
 import com.java.service.CleanupService;
+import com.java.util.FileUtils;
 import com.java.util.PathResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -89,7 +90,7 @@ public class FileManagementService {
 
             stats.setTotalSizeBytes(totalSize.get());
             stats.setFileCount(fileCount.get());
-            stats.setFormattedSize(formatBytes(totalSize.get()));
+            stats.setFormattedSize(FileUtils.formatBytes(totalSize.get()));
             stats.setUsagePercentage(calculateUsagePercentage(totalSize.get()));
             
             if (fileCount.get() > 0) {
@@ -198,10 +199,10 @@ public class FileManagementService {
             
             long averageSize = calculateAverageFileSize();
             stats.setAverageFileSizeBytes(averageSize);
-            stats.setFormattedAverageSize(formatBytes(averageSize));
+            stats.setFormattedAverageSize(FileUtils.formatBytes(averageSize));
             
             log.info("Статистика собрана: импорт={}, экспорт={}, средний размер={}", 
-                importCount, exportCount, formatBytes(averageSize));
+                importCount, exportCount, FileUtils.formatBytes(averageSize));
             
             return stats;
 
@@ -342,7 +343,7 @@ public class FileManagementService {
         try {
             long fileSize = Files.size(entry.getValue().get(0));
             dto.setFileSizeBytes(fileSize);
-            dto.setFormattedFileSize(formatBytes(fileSize));
+            dto.setFormattedFileSize(FileUtils.formatBytes(fileSize));
             dto.setFileName(entry.getValue().get(0).getFileName().toString());
         } catch (IOException e) {
             dto.setFileSizeBytes(0);
@@ -414,13 +415,6 @@ public class FileManagementService {
         return totalSpace > 0 ? (double) sizeBytes / totalSpace * 100 : 0.0;
     }
 
-    private String formatBytes(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
-        if (bytes < 1024 * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
-        return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
-    }
-
     private ArchiveResultDto createArchiveResult(int files, long size, String path, boolean success, String error) {
         ArchiveResultDto result = new ArchiveResultDto();
         result.setArchivedFiles(files);
@@ -429,7 +423,7 @@ public class FileManagementService {
         result.setSuccess(success);
         result.setErrorMessage(error);
         result.setArchiveTime(LocalDateTime.now());
-        result.setFormattedArchivedSize(formatBytes(size));
+        result.setFormattedArchivedSize(FileUtils.formatBytes(size));
         return result;
     }
 
@@ -441,7 +435,7 @@ public class FileManagementService {
         result.setSuccess(success);
         result.setErrorMessage(error);
         result.setCleanupTime(LocalDateTime.now());
-        result.setFormattedFreedSpace(formatBytes(freedSpace));
+        result.setFormattedFreedSpace(FileUtils.formatBytes(freedSpace));
         return result;
     }
     
@@ -479,7 +473,7 @@ public class FileManagementService {
             
             result.put("success", deletedFiles.get() > 0);
             result.put("deletedFiles", deletedFiles.get());
-            result.put("formattedFreedSpace", formatBytes(freedSpace.get()));
+            result.put("formattedFreedSpace", FileUtils.formatBytes(freedSpace.get()));
             
             log.info("Удаление архивов завершено. Удалено файлов: {}", deletedFiles.get());
             
@@ -536,7 +530,7 @@ public class FileManagementService {
             result.put("success", deletedDuplicates.get() > 0);
             result.put("deletedDuplicates", deletedDuplicates.get());
             result.put("remainingFiles", remainingFiles.get());
-            result.put("formattedFreedSpace", formatBytes(freedSpace.get()));
+            result.put("formattedFreedSpace", FileUtils.formatBytes(freedSpace.get()));
             
             log.info("Удаление дубликатов завершено. Удалено: {}, оставлено: {}", 
                 deletedDuplicates.get(), remainingFiles.get());
@@ -590,7 +584,7 @@ public class FileManagementService {
             
             result.put("success", deletedFiles.get() > 0);
             result.put("deletedFiles", deletedFiles.get());
-            result.put("formattedFreedSpace", formatBytes(freedSpace.get()));
+            result.put("formattedFreedSpace", FileUtils.formatBytes(freedSpace.get()));
             
             log.info("Очистка директории {} завершена. Удалено файлов: {}", directoryType, deletedFiles.get());
             
@@ -631,7 +625,7 @@ public class FileManagementService {
             result.put("success", totalDeletedFiles.get() > 0);
             result.put("totalDeletedFiles", totalDeletedFiles.get());
             result.put("cleanedDirectories", cleanedDirectories.get());
-            result.put("formattedFreedSpace", formatBytes(totalFreedSpace.get()));
+            result.put("formattedFreedSpace", FileUtils.formatBytes(totalFreedSpace.get()));
             
             log.info("Полная очистка завершена. Удалено файлов: {}, очищено директорий: {}", 
                 totalDeletedFiles.get(), cleanedDirectories.get());

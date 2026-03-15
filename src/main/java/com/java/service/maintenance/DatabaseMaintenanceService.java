@@ -2,6 +2,7 @@ package com.java.service.maintenance;
 
 import com.java.dto.*;
 import com.java.repository.*;
+import com.java.util.FileUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -91,12 +92,12 @@ public class DatabaseMaintenanceService {
 
             result.put("success", true);
             result.put("tablesProcessed", tables.size());
-            result.put("initialSize", formatBytes(startSize));
-            result.put("finalSize", formatBytes(endSize));
-            result.put("freedSpace", formatBytes(freedBytes));
+            result.put("initialSize", FileUtils.formatBytes(startSize));
+            result.put("finalSize", FileUtils.formatBytes(endSize));
+            result.put("freedSpace", FileUtils.formatBytes(freedBytes));
             result.put("freedSpaceBytes", freedBytes);
 
-            log.info("VACUUM FULL завершен. Освобождено: {}", formatBytes(freedBytes));
+            log.info("VACUUM FULL завершен. Освобождено: {}", FileUtils.formatBytes(freedBytes));
 
         } catch (Exception e) {
             log.error("Ошибка при выполнении VACUUM FULL", e);
@@ -437,7 +438,7 @@ public class DatabaseMaintenanceService {
         
         try {
             stats.setTotalSizeBytes(getDatabaseSize());
-            stats.setFormattedTotalSize(formatBytes(stats.getTotalSizeBytes()));
+            stats.setFormattedTotalSize(FileUtils.formatBytes(stats.getTotalSizeBytes()));
             stats.setTableSizes(getTableSizes());
             stats.setFormattedTableSizes(formatTableSizes(stats.getTableSizes()));
             stats.setTotalTables(getTotalTables());
@@ -937,7 +938,7 @@ public class DatabaseMaintenanceService {
         return tableSizes.entrySet().stream()
             .collect(Collectors.toMap(
                 Map.Entry::getKey,
-                entry -> formatBytes(entry.getValue())
+                entry -> FileUtils.formatBytes(entry.getValue())
             ));
     }
 
@@ -1046,13 +1047,6 @@ public class DatabaseMaintenanceService {
         }
     }
 
-
-    private String formatBytes(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
-        if (bytes < 1024 * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
-        return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
-    }
 
     private String truncateQuery(String query) {
         if (query == null) return "";

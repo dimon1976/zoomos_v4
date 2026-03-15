@@ -185,6 +185,20 @@ public class AsyncConfig {
     }
 
     /**
+     * Планировщик задач для обслуживания системы (cron-расписания)
+     */
+    @Bean(name = "maintenanceTaskScheduler")
+    public ThreadPoolTaskScheduler maintenanceTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("maintenance-sched-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(60);
+        scheduler.initialize();
+        return scheduler;
+    }
+
+    /**
      * Планировщик задач для автоматических проверок Zoomos (cron-расписания)
      */
     @Bean(name = "zoomosSchedulerTaskScheduler")

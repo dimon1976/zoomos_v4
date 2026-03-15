@@ -2,6 +2,8 @@ package com.java.controller;
 
 import com.java.dto.*;
 import com.java.repository.ClientRepository;
+import com.java.service.MaintenanceSchedulerService;
+import com.java.service.ZoomosSettingsService;
 import com.java.service.maintenance.DatabaseMaintenanceService;
 import com.java.service.maintenance.FileManagementService;
 import com.java.service.maintenance.SystemHealthService;
@@ -12,13 +14,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +37,8 @@ public class MaintenanceController {
     private final SystemHealthService systemHealthService;
     private final ClientRepository clientRepository;
     private final DataCleanupService dataCleanupService;
+    private final MaintenanceSchedulerService maintenanceSchedulerService;
+    private final ZoomosSettingsService settingsService;
 
     @Value("${database.maintenance.cleanup.old-data.days:120}")
     private int databaseCleanupDays;
@@ -484,6 +486,67 @@ public class MaintenanceController {
             log.warn("Не удалось проверить состояние системы: {}", e.getMessage());
             // В случае ошибки разрешаем операцию (fail-open)
             return true;
+        }
+    }
+
+    // === РАСПИСАНИЕ ОБСЛУЖИВАНИЯ ===
+
+    private static final List<String> TASK_KEYS = List.of(
+            "fileArchive", "dbCleanup", "healthCheck", "perfAnalysis", "fullMaintenance");
+
+    private static final Map<String, String> TASK_NAMES = Map.of(
+            "fileArchive",     "Архивирование файлов",
+            "dbCleanup",       "Очистка базы данных",
+            "healthCheck",     "Проверка здоровья системы",
+            "perfAnalysis",    "Анализ производительности",
+            "fullMaintenance", "Полное обслуживание");
+
+    @GetMapping("/schedule")
+    public String schedulePage(Model model) {
+        model.addAttribute("globalEnabled", maintenanceSchedulerService.isEnabled());
+        Map<String, Map<String, String>> tasks = new LinkedHashMap<>();
+        for (String key : TASK_KEYS) {
+            Map<String, String> t = new HashMap<>();
+            t.put("name",      TASK_NAMES.getOrDefault(key, key));
+            t.put("enabled",   settingsService.getString("maint." + key + ".enabled", "true"));
+            t.put("cron",      settingsService.getString("maint." + key + ".cron", ""));
+            t.put("lastRunAt", settingsService.getString("maint." + key + ".lastRunAt", ""));
+            t.put("scheduled", maintenanceSchedulerService.isTaskScheduled(key) ? "true" : "false");
+            tasks.put(key, t);
+        }
+        model.addAttribute("tasks", tasks);
+        return "maintenance/schedule";
+    }
+
+    @PostMapping("/schedule/save")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> saveSchedule(@RequestBody Map<String, String> settings) {
+        try {
+            settingsService.saveAll(settings);
+            maintenanceSchedulerService.rescheduleAll();
+            return ResponseEntity.ok(Map.of("success", true,
+                    "message", "Настройки сохранены, расписание обновлено"));
+        } catch (Exception e) {
+            log.error("Ошибка сохранения настроек расписания", e);
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/schedule/trigger/{taskKey}")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> triggerTask(@PathVariable String taskKey) {
+        if (!TASK_KEYS.contains(taskKey)) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Неизвестная задача: " + taskKey));
+        }
+        try {
+            maintenanceSchedulerService.triggerTask(taskKey);
+            String lastRunAt = settingsService.getString("maint." + taskKey + ".lastRunAt", "");
+            return ResponseEntity.ok(Map.of("success", true,
+                    "message", "Задача запущена: " + TASK_NAMES.getOrDefault(taskKey, taskKey),
+                    "lastRunAt", lastRunAt));
+        } catch (Exception e) {
+            log.error("Ошибка ручного запуска задачи {}", taskKey, e);
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "message", e.getMessage()));
         }
     }
 
