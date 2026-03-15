@@ -149,20 +149,13 @@
                 </div>
                 <div class="card-body">
                     <!-- Показываем разные детали в зависимости от статуса -->
-                    <div th:if="${operation.status.name() == 'PENDING'}">
-                        <div class="alert alert-info mb-0">
-                            <i class="fas fa-hourglass-start me-2"></i>
-                            Операция ожидает начала обработки...
-                        </div>
-                    </div>
-
-                    <div th:if="${operation.status.name() == 'PROCESSING'}">
+                    <div th:if="${operation.status.name() == 'PENDING' or operation.status.name() == 'PROCESSING'}">
                         <div class="alert alert-primary mb-3">
-                            <i class="fas fa-spinner fa-spin me-2"></i>
-                            Идет обработка файла...
+                            <i th:class="${operation.status.name() == 'PENDING'} ? 'fas fa-hourglass-start me-2' : 'fas fa-spinner fa-spin me-2'"></i>
+                            <span th:text="${operation.status.name() == 'PENDING'} ? 'Операция ожидает начала обработки...' : 'Идет обработка файла...'">Обработка...</span>
                         </div>
 
-                        <!-- Прогресс бар -->
+                        <!-- Прогресс-бар — всегда в DOM для PENDING/PROCESSING -->
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span>Прогресс обработки</span>
@@ -182,7 +175,7 @@
                             </div>
                         </div>
 
-                        <!-- Дополнительная информация об импорте -->
+                        <!-- Статистика импорта -->
                         <div th:if="${importSession}" class="mt-3">
                             <div class="row text-center">
                                 <div class="col-md-3">
@@ -205,6 +198,31 @@
                                     <div class="fw-bold" id="currentOperation">Обработка...</div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Статистика экспорта -->
+                        <div th:if="${exportSession}" class="mt-3">
+                            <div class="row text-center">
+                                <div class="col-md-4">
+                                    <small class="text-muted">Экспортировано</small>
+                                    <div class="fw-bold text-success" data-stat="processedRows"
+                                         th:text="${exportSession.exportedRows ?: 0}">0</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted">Отфильтровано</small>
+                                    <div class="fw-bold text-warning" data-stat="filteredRows"
+                                         th:text="${exportSession.filteredRows ?: 0}">0</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted">Статус</small>
+                                    <div class="fw-bold" id="currentOperation">Инициализация...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fallback когда сессия ещё не создана -->
+                        <div th:if="${importSession == null and exportSession == null}" class="mt-3 text-center">
+                            <div class="fw-bold text-muted" id="currentOperation">Инициализация...</div>
                         </div>
                     </div>
 
@@ -418,6 +436,9 @@
             updateStatValue('processedRows', progress.exportedRows);
             var remaining = (progress.totalRows || 0) - progress.exportedRows;
             updateStatValue('remainingRows', remaining);
+        }
+        if (progress.filteredRows !== undefined) {
+            updateStatValue('filteredRows', progress.filteredRows);
         }
 
         // Дополнительная статистика для импорта

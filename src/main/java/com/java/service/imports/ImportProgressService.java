@@ -133,8 +133,10 @@ public class ImportProgressService extends BaseProgressService<ImportSession, Im
      * Вычисляет прогресс с учетом того, что totalRows может быть оценкой
      */
     private Integer calculateProgressPercentage(ImportSession session) {
-        if (session.getTotalRows() == null || session.getTotalRows() == 0 ||
-                session.getProcessedRows() == null) {
+        if (session.getTotalRows() == null || session.getProcessedRows() == null) {
+            return 10; // Фаза инициализации — начало обработки
+        }
+        if (session.getTotalRows() == 0) {
             return 0;
         }
 
