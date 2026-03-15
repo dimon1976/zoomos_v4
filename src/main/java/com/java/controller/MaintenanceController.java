@@ -491,9 +491,6 @@ public class MaintenanceController {
 
     // === РАСПИСАНИЕ ОБСЛУЖИВАНИЯ ===
 
-    private static final List<String> TASK_KEYS = List.of(
-            "fileArchive", "dbCleanup", "healthCheck", "perfAnalysis", "fullMaintenance");
-
     private static final Map<String, String> TASK_NAMES = Map.of(
             "fileArchive",     "Архивирование файлов",
             "dbCleanup",       "Очистка базы данных",
@@ -505,7 +502,7 @@ public class MaintenanceController {
     public String schedulePage(Model model) {
         model.addAttribute("globalEnabled", maintenanceSchedulerService.isEnabled());
         Map<String, Map<String, String>> tasks = new LinkedHashMap<>();
-        for (String key : TASK_KEYS) {
+        for (String key : MaintenanceSchedulerService.TASK_KEYS) {
             Map<String, String> t = new HashMap<>();
             t.put("name",      TASK_NAMES.getOrDefault(key, key));
             t.put("enabled",   settingsService.getString("maint." + key + ".enabled", "true"));
@@ -535,7 +532,7 @@ public class MaintenanceController {
     @PostMapping("/schedule/trigger/{taskKey}")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> triggerTask(@PathVariable String taskKey) {
-        if (!TASK_KEYS.contains(taskKey)) {
+        if (!MaintenanceSchedulerService.TASK_KEYS.contains(taskKey)) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Неизвестная задача: " + taskKey));
         }
         try {

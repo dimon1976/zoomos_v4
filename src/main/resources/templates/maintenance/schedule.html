@@ -17,8 +17,6 @@
         .task-row td { vertical-align: middle; }
         .cron-input { font-family: monospace; font-size: 0.9rem; }
         .last-run { font-size: 0.8rem; color: #6c757d; }
-        .badge-scheduled { background-color: #198754; }
-        .badge-idle     { background-color: #6c757d; }
         .global-toggle-section { background: #f8f9fa; border-radius: 8px; padding: 1rem 1.5rem; }
     </style>
 </th:block>
@@ -88,7 +86,7 @@
                         </td>
                         <td class="text-center">
                             <span th:id="'badge-' + ${entry.key}"
-                                  th:class="${entry.value['scheduled'] == 'true'} ? 'badge badge-scheduled' : 'badge badge-idle'"
+                                  th:class="${entry.value['scheduled'] == 'true'} ? 'badge text-bg-success' : 'badge text-bg-secondary'"
                                   th:text="${entry.value['scheduled'] == 'true'} ? 'активна' : 'не активна'">
                             </span>
                         </td>

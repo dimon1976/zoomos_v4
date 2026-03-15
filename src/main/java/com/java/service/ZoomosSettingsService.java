@@ -47,12 +47,9 @@ public class ZoomosSettingsService {
     }
 
     public void set(String key, String value) {
-        int updated = jdbcTemplate.update(
-                "UPDATE zoomos_settings SET value = ? WHERE key = ?", value, key);
-        if (updated == 0) {
-            jdbcTemplate.update(
-                    "INSERT INTO zoomos_settings (key, value) VALUES (?, ?)", key, value);
-        }
+        jdbcTemplate.update(
+                "INSERT INTO zoomos_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                key, value);
         log.debug("ZoomosSettings: {} = {}", key, value);
     }
 

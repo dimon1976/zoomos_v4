@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,7 +43,7 @@ public class MaintenanceSchedulerService {
     private final ThreadPoolTaskScheduler taskScheduler;
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final List<String> TASK_KEYS = List.of(
+    public static final List<String> TASK_KEYS = List.of(
             "fileArchive", "dbCleanup", "healthCheck", "perfAnalysis", "fullMaintenance");
 
     private final Map<String, ScheduledFuture<?>> scheduleMap = new ConcurrentHashMap<>();
@@ -72,11 +73,11 @@ public class MaintenanceSchedulerService {
     }
 
     /**
-     * Ручной немедленный запуск задачи по ключу.
+     * Ручной немедленный запуск задачи по ключу (асинхронно на пуле планировщика).
      */
     public void triggerTask(String taskKey) {
         log.info("MaintenanceSchedulerService: ручной запуск задачи '{}'", taskKey);
-        getTaskRunnable(taskKey).run();
+        taskScheduler.execute(getTaskRunnable(taskKey));
     }
 
     /** Возвращает true если глобальный планировщик включён */
@@ -91,12 +92,33 @@ public class MaintenanceSchedulerService {
 
     private void scheduleTask(String key, String cron) {
         try {
-            ScheduledFuture<?> future = taskScheduler.schedule(getTaskRunnable(key), new CronTrigger(cron));
+            String springCron = toSpringCron(cron);
+            ScheduledFuture<?> future = taskScheduler.schedule(getTaskRunnable(key), new CronTrigger(springCron));
             scheduleMap.put(key, future);
-            log.info("MaintenanceSchedulerService: задача '{}' запланирована по cron='{}'", key, cron);
+            log.info("MaintenanceSchedulerService: задача '{}' запланирована по cron='{}'", key, springCron);
         } catch (Exception e) {
             log.error("MaintenanceSchedulerService: ошибка планирования задачи '{}' cron='{}': {}", key, cron, e.getMessage());
         }
+    }
+
+    /** Конвертирует 5-польный Unix cron в 6-польный Spring cron (добавляет секунды). */
+    private String toSpringCron(String raw) {
+        String[] parts = raw.trim().split("\\s+");
+        if (parts.length == 5) {
+            parts = ("0 " + raw.trim()).split("\\s+");
+        }
+        return String.join(" ", parts);
+    }
+
+    private DataCleanupRequestDto buildCleanupRequest(String initiatedBy) {
+        int retentionDays = settingsService.getInt("database.maintenance.cleanup.old-data.days", 120);
+        return DataCleanupRequestDto.builder()
+                .cutoffDate(LocalDateTime.now().minusDays(retentionDays))
+                .entityTypes(Set.of("IMPORT_SESSIONS", "EXPORT_SESSIONS", "FILE_OPERATIONS", "IMPORT_ERRORS"))
+                .batchSize(1000)
+                .dryRun(false)
+                .initiatedBy(initiatedBy)
+                .build();
     }
 
     private void unscheduleTask(String key) {
@@ -152,14 +174,7 @@ public class MaintenanceSchedulerService {
         log.info("Запуск плановой очистки БД: {}", LocalDateTime.now().format(FORMATTER));
         recordLastRun("dbCleanup");
         try {
-            int retentionDays = settingsService.getInt("database.maintenance.cleanup.old-data.days", 30);
-            DataCleanupRequestDto request = DataCleanupRequestDto.builder()
-                    .cutoffDate(LocalDateTime.now().minusDays(retentionDays))
-                    .entityTypes(Set.of("IMPORT_SESSIONS", "EXPORT_SESSIONS", "FILE_OPERATIONS", "IMPORT_ERRORS"))
-                    .batchSize(1000)
-                    .dryRun(false)
-                    .initiatedBy("SCHEDULER")
-                    .build();
+            DataCleanupRequestDto request = buildCleanupRequest("SCHEDULER");
             DataCleanupResultDto result = dataCleanupService.executeCleanup(request);
             if (result.isSuccess()) {
                 long totalDeleted = result.getTotalRecordsDeleted();
@@ -254,15 +269,7 @@ public class MaintenanceSchedulerService {
         recordLastRun("fullMaintenance");
         try {
             var fileResult = fileManagementService.archiveOldFiles(30);
-            int retentionDays = settingsService.getInt("database.maintenance.cleanup.old-data.days", 30);
-            DataCleanupRequestDto cleanupRequest = DataCleanupRequestDto.builder()
-                    .cutoffDate(LocalDateTime.now().minusDays(retentionDays))
-                    .entityTypes(Set.of("IMPORT_SESSIONS", "EXPORT_SESSIONS", "FILE_OPERATIONS", "IMPORT_ERRORS"))
-                    .batchSize(1000)
-                    .dryRun(false)
-                    .initiatedBy("SCHEDULER_FULL_MAINTENANCE")
-                    .build();
-            DataCleanupResultDto dbResult = dataCleanupService.executeCleanup(cleanupRequest);
+            DataCleanupResultDto dbResult = dataCleanupService.executeCleanup(buildCleanupRequest("SCHEDULER_FULL_MAINTENANCE"));
             var health = systemHealthService.checkSystemHealth();
 
             StringBuilder report = new StringBuilder("Полное обслуживание системы завершено:\n");
