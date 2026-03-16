@@ -1826,6 +1826,11 @@ public class ZoomosAnalysisController {
                     .withZoneSameInstant(java.time.ZoneId.systemDefault())
                     .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")));
         }
+        if (run.getCompletedAt() != null) {
+            result.put("completedAt", run.getCompletedAt()
+                    .withZoneSameInstant(java.time.ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")));
+        }
         return ResponseEntity.ok(result);
     }
 

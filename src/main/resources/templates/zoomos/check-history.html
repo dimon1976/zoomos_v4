@@ -39,6 +39,13 @@
         <button class="btn btn-sm btn-outline-secondary" type="button" id="historySearchClear" title="Сбросить фильтр">
             <i class="fas fa-times"></i>
         </button>
+        <select id="historyPageSize" class="form-select form-select-sm w-auto" title="Строк на странице">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="0">Все</option>
+        </select>
         <span id="historyCount" class="text-muted small"></span>
 
         <button type="button" id="btnDeleteSelected" class="btn btn-sm btn-danger ms-auto" style="display:none">
@@ -109,6 +116,12 @@
         </div>
     </div>
 
+    <!-- Пагинация -->
+    <div id="historyPagination" class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2" style="display:none!important">
+        <span id="historyPaginationInfo" class="text-muted small"></span>
+        <nav><ul class="pagination pagination-sm mb-0" id="historyPaginationPages"></ul></nav>
+    </div>
+
     <!-- Модал подтверждения удаления -->
     <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
@@ -137,22 +150,96 @@
     const histSearch  = document.getElementById('historySearch');
     const histCount   = document.getElementById('historyCount');
     const histClear   = document.getElementById('historySearchClear');
+    const histPageSize = document.getElementById('historyPageSize');
     const checkAll    = document.getElementById('checkAll');
     const btnDelete   = document.getElementById('btnDeleteSelected');
     const selectedCnt = document.getElementById('selectedCount');
     const deleteForm  = document.getElementById('deleteForm');
+    const pagination  = document.getElementById('historyPagination');
+    const paginationPages = document.getElementById('historyPaginationPages');
+    const paginationInfo  = document.getElementById('historyPaginationInfo');
+
+    const PAGE_SIZE_KEY = 'zoomos-history-page-size';
+    let currentPage = 1;
+
+    // Восстановить сохранённый размер страницы
+    const savedSize = localStorage.getItem(PAGE_SIZE_KEY);
+    if (savedSize && histPageSize) {
+        const opt = histPageSize.querySelector(`option[value="${savedSize}"]`);
+        if (opt) opt.selected = true;
+    }
+
+    function getPageSize() {
+        return histPageSize ? parseInt(histPageSize.value) : 25;
+    }
 
     function filterHistory() {
         const q = histSearch ? histSearch.value.trim().toLowerCase() : '';
-        const rows = document.querySelectorAll('tbody tr');
-        rows.forEach(r => {
+        const allRows = Array.from(document.querySelectorAll('tbody tr'));
+        const matched = allRows.filter(r => {
             const name = r.cells[2]?.textContent.toLowerCase() || '';
-            r.style.display = (!q || name.includes(q)) ? '' : 'none';
+            return !q || name.includes(q);
         });
-        const total = rows.length;
-        const visible = Array.from(rows).filter(r => r.style.display !== 'none').length;
-        if (histCount) histCount.textContent = q ? `Показано: ${visible} из ${total}` : '';
+
+        const pageSize = getPageSize();
+        const totalMatched = matched.length;
+        const totalPages = pageSize === 0 ? 1 : Math.ceil(totalMatched / pageSize);
+        if (currentPage > totalPages) currentPage = 1;
+
+        allRows.forEach(r => r.style.display = 'none');
+        const start = pageSize === 0 ? 0 : (currentPage - 1) * pageSize;
+        const end   = pageSize === 0 ? totalMatched : start + pageSize;
+        matched.slice(start, end).forEach(r => r.style.display = '');
+
+        // Счётчик
+        if (histCount) {
+            histCount.textContent = q ? `Найдено: ${totalMatched} из ${allRows.length}` : `Всего: ${allRows.length}`;
+        }
+
+        // Пагинация
+        if (pageSize > 0 && totalPages > 1) {
+            pagination.style.removeProperty('display');
+            paginationInfo.textContent = `Страница ${currentPage} из ${totalPages} (${totalMatched} записей)`;
+            renderPages(totalPages);
+        } else {
+            pagination.style.setProperty('display', 'none', 'important');
+        }
+
         updateDeleteBtn();
+    }
+
+    function renderPages(total) {
+        paginationPages.innerHTML = '';
+        const prev = document.createElement('li');
+        prev.className = 'page-item' + (currentPage === 1 ? ' disabled' : '');
+        prev.innerHTML = '<a class="page-link" href="#">‹</a>';
+        prev.addEventListener('click', e => { e.preventDefault(); if (currentPage > 1) { currentPage--; filterHistory(); }});
+        paginationPages.appendChild(prev);
+
+        // Показываем: первую, последнюю, текущую ±2
+        const pages = new Set([1, total]);
+        for (let i = Math.max(1, currentPage - 2); i <= Math.min(total, currentPage + 2); i++) pages.add(i);
+        let last = 0;
+        [...pages].sort((a,b)=>a-b).forEach(p => {
+            if (last && p - last > 1) {
+                const dots = document.createElement('li');
+                dots.className = 'page-item disabled';
+                dots.innerHTML = '<a class="page-link">…</a>';
+                paginationPages.appendChild(dots);
+            }
+            const li = document.createElement('li');
+            li.className = 'page-item' + (p === currentPage ? ' active' : '');
+            li.innerHTML = `<a class="page-link" href="#">${p}</a>`;
+            li.addEventListener('click', e => { e.preventDefault(); currentPage = p; filterHistory(); });
+            paginationPages.appendChild(li);
+            last = p;
+        });
+
+        const next = document.createElement('li');
+        next.className = 'page-item' + (currentPage === total ? ' disabled' : '');
+        next.innerHTML = '<a class="page-link" href="#">›</a>';
+        next.addEventListener('click', e => { e.preventDefault(); if (currentPage < total) { currentPage++; filterHistory(); }});
+        paginationPages.appendChild(next);
     }
 
     function updateDeleteBtn() {
@@ -164,15 +251,25 @@
         }
     }
 
+    if (histPageSize) {
+        histPageSize.addEventListener('change', () => {
+            localStorage.setItem(PAGE_SIZE_KEY, histPageSize.value);
+            currentPage = 1;
+            filterHistory();
+        });
+    }
+
     if (histSearch) {
-        histSearch.addEventListener('input', filterHistory);
-        if (histSearch.value.trim()) filterHistory();
+        histSearch.addEventListener('input', () => { currentPage = 1; filterHistory(); });
     }
     if (histClear) {
         histClear.addEventListener('click', () => {
-            if (histSearch) { histSearch.value = ''; filterHistory(); }
+            if (histSearch) { histSearch.value = ''; currentPage = 1; filterHistory(); }
         });
     }
+
+    // Инициализация
+    filterHistory();
 
     if (checkAll) {
         checkAll.addEventListener('change', function() {

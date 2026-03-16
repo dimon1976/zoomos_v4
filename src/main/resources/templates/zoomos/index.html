@@ -299,6 +299,12 @@
             </button>
         </div>
         <span id="searchCount" class="text-muted small"></span>
+        <select id="shopsPageSize" class="form-select form-select-sm w-auto" title="Магазинов на странице">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="0">Все</option>
+        </select>
         <button id="viewToggleBtn" class="btn btn-sm btn-outline-secondary ms-auto" title="Компактный вид">
             <i class="fas fa-th-list"></i>
         </button>
@@ -353,7 +359,7 @@
                 <strong th:text="${shop.shopName}">shop.ru</strong>
                 <span th:if="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
                     <i class="fas fa-sync-alt me-1"></i>Обновлено:
-                    <span th:text="${#temporals.format(shop.lastSyncedAt, 'dd.MM.yyyy HH:mm')}"></span>
+                    <span class="fw-semibold text-body" th:text="${#temporals.format(shop.lastSyncedAt, 'dd.MM.yyyy HH:mm')}"></span>
                 </span>
                 <span th:unless="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
                     <i class="fas fa-clock me-1"></i>Не синхронизировано
@@ -713,6 +719,12 @@
         </div>
     </div>
     </div><!-- /shops-container -->
+
+    <!-- Пагинация магазинов -->
+    <div id="shopsPagination" class="d-flex justify-content-between align-items-center mt-2 mb-3 flex-wrap gap-2" style="display:none!important">
+        <span id="shopsPaginationInfo" class="text-muted small"></span>
+        <nav><ul class="pagination pagination-sm mb-0" id="shopsPaginationPages"></ul></nav>
+    </div>
 
     <!-- Выключенные магазины -->
     <div th:unless="${disabledShops.empty}" class="mt-3">
@@ -1177,25 +1189,101 @@
     const searchInput = document.getElementById('shopSearch');
     const clearBtn = document.getElementById('clearSearch');
     const countEl = document.getElementById('searchCount');
-    const shopCards = document.querySelectorAll('.shop-card');
+    const shopsPageSizeEl = document.getElementById('shopsPageSize');
+    const shopsPagination = document.getElementById('shopsPagination');
+    const shopsPaginationPages = document.getElementById('shopsPaginationPages');
+    const shopsPaginationInfo = document.getElementById('shopsPaginationInfo');
+    const SHOPS_PAGE_SIZE_KEY = 'zoomos-shops-page-size';
+
+    let shopsCurrentPage = 1;
+
+    // Восстановить сохранённый размер страницы
+    const savedShopsSize = localStorage.getItem(SHOPS_PAGE_SIZE_KEY);
+    if (savedShopsSize && shopsPageSizeEl) {
+        const opt = shopsPageSizeEl.querySelector(`option[value="${savedShopsSize}"]`);
+        if (opt) opt.selected = true;
+    }
+
+    function getShopsPageSize() {
+        return shopsPageSizeEl ? parseInt(shopsPageSizeEl.value) : 0;
+    }
 
     function updateSearch() {
         const q = searchInput.value.trim().toLowerCase();
-        let visible = 0;
-        shopCards.forEach(card => {
+        const container = document.getElementById('shops-container');
+        const allCards = Array.from(container.querySelectorAll('.shop-card'));
+
+        const matched = allCards.filter(card => {
             const name = (card.dataset.shopName || '').toLowerCase();
-            if (!q || name.includes(q)) {
-                card.classList.remove('hidden-by-search');
-                visible++;
-            } else {
-                card.classList.add('hidden-by-search');
-            }
+            return !q || name.includes(q);
         });
-        countEl.textContent = q ? `Показано: ${visible} из ${shopCards.length}` : '';
+
+        const pageSize = getShopsPageSize();
+        const totalPages = pageSize === 0 ? 1 : Math.ceil(matched.length / pageSize);
+        if (shopsCurrentPage > totalPages) shopsCurrentPage = 1;
+
+        const start = pageSize === 0 ? 0 : (shopsCurrentPage - 1) * pageSize;
+        const end   = pageSize === 0 ? matched.length : start + pageSize;
+        const visible = matched.slice(start, end);
+
+        allCards.forEach(card => card.classList.add('hidden-by-search'));
+        visible.forEach(card => card.classList.remove('hidden-by-search'));
+
+        countEl.textContent = q ? `Найдено: ${matched.length} из ${allCards.length}` : '';
+
+        if (pageSize > 0 && totalPages > 1) {
+            shopsPagination.style.removeProperty('display');
+            shopsPaginationInfo.textContent = `Страница ${shopsCurrentPage} из ${totalPages} (${matched.length} магазинов)`;
+            renderShopsPages(totalPages);
+        } else {
+            shopsPagination.style.setProperty('display', 'none', 'important');
+        }
     }
 
-    searchInput.addEventListener('input', updateSearch);
-    clearBtn.addEventListener('click', () => { searchInput.value = ''; updateSearch(); searchInput.focus(); });
+    function renderShopsPages(total) {
+        shopsPaginationPages.innerHTML = '';
+        const prev = document.createElement('li');
+        prev.className = 'page-item' + (shopsCurrentPage === 1 ? ' disabled' : '');
+        prev.innerHTML = '<a class="page-link" href="#">‹</a>';
+        prev.addEventListener('click', e => { e.preventDefault(); if (shopsCurrentPage > 1) { shopsCurrentPage--; updateSearch(); }});
+        shopsPaginationPages.appendChild(prev);
+
+        const pages = new Set([1, total]);
+        for (let i = Math.max(1, shopsCurrentPage - 2); i <= Math.min(total, shopsCurrentPage + 2); i++) pages.add(i);
+        let last = 0;
+        [...pages].sort((a,b)=>a-b).forEach(p => {
+            if (last && p - last > 1) {
+                const dots = document.createElement('li');
+                dots.className = 'page-item disabled';
+                dots.innerHTML = '<a class="page-link">…</a>';
+                shopsPaginationPages.appendChild(dots);
+            }
+            const li = document.createElement('li');
+            li.className = 'page-item' + (p === shopsCurrentPage ? ' active' : '');
+            li.innerHTML = `<a class="page-link" href="#">${p}</a>`;
+            li.addEventListener('click', e => { e.preventDefault(); shopsCurrentPage = p; updateSearch(); });
+            shopsPaginationPages.appendChild(li);
+            last = p;
+        });
+
+        const next = document.createElement('li');
+        next.className = 'page-item' + (shopsCurrentPage === total ? ' disabled' : '');
+        next.innerHTML = '<a class="page-link" href="#">›</a>';
+        next.addEventListener('click', e => { e.preventDefault(); if (shopsCurrentPage < total) { shopsCurrentPage++; updateSearch(); }});
+        shopsPaginationPages.appendChild(next);
+    }
+
+    if (shopsPageSizeEl) {
+        shopsPageSizeEl.addEventListener('change', () => {
+            localStorage.setItem(SHOPS_PAGE_SIZE_KEY, shopsPageSizeEl.value);
+            shopsCurrentPage = 1;
+            updateSearch();
+        });
+    }
+
+    searchInput.addEventListener('input', () => { shopsCurrentPage = 1; updateSearch(); });
+    clearBtn.addEventListener('click', () => { searchInput.value = ''; shopsCurrentPage = 1; updateSearch(); searchInput.focus(); });
+    updateSearch();
 
     // ---- Переключение чекбокса is_active ----
     document.querySelectorAll('.city-toggle').forEach(cb => {
@@ -1884,15 +1972,14 @@
         document.getElementById('result-link-' + shopId).href = '/zoomos/check/results/' + data.runId;
         document.getElementById('check-result-' + shopId).style.display = 'block';
         // Обновить метку "Обновлено:" в header карточки
-        const card = document.querySelector('.shop-card[data-shop-id="' + shopId + '"]');
-        if (card) {
-            const syncEl = card.querySelector('.sync-status');
-            if (syncEl) {
-                const now = new Date();
-                const p = n => String(n).padStart(2, '0');
-                const fmt = p(now.getDate()) + '.' + p(now.getMonth()+1) + '.' + now.getFullYear()
-                          + ' ' + p(now.getHours()) + ':' + p(now.getMinutes());
-                syncEl.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Обновлено: ' + fmt;
+        const serverTime = data.completedAt || data.startedAt;
+        if (serverTime) {
+            const card = document.querySelector('.shop-card[data-shop-id="' + shopId + '"]');
+            if (card) {
+                const syncEl = card.querySelector('.sync-status');
+                if (syncEl) {
+                    syncEl.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Обновлено: <span class="fw-semibold text-body">' + serverTime + '</span>';
+                }
             }
         }
     }
@@ -2109,6 +2196,28 @@
                             icon.className = 'fas fa-star text-warning';
                         } else {
                             icon.className = 'far fa-star text-secondary';
+                        }
+                        // Пересортировать: приоритетные — в начало, остальные — после них
+                        const container = document.getElementById('shops-container');
+                        const card = this.closest('.shop-card');
+                        if (container && card) {
+                            if (data.isPriority) {
+                                container.insertBefore(card, container.firstElementChild);
+                            } else {
+                                const lastPriority = Array.from(container.querySelectorAll('.shop-card'))
+                                    .filter(c => c !== card && c.querySelector('.btn-shop-priority i.fas.fa-star') !== null)
+                                    .pop();
+                                if (lastPriority) {
+                                    lastPriority.insertAdjacentElement('afterend', card);
+                                } else {
+                                    container.insertBefore(card, container.firstElementChild);
+                                }
+                            }
+                            shopsCurrentPage = 1;
+                            updateSearch();
+                            // Сохранить новый порядок в localStorage чтобы Sortable восстановил его при перезагрузке
+                            const newOrder = [...container.querySelectorAll('.shop-card')].map(c => c.dataset.shopId);
+                            localStorage.setItem('zoomosShopOrder', JSON.stringify(newOrder));
                         }
                     }
                 })

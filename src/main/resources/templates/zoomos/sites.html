@@ -47,9 +47,15 @@
     </div>
 
     <!-- Фильтр -->
-    <div class="mb-3 d-flex align-items-center gap-2">
+    <div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
         <input type="text" id="siteSearch" class="form-control form-control-sm w-auto"
                placeholder="Фильтр по имени сайта..." style="min-width:260px">
+        <select id="sitesPageSize" class="form-select form-select-sm w-auto" title="Строк на странице">
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="0">Все</option>
+        </select>
         <span id="searchCount" class="text-muted small"></span>
     </div>
 
@@ -114,6 +120,12 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <!-- Пагинация -->
+    <div id="sitesPagination" class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2" style="display:none!important">
+        <span id="sitesPaginationInfo" class="text-muted small"></span>
+        <nav><ul class="pagination pagination-sm mb-0" id="sitesPaginationPages"></ul></nav>
     </div>
 
 </div>
@@ -250,26 +262,102 @@
         });
     });
 
-    // ---- Фильтр по имени ----
-    const siteSearch = document.getElementById('siteSearch');
-    const countEl = document.getElementById('searchCount');
+    // ---- Фильтр + пагинация ----
+    const siteSearch    = document.getElementById('siteSearch');
+    const countEl       = document.getElementById('searchCount');
+    const sitesPageSize = document.getElementById('sitesPageSize');
+    const sitesPag      = document.getElementById('sitesPagination');
+    const sitesPagPages = document.getElementById('sitesPaginationPages');
+    const sitesPagInfo  = document.getElementById('sitesPaginationInfo');
+    const SITES_PS_KEY  = 'zoomos-sites-page-size';
+    let sitesCurrentPage = 1;
 
-    function updateSearchCount() {
-        const rows = document.querySelectorAll('#sitesTable tbody tr');
-        const visible = Array.from(rows).filter(r => r.style.display !== 'none').length;
-        countEl.textContent = rows.length !== visible ? `Показано: ${visible} из ${rows.length}` : '';
+    const savedSitesPSize = localStorage.getItem(SITES_PS_KEY);
+    if (savedSitesPSize && sitesPageSize) {
+        const opt = sitesPageSize.querySelector(`option[value="${savedSitesPSize}"]`);
+        if (opt) opt.selected = true;
     }
 
-    if (siteSearch) {
-        siteSearch.addEventListener('input', function() {
-            const q = this.value.trim().toLowerCase();
-            document.querySelectorAll('#sitesTable tbody tr').forEach(row => {
-                const name = row.querySelector('.site-name-cell')?.textContent.toLowerCase() || '';
-                row.style.display = (!q || name.includes(q)) ? '' : 'none';
-            });
-            updateSearchCount();
+    function getSitesPageSize() { return sitesPageSize ? parseInt(sitesPageSize.value) : 25; }
+
+    function filterSites() {
+        const q = siteSearch ? siteSearch.value.trim().toLowerCase() : '';
+        const allRows = Array.from(document.querySelectorAll('#sitesTable tbody tr'));
+        const matched = allRows.filter(r => {
+            const name = r.querySelector('.site-name-cell')?.textContent.toLowerCase() || '';
+            return !q || name.includes(q);
+        });
+
+        const pageSize = getSitesPageSize();
+        const totalMatched = matched.length;
+        const totalPages = pageSize === 0 ? 1 : Math.ceil(totalMatched / pageSize);
+        if (sitesCurrentPage > totalPages) sitesCurrentPage = 1;
+
+        allRows.forEach(r => r.style.display = 'none');
+        const start = pageSize === 0 ? 0 : (sitesCurrentPage - 1) * pageSize;
+        const end   = pageSize === 0 ? totalMatched : start + pageSize;
+        matched.slice(start, end).forEach(r => r.style.display = '');
+
+        if (countEl) {
+            countEl.textContent = q ? `Найдено: ${totalMatched} из ${allRows.length}` : `Всего: ${allRows.length}`;
+        }
+
+        if (pageSize > 0 && totalPages > 1) {
+            sitesPag.style.removeProperty('display');
+            sitesPagInfo.textContent = `Страница ${sitesCurrentPage} из ${totalPages} (${totalMatched} записей)`;
+            renderSitesPages(totalPages);
+        } else {
+            sitesPag.style.setProperty('display', 'none', 'important');
+        }
+    }
+
+    function renderSitesPages(total) {
+        sitesPagPages.innerHTML = '';
+        const prev = document.createElement('li');
+        prev.className = 'page-item' + (sitesCurrentPage === 1 ? ' disabled' : '');
+        prev.innerHTML = '<a class="page-link" href="#">‹</a>';
+        prev.addEventListener('click', e => { e.preventDefault(); if (sitesCurrentPage > 1) { sitesCurrentPage--; filterSites(); }});
+        sitesPagPages.appendChild(prev);
+
+        const pages = new Set([1, total]);
+        for (let i = Math.max(1, sitesCurrentPage - 2); i <= Math.min(total, sitesCurrentPage + 2); i++) pages.add(i);
+        let last = 0;
+        [...pages].sort((a,b)=>a-b).forEach(p => {
+            if (last && p - last > 1) {
+                const dots = document.createElement('li');
+                dots.className = 'page-item disabled';
+                dots.innerHTML = '<a class="page-link">…</a>';
+                sitesPagPages.appendChild(dots);
+            }
+            const li = document.createElement('li');
+            li.className = 'page-item' + (p === sitesCurrentPage ? ' active' : '');
+            li.innerHTML = `<a class="page-link" href="#">${p}</a>`;
+            li.addEventListener('click', e => { e.preventDefault(); sitesCurrentPage = p; filterSites(); });
+            sitesPagPages.appendChild(li);
+            last = p;
+        });
+
+        const next = document.createElement('li');
+        next.className = 'page-item' + (sitesCurrentPage === total ? ' disabled' : '');
+        next.innerHTML = '<a class="page-link" href="#">›</a>';
+        next.addEventListener('click', e => { e.preventDefault(); if (sitesCurrentPage < total) { sitesCurrentPage++; filterSites(); }});
+        sitesPagPages.appendChild(next);
+    }
+
+    function updateSearchCount() { filterSites(); }
+
+    if (sitesPageSize) {
+        sitesPageSize.addEventListener('change', () => {
+            localStorage.setItem(SITES_PS_KEY, sitesPageSize.value);
+            sitesCurrentPage = 1;
+            filterSites();
         });
     }
+    if (siteSearch) {
+        siteSearch.addEventListener('input', () => { sitesCurrentPage = 1; filterSites(); });
+    }
+
+    filterSites();
 </script>
 </th:block>
 
