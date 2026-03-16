@@ -119,9 +119,12 @@ public class ExportProgressService extends BaseProgressService<ExportSession, Ex
                     if (session.getExportedRows() != null) {
                         return Math.min(95, (int) ((session.getExportedRows() * 80) / session.getTotalRows()) + 15);
                     }
-                    return 50; // Середина обработки
+                    return 30; // totalRows известен, экспорт ещё не начат
                 }
-                return 30;
+                if (session.getTotalRows() != null && session.getTotalRows() == 0) {
+                    return 95; // Данных нет — экспорт завершается
+                }
+                return 10; // Фаза загрузки из БД (totalRows ещё не известен)
             case COMPLETED:
                 return 100;
             case FAILED:
@@ -140,6 +143,9 @@ public class ExportProgressService extends BaseProgressService<ExportSession, Ex
                 if (session.getExportedRows() != null && session.getTotalRows() != null) {
                     return String.format("Экспорт данных (%d из %d строк)",
                             session.getExportedRows(), session.getTotalRows());
+                }
+                if (session.getTotalRows() == null) {
+                    return "Загрузка данных из базы данных...";
                 }
                 return "Обработка данных...";
             case COMPLETED:

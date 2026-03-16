@@ -1329,6 +1329,7 @@ public class ZoomosAnalysisController {
                                     int minAbsoluteErrors, boolean ignoreStock,
                                     ZoomosCheckService.MedianStats baseline,
                                     List<Map<String, Object>> issues, String shopName) {
+        int initialIssueCount = issues.size();
         ZoomosParsingStats newest = sortedAsc.get(sortedAsc.size() - 1);
         ZoomosParsingStats prev   = sortedAsc.size() >= 2 ? sortedAsc.get(sortedAsc.size() - 2) : null;
 
@@ -1474,6 +1475,27 @@ public class ZoomosAnalysisController {
                 }
             }
         }
+
+        // Медленная выкачка (только если других проблем не выявлено)
+        if (issues.size() == initialIssueCount
+                && baseline != null && baseline.durationMinutes() != null
+                && newest.getParsingDurationMinutes() != null) {
+            int refDur = baseline.durationMinutes();
+            int curDur = newest.getParsingDurationMinutes();
+            if (refDur > 0 && (double) curDur > refDur * 1.5) {
+                Map<String, Object> issue = new LinkedHashMap<>();
+                issue.put("site", siteName);
+                issue.put("city", cityName);
+                issue.put("cityId", cityId);
+                issue.put("addressId", addressId);
+                issue.put("addressName", addressName);
+                issue.put("checkType", checkType);
+                issue.put("shopName", shopName);
+                issue.put("type", "WARNING");
+                issue.put("message", String.format("Медленная выкачка: %d мин (базовый: %d мин)", curDur, refDur));
+                issues.add(issue);
+            }
+        }
     }
 
     /**
@@ -1567,6 +1589,18 @@ public class ZoomosAnalysisController {
             }
         }
 
+        // Pre-group issues по "site|city" для O(1) поиска внутри цикла
+        Map<String, List<String>> issueMessagesBySiteCity = new HashMap<>();
+        for (Map<String, Object> iss : issues) {
+            Object site = iss.get("site");
+            Object city = iss.get("city");
+            Object msg  = iss.get("message");
+            if (site != null && msg != null) {
+                String key = site + "|" + (city != null ? city : "");
+                issueMessagesBySiteCity.computeIfAbsent(key, k -> new ArrayList<>()).add((String) msg);
+            }
+        }
+
         List<Map<String, Object>> groups = new ArrayList<>();
 
         bySite.forEach((siteName, siteStats) -> {
@@ -1634,6 +1668,11 @@ public class ZoomosAnalysisController {
                 cg.put("status", cityStatus);
                 cg.put("stats", cityStats);
                 cg.put("addressGroups", addressGroups);
+                String issueLookupKey = siteName + "|" + cityName;
+                List<String> cityIssueMessages = issueMessagesBySiteCity.get(issueLookupKey);
+                if (cityIssueMessages != null && !cityIssueMessages.isEmpty()) {
+                    cg.put("issueMessages", cityIssueMessages);
+                }
                 cityGroups.add(cg);
             });
             cityGroups.sort(Comparator.comparingInt(cg -> statusPriority((String) cg.get("status"))));
@@ -2210,7 +2249,7 @@ public class ZoomosAnalysisController {
         }
 
         if (newest.getCompletionPercent() != null && newest.getCompletionPercent() < 100) {
-            return String.format("Выкачка: %.0f%%", newest.getCompletionPercent());
+            return String.format("Выкачка: %d%%", newest.getCompletionPercent());
         }
         return "ERROR".equals(status) ? "Проблема с выкачкой" : "Нужна проверка";
     }
