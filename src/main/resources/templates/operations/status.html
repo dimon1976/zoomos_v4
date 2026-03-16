@@ -164,7 +164,7 @@
                             <div class="progress">
                                 <div class="progress-bar progress-bar-striped progress-bar-animated"
                                      role="progressbar" id="progressBar"
-                                     th:style="${operation.status.name() == 'PENDING'} ? 'width: 100%' : 'width: ' + ${operation.processingProgress ?: 0} + '%'">
+                                     th:style="${operation.status.name() == 'PENDING'} ? 'width: 0%' : 'width: ' + ${operation.processingProgress ?: 0} + '%'">
                                 </div>
                             </div>
                             <div class="text-center mt-1">

@@ -46,6 +46,6 @@
     "java.compile.targetCompatibility": "17",
     // Spring Boot settings
     "spring-boot.ls.problem.application-properties.UNKNOWN_PROPERTY": "ignore",
-    "claudeCode.useTerminal": false,
-    "claudeCodeChat.permissions.yoloMode": true
+    "claudeCode.useTerminal": true,
+    "claudeCodeChat.permissions.yoloMode": false
 }

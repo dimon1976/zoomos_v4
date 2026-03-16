@@ -1484,9 +1484,13 @@ public class ZoomosAnalysisController {
             int curDur = newest.getParsingDurationMinutes();
             if (refDur > 0 && (double) curDur > refDur * 1.5) {
                 Map<String, Object> issue = new LinkedHashMap<>();
-                issue.put("site", siteName); issue.put("city", cityName); issue.put("cityId", cityId);
-                issue.put("addressId", addressId); issue.put("addressName", addressName);
-                issue.put("checkType", checkType); issue.put("shopName", shopName);
+                issue.put("site", siteName);
+                issue.put("city", cityName);
+                issue.put("cityId", cityId);
+                issue.put("addressId", addressId);
+                issue.put("addressName", addressName);
+                issue.put("checkType", checkType);
+                issue.put("shopName", shopName);
                 issue.put("type", "WARNING");
                 issue.put("message", String.format("Медленная выкачка: %d мин (базовый: %d мин)", curDur, refDur));
                 issues.add(issue);
@@ -1585,6 +1589,18 @@ public class ZoomosAnalysisController {
             }
         }
 
+        // Pre-group issues по "site|city" для O(1) поиска внутри цикла
+        Map<String, List<String>> issueMessagesBySiteCity = new HashMap<>();
+        for (Map<String, Object> iss : issues) {
+            Object site = iss.get("site");
+            Object city = iss.get("city");
+            Object msg  = iss.get("message");
+            if (site != null && msg != null) {
+                String key = site + "|" + (city != null ? city : "");
+                issueMessagesBySiteCity.computeIfAbsent(key, k -> new ArrayList<>()).add((String) msg);
+            }
+        }
+
         List<Map<String, Object>> groups = new ArrayList<>();
 
         bySite.forEach((siteName, siteStats) -> {
@@ -1652,12 +1668,9 @@ public class ZoomosAnalysisController {
                 cg.put("status", cityStatus);
                 cg.put("stats", cityStats);
                 cg.put("addressGroups", addressGroups);
-                List<String> cityIssueMessages = issues.stream()
-                        .filter(iss -> siteName.equals(iss.get("site")) && cityName.equals(iss.get("city")))
-                        .map(iss -> (String) iss.get("message"))
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toList());
-                if (!cityIssueMessages.isEmpty()) {
+                String issueLookupKey = siteName + "|" + cityName;
+                List<String> cityIssueMessages = issueMessagesBySiteCity.get(issueLookupKey);
+                if (cityIssueMessages != null && !cityIssueMessages.isEmpty()) {
                     cg.put("issueMessages", cityIssueMessages);
                 }
                 cityGroups.add(cg);
