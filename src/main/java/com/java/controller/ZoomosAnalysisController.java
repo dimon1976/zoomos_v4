@@ -2236,7 +2236,7 @@ public class ZoomosAnalysisController {
         }
 
         if (newest.getCompletionPercent() != null && newest.getCompletionPercent() < 100) {
-            return String.format("Выкачка: %.0f%%", newest.getCompletionPercent());
+            return String.format("Выкачка: %d%%", newest.getCompletionPercent());
         }
         return "ERROR".equals(status) ? "Проблема с выкачкой" : "Нужна проверка";
     }
