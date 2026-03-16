@@ -112,6 +112,11 @@
                     <span class="badge ms-1 small"
                           th:classappend="${cg['status'] == 'ERROR'} ? 'bg-danger' : (${cg['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
                           th:text="${cg['status']}"></span>
+                    <span th:if="${cg['issueMessages'] != null}"
+                          th:each="msg : ${cg['issueMessages']}"
+                          class="ms-2 small fw-normal"
+                          th:classappend="${cg['status'] == 'ERROR'} ? 'text-danger' : 'text-warning-emphasis'"
+                          th:text="'— ' + ${msg}"></span>
                 </div>
                 <!-- Подгруппы по адресу внутри города -->
                 <div th:each="ag : ${cg['addressGroups']}">
