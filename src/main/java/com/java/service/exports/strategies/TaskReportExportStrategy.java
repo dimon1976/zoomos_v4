@@ -83,10 +83,9 @@ public class TaskReportExportStrategy implements ExportStrategy {
         }
 
         // 3. Загружаем допустимые комбинации номер_задания + код_розничной_сети
-        updateProgress(progressSession, 10, "Загрузка ключей заданий из БД...");
-        Set<String> allowedKeys = loadAllowedTaskKeys(taskNumbers);
+        Set<String> allowedKeys = loadAllowedTaskKeys(taskNumbers, progressSession);
         log.debug("Допустимых комбинаций номер+код_сети из заданий: {}", allowedKeys.size());
-        updateProgress(progressSession, 18, String.format("Загружено %d ключей заданий", allowedKeys.size()));
+        updateProgress(progressSession, 68, String.format("Загружено %d ключей заданий", allowedKeys.size()));
         if (log.isDebugEnabled()) {
             log.debug("Допустимые ключи: {}", allowedKeys);
         }
@@ -94,6 +93,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
         // ВРЕМЕННОЕ РЕШЕНИЕ: Если не найдено ключей по точным номерам, попробуем расширенный поиск
         if (allowedKeys.isEmpty()) {
             log.warn("ПРИМЕНЕНИЕ ВРЕМЕННОГО РЕШЕНИЯ: Расширенный поиск заданий");
+            updateProgress(progressSession, 40, "Расширенный поиск ключей заданий...");
             allowedKeys = loadAllTaskKeysWithFlexibleMatching();
             log.warn("Расширенный поиск нашел {} ключей", allowedKeys.size());
         }
@@ -161,9 +161,9 @@ public class TaskReportExportStrategy implements ExportStrategy {
             Map<String, Object> reportRow = reportData.get(rowIdx);
             Map<String, Object> workingRow = new HashMap<>(reportRow);
 
-            // Обновляем прогресс каждые 5% итераций
+            // Обновляем прогресс каждые 5% итераций (диапазон 70-85%)
             if (rowIdx > 0 && rowIdx % progressStep == 0) {
-                updateProgress(progressSession, 20 + rowIdx * 65 / total,
+                updateProgress(progressSession, 70 + rowIdx * 15 / total,
                         String.format("Обработка строк (%d из %d)...", rowIdx, total));
             }
 
@@ -416,7 +416,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
     /**
      * Загружает данные заданий по номерам
      */
-    private Set<String> loadAllowedTaskKeys(Set<String> taskNumbers) {
+    private Set<String> loadAllowedTaskKeys(Set<String> taskNumbers, ExportSession progressSession) {
         log.debug("=== Загрузка допустимых ключей для заданий ===");
         if (taskNumbers == null || taskNumbers.isEmpty()) {
             log.debug("Пустой список номеров заданий");
@@ -426,8 +426,14 @@ public class TaskReportExportStrategy implements ExportStrategy {
         Set<String> allowed = new HashSet<>();
         List<String> numbers = new ArrayList<>(taskNumbers);
         int batchSize = 1000;
+        int totalBatches = (numbers.size() + batchSize - 1) / batchSize;
 
         for (int i = 0; i < numbers.size(); i += batchSize) {
+            int batchNum = i / batchSize;
+            // Прогресс 10-65% равномерно по батчам
+            updateProgress(progressSession, 10 + batchNum * 55 / Math.max(1, totalBatches),
+                    String.format("Загрузка ключей заданий из БД... (пакет %d из %d)", batchNum + 1, totalBatches));
+
             List<String> batch = numbers.subList(i, Math.min(i + batchSize, numbers.size()));
             String placeholders = String.join(", ", Collections.nCopies(batch.size(), "?"));
             String sql = "SELECT product_additional1, competitor_additional FROM av_data WHERE data_source = 'TASK' " +
