@@ -63,8 +63,8 @@ public class NotificationServiceImpl implements NotificationService {
                 .timestamp(ZonedDateTime.now())
                 .operationId(operation.getId())
                 .clientName(operation.getClient().getName())
-                .fileName(operation.getResultFilePath() != null ? operation.getResultFilePath().substring(operation.getResultFilePath().lastIndexOf('/') + 1) : operation.getFileName())
-                .actionUrl("/export/download/" + session.getId())
+                .fileName(operation.getFileName())
+                .actionUrl("/files/download/" + operation.getFileName())
                 .actionText("Скачать файл")
                 .autoHideSeconds(60)
                 .build();
