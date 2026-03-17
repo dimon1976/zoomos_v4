@@ -114,6 +114,10 @@ public class ExportProgressService extends BaseProgressService<ExportSession, Ex
             case INITIALIZING:
                 return 5;
             case PROCESSING:
+                // Если стратегия репортит собственный прогресс — используем его (0-100 → 30-95)
+                if (session.getStrategyProgress() != null) {
+                    return 30 + (session.getStrategyProgress() * 65) / 100;
+                }
                 // Промежуточные значения в зависимости от этапа
                 if (session.getTotalRows() != null && session.getTotalRows() > 0) {
                     if (session.getExportedRows() != null) {
@@ -141,7 +145,7 @@ public class ExportProgressService extends BaseProgressService<ExportSession, Ex
      */
     public void sendHeartbeat(ExportSession session, String stageName) {
         try {
-            session.setCurrentStageName(stageName);
+            if (stageName != null) session.setCurrentStageName(stageName);
             ExportProgressDto dto = buildProgressDto(session);
             progressController.sendProgressUpdate(getOperationId(session), dto);
         } catch (Exception e) {

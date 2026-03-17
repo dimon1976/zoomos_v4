@@ -1,5 +1,6 @@
 package com.java.service.exports.strategies;
 
+import com.java.model.entity.ExportSession;
 import com.java.model.entity.ExportTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,12 +44,15 @@ public class TaskReportExportStrategy implements ExportStrategy {
         int maxReportAgeDays = context.get("maxReportAgeDays") != null
                 ? ((Integer) context.get("maxReportAgeDays"))
                 : DEFAULT_MAX_REPORT_AGE_DAYS;
+        ExportSession progressSession = (ExportSession) context.get("session");
 
         // 1. Отбираем только записи с data_source = 'REPORT'
         List<Map<String, Object>> reportData = data.stream()
                 .filter(row -> "REPORT".equals(row.get("data_source")))
                 .collect(Collectors.toList());
         log.debug("Записей с data_source=REPORT: {}", reportData.size());
+        updateProgress(progressSession, 5,
+                String.format("Фильтрация записей REPORT (%d/%d)...", reportData.size(), data.size()));
 
         if (reportData.isEmpty()) {
             log.warn("Нет записей с data_source=REPORT");
@@ -79,8 +83,10 @@ public class TaskReportExportStrategy implements ExportStrategy {
         }
 
         // 3. Загружаем допустимые комбинации номер_задания + код_розничной_сети
+        updateProgress(progressSession, 10, "Загрузка ключей заданий из БД...");
         Set<String> allowedKeys = loadAllowedTaskKeys(taskNumbers);
         log.debug("Допустимых комбинаций номер+код_сети из заданий: {}", allowedKeys.size());
+        updateProgress(progressSession, 18, String.format("Загружено %d ключей заданий", allowedKeys.size()));
         if (log.isDebugEnabled()) {
             log.debug("Допустимые ключи: {}", allowedKeys);
         }
@@ -148,9 +154,18 @@ public class TaskReportExportStrategy implements ExportStrategy {
         int skippedWithoutKey = 0;
         int общееКоличествоИзмененийДат = 0; // Общий счетчик для логирования
         Map<TaskNetworkKey, Integer> missingKeyCounts = new HashMap<>();
+        int total = reportData.size();
+        int progressStep = Math.max(1, total / 20); // обновлять каждые 5%
 
-        for (Map<String, Object> reportRow : reportData) {
+        for (int rowIdx = 0; rowIdx < total; rowIdx++) {
+            Map<String, Object> reportRow = reportData.get(rowIdx);
             Map<String, Object> workingRow = new HashMap<>(reportRow);
+
+            // Обновляем прогресс каждые 5% итераций
+            if (rowIdx > 0 && rowIdx % progressStep == 0) {
+                updateProgress(progressSession, 20 + rowIdx * 65 / total,
+                        String.format("Обработка строк (%d из %d)...", rowIdx, total));
+            }
 
             // 5.1. Обогащаем данными из справочника если нужно (только для market.yandex.ru)
             if (needsEnrichment(workingRow)) {
@@ -205,6 +220,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
                 matched, reportData.size(), enriched, skippedWithoutKey, общееКоличествоИзмененийДат);
 
         // 6. Применяем стандартную обработку для форматирования полей
+        updateProgress(progressSession, 88, "Применение форматирования полей...");
         List<Map<String, Object>> finalData = defaultStrategy.processData(processedData, template, context);
         
         // После обработки defaultStrategy подсчитываем группировку по экспортированным данным
@@ -222,6 +238,13 @@ public class TaskReportExportStrategy implements ExportStrategy {
     /**
      * Проверяет, нужно ли обогащение данными из справочника (только для market.yandex.ru)
      */
+    /** Обновляет volatile-поля прогресса в сессии — heartbeat прочитает их и отправит WebSocket */
+    private void updateProgress(ExportSession session, int percent, String stage) {
+        if (session == null) return;
+        session.setStrategyProgress(percent);
+        session.setCurrentStageName(stage);
+    }
+
     private boolean needsEnrichment(Map<String, Object> row) {
         String competitorUrl = Objects.toString(row.get("competitor_url"), "");
         if (!competitorUrl.contains("market.yandex.ru")) {

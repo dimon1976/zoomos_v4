@@ -80,6 +80,10 @@ public class ExportSession {
     @Transient
     private volatile String currentStageName;
 
+    /** 0-100% прогресс внутри стратегии — не персистируется, только в памяти */
+    @Transient
+    private volatile Integer strategyProgress;
+
     @Transient
     public Integer getProgressPercentage() {
         if (totalRows == null || totalRows == 0) return 0;

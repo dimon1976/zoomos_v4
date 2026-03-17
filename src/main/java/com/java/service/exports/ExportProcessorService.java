@@ -124,6 +124,7 @@ public class ExportProcessorService {
             Map<String, Object> context = new HashMap<>();
             context.put("operationIds", request.getOperationIds());
             context.put("session", session);
+            context.put("progressService", progressService);
             context.put("maxReportAgeDays", request.getMaxReportAgeDays());
             if (session.getFileOperation() != null && session.getFileOperation().getClient() != null) {
                 context.put("clientRegionCode", session.getFileOperation().getClient().getRegionCode());
@@ -144,9 +145,15 @@ public class ExportProcessorService {
             ScheduledExecutorService heartbeatExec = Executors.newSingleThreadScheduledExecutor(
                     r -> { Thread t = new Thread(r, "export-heartbeat-" + session.getId()); t.setDaemon(true); return t; });
             ScheduledFuture<?> heartbeat = heartbeatExec.scheduleAtFixedRate(() -> {
-                long elapsed = (System.currentTimeMillis() - strategyStartMs) / 1000;
-                progressService.sendHeartbeat(session,
-                        String.format("Применение стратегии %s... (%d сек)", strategyDisplayName, elapsed));
+                if (session.getStrategyProgress() != null) {
+                    // Стратегия сама управляет прогрессом — шлём пинг без override stageName
+                    progressService.sendHeartbeat(session, null);
+                } else {
+                    // Стратегия не репортит — показываем elapsed time
+                    long elapsed = (System.currentTimeMillis() - strategyStartMs) / 1000;
+                    progressService.sendHeartbeat(session,
+                            String.format("Применение стратегии %s... (%d сек)", strategyDisplayName, elapsed));
+                }
             }, 3, 3, TimeUnit.SECONDS);
 
             List<Map<String, Object>> processedData;
@@ -156,6 +163,7 @@ public class ExportProcessorService {
                 heartbeat.cancel(false);
                 heartbeatExec.shutdown();
                 session.setCurrentStageName(null);
+                session.setStrategyProgress(null);
             }
             log.debug("После применения стратегии осталось {} строк", processedData.size());
 
