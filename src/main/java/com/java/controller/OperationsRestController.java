@@ -111,11 +111,10 @@ public class OperationsRestController {
      * Удаление операции и связанных данных
      */
     @DeleteMapping("/operations/{operationId}")
-    public void deleteOperation(@PathVariable Long operationId) {
+    public java.util.Map<String, Object> deleteOperation(@PathVariable Long operationId) {
         log.info("Запрос на удаление операции ID: {}", operationId);
-        
-        // Используем новый сервис для полного удаления операции со всеми данными
-        operationDeletionService.deleteOperationCompletely(operationId);
+        boolean fileDeleted = operationDeletionService.deleteOperationCompletely(operationId);
+        return java.util.Map.of("fileDeleted", fileDeleted);
     }
 
     /**

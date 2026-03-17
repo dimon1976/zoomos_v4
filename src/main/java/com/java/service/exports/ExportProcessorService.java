@@ -144,16 +144,27 @@ public class ExportProcessorService {
             long strategyStartMs = System.currentTimeMillis();
             ScheduledExecutorService heartbeatExec = Executors.newSingleThreadScheduledExecutor(
                     r -> { Thread t = new Thread(r, "export-heartbeat-" + session.getId()); t.setDaemon(true); return t; });
+            int[] animatedPct = {0}; // локальный счётчик анимации, 0-93
+
             ScheduledFuture<?> heartbeat = heartbeatExec.scheduleAtFixedRate(() -> {
-                if (session.getStrategyProgress() != null) {
-                    // Стратегия сама управляет прогрессом — шлём пинг без override stageName
-                    progressService.sendHeartbeat(session, null);
+                long elapsed = (System.currentTimeMillis() - strategyStartMs) / 1000;
+
+                // Синхронизируемся с реальным прогрессом если стратегия обогнала анимацию
+                Integer realPct = session.getStrategyProgress();
+                if (realPct != null && realPct > animatedPct[0]) {
+                    animatedPct[0] = realPct;
                 } else {
-                    // Стратегия не репортит — показываем elapsed time
-                    long elapsed = (System.currentTimeMillis() - strategyStartMs) / 1000;
-                    progressService.sendHeartbeat(session,
-                            String.format("Применение стратегии %s... (%d сек)", strategyDisplayName, elapsed));
+                    // Анимируем +1% за тик независимо от того, репортит ли стратегия прогресс
+                    animatedPct[0] = Math.min(93, animatedPct[0] + 1);
                 }
+                // Записываем обратно: calculateProgressPercentage() прочитает и отобразит нарастающий %
+                session.setStrategyProgress(animatedPct[0]);
+
+                String baseName = session.getCurrentStageName();
+                String displayStage = (baseName != null ? baseName
+                        : "Применение стратегии " + strategyDisplayName + "...")
+                        + " (" + elapsed + " сек)";
+                progressService.sendHeartbeat(session, displayStage);
             }, 3, 3, TimeUnit.SECONDS);
 
             List<Map<String, Object>> processedData;

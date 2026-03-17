@@ -167,13 +167,7 @@
                                      th:style="${operation.status.name() == 'PENDING'} ? 'width: 0%' : 'width: ' + ${operation.processingProgress ?: 0} + '%'">
                                 </div>
                             </div>
-                            <div class="text-center mt-1">
-                                <small class="text-muted" id="progressDetails">
-                                    <span th:if="${operation.status.name() == 'PENDING'}">Ожидание начала обработки...</span>
-                                    <span th:if="${operation.status.name() == 'PROCESSING'}">Обработка данных...</span>
-                                </small>
                             </div>
-                        </div>
 
                         <!-- Статистика импорта -->
                         <div th:if="${importSession}" class="mt-3">
@@ -230,7 +224,7 @@
                             за <strong th:text="${duration}">время</strong>
                         </div>
 
-                        <!-- Детали импорта если есть -->
+                        <!-- Детали импорта -->
                         <div th:if="${importSession}" class="mt-3">
                             <h6>Результаты импорта:</h6>
                             <ul>
@@ -244,12 +238,39 @@
                             </ul>
                         </div>
 
-                        <!-- Возможные действия после завершения -->
+                        <!-- Детали экспорта -->
+                        <div th:if="${exportSession}" class="mt-3">
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <div class="fw-bold fs-5 text-success" th:text="${exportSession.exportedRows ?: 0}">0</div>
+                                    <small class="text-muted">Экспортировано</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="fw-bold fs-5 text-warning" th:text="${exportSession.filteredRows ?: 0}">0</div>
+                                    <small class="text-muted">Отфильтровано</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="fw-bold fs-5 text-info" th:text="${exportSession.modifiedRows ?: 0}">0</div>
+                                    <small class="text-muted">Модифицировано</small>
+                                </div>
+                            </div>
+                            <div th:if="${exportSession.fileSize != null}" class="text-center mt-2">
+                                <small class="text-muted">Размер файла:
+                                    <strong th:text="${#numbers.formatDecimal(exportSession.fileSize / 1048576.0, 1, 2) + ' МБ'}">0 МБ</strong>
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Действия -->
                         <div class="mt-3">
-                            <h6>Доступные действия:</h6>
                             <div class="btn-group">
+                                <a th:if="${exportSession != null and exportSession.resultFilePath != null}"
+                                   th:href="@{/files/download/{name}(name=${operation.fileName})}"
+                                   class="btn btn-success">
+                                    <i class="fas fa-download me-1"></i>Скачать файл
+                                </a>
                                 <a th:href="@{/clients/{id}(id=${clientId})}"
-                                   class="btn btn-outline-secondary btn-sm">
+                                   class="btn btn-outline-secondary">
                                     <i class="fas fa-eye me-1"></i>Просмотреть данные
                                 </a>
                             </div>
@@ -294,13 +315,20 @@
                             </div>
                             <div class="card-body">
                                 <ul class="mb-0">
-                                    <li>Проверьте формат файла и соответствие заголовков шаблону импорта</li>
-                                    <li>Убедитесь, что все обязательные поля заполнены</li>
-                                    <li>Проверьте типы данных в столбцах (числа, даты, текст)</li>
-                                    <li th:if="${operation.errorMessage != null and (operation.errorMessage.contains('255') or operation.errorMessage.contains('длин'))}">
-                                        <strong>Важно:</strong> Сократите длинные текстовые поля до 255 символов
-                                    </li>
-                                    <li>Удалите специальные символы и переносы строк внутри ячеек</li>
+                                    <th:block th:if="${importSession}">
+                                        <li>Проверьте формат файла и соответствие заголовков шаблону импорта</li>
+                                        <li>Убедитесь, что все обязательные поля заполнены</li>
+                                        <li>Проверьте типы данных в столбцах (числа, даты, текст)</li>
+                                        <li th:if="${operation.errorMessage != null and (operation.errorMessage.contains('255') or operation.errorMessage.contains('длин'))}">
+                                            <strong>Важно:</strong> Сократите длинные текстовые поля до 255 символов
+                                        </li>
+                                        <li>Удалите специальные символы и переносы строк внутри ячеек</li>
+                                    </th:block>
+                                    <th:block th:if="${exportSession}">
+                                        <li>Проверьте настройки шаблона экспорта и выбранные поля</li>
+                                        <li>Убедитесь, что исходные операции содержат данные</li>
+                                        <li>Проверьте фильтры — возможно они исключают все записи</li>
+                                    </th:block>
                                     <li>При необходимости обратитесь к администратору системы</li>
                                 </ul>
 
@@ -319,9 +347,15 @@
                         <!-- Действия -->
                         <div class="mt-3">
                             <div class="btn-group" role="group">
-                                <a th:href="@{/clients/{id}/import(id=${clientId})}"
+                                <a th:if="${importSession}"
+                                   th:href="@{/clients/{id}/import(id=${clientId})}"
                                    class="btn btn-primary">
                                     <i class="fas fa-redo me-1"></i>Попробовать снова
+                                </a>
+                                <a th:if="${exportSession}"
+                                   th:href="@{/clients/{id}(id=${clientId})}"
+                                   class="btn btn-primary">
+                                    <i class="fas fa-redo me-1"></i>Повторить экспорт
                                 </a>
                                 <a th:href="@{/clients/{id}(id=${clientId})}"
                                    class="btn btn-outline-secondary">
@@ -454,12 +488,6 @@
             var currentOp = document.getElementById('currentOperation');
             if (currentOp) {
                 currentOp.textContent = progress.currentOperation;
-            }
-
-            // Обновляем детали прогресса
-            var progressDetails = document.getElementById('progressDetails');
-            if (progressDetails) {
-                progressDetails.textContent = progress.currentOperation;
             }
         }
 
