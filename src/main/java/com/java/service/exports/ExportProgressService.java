@@ -135,7 +135,25 @@ public class ExportProgressService extends BaseProgressService<ExportSession, Ex
         }
     }
 
+    /**
+     * Отправляет WebSocket-обновление из фонового потока (без записи в БД).
+     * Используется для heartbeat во время долгих синхронных операций.
+     */
+    public void sendHeartbeat(ExportSession session, String stageName) {
+        try {
+            session.setCurrentStageName(stageName);
+            ExportProgressDto dto = buildProgressDto(session);
+            progressController.sendProgressUpdate(getOperationId(session), dto);
+        } catch (Exception e) {
+            log.debug("Heartbeat error for session {}: {}", session.getId(), e.getMessage());
+        }
+    }
+
     private String getCurrentOperation(ExportSession session) {
+        // Если стратегия или heartbeat установили текущий этап — показываем его
+        if (session.getCurrentStageName() != null) {
+            return session.getCurrentStageName();
+        }
         switch (session.getStatus()) {
             case INITIALIZING:
                 return "Инициализация экспорта...";

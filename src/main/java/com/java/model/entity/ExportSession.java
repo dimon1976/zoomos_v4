@@ -76,6 +76,10 @@ public class ExportSession {
     @Column(name = "completed_at")
     private ZonedDateTime completedAt;
 
+    /** Название текущего этапа обработки — не персистируется, только в памяти */
+    @Transient
+    private volatile String currentStageName;
+
     @Transient
     public Integer getProgressPercentage() {
         if (totalRows == null || totalRows == 0) return 0;

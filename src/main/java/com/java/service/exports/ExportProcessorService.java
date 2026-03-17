@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -137,7 +138,25 @@ public class ExportProcessorService {
             // ✅ ОБНОВЛЯЕМ ПРОГРЕСС ПЕРЕД ОБРАБОТКОЙ СТРАТЕГИИ (50%)
             progressService.sendProgressUpdate(session);
 
-            List<Map<String, Object>> processedData = strategy.processData(data, template, context);
+            // Heartbeat: пока стратегия работает — отправляем WebSocket-пинг каждые 3 сек
+            String strategyDisplayName = template.getExportStrategy().name();
+            long strategyStartMs = System.currentTimeMillis();
+            ScheduledExecutorService heartbeatExec = Executors.newSingleThreadScheduledExecutor(
+                    r -> { Thread t = new Thread(r, "export-heartbeat-" + session.getId()); t.setDaemon(true); return t; });
+            ScheduledFuture<?> heartbeat = heartbeatExec.scheduleAtFixedRate(() -> {
+                long elapsed = (System.currentTimeMillis() - strategyStartMs) / 1000;
+                progressService.sendHeartbeat(session,
+                        String.format("Применение стратегии %s... (%d сек)", strategyDisplayName, elapsed));
+            }, 3, 3, TimeUnit.SECONDS);
+
+            List<Map<String, Object>> processedData;
+            try {
+                processedData = strategy.processData(data, template, context);
+            } finally {
+                heartbeat.cancel(false);
+                heartbeatExec.shutdown();
+                session.setCurrentStageName(null);
+            }
             log.debug("После применения стратегии осталось {} строк", processedData.size());
 
             session.setModifiedRows((long) (data.size() - processedData.size()));
