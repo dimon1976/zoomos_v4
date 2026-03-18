@@ -1284,7 +1284,7 @@
             selectedIssues.forEach(function(iss) {
                 (byType[iss.type] = byType[iss.type] || []).push(iss);
             });
-            let desc = '*' + site + '* — проблемы с выкачкой:\n\n';
+            let desc = '';
             ['ERROR', 'WARNING', 'NOT_FOUND', 'TREND_WARNING'].forEach(function(type) {
                 const list = byType[type];
                 if (!list) return;
@@ -1508,7 +1508,7 @@
                     document.getElementById('rmLoading').classList.add('d-none');
                     const desc = currentSiteIssues.length === 1
                         ? buildSiteDescription(site, currentSiteIssues)
-                        : ('Сайт: ' + site + '\n');
+                        : '';
                     document.getElementById('rmDescription').value = desc;
                     document.getElementById('rmCreateBlock').classList.remove('d-none');
                     document.getElementById('rmCreateBtn').classList.remove('d-none');
