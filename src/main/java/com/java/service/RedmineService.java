@@ -512,7 +512,6 @@ public class RedmineService {
 
     private String buildDescription(String site, String city, String historyUrl, String matchingUrl) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Сайт: ").append(site).append("\n");
         if (city != null && !city.isBlank()) sb.append("Город: ").append(city).append("\n");
         if (historyUrl != null && !historyUrl.isBlank()) sb.append("\nИстория выкачки: ").append(historyUrl);
         if (matchingUrl != null && !matchingUrl.isBlank()) sb.append("\nМатчинг: ").append(matchingUrl);

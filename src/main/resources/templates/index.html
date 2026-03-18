@@ -523,11 +523,11 @@
                     </span>
                 </td>
                 <td>
-                    ${op.status === 'PROCESSING' && op.processingProgress !== null
+                    ${op.status === 'PROCESSING'
             ? `<div class="progress progress-compact">
                                <div class="progress-bar progress-bar-striped progress-bar-animated"
-                                    style="width: ${op.processingProgress}%"
-                                    title="${op.processingProgress}%">
+                                    style="width: ${op.processingProgress || 0}%"
+                                    title="${op.processingProgress || 0}%">
                                </div>
                            </div>`
             : (op.processingProgress !== null ? op.processingProgress + '%' : '-')}
