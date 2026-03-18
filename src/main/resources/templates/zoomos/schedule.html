@@ -98,7 +98,7 @@
                         <th style="min-width:145px" class="text-center">Действия</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="schedTbody">
                 <th:block th:each="shop : ${shops}">
 
                     <!-- Строка-заголовок магазина -->
@@ -473,7 +473,7 @@
     let schedSortCol = null, schedSortDir = -1; // -1 = desc, 1 = asc
 
     function getShopGroups() {
-        const tbody = document.querySelector('.table tbody');
+        const tbody = document.getElementById('schedTbody');
         const groups = [];
         let cur = null;
         [...tbody.querySelectorAll('tr')].forEach(row => {
@@ -520,7 +520,7 @@
             const cmp = (ka < kb ? -1 : ka > kb ? 1 : 0);
             return cmp !== 0 ? cmp * schedSortDir : a.name.localeCompare(b.name);
         });
-        const tbody = document.querySelector('.table tbody');
+        const tbody = document.getElementById('schedTbody');
         groups.forEach(g => { tbody.appendChild(g.header); g.rows.forEach(r => tbody.appendChild(r)); });
         // Обновляем индикаторы
         document.querySelectorAll('.th-sortable').forEach(th => {
