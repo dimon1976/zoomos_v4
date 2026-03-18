@@ -140,6 +140,11 @@
                 <span class="badge bg-secondary ms-2" id="issuesCountBadge" th:text="${issues.size()}">0</span>
             </span>
             <span class="d-flex align-items-center gap-2">
+                <button id="btnCopyDomains" type="button"
+                        class="btn btn-sm btn-outline-secondary py-0 px-2" title="Скопировать список доменов"
+                        onclick="event.stopPropagation(); copyIssueDomains(this)">
+                    <i class="fas fa-copy me-1"></i>Копировать домены
+                </button>
                 <button th:if="${redmineEnabled}" id="btnRefreshRedmine" type="button"
                         class="btn btn-sm btn-outline-secondary py-0 px-2" title="Обновить статусы из Redmine">
                     <i class="fas fa-arrow-clockwise me-1"></i>Статусы Redmine
@@ -1279,7 +1284,7 @@
             selectedIssues.forEach(function(iss) {
                 (byType[iss.type] = byType[iss.type] || []).push(iss);
             });
-            let desc = '*' + site + '* — проблемы с выкачкой:\n\n';
+            let desc = 'проблемы с выкачкой:\n\n';
             ['ERROR', 'WARNING', 'NOT_FOUND', 'TREND_WARNING'].forEach(function(type) {
                 const list = byType[type];
                 if (!list) return;
@@ -1297,7 +1302,8 @@
             selectedIssues.forEach(function(i) {
                 if (i.historyUrl && !seenHistoryUrls.has(i.historyUrl)) {
                     seenHistoryUrls.add(i.historyUrl);
-                    historyLines.push((i.city || '') + (i.addressId ? ' (' + i.addressId + ')' : '') + ': ' + i.historyUrl);
+                    const prefix = (i.city || '') + (i.addressId ? ' (' + i.addressId + ')' : '');
+                    historyLines.push(prefix ? prefix + ': ' + i.historyUrl : i.historyUrl);
                 }
             });
             if (historyLines.length) desc += '{{collapse(Ссылки на историю парсинга)\n' + historyLines.join('\n') + '\n}}\n\n';
@@ -1503,7 +1509,7 @@
                     document.getElementById('rmLoading').classList.add('d-none');
                     const desc = currentSiteIssues.length === 1
                         ? buildSiteDescription(site, currentSiteIssues)
-                        : ('Сайт: ' + site + '\n');
+                        : '';
                     document.getElementById('rmDescription').value = desc;
                     document.getElementById('rmCreateBlock').classList.remove('d-none');
                     document.getElementById('rmCreateBtn').classList.remove('d-none');
@@ -1704,6 +1710,20 @@
         });
     })();
     // ── /Redmine ──────────────────────────────────────────────────────
+
+    function copyIssueDomains(btn) {
+        const domains = [...document.querySelectorAll('#issuesCollapse .site-issues-block')]
+            .filter(el => !el.closest('#verifiedSitesCollapse'))
+            .map(el => el.dataset.site)
+            .filter(Boolean)
+            .join('\n');
+        navigator.clipboard.writeText(domains).then(() => {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check me-1"></i>Скопировано';
+            btn.classList.replace('btn-outline-secondary', 'btn-success');
+            setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-success', 'btn-outline-secondary'); }, 2000);
+        });
+    }
 
 </script>
 </th:block>

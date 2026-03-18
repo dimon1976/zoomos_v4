@@ -49,9 +49,15 @@
     </div>
 
     <!-- Фильтр -->
-    <div class="mb-3 d-flex align-items-center gap-2">
+    <div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
         <input type="text" id="citySearch" class="form-control form-control-sm w-auto"
                placeholder="Фильтр..." style="min-width:260px">
+        <select id="citiesPageSize" class="form-select form-select-sm w-auto" title="Строк на странице">
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="0">Все</option>
+        </select>
         <span id="searchCount" class="text-muted small"></span>
         <span class="text-muted small ms-2">Всего: <span th:text="${#lists.size(cityNames)}">0</span></span>
     </div>
@@ -117,6 +123,12 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <!-- Пагинация -->
+    <div id="citiesPagination" class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2" style="display:none!important">
+        <span id="citiesPaginationInfo" class="text-muted small"></span>
+        <nav><ul class="pagination pagination-sm mb-0" id="citiesPaginationPages"></ul></nav>
     </div>
 
 </div>
@@ -291,25 +303,113 @@
         });
     }
 
-    // ---- Фильтр ----
-    const citySearch = document.getElementById('citySearch');
-    const countEl = document.getElementById('searchCount');
+    // ---- Фильтр + пагинация ----
+    const citySearch     = document.getElementById('citySearch');
+    const countEl        = document.getElementById('searchCount');
+    const citiesPageSize = document.getElementById('citiesPageSize');
+    const citiesPag      = document.getElementById('citiesPagination');
+    const citiesPagPages = document.getElementById('citiesPaginationPages');
+    const citiesPagInfo  = document.getElementById('citiesPaginationInfo');
+    const CITIES_PS_KEY  = 'zoomos-cities-page-size';
+    let citiesCurrentPage = 1;
 
-    function updateSearchCount() {
-        const rows = document.querySelectorAll('#citiesTable tbody tr');
-        const visible = Array.from(rows).filter(r => r.style.display !== 'none').length;
-        countEl.textContent = rows.length !== visible ? `Показано: ${visible} из ${rows.length}` : '';
+    const savedCitiesPSize = localStorage.getItem(CITIES_PS_KEY);
+    if (savedCitiesPSize && citiesPageSize) {
+        const opt = citiesPageSize.querySelector(`option[value="${savedCitiesPSize}"]`);
+        if (opt) opt.selected = true;
     }
 
-    citySearch.addEventListener('input', function() {
-        const q = this.value.trim().toLowerCase();
-        document.querySelectorAll('#citiesTable tbody tr').forEach(row => {
+    function getCitiesPageSize() { return citiesPageSize ? parseInt(citiesPageSize.value) : 25; }
+
+    function filterCities() {
+        const q = citySearch ? citySearch.value.trim().toLowerCase() : '';
+        // Только основные строки (city-row-*), addr-row-* не затрагиваем
+        const allMainRows = Array.from(document.querySelectorAll('#citiesTable tbody tr[id^="city-row-"]'));
+        const matched = allMainRows.filter(row => {
             const id   = row.querySelector('.city-id-cell')?.textContent.toLowerCase() || '';
             const name = row.querySelector('.city-name-input')?.value.toLowerCase() || '';
-            row.style.display = (!q || id.includes(q) || name.includes(q)) ? '' : 'none';
+            return !q || id.includes(q) || name.includes(q);
         });
-        updateSearchCount();
-    });
+
+        const pageSize = getCitiesPageSize();
+        const totalMatched = matched.length;
+        const totalPages = pageSize === 0 ? 1 : Math.ceil(totalMatched / pageSize);
+        if (citiesCurrentPage > totalPages) citiesCurrentPage = 1;
+
+        const start = pageSize === 0 ? 0 : (citiesCurrentPage - 1) * pageSize;
+        const end   = pageSize === 0 ? totalMatched : start + pageSize;
+
+        const visibleSet = new Set(matched.slice(start, end));
+        allMainRows.forEach(row => {
+            const show = visibleSet.has(row);
+            row.style.display = show ? '' : 'none';
+            // Скрыть addr-row вместе с city-row если город не отображается
+            if (!show) {
+                const addrRow = document.getElementById('addr-row-' + row.id.replace('city-row-', ''));
+                if (addrRow) addrRow.style.display = 'none';
+            }
+        });
+
+        if (countEl) {
+            countEl.textContent = q ? `Найдено: ${totalMatched} из ${allMainRows.length}` : '';
+        }
+
+        if (pageSize > 0 && totalPages > 1) {
+            citiesPag.style.removeProperty('display');
+            citiesPagInfo.textContent = `Страница ${citiesCurrentPage} из ${totalPages} (${totalMatched} записей)`;
+            renderCitiesPages(totalPages);
+        } else {
+            citiesPag.style.setProperty('display', 'none', 'important');
+        }
+    }
+
+    function renderCitiesPages(total) {
+        citiesPagPages.innerHTML = '';
+        const prev = document.createElement('li');
+        prev.className = 'page-item' + (citiesCurrentPage === 1 ? ' disabled' : '');
+        prev.innerHTML = '<a class="page-link" href="#">‹</a>';
+        prev.addEventListener('click', e => { e.preventDefault(); if (citiesCurrentPage > 1) { citiesCurrentPage--; filterCities(); }});
+        citiesPagPages.appendChild(prev);
+
+        const pages = new Set([1, total]);
+        for (let i = Math.max(1, citiesCurrentPage - 2); i <= Math.min(total, citiesCurrentPage + 2); i++) pages.add(i);
+        let last = 0;
+        [...pages].sort((a,b)=>a-b).forEach(p => {
+            if (last && p - last > 1) {
+                const dots = document.createElement('li');
+                dots.className = 'page-item disabled';
+                dots.innerHTML = '<a class="page-link">…</a>';
+                citiesPagPages.appendChild(dots);
+            }
+            const li = document.createElement('li');
+            li.className = 'page-item' + (p === citiesCurrentPage ? ' active' : '');
+            li.innerHTML = `<a class="page-link" href="#">${p}</a>`;
+            li.addEventListener('click', e => { e.preventDefault(); citiesCurrentPage = p; filterCities(); });
+            citiesPagPages.appendChild(li);
+            last = p;
+        });
+
+        const next = document.createElement('li');
+        next.className = 'page-item' + (citiesCurrentPage === total ? ' disabled' : '');
+        next.innerHTML = '<a class="page-link" href="#">›</a>';
+        next.addEventListener('click', e => { e.preventDefault(); if (citiesCurrentPage < total) { citiesCurrentPage++; filterCities(); }});
+        citiesPagPages.appendChild(next);
+    }
+
+    function updateSearchCount() { filterCities(); }
+
+    if (citiesPageSize) {
+        citiesPageSize.addEventListener('change', () => {
+            localStorage.setItem(CITIES_PS_KEY, citiesPageSize.value);
+            citiesCurrentPage = 1;
+            filterCities();
+        });
+    }
+    if (citySearch) {
+        citySearch.addEventListener('input', () => { citiesCurrentPage = 1; filterCities(); });
+    }
+
+    filterCities();
 </script>
 </th:block>
 

@@ -114,6 +114,10 @@ public class ExportProgressService extends BaseProgressService<ExportSession, Ex
             case INITIALIZING:
                 return 5;
             case PROCESSING:
+                // Если стратегия репортит собственный прогресс — используем его (0-100 → 30-95)
+                if (session.getStrategyProgress() != null) {
+                    return 30 + (session.getStrategyProgress() * 65) / 100;
+                }
                 // Промежуточные значения в зависимости от этапа
                 if (session.getTotalRows() != null && session.getTotalRows() > 0) {
                     if (session.getExportedRows() != null) {
@@ -135,7 +139,30 @@ public class ExportProgressService extends BaseProgressService<ExportSession, Ex
         }
     }
 
+    /**
+     * Отправляет WebSocket-обновление из фонового потока (без записи в БД).
+     * displayStage переопределяет текст операции только в DTO — session.currentStageName не трогается,
+     * чтобы избежать накопления суффиксов "(N сек) (N сек)...".
+     */
+    public void sendHeartbeat(ExportSession session, String displayStage) {
+        try {
+            ExportProgressDto dto = buildProgressDto(session);
+            if (displayStage != null) {
+                dto.setCurrentOperation(displayStage);
+            }
+            progressController.sendProgressUpdate(getOperationId(session), dto);
+            log.info("Heartbeat: сессия {}: {}% — {}",
+                    session.getId(), dto.getProgressPercentage(), dto.getCurrentOperation());
+        } catch (Throwable e) {
+            log.error("Heartbeat error for session {}", session.getId(), e);
+        }
+    }
+
     private String getCurrentOperation(ExportSession session) {
+        // Если стратегия или heartbeat установили текущий этап — показываем его
+        if (session.getCurrentStageName() != null) {
+            return session.getCurrentStageName();
+        }
         switch (session.getStatus()) {
             case INITIALIZING:
                 return "Инициализация экспорта...";

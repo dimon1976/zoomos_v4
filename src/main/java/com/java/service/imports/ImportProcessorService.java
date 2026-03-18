@@ -618,8 +618,8 @@ public class ImportProcessorService {
 
         sessionRepository.save(session);
 
-        // Отправляем финальное обновление
-        progressService.sendProgressUpdate(session);
+        // Отправляем финальное обновление (без throttle, чтобы статус-страница перезагрузилась)
+        progressService.sendCompletionNotification(session);
         
         // Отправляем нотификацию об успешном завершении
         if (session.getStatus() == ImportStatus.COMPLETED) {

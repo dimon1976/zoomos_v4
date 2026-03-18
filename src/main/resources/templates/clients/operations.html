@@ -430,6 +430,15 @@
         loadOperations(page);
     }
 
+    function showOperationToast(message, type) {
+        var toast = document.createElement('div');
+        toast.className = 'alert alert-' + type + ' position-fixed bottom-0 end-0 m-3';
+        toast.style.cssText = 'z-index:9999;max-width:350px;';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(function() { toast.remove(); }, 4000);
+    }
+
     function deleteOperation(operationId) {
         if (!confirm('Вы действительно хотите удалить эту операцию?')) {
             return;
@@ -443,8 +452,13 @@
                 if (!response.ok) {
                     throw new Error('Ошибка удаления');
                 }
-                // Перезагружаем текущую страницу операций
+                return response.json();
+            })
+            .then(result => {
                 loadOperations(currentPage);
+                if (result.fileDeleted) {
+                    showOperationToast('Операция удалена. Файл экспорта удалён с диска.', 'success');
+                }
             })
             .catch(error => {
                 console.error('Ошибка удаления операции:', error);

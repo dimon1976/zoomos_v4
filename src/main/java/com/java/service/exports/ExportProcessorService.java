@@ -16,11 +16,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -40,9 +42,10 @@ public class ExportProcessorService {
     private final ExportStatisticsWriterService statisticsWriterService;
     private final ExportProgressService progressService;
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    // Флаги отмены для каждой сессии
-    private final Map<Long, AtomicBoolean> cancellationFlags = new HashMap<>();
+    // Флаги отмены для каждой сессии (ConcurrentHashMap — доступ из нескольких потоков)
+    private final Map<Long, AtomicBoolean> cancellationFlags = new ConcurrentHashMap<>();
 
     /**
      * Обрабатывает экспорт данных
@@ -87,8 +90,7 @@ public class ExportProcessorService {
             // Обновляем sourceOperationIds в сессии с реальными ID операций после загрузки данных
             if (request.getOperationIds() != null && !request.getOperationIds().isEmpty()) {
                 try {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    String sourceOperationIdsJson = mapper.writeValueAsString(request.getOperationIds());
+                    String sourceOperationIdsJson = objectMapper.writeValueAsString(request.getOperationIds());
                     session.setSourceOperationIds(sourceOperationIdsJson);
                     sessionRepository.save(session);
                     log.debug("Обновлены sourceOperationIds в сессии {}: {}", session.getId(), sourceOperationIdsJson);
@@ -123,6 +125,7 @@ public class ExportProcessorService {
             Map<String, Object> context = new HashMap<>();
             context.put("operationIds", request.getOperationIds());
             context.put("session", session);
+            context.put("progressService", progressService);
             context.put("maxReportAgeDays", request.getMaxReportAgeDays());
             if (session.getFileOperation() != null && session.getFileOperation().getClient() != null) {
                 context.put("clientRegionCode", session.getFileOperation().getClient().getRegionCode());
@@ -137,7 +140,43 @@ public class ExportProcessorService {
             // ✅ ОБНОВЛЯЕМ ПРОГРЕСС ПЕРЕД ОБРАБОТКОЙ СТРАТЕГИИ (50%)
             progressService.sendProgressUpdate(session);
 
-            List<Map<String, Object>> processedData = strategy.processData(data, template, context);
+            // Heartbeat: пока стратегия работает — отправляем WebSocket-пинг каждые 3 сек
+            String strategyDisplayName = template.getExportStrategy().name();
+            long strategyStartMs = System.currentTimeMillis();
+            ScheduledExecutorService heartbeatExec = Executors.newSingleThreadScheduledExecutor(
+                    r -> { Thread t = new Thread(r, "export-heartbeat-" + session.getId()); t.setDaemon(true); return t; });
+            int[] animatedPct = {0}; // локальный счётчик анимации, 0-93
+
+            ScheduledFuture<?> heartbeat = heartbeatExec.scheduleAtFixedRate(() -> {
+                long elapsed = (System.currentTimeMillis() - strategyStartMs) / 1000;
+
+                // Синхронизируемся с реальным прогрессом если стратегия обогнала анимацию
+                Integer realPct = session.getStrategyProgress();
+                if (realPct != null && realPct > animatedPct[0]) {
+                    animatedPct[0] = realPct;
+                } else {
+                    // Анимируем +1% за тик независимо от того, репортит ли стратегия прогресс
+                    animatedPct[0] = Math.min(93, animatedPct[0] + 1);
+                }
+                // Записываем обратно: calculateProgressPercentage() прочитает и отобразит нарастающий %
+                session.setStrategyProgress(animatedPct[0]);
+
+                String baseName = session.getCurrentStageName();
+                String displayStage = (baseName != null ? baseName
+                        : "Применение стратегии " + strategyDisplayName + "...")
+                        + " (" + elapsed + " сек)";
+                progressService.sendHeartbeat(session, displayStage);
+            }, 3, 3, TimeUnit.SECONDS);
+
+            List<Map<String, Object>> processedData;
+            try {
+                processedData = strategy.processData(data, template, context);
+            } finally {
+                heartbeat.cancel(false);
+                heartbeatExec.shutdown();
+                session.setCurrentStageName(null);
+                session.setStrategyProgress(null);
+            }
             log.debug("После применения стратегии осталось {} строк", processedData.size());
 
             session.setModifiedRows((long) (data.size() - processedData.size()));

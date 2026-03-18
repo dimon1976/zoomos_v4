@@ -7,6 +7,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 /**
  * Сервис для безопасного удаления операций со всеми связанными данными
  */
@@ -26,30 +29,33 @@ public class OperationDeletionService {
     /**
      * Удаляет операцию со всеми связанными данными
      * Порядок удаления критически важен для сохранения целостности данных
+     * @return true если файл экспорта был успешно удалён с диска, false иначе
      */
     @Transactional
-    public void deleteOperationCompletely(Long operationId) {
+    public boolean deleteOperationCompletely(Long operationId) {
         log.info("Начинаем полное удаление операции ID: {}", operationId);
 
         if (!fileOperationRepository.existsById(operationId)) {
             throw new IllegalArgumentException("Операция не найдена");
         }
 
+        boolean[] fileDeleted = {false};
+
         try {
             // 1. Находим сессию импорта если она есть
             importSessionRepository.findByFileOperationId(operationId).ifPresent(importSession -> {
                 log.debug("Удаляем данные импорта для сессии: {}", importSession.getId());
-                
+
                 // 1.1. Удаляем импортированные данные из av_data (по operation_id)
                 int deletedAvData = jdbcTemplate.update(
-                    "DELETE FROM av_data WHERE operation_id = ?", 
+                    "DELETE FROM av_data WHERE operation_id = ?",
                     operationId
                 );
                 log.debug("Удалено записей из av_data: {}", deletedAvData);
 
                 // 1.2. Удаляем данные из av_handbook (по import_session_id)
                 int deletedAvHandbook = jdbcTemplate.update(
-                    "DELETE FROM av_handbook WHERE import_session_id = ?", 
+                    "DELETE FROM av_handbook WHERE import_session_id = ?",
                     importSession.getId()
                 );
                 log.debug("Удалено записей из av_handbook: {}", deletedAvHandbook);
@@ -69,6 +75,17 @@ public class OperationDeletionService {
             exportSessionRepository.findByFileOperationId(operationId).ifPresent(exportSession -> {
                 log.debug("Удаляем данные экспорта для сессии: {}", exportSession.getId());
 
+                // 2.0. Удаляем результирующий файл с диска
+                String filePath = exportSession.getResultFilePath();
+                if (filePath != null) {
+                    try {
+                        fileDeleted[0] = Files.deleteIfExists(Path.of(filePath));
+                        log.debug("Файл экспорта {}: {}", filePath, fileDeleted[0] ? "удалён" : "не найден (уже удалён)");
+                    } catch (Exception e) {
+                        log.warn("Не удалось удалить файл экспорта {}: {}", filePath, e.getMessage());
+                    }
+                }
+
                 // 2.1. Удаляем статистику экспорта
                 exportStatisticsRepository.deleteByExportSessionId(exportSession.getId());
                 log.debug("Удалена статистика экспорта для сессии: {}", exportSession.getId());
@@ -86,6 +103,8 @@ public class OperationDeletionService {
             log.error("Ошибка при удалении операции {}: {}", operationId, e.getMessage(), e);
             throw new RuntimeException("Не удалось удалить операцию: " + e.getMessage(), e);
         }
+
+        return fileDeleted[0];
     }
 
     /**

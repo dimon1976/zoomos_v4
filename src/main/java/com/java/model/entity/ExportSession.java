@@ -11,6 +11,8 @@ import java.time.ZonedDateTime;
 @Entity
 @Table(name = "export_sessions")
 @Data
+@ToString(exclude = {"fileOperation", "template"})
+@EqualsAndHashCode(exclude = {"fileOperation", "template"})
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -75,6 +77,14 @@ public class ExportSession {
 
     @Column(name = "completed_at")
     private ZonedDateTime completedAt;
+
+    /** Название текущего этапа обработки — не персистируется, только в памяти */
+    @Transient
+    private volatile String currentStageName;
+
+    /** 0-100% прогресс внутри стратегии — не персистируется, только в памяти */
+    @Transient
+    private volatile Integer strategyProgress;
 
     @Transient
     public Integer getProgressPercentage() {

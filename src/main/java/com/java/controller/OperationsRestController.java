@@ -16,7 +16,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -56,7 +58,7 @@ public class OperationsRestController {
 
         // Проверяем существование клиента
         Client client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Клиент не найден"));
 
         // Получаем последние операции клиента
         Specification<FileOperation> spec = (root, query, cb) -> cb.equal(root.get("client"), client);
@@ -104,18 +106,17 @@ public class OperationsRestController {
 
         return fileOperationRepository.findById(operationId)
                 .map(this::toDto)
-                .orElseThrow(() -> new IllegalArgumentException("Операция не найдена"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Операция не найдена"));
     }
 
     /**
      * Удаление операции и связанных данных
      */
     @DeleteMapping("/operations/{operationId}")
-    public void deleteOperation(@PathVariable Long operationId) {
+    public java.util.Map<String, Object> deleteOperation(@PathVariable Long operationId) {
         log.info("Запрос на удаление операции ID: {}", operationId);
-        
-        // Используем новый сервис для полного удаления операции со всеми данными
-        operationDeletionService.deleteOperationCompletely(operationId);
+        boolean fileDeleted = operationDeletionService.deleteOperationCompletely(operationId);
+        return java.util.Map.of("fileDeleted", fileDeleted);
     }
 
     /**
@@ -241,7 +242,7 @@ public class OperationsRestController {
 
         // Проверяем существование клиента
         Client client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Клиент не найден"));
 
         // Подсчитываем статистику
         long totalImports = fileOperationRepository.countByClientAndOperationType(client, FileOperation.OperationType.IMPORT);
@@ -266,16 +267,12 @@ public class OperationsRestController {
 
         // Проверяем существование клиента
         Client client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Клиент не найден"));
 
-        // Подсчитываем статистику по статусам
+        // Подсчитываем статистику по статусам одним GROUP BY запросом
         java.util.Map<String, Long> statusStats = new java.util.HashMap<>();
-        for (FileOperation.OperationStatus status : FileOperation.OperationStatus.values()) {
-            long count = fileOperationRepository.countByClientAndStatus(client, status);
-            if (count > 0) {
-                statusStats.put(status.name(), count);
-            }
-        }
+        fileOperationRepository.countByClientGroupByStatus(client)
+                .forEach(row -> statusStats.put(((FileOperation.OperationStatus) row[0]).name(), (Long) row[1]));
 
         return statusStats;
     }
