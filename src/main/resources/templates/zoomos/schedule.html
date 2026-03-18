@@ -64,7 +64,7 @@
             </button>
         </div>
         <div class="form-check form-switch mb-0">
-            <input class="form-check-input" type="checkbox" id="showEnabledOnly" checked>
+            <input class="form-check-input" type="checkbox" id="showEnabledOnly">
             <label class="form-check-label small" for="showEnabledOnly">Только включённые</label>
         </div>
         <span id="schedFilterCount" class="text-muted small"></span>
@@ -467,7 +467,15 @@
         schedSearchEl.addEventListener('input', filterSchedRows);
         schedSearchClearEl.addEventListener('click', () => { schedSearchEl.value = ''; filterSchedRows(); });
     }
-    if (showEnabledOnlyEl) showEnabledOnlyEl.addEventListener('change', filterSchedRows);
+    if (showEnabledOnlyEl) {
+        // Восстанавливаем сохранённое состояние (default: true — только включённые)
+        const saved = localStorage.getItem('schedule-show-enabled-only');
+        showEnabledOnlyEl.checked = saved === null ? true : saved === 'true';
+        showEnabledOnlyEl.addEventListener('change', function() {
+            localStorage.setItem('schedule-show-enabled-only', this.checked);
+            filterSchedRows();
+        });
+    }
     filterSchedRows();
 
     // ---- Добавить расписание ----

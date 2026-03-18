@@ -578,6 +578,7 @@
                 <span class="badge bg-success d-none" th:id="'result-ok-' + ${shop.id}"></span>
                 <span class="badge bg-warning text-dark d-none" th:id="'result-warn-' + ${shop.id}"></span>
                 <span class="badge bg-danger d-none" th:id="'result-err-' + ${shop.id}"></span>
+                <span class="badge bg-secondary d-none" th:id="'result-notfound-' + ${shop.id}"></span>
                 <a href="#" class="btn btn-sm btn-outline-primary" th:id="'result-link-' + ${shop.id}">
                     <i class="fas fa-external-link-alt me-1"></i>Результаты
                 </a>
@@ -1941,9 +1942,10 @@
             el.textContent = count + ' ' + label;
             el.classList.toggle('d-none', count === 0);
         }
-        showBadge('result-ok-'   + shopId, data.okCount      || 0, 'OK');
-        showBadge('result-warn-' + shopId, data.warningCount || 0, 'Warn');
-        showBadge('result-err-'  + shopId, data.errorCount   || 0, 'Error');
+        showBadge('result-ok-'       + shopId, data.okCount       || 0, 'OK');
+        showBadge('result-warn-'     + shopId, data.warningCount  || 0, 'Warn');
+        showBadge('result-err-'      + shopId, data.errorCount    || 0, 'Error');
+        showBadge('result-notfound-' + shopId, data.notFoundCount || 0, 'НЕТ/ИДЁТ');
         // Compact-mode badges
         showBadge('compact-ok-'   + shopId, data.okCount      || 0, 'OK');
         showBadge('compact-warn-' + shopId, data.warningCount || 0, 'Warn');

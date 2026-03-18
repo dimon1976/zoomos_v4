@@ -1148,7 +1148,7 @@ public class ZoomosCheckService {
             Set<String> allExpectedAddresses = flattenAddressIds(addrMapping);
             for (String aid : allExpectedAddresses) {
                 if (!foundAddressKeys.contains(site + "|" + aid)) {
-                    error++; // NOT_FOUND → считается как ERROR
+                    notFound++;
                 }
             }
 
@@ -1156,7 +1156,7 @@ public class ZoomosCheckService {
             for (String cityId : expectedCities) {
                 if (addressCoveredCities.contains(cityId)) continue;
                 if (!foundCityKeys.contains(site + "|" + cityId)) {
-                    error++; // NOT_FOUND → считается как ERROR
+                    notFound++;
                 }
             }
         }
@@ -1171,12 +1171,17 @@ public class ZoomosCheckService {
                 .filter(c -> c.getParserInclude() != null && !c.getParserInclude().isBlank())
                 .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
 
-        // Baseline: вычисляем диапазон дат для загрузки медианы
-        int baselineDays = run.getBaselineDays() != null ? run.getBaselineDays() : 0;
-        ZonedDateTime baselineDatesFrom = null, baselineDatesTo = null;
-        if (baselineDays > 0) {
-            baselineDatesFrom = run.getDateFrom().minusDays(baselineDays).atStartOfDay(ZoneOffset.UTC);
-            baselineDatesTo   = run.getDateFrom().minusDays(1).atTime(23, 59).atZone(ZoneOffset.UTC);
+        // Предзагружаем baseline-записи текущего run одним запросом (как в checkResults контроллере)
+        boolean hasBaseline = run.getBaselineDays() != null && run.getBaselineDays() > 0;
+        Map<String, List<ZoomosParsingStats>> baselineByKey = new LinkedHashMap<>();
+        if (hasBaseline) {
+            List<ZoomosParsingStats> baselineStatsList = parsingStatsRepository
+                    .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(run.getId());
+            for (ZoomosParsingStats s : baselineStatsList) {
+                String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")
+                        + "|" + (s.getAddressId() != null ? s.getAddressId() : "");
+                baselineByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
+            }
         }
 
         // Оцениваем каждую группу site+city (только завершённые группы из grouped)
@@ -1203,15 +1208,14 @@ public class ZoomosCheckService {
             } else {
                 boolean ignoreStock = group.get(0).getSiteName() != null
                         && ignoreStockSites.contains(group.get(0).getSiteName());
-                // Загружаем baseline медиану для данной группы
                 MedianStats baseline = null;
-                if (baselineDatesFrom != null) {
+                if (hasBaseline) {
                     String siteForBl = group.get(0).getSiteName();
                     String cityForBl = group.get(0).getCityName();
                     String addrForBl = group.get(0).getAddressId();
-                    List<ZoomosParsingStats> bl = parsingStatsRepository
-                            .findForBaseline(siteForBl, cityForBl, addrForBl, baselineDatesFrom, baselineDatesTo);
-                    baseline = computeBaselineMedian(bl);
+                    String blKey = siteForBl + "|" + (cityForBl != null ? cityForBl : "")
+                            + "|" + (addrForBl != null ? addrForBl : "");
+                    baseline = computeBaselineMedian(baselineByKey.getOrDefault(blKey, Collections.emptyList()));
                 }
                 status = evaluateGroup(group, run.getDropThreshold(), run.getErrorGrowthThreshold(),
                         minAbsErrors, ignoreStock, baseline);
