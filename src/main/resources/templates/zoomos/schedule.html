@@ -23,6 +23,12 @@
     .shop-header-row td { background-color: #f1f3f5; font-size: 0.88em; }
     .label-input { min-width: 90px; max-width: 120px; }
     .btn-xs { font-size: 0.72rem; padding: 0.1rem 0.35rem; }
+    .th-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    .th-sortable:hover { background-color: #e2e6ea; }
+    .th-sortable .sort-icon { margin-left: 4px; font-size: 0.75em; color: #aaa; }
+    .th-sortable.sort-asc .sort-icon::after  { content: '▲'; color: #333; }
+    .th-sortable.sort-desc .sort-icon::after { content: '▼'; color: #333; }
+    .th-sortable:not(.sort-asc):not(.sort-desc) .sort-icon::after { content: '⇅'; }
 </style>
 </th:block>
 
@@ -83,12 +89,12 @@
             <table class="table table-sm table-bordered table-hover mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th style="width:40px" class="text-center" title="Расписание включено">Вкл</th>
-                        <th style="min-width:90px" class="d-none d-md-table-cell">Метка</th>
+                        <th style="width:40px" class="text-center th-sortable" data-sort="enabled" title="Сортировать по включённым"><span>Вкл</span><span class="sort-icon"></span></th>
+                        <th style="min-width:90px" class="d-none d-md-table-cell th-sortable" data-sort="name" title="Сортировать по названию магазина"><span>Метка</span><span class="sort-icon"></span></th>
                         <th style="min-width:155px">Cron <span class="text-muted fw-normal" style="font-size:0.78em">(сек мин час д м нед)</span></th>
                         <th style="min-width:120px" class="text-center d-none d-lg-table-cell">Период (offset)</th>
                         <th style="min-width:150px" class="text-center d-none d-lg-table-cell">Время выкачки</th>
-                        <th style="min-width:140px" class="text-center">Последний запуск</th>
+                        <th style="min-width:140px" class="text-center th-sortable" data-sort="lastrun" title="Сортировать по дате последнего запуска"><span>Последний запуск</span><span class="sort-icon"></span></th>
                         <th style="min-width:145px" class="text-center">Действия</th>
                     </tr>
                 </thead>
@@ -462,6 +468,71 @@
                 : '';
         }
     }
+
+    // ---- Сортировка групп магазинов ----
+    let schedSortCol = null, schedSortDir = -1; // -1 = desc, 1 = asc
+
+    function getShopGroups() {
+        const tbody = document.querySelector('.table tbody');
+        const groups = [];
+        let cur = null;
+        [...tbody.querySelectorAll('tr')].forEach(row => {
+            if (row.classList.contains('shop-header-row')) {
+                cur = { header: row, rows: [], name: (row.dataset.shopName || '').toLowerCase() };
+                groups.push(cur);
+            } else if (cur) {
+                cur.rows.push(row);
+            }
+        });
+        return groups;
+    }
+
+    function getGroupSortKey(g, col) {
+        if (col === 'enabled') {
+            return g.rows.filter(r => r.classList.contains('sched-row'))
+                         .reduce((n, r) => n + (r.querySelector('.sched-enabled-cb')?.checked ? 1 : 0), 0);
+        }
+        if (col === 'lastrun') {
+            let max = -1;
+            g.rows.forEach(r => {
+                const txt = (r.querySelector('.sched-last-run-cell') || {}).textContent || '';
+                const m = txt.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);
+                if (m) {
+                    const ts = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).getTime();
+                    if (ts > max) max = ts;
+                }
+            });
+            return max;
+        }
+        return g.name; // 'name'
+    }
+
+    function applySort(col) {
+        if (schedSortCol === col) {
+            schedSortDir = -schedSortDir;
+        } else {
+            schedSortCol = col;
+            schedSortDir = -1; // первый клик — desc (больше сверху)
+        }
+        const groups = getShopGroups();
+        groups.sort((a, b) => {
+            const ka = getGroupSortKey(a, col), kb = getGroupSortKey(b, col);
+            const cmp = (ka < kb ? -1 : ka > kb ? 1 : 0);
+            return cmp !== 0 ? cmp * schedSortDir : a.name.localeCompare(b.name);
+        });
+        const tbody = document.querySelector('.table tbody');
+        groups.forEach(g => { tbody.appendChild(g.header); g.rows.forEach(r => tbody.appendChild(r)); });
+        // Обновляем индикаторы
+        document.querySelectorAll('.th-sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+            if (th.dataset.sort === col) th.classList.add(schedSortDir === 1 ? 'sort-asc' : 'sort-desc');
+        });
+        filterSchedRows();
+    }
+
+    document.querySelectorAll('.th-sortable').forEach(th => {
+        th.addEventListener('click', () => applySort(th.dataset.sort));
+    });
 
     if (schedSearchEl) {
         schedSearchEl.addEventListener('input', filterSchedRows);
