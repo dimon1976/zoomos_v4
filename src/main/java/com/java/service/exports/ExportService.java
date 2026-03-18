@@ -8,6 +8,7 @@ import com.java.model.Client;
 import com.java.model.FileOperation;
 import com.java.model.entity.ExportSession;
 import com.java.model.entity.ExportTemplate;
+import com.java.model.enums.ExportStatus;
 import com.java.repository.ClientRepository;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.ExportTemplateRepository;
@@ -132,8 +133,8 @@ public class ExportService {
 
         return sessionRepository.findById(sessionId)
                 .map(session -> {
-                    if (session.getStatus().name().equals("PROCESSING") ||
-                            session.getStatus().name().equals("INITIALIZING")) {
+                    if (session.getStatus() == ExportStatus.PROCESSING ||
+                            session.getStatus() == ExportStatus.INITIALIZING) {
 
                         // Отправляем сигнал отмены процессору
                         processorService.cancelExport(sessionId);

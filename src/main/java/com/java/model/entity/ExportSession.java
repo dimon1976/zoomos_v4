@@ -11,6 +11,8 @@ import java.time.ZonedDateTime;
 @Entity
 @Table(name = "export_sessions")
 @Data
+@ToString(exclude = {"fileOperation", "template"})
+@EqualsAndHashCode(exclude = {"fileOperation", "template"})
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

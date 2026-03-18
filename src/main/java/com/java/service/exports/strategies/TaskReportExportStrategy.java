@@ -554,13 +554,9 @@ public class TaskReportExportStrategy implements ExportStrategy {
         jdbcTemplate.query(sql, rs -> {
             String taskNum = rs.getString("product_additional1");
             String networkCode = rs.getString("competitor_additional");
-            log.debug("Найдена запись TASK (расширенный поиск): taskNum='{}', networkCode='{}'", 
-                taskNum, networkCode);
-            
             String key = buildKey(taskNum, networkCode);
             if (key != null) {
                 allowed.add(key);
-                log.debug("Добавлен ключ (расширенный поиск): '{}'", key);
             }
         });
         

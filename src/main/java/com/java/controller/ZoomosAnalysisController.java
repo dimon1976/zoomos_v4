@@ -525,10 +525,9 @@ public class ZoomosAnalysisController {
                     checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, mae, tdt, tet, operationId);
                     // Обновляем lastRunAt во всех расписаниях магазина
                     java.time.ZonedDateTime now = java.time.ZonedDateTime.now();
-                    scheduleRepository.findAllByShopId(shopId).forEach(schedule -> {
-                        schedule.setLastRunAt(now);
-                        scheduleRepository.save(schedule);
-                    });
+                    java.util.List<ZoomosShopSchedule> schedules = scheduleRepository.findAllByShopId(shopId);
+                    schedules.forEach(s -> s.setLastRunAt(now));
+                    scheduleRepository.saveAll(schedules);
                 } catch (Exception e) {
                     log.error("Ошибка фоновой проверки: {}", e.getMessage(), e);
                 }
@@ -2101,6 +2100,9 @@ public class ZoomosAnalysisController {
             // siteName (canonical) → alert map
             Map<String, Map<String, Object>> siteAlerts = new LinkedHashMap<>();
 
+            Set<String> ignoreStockSitesAlert = knownSiteRepository.findAllByIgnoreStockTrue()
+                    .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+
             for (ZoomosCheckRun run : latestByShop.values()) {
                 List<ZoomosParsingStats> stats = parsingStatsRepository
                         .findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(run.getId());
@@ -2117,10 +2119,6 @@ public class ZoomosAnalysisController {
                 int drop = run.getDropThreshold() != null ? run.getDropThreshold() : 10;
                 int errGrowth = run.getErrorGrowthThreshold() != null ? run.getErrorGrowthThreshold() : 30;
                 int minAbsErr = run.getMinAbsoluteErrors() != null ? run.getMinAbsoluteErrors() : 5;
-
-                // Загружаем ignoreStockSites для этого run
-                Set<String> ignoreStockSitesAlert = knownSiteRepository.findAllByIgnoreStockTrue()
-                        .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
 
                 // Оцениваем группы с данными
                 for (Map.Entry<String, List<ZoomosParsingStats>> entry : bySiteCity.entrySet()) {

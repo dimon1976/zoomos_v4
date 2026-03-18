@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.ZonedDateTime;
@@ -41,9 +42,10 @@ public class ExportProcessorService {
     private final ExportStatisticsWriterService statisticsWriterService;
     private final ExportProgressService progressService;
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    // Флаги отмены для каждой сессии
-    private final Map<Long, AtomicBoolean> cancellationFlags = new HashMap<>();
+    // Флаги отмены для каждой сессии (ConcurrentHashMap — доступ из нескольких потоков)
+    private final Map<Long, AtomicBoolean> cancellationFlags = new ConcurrentHashMap<>();
 
     /**
      * Обрабатывает экспорт данных
@@ -88,8 +90,7 @@ public class ExportProcessorService {
             // Обновляем sourceOperationIds в сессии с реальными ID операций после загрузки данных
             if (request.getOperationIds() != null && !request.getOperationIds().isEmpty()) {
                 try {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    String sourceOperationIdsJson = mapper.writeValueAsString(request.getOperationIds());
+                    String sourceOperationIdsJson = objectMapper.writeValueAsString(request.getOperationIds());
                     session.setSourceOperationIds(sourceOperationIdsJson);
                     sessionRepository.save(session);
                     log.debug("Обновлены sourceOperationIds в сессии {}: {}", session.getId(), sourceOperationIdsJson);
