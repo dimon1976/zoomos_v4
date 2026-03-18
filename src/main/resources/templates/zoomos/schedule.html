@@ -507,13 +507,18 @@
         return g.name; // 'name'
     }
 
-    function applySort(col) {
-        if (schedSortCol === col) {
+    function applySort(col, dir) {
+        if (dir !== undefined) {
+            schedSortCol = col;
+            schedSortDir = dir;
+        } else if (schedSortCol === col) {
             schedSortDir = -schedSortDir;
         } else {
             schedSortCol = col;
             schedSortDir = -1; // первый клик — desc (больше сверху)
         }
+        localStorage.setItem('schedule-sort-col', schedSortCol);
+        localStorage.setItem('schedule-sort-dir', schedSortDir);
         const groups = getShopGroups();
         groups.sort((a, b) => {
             const ka = getGroupSortKey(a, col), kb = getGroupSortKey(b, col);
@@ -525,7 +530,7 @@
         // Обновляем индикаторы
         document.querySelectorAll('.th-sortable').forEach(th => {
             th.classList.remove('sort-asc', 'sort-desc');
-            if (th.dataset.sort === col) th.classList.add(schedSortDir === 1 ? 'sort-asc' : 'sort-desc');
+            if (th.dataset.sort === schedSortCol) th.classList.add(schedSortDir === 1 ? 'sort-asc' : 'sort-desc');
         });
         filterSchedRows();
     }
@@ -533,6 +538,11 @@
     document.querySelectorAll('.th-sortable').forEach(th => {
         th.addEventListener('click', () => applySort(th.dataset.sort));
     });
+
+    // Восстанавливаем сохранённую сортировку
+    const savedSortCol = localStorage.getItem('schedule-sort-col');
+    const savedSortDir = localStorage.getItem('schedule-sort-dir');
+    if (savedSortCol) applySort(savedSortCol, savedSortDir ? +savedSortDir : -1);
 
     if (schedSearchEl) {
         schedSearchEl.addEventListener('input', filterSchedRows);
