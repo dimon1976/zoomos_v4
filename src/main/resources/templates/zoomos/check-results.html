@@ -1302,7 +1302,8 @@
             selectedIssues.forEach(function(i) {
                 if (i.historyUrl && !seenHistoryUrls.has(i.historyUrl)) {
                     seenHistoryUrls.add(i.historyUrl);
-                    historyLines.push((i.city || '') + (i.addressId ? ' (' + i.addressId + ')' : '') + ': ' + i.historyUrl);
+                    const prefix = (i.city || '') + (i.addressId ? ' (' + i.addressId + ')' : '');
+                    historyLines.push(prefix ? prefix + ': ' + i.historyUrl : i.historyUrl);
                 }
             });
             if (historyLines.length) desc += '{{collapse(Ссылки на историю парсинга)\n' + historyLines.join('\n') + '\n}}\n\n';
