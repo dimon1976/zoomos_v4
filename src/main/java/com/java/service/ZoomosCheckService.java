@@ -165,7 +165,14 @@ public class ZoomosCheckService {
                 sendProgress(shopId, operationId, processed, total, "Проверяем " + siteName + " (API)...");
 
                 // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
-                List<ZoomosParsingStats> stats = parseApiPage(page, siteName, effectiveDateFrom, dateTo, cityIdEntries, run);
+                List<ZoomosParsingStats> stats = parseWithRetry(
+                        () -> parseApiPage(page, siteName, effectiveDateFrom, dateTo, cityIdEntries, run),
+                        siteName, run);
+                if (stats == null) {
+                    processed += cityIdEntries.size();
+                    sendProgress(shopId, operationId, processed, total, "TIMEOUT: " + siteName + " — пропущен");
+                    continue;
+                }
                 List<ZoomosParsingStats> mainStats = splitBaseline(stats, dateFrom, combineBaseline, allBaselineStats);
                 if (hasTimeFilter) {
                     mainStats = filterByTime(mainStats, rangeStart, rangeEnd);
@@ -189,8 +196,15 @@ public class ZoomosCheckService {
                         "Проверяем " + siteName + " (ITEM, shop=" + shop.getShopName() + ")...");
 
                 // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
-                List<ZoomosParsingStats> stats = parseItemPage(page, siteName, shop.getShopName(),
-                        effectiveDateFrom, dateTo, cityIdEntries, run);
+                List<ZoomosParsingStats> stats = parseWithRetry(
+                        () -> parseItemPage(page, siteName, shop.getShopName(),
+                                effectiveDateFrom, dateTo, cityIdEntries, run),
+                        siteName, run);
+                if (stats == null) {
+                    processed += cityIdEntries.size();
+                    sendProgress(shopId, operationId, processed, total, "TIMEOUT: " + siteName + " — пропущен");
+                    continue;
+                }
                 List<ZoomosParsingStats> mainStats = splitBaseline(stats, dateFrom, combineBaseline, allBaselineStats);
                 if (hasTimeFilter) {
                     mainStats = filterByTime(mainStats, rangeStart, rangeEnd);
@@ -301,6 +315,50 @@ public class ZoomosCheckService {
     }
 
     /**
+     * Запускает action с retry при timeout-исключениях.
+     * Возвращает null если все попытки исчерпаны — в этом случае таймаут записывается в run.
+     */
+    private List<ZoomosParsingStats> parseWithRetry(
+            java.util.function.Supplier<List<ZoomosParsingStats>> action,
+            String siteName, ZoomosCheckRun run) {
+        int maxAttempts = config.getRetryAttempts();
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return action.get();
+            } catch (Exception e) {
+                boolean isTimeout = isTimeoutException(e);
+                if (!isTimeout) throw e;
+                if (attempt == maxAttempts) {
+                    run.setTimeoutCount((run.getTimeoutCount() != null ? run.getTimeoutCount() : 0) + 1);
+                    String prev = run.getErrorMessage() != null ? run.getErrorMessage() + "; " : "";
+                    run.setErrorMessage(prev + "TIMEOUT: " + siteName + " (попытки исчерпаны)");
+                    log.warn("TIMEOUT для {} — все {} попытки исчерпаны, пропускаем сайт", siteName, maxAttempts);
+                    return null;
+                }
+                log.warn("Timeout для {} (попытка {}/{}), повтор через {}с...",
+                        siteName, attempt, maxAttempts, config.getRetryDelaySeconds());
+                try {
+                    Thread.sleep(config.getRetryDelaySeconds() * 1000L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(ie);
+                }
+            }
+        }
+        return null; // unreachable
+    }
+
+    private boolean isTimeoutException(Exception e) {
+        String msg = e.getMessage();
+        if (msg != null && (msg.contains("Timeout") || msg.contains("timeout"))) return true;
+        if (e.getCause() != null) {
+            String cause = e.getCause().getMessage();
+            return cause != null && (cause.contains("Timeout") || cause.contains("timeout"));
+        }
+        return false;
+    }
+
+    /**
      * Разделяет список записей на основные и baseline.
      * Записи с startTime до dateFrom (эксклюзивно) помечаются is_baseline=true
      * и добавляются в baselineAccumulator. Возвращает основные записи.
@@ -347,6 +405,7 @@ public class ZoomosCheckService {
         // Собираем все допустимые city ID и address ID для фильтрации
         Set<String> allowedCityIds = new HashSet<>();
         Set<String> allowedAddressIds = new HashSet<>();
+        Map<String, Set<String>> allowedAddressesByCityId = new HashMap<>();
         Map<String, ZoomosCityId> cityIdMap = new HashMap<>();
         for (ZoomosCityId entry : cityIdEntries) {
             if (entry.getCityIds() != null && !entry.getCityIds().isBlank()) {
@@ -358,11 +417,17 @@ public class ZoomosCheckService {
                     }
                 }
             }
-            allowedAddressIds.addAll(flattenAddressIds(parseAddressMapping(entry.getAddressIds())));
+            parseAddressMapping(entry.getAddressIds()).forEach((cityId, addrIds) -> {
+                if (cityId != null && !cityId.isBlank()) {
+                    allowedAddressesByCityId.computeIfAbsent(cityId.trim(), k -> new HashSet<>()).addAll(addrIds);
+                } else {
+                    allowedAddressIds.addAll(addrIds);
+                }
+            });
         }
 
         // Для API-сайтов берём только глобальные выкачки (поле "Клиент" пустое)
-        return parseTable(page, run, siteName, "API", allowedCityIds, cityIdMap, allowedAddressIds).stream()
+        return parseTable(page, run, siteName, "API", allowedCityIds, cityIdMap, allowedAddressIds, allowedAddressesByCityId).stream()
                 .filter(s -> s.getClientName() == null || s.getClientName().isBlank())
                 .collect(Collectors.toList());
     }
@@ -388,6 +453,7 @@ public class ZoomosCheckService {
 
         Set<String> allowedCityIds = new HashSet<>();
         Set<String> allowedAddressIds = new HashSet<>();
+        Map<String, Set<String>> allowedAddressesByCityId = new HashMap<>();
         Map<String, ZoomosCityId> cityIdMap = new HashMap<>();
         for (ZoomosCityId entry : cityIdEntries) {
             if (entry.getCityIds() != null && !entry.getCityIds().isBlank()) {
@@ -399,10 +465,16 @@ public class ZoomosCheckService {
                     }
                 }
             }
-            allowedAddressIds.addAll(flattenAddressIds(parseAddressMapping(entry.getAddressIds())));
+            parseAddressMapping(entry.getAddressIds()).forEach((cityId, addrIds) -> {
+                if (cityId != null && !cityId.isBlank()) {
+                    allowedAddressesByCityId.computeIfAbsent(cityId.trim(), k -> new HashSet<>()).addAll(addrIds);
+                } else {
+                    allowedAddressIds.addAll(addrIds);
+                }
+            });
         }
 
-        return parseTable(page, run, siteName, "ITEM", allowedCityIds, cityIdMap, allowedAddressIds);
+        return parseTable(page, run, siteName, "ITEM", allowedCityIds, cityIdMap, allowedAddressIds, allowedAddressesByCityId);
     }
 
     // =========================================================================
@@ -441,9 +513,16 @@ public class ZoomosCheckService {
                 }
             }
         }
-        allowedAddressIds.addAll(flattenAddressIds(parseAddressMapping(cid.getAddressIds())));
+        Map<String, Set<String>> allowedAddressesByCityId = new HashMap<>();
+        parseAddressMapping(cid.getAddressIds()).forEach((cityId, addrIds) -> {
+            if (cityId != null && !cityId.isBlank()) {
+                allowedAddressesByCityId.computeIfAbsent(cityId.trim(), k -> new HashSet<>()).addAll(addrIds);
+            } else {
+                allowedAddressIds.addAll(addrIds);
+            }
+        });
 
-        List<ZoomosParsingStats> stats = parseTable(page, run, siteName, checkType, allowedCityIds, cityIdMap, allowedAddressIds);
+        List<ZoomosParsingStats> stats = parseTable(page, run, siteName, checkType, allowedCityIds, cityIdMap, allowedAddressIds, allowedAddressesByCityId);
         // Для API — только глобальные выкачки (без клиента)
         if ("API".equals(checkType)) {
             stats = stats.stream()
@@ -464,7 +543,8 @@ public class ZoomosCheckService {
                                                  String defaultSiteName, String checkType,
                                                  Set<String> allowedCityIds,
                                                  Map<String, ZoomosCityId> cityIdMap,
-                                                 Set<String> allowedAddressIds) {
+                                                 Set<String> allowedAddressIds,
+                                                 Map<String, Set<String>> allowedAddressesByCityId) {
         List<ZoomosParsingStats> results = new ArrayList<>();
 
         // Извлекаем все данные таблицы одним вызовом JS в браузере,
@@ -609,12 +689,17 @@ public class ZoomosCheckService {
         upsertCityNames(results);
         upsertCityAddresses(results);
 
-        // Применяем комбинированный фильтр: address-покрытые города → только по addressId,
+        // Применяем комбинированный фильтр: address-покрытые города → только по addressId (city-specific),
         // остальные города → по cityId
-        if (!allowedCityIds.isEmpty() || !allowedAddressIds.isEmpty()) {
-            // Находим cityId-ы, для которых в данных есть хотя бы одна строка с подходящим addressId.
-            // Такие города считаются "покрытыми адресами" — их city-level строки исключаем.
-            Set<String> addressCoveredCityIds = results.stream()
+        if (!allowedCityIds.isEmpty() || !allowedAddressIds.isEmpty() || !allowedAddressesByCityId.isEmpty()) {
+            // Города с city-specific ограничениями по адресам (из конфига)
+            Set<String> addressConstrainedCityIds = allowedAddressesByCityId.entrySet().stream()
+                    .filter(e -> !e.getValue().isEmpty())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toSet());
+
+            // Для обратной совместимости: города из данных с плоскими адресами
+            Set<String> flatAddressCoveredCityIds = results.stream()
                     .filter(s -> s.getAddressId() != null && allowedAddressIds.contains(s.getAddressId()))
                     .map(s -> extractCityId(s.getCityName()))
                     .filter(Objects::nonNull)
@@ -623,10 +708,15 @@ public class ZoomosCheckService {
             results = results.stream().filter(s -> {
                 String addrId = s.getAddressId();
                 String cId    = extractCityId(s.getCityName());
-                // Строка подходит по addressId → включаем всегда
+                // City-specific: если для города есть address-ограничения — только через них
+                if (cId != null && addressConstrainedCityIds.contains(cId)) {
+                    Set<String> addrsForCity = allowedAddressesByCityId.get(cId);
+                    return addrId != null && addrsForCity != null && addrsForCity.contains(addrId);
+                }
+                // Плоские адреса (без привязки к городу — обратная совместимость)
                 if (addrId != null && allowedAddressIds.contains(addrId)) return true;
                 // Строка подходит по cityId И этот город не покрыт адресами → включаем
-                if (cId != null && allowedCityIds.contains(cId) && !addressCoveredCityIds.contains(cId)) return true;
+                if (cId != null && allowedCityIds.contains(cId) && !flatAddressCoveredCityIds.contains(cId)) return true;
                 return false;
             }).collect(Collectors.toList());
         }

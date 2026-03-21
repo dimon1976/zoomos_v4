@@ -174,13 +174,27 @@ public class ZoomosAnalysisController {
     @GetMapping("/city-addresses")
     @ResponseBody
     public ResponseEntity<?> getCityAddresses(
-            @RequestParam(required = false) String cityIds) {
+            @RequestParam(required = false) String cityIds,
+            @RequestParam(required = false) String siteName) {
         List<com.java.model.entity.ZoomosCityAddress> addrs;
         if (cityIds != null && !cityIds.isBlank()) {
             List<String> ids = Arrays.asList(cityIds.split(","));
             addrs = cityAddressRepository.findByCityIdInOrderByCityIdAscAddressIdAsc(ids);
         } else {
             addrs = cityAddressRepository.findAll();
+        }
+        // Если передан siteName — фильтруем по адресам, настроенным для этого сайта
+        if (siteName != null && !siteName.isBlank()) {
+            Set<String> siteAddressIds = cityIdRepository.findAllBySiteName(siteName).stream()
+                    .flatMap(e -> com.java.service.ZoomosCheckService
+                            .flattenAddressIds(com.java.service.ZoomosCheckService.parseAddressMapping(e.getAddressIds()))
+                            .stream())
+                    .collect(java.util.stream.Collectors.toSet());
+            if (!siteAddressIds.isEmpty()) {
+                addrs = addrs.stream()
+                        .filter(a -> siteAddressIds.contains(a.getAddressId()))
+                        .collect(java.util.stream.Collectors.toList());
+            }
         }
         Map<String, List<Map<String, String>>> result = new java.util.LinkedHashMap<>();
         for (com.java.model.entity.ZoomosCityAddress a : addrs) {

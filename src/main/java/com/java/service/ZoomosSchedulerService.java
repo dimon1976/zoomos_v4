@@ -11,10 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.scheduling.support.CronTrigger;
+import org.springframework.scheduling.support.SimpleTriggerContext;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -47,8 +49,20 @@ public class ZoomosSchedulerService {
             checkRunRepository.saveAll(stuckRuns);
             log.warn("ZoomosSchedulerService: {} зависших RUNNING-проверок переведены в FAILED", stuckRuns.size());
         }
-        scheduleRepo.findAllByIsEnabledTrue().forEach(this::scheduleCheck);
+        List<ZoomosShopSchedule> enabledSchedules = scheduleRepo.findAllByIsEnabledTrue();
+        enabledSchedules.forEach(this::scheduleCheck);
         log.info("ZoomosSchedulerService: загружено {} активных расписаний", scheduleMap.size());
+
+        // Диагностика: уведомить о пропущенных запусках (lastRunAt > 2 часов назад)
+        ZonedDateTime threshold = ZonedDateTime.now().minusHours(2);
+        enabledSchedules.forEach(s -> {
+            ZonedDateTime lastRun = s.getLastRunAt();
+            if (lastRun == null || lastRun.isBefore(threshold)) {
+                log.warn("Расписание id={} shopId={} cron='{}': lastRunAt={} — возможно пропущен запуск. " +
+                         "Spring CronTrigger не наверстывает пропущенные запуски — следующий запуск будет по расписанию.",
+                        s.getId(), s.getShopId(), s.getCronExpression(), lastRun);
+            }
+        });
     }
 
     public void saveAndReschedule(ZoomosShopSchedule schedule) {
@@ -105,12 +119,15 @@ public class ZoomosSchedulerService {
     private void scheduleCheck(ZoomosShopSchedule s) {
         try {
             String springCron = CronUtils.toSpringCron(s.getCronExpression());
-            ScheduledFuture<?> future = taskScheduler.schedule(
-                    () -> runCheck(s), new CronTrigger(springCron));
+            CronTrigger trigger = new CronTrigger(springCron);
+            ScheduledFuture<?> future = taskScheduler.schedule(() -> runCheck(s), trigger);
             scheduleMap.put(s.getId(), future);
-            log.info("Запланирована проверка для id={} shopId={} по cron='{}'", s.getId(), s.getShopId(), springCron);
+            Date nextFire = trigger.nextExecutionTime(new SimpleTriggerContext());
+            log.info("Расписание id={} shopId={} cron='{}' зарегистрировано, следующий запуск: {}",
+                    s.getId(), s.getShopId(), springCron, nextFire);
         } catch (Exception e) {
-            log.error("Ошибка при планировании id={} shopId={}: {}", s.getId(), s.getShopId(), e.getMessage());
+            log.error("Ошибка при планировании id={} shopId={} cron='{}': {}",
+                    s.getId(), s.getShopId(), s.getCronExpression(), e.getMessage());
         }
     }
 

@@ -95,6 +95,11 @@
                                 <span class="badge"
                                       th:classappend="${r.status == 'COMPLETED'} ? 'bg-success' : (${r.status == 'FAILED'} ? 'bg-danger' : 'bg-warning')"
                                       th:text="${r.status}">OK</span>
+                                <span th:if="${r.timeoutCount != null and r.timeoutCount > 0}"
+                                      class="badge bg-warning text-dark ms-1"
+                                      th:title="${r.errorMessage}">
+                                    <i class="fas fa-clock me-1"></i>TIMEOUT ×<span th:text="${r.timeoutCount}"></span>
+                                </span>
                             </td>
                             <td class="text-center" th:text="${r.totalSites}">0</td>
                             <td class="text-center" th:text="${r.okCount}">0</td>

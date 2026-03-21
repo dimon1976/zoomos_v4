@@ -127,6 +127,17 @@
         </div>
     </div>
 
+    <!-- TIMEOUT-алерт: показываем если проверка завершена, но часть сайтов упала по таймауту -->
+    <div th:if="${run.timeoutCount != null and run.timeoutCount > 0}"
+         class="alert alert-warning mb-3 d-flex align-items-start gap-2" role="alert">
+        <i class="fas fa-clock fa-lg mt-1 flex-shrink-0"></i>
+        <div>
+            <strong>Таймаут при проверке (<span th:text="${run.timeoutCount}"></span> сайт(ов))</strong> —
+            часть сайтов была пропущена из-за превышения времени ожидания.
+            <span th:if="${run.errorMessage != null}" class="d-block mt-1 small text-muted" th:text="${run.errorMessage}"></span>
+        </div>
+    </div>
+
     <!-- ═══════════════════════════════════════════════════════
          БЛОК 2: ЧТО СТОИТ ПРОВЕРИТЬ (только если есть проблемы)
     ═══════════════════════════════════════════════════════ -->
@@ -144,6 +155,11 @@
                         class="btn btn-sm btn-outline-secondary py-0 px-2" title="Скопировать список доменов"
                         onclick="event.stopPropagation(); copyIssueDomains(this)">
                     <i class="fas fa-copy me-1"></i>Копировать домены
+                </button>
+                <button id="btnCopyIssues" type="button"
+                        class="btn btn-sm btn-outline-secondary py-0 px-2" title="Скопировать проблемы: Сайт - город - адрес (проблема)"
+                        onclick="event.stopPropagation(); copyIssueProblems(this)">
+                    <i class="fas fa-list me-1"></i>Копировать проблемы
                 </button>
                 <button th:if="${redmineEnabled}" id="btnRefreshRedmine" type="button"
                         class="btn btn-sm btn-outline-secondary py-0 px-2" title="Обновить статусы из Redmine">
@@ -1718,6 +1734,28 @@
             .filter(Boolean)
             .join('\n');
         navigator.clipboard.writeText(domains).then(() => {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check me-1"></i>Скопировано';
+            btn.classList.replace('btn-outline-secondary', 'btn-success');
+            setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-success', 'btn-outline-secondary'); }, 2000);
+        });
+    }
+
+    function copyIssueProblems(btn) {
+        const lines = [];
+        document.querySelectorAll('#issuesCollapse .site-issues-block').forEach(block => {
+            if (block.closest('#verifiedSitesCollapse')) return;
+            const siteName = block.dataset.site || '';
+            block.querySelectorAll('.list-group-item[data-message]').forEach(issue => {
+                if (issue.classList.contains('issue-hidden')) return;
+                const city    = issue.dataset.city    || '';
+                const addrId  = issue.dataset.addressid || '';
+                const msg     = issue.dataset.message  || '';
+                const parts   = [siteName, city, addrId].filter(Boolean).join(' - ');
+                lines.push(parts + (msg ? ` (${msg})` : ''));
+            });
+        });
+        navigator.clipboard.writeText(lines.join('\n')).then(() => {
             const orig = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-check me-1"></i>Скопировано';
             btn.classList.replace('btn-outline-secondary', 'btn-success');

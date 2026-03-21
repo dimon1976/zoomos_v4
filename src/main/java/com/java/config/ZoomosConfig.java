@@ -13,4 +13,6 @@ public class ZoomosConfig {
     private String username;
     private String password;
     private int timeoutSeconds = 30;
+    private int retryAttempts = 3;
+    private int retryDelaySeconds = 3;
 }

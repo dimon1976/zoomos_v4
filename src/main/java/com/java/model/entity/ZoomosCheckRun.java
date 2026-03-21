@@ -87,6 +87,13 @@ public class ZoomosCheckRun {
     @Builder.Default
     private String status = "RUNNING";
 
+    @Column(name = "error_message", length = 1000)
+    private String errorMessage;
+
+    @Column(name = "timeout_count")
+    @Builder.Default
+    private Integer timeoutCount = 0;
+
     @Column(name = "started_at", updatable = false)
     private ZonedDateTime startedAt;
 

@@ -1683,7 +1683,10 @@
     function loadSuggestions() {
         const cityIds = Object.keys(addrModalData).filter(id => id);
         if (!cityIds.length) return;
-        fetch('/zoomos/city-addresses?cityIds=' + encodeURIComponent(cityIds.join(',')))
+        const siteEl = document.getElementById('addrModalSite');
+        const siteName = siteEl ? siteEl.textContent.trim() : '';
+        const siteParam = siteName ? '&siteName=' + encodeURIComponent(siteName) : '';
+        fetch('/zoomos/city-addresses?cityIds=' + encodeURIComponent(cityIds.join(',')) + siteParam)
             .then(r => r.json())
             .then(data => { knownAddresses = data; applySuggestions(); })
             .catch(() => {});
