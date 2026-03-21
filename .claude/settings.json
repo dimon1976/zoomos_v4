@@ -2,67 +2,29 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Read|Edit|MultiEdit|Write|Bash",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "claudekit-hooks run file-guard"
+            "command": "python .claude/hooks/pre_tool_use.py",
+            "timeout": 5000
           }
         ]
       }
     ],
-    "PostToolUse": [
+    "SessionStart": [
       {
-        "matcher": "Write|Edit|MultiEdit",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "claudekit-hooks run lint-changed"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
+            "command": "python .claude/hooks/session_start.py",
+            "timeout": 5000
+          },
           {
             "type": "command",
-            "command": "claudekit-hooks run typecheck-changed"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claudekit-hooks run check-any-changed"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claudekit-hooks run test-changed"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claudekit-hooks run check-comment-replacement"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claudekit-hooks run check-unused-parameters"
+            "command": "python .claude/hooks/notification.py session_start",
+            "timeout": 3000
           }
         ]
       }
@@ -73,44 +35,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claudekit-hooks run typecheck-project"
-          },
-          {
-            "type": "command",
-            "command": "claudekit-hooks run lint-project"
-          },
-          {
-            "type": "command",
-            "command": "claudekit-hooks run test-project"
-          },
-          {
-            "type": "command",
-            "command": "claudekit-hooks run check-todos"
-          },
-          {
-            "type": "command",
-            "command": "claudekit-hooks run self-review"
-          },
-          {
-            "type": "command",
-            "command": "claudekit-hooks run create-checkpoint"
+            "command": "python .claude/hooks/notification.py stop",
+            "timeout": 3000
           }
         ]
       }
     ],
-    "SubagentStop": [],
-    "SessionStart": [],
-    "UserPromptSubmit": [
+    "SubagentStop": [
       {
         "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "claudekit-hooks run codebase-map"
-          },
-          {
-            "type": "command",
-            "command": "claudekit-hooks run thinking-level"
+            "command": "python .claude/hooks/notification.py subagent_stop",
+            "timeout": 3000
           }
         ]
       }
