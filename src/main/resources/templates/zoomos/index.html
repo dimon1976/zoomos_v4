@@ -118,7 +118,7 @@
         }
         .shop-batch-cb { cursor: pointer; }
         .sortable-ghost { opacity: 0.4; background: #e8f4f8; }
-        .shop-order-btns .btn { padding: 1px 5px; font-size: 0.75em; }
+        .shop-order-btns .btn.btn-icon { width: 2rem; height: 2rem; padding: 0; }
         /* Compact-only элементы — скрыты в стандартном режиме */
         .compact-result { display: none; }
         .compact-run-btn { display: none !important; }
@@ -138,6 +138,7 @@
             border: none !important;
             border-radius: 0 !important;
             border-bottom: 1px solid #dee2e6 !important;
+            box-shadow: none !important;
         }
         #shops-container.compact-mode .shop-card:first-of-type {
             border-top: 1px solid #dee2e6 !important;
@@ -321,7 +322,7 @@
     </div>
 
     <!-- Глобальная дата-панель (список-режим) -->
-    <div id="globalDateBar" class="d-none sticky-top bg-white border-bottom px-3 py-2 d-flex align-items-center gap-2 flex-wrap" style="z-index:98;">
+    <div id="globalDateBar" class="sticky-top bg-white border-bottom px-3 py-2 align-items-center gap-2 flex-wrap" style="z-index:98; display:none;">
         <small class="text-muted fw-semibold"><i class="fas fa-calendar-alt me-1"></i>Период для всех:</small>
         <input type="date" id="globalDateFrom" class="form-control form-control-sm" style="width:135px;">
         <input type="time" id="globalTimeFrom" class="form-control form-control-sm" style="width:105px;"
@@ -402,20 +403,20 @@
                     <i class="fas fa-play"></i>
                 </button>
                 <!-- Кнопки переупорядочивания -->
-                <div class="btn-group btn-group-sm shop-order-btns border-end pe-2" role="group">
-                    <button type="button" class="btn btn-outline-secondary btn-shop-move"
+                <div class="d-flex gap-1 align-items-center border-end pe-2 shop-order-btns">
+                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
                             th:data-shop-id="${shop.id}" data-direction="top" title="В начало">
                         <i class="fas fa-angle-double-up"></i>
                     </button>
-                    <button type="button" class="btn btn-outline-secondary btn-shop-move"
+                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
                             th:data-shop-id="${shop.id}" data-direction="up" title="Вверх">
                         <i class="fas fa-angle-up"></i>
                     </button>
-                    <button type="button" class="btn btn-outline-secondary btn-shop-move"
+                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
                             th:data-shop-id="${shop.id}" data-direction="down" title="Вниз">
                         <i class="fas fa-angle-down"></i>
                     </button>
-                    <button type="button" class="btn btn-outline-secondary btn-shop-move"
+                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
                             th:data-shop-id="${shop.id}" data-direction="bottom" title="В конец">
                         <i class="fas fa-angle-double-down"></i>
                     </button>
@@ -1087,6 +1088,13 @@
         </div>
     </div>
 
+    <!-- Скрытые триггеры для программного открытия модалок (без window.bootstrap) -->
+    <button id="__triggerSyncModal"    data-bs-toggle="modal" data-bs-target="#syncConfirmModal"    hidden tabindex="-1"></button>
+    <button id="__triggerSchedModal"   data-bs-toggle="modal" data-bs-target="#scheduleToggleModal" hidden tabindex="-1"></button>
+    <button id="__triggerParserModal"  data-bs-toggle="modal" data-bs-target="#parserFilterModal"   hidden tabindex="-1"></button>
+    <button id="__triggerAddrModal"    data-bs-toggle="modal" data-bs-target="#addressModal"        hidden tabindex="-1"></button>
+    <button id="__triggerCompactModal" data-bs-toggle="modal" data-bs-target="#compactShopSettingsModal" hidden tabindex="-1"></button>
+
 </div>
 </th:block>
 
@@ -1404,9 +1412,15 @@
         });
     });
 
+    // ---- Утилиты для модалок без window.bootstrap ----
+    function showModal(triggerId)  { document.getElementById(triggerId)?.click(); }
+    function hideModal(modalId) {
+        const el = document.querySelector('#' + modalId + ' [data-bs-dismiss="modal"]');
+        if (el) el.click();
+    }
+
     // ---- Модалка фильтра парсера ----
     let parserFilterEntryId = null;
-    const parserFilterModal = new bootstrap.Modal(document.getElementById('parserFilterModal'));
 
     function loadParserPatterns(siteName) {
         const container = document.getElementById('parserPatternsList');
@@ -1464,7 +1478,7 @@
             document.getElementById('parserIncludeInput').value = this.dataset.include || '';
             document.getElementById('parserIncludeModeSelect').value = this.dataset.includeMode || 'OR';
             document.getElementById('parserExcludeInput').value = this.dataset.exclude || '';
-            parserFilterModal.show();
+            showModal('__triggerParserModal');
             loadParserPatterns(this.dataset.site || '');
         });
     });
@@ -1498,7 +1512,7 @@
             saveBtn.disabled = false;
             saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
             if (data.success) {
-                parserFilterModal.hide();
+                hideModal('parserFilterModal');
                 // Обновить data-* и подсветку на кнопке
                 const btn = document.querySelector('.btn-parser-filter[data-id="' + parserFilterEntryId + '"]');
                 if (btn) {
@@ -1523,7 +1537,7 @@
     let addrModalEntryId = null;
     let addrModalData = {}; // cityId → [addressIds]
     let knownAddresses = {}; // cityId → [{id, name}]  — справочник адресов
-    const addrModal = new bootstrap.Modal(document.getElementById('addressModal'));
+    let addrModal;
 
     // Парсинг addressIds: JSON {"3435":["18121"]} или плоский "18121,18122"
     function parseAddrData(raw, cities) {
@@ -1716,7 +1730,7 @@
             addrModalData = parseAddrData(this.dataset.addresses || '', this.dataset.cities || '');
             knownAddresses = {};
             renderAddrModal();
-            addrModal.show();
+            showModal('__triggerAddrModal');
             loadSuggestions();
         });
     });
@@ -1746,7 +1760,7 @@
             saveBtn.disabled = false;
             saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
             if (data.success) {
-                addrModal.hide();
+                hideModal('addressModal');
                 // Обновить data-addresses на кнопке и бейдж
                 const btn = document.querySelector('.btn-edit-addresses[data-id="' + addrModalEntryId + '"]');
                 if (btn) {
@@ -1998,10 +2012,7 @@
     let syncApplyType = null;
     let syncApplyShopName = null;
 
-    function getSyncModal() {
-        if (!syncModal) syncModal = new bootstrap.Modal(document.getElementById('syncConfirmModal'));
-        return syncModal;
-    }
+    function getSyncModal() { return null; } // не используется, оставлено для совместимости
 
     function previewSync(shopName, type) {
         syncApplyShopName = shopName;
@@ -2020,7 +2031,7 @@
         contentEl.innerHTML = '';
         applyBtn.style.display = 'none';
 
-        getSyncModal().show();
+        showModal('__triggerSyncModal');
 
         const url = type === 'matching'
             ? '/zoomos/shops/' + encodeURIComponent(shopName) + '/sync-from-matching/preview'
@@ -2134,7 +2145,7 @@
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                getSyncModal().hide();
+                hideModal('syncConfirmModal');
                 location.reload();
             } else {
                 alert('Ошибка: ' + (data.error || 'неизвестная'));
@@ -2264,10 +2275,7 @@
     let schedToggleModal = null;
     let pendingSchedToggle = null;
 
-    function getSchedToggleModal() {
-        if (!schedToggleModal) schedToggleModal = new bootstrap.Modal(document.getElementById('scheduleToggleModal'));
-        return schedToggleModal;
-    }
+    function getSchedToggleModal() { return null; } // не используется, оставлено для совместимости
 
     document.querySelectorAll('.schedule-enabled-cb').forEach(cb => {
         cb.addEventListener('change', function() {
@@ -2281,7 +2289,7 @@
             document.getElementById('schedToggleShopName').textContent = shopName;
             document.getElementById('schedToggleBody').innerHTML =
                 '<p class="mb-0 small">' + escHtml(action) + ' автопроверку по расписанию для <strong>' + escHtml(shopName) + '</strong>?</p>';
-            getSchedToggleModal().show();
+            showModal('__triggerSchedModal');
         });
     });
 
@@ -2627,8 +2635,7 @@
             // Авто-раскрыть/свернуть таблицу сайтов
             const cityTable = document.getElementById('cityTable-' + shopId);
             if (cityTable) {
-                const collapseInstance = bootstrap.Collapse.getOrCreateInstance(cityTable);
-                expanded ? collapseInstance.show() : collapseInstance.hide();
+                cityTable.classList.toggle('show', expanded);
             }
         });
     });
@@ -2698,7 +2705,7 @@
             setVal('trendDrop-'     + sid, csTrendDrop.value, 'checkTrendDrop-');
             setVal('trendErr-'      + sid, csTrendErr.value,  'checkTrendErr-');
 
-            bootstrap.Modal.getInstance(modal).hide();
+            hideModal('compactShopSettingsModal');
         });
     })();
 
@@ -2717,7 +2724,7 @@
             container.classList.add('compact-mode');
             btn.innerHTML = '<i class="fas fa-th-large"></i>';
             btn.title = 'Стандартный вид';
-            if (globalBar) globalBar.classList.remove('d-none');
+            if (globalBar) globalBar.style.display = 'flex';
         }
 
         btn.addEventListener('click', function() {
@@ -2727,7 +2734,7 @@
                 ? '<i class="fas fa-th-large"></i>'
                 : '<i class="fas fa-th-list"></i>';
             btn.title = isCompact ? 'Стандартный вид' : 'Компактный вид';
-            if (globalBar) globalBar.classList.toggle('d-none', !isCompact);
+            if (globalBar) globalBar.style.display = isCompact ? 'flex' : 'none';
         });
     })();
 </script>

@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
  * Инициализирует всплывающие подсказки Bootstrap
  */
 function initTooltips() {
+    if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
@@ -51,10 +52,12 @@ function initAlertDismissal() {
     const successAlerts = document.querySelectorAll('.alert-success');
 
     successAlerts.forEach(alert => {
-        // Автоматически скрываем уведомление об успехе через 5 секунд
         setTimeout(() => {
-            const bsAlert = new bootstrap.Alert(alert);
-            bsAlert.close();
+            if (typeof bootstrap !== 'undefined' && bootstrap.Alert) {
+                new bootstrap.Alert(alert).close();
+            } else {
+                alert.style.display = 'none';
+            }
         }, 5000);
     });
 }

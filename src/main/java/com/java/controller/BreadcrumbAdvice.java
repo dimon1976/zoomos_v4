@@ -53,6 +53,11 @@ public class BreadcrumbAdvice {
     private static final Pattern CLIENT_PATH_PATTERN = Pattern.compile("^/clients/(\\d+)(?:/(.+))?$");
     private static final Pattern TEMPLATE_PATH_PATTERN = Pattern.compile("^/clients/(\\d+)/(import|export)/templates(?:/(.+))?$");
 
+    // Промежуточные пути, у которых нет собственного маршрута — не делаем кликабельными
+    private static final Set<String> NON_LINKABLE_PATHS = new HashSet<>(Arrays.asList(
+            "/zoomos/check/results"
+    ));
+
     @ModelAttribute("breadcrumbs")
     public List<BreadcrumbItem> breadcrumbs(HttpServletRequest request) {
         String uri = request.getRequestURI();
@@ -127,14 +132,15 @@ public class BreadcrumbAdvice {
     private void generateStandardBreadcrumbs(List<BreadcrumbItem> crumbs, String uri) {
         String[] parts = uri.split("/");
         StringBuilder path = new StringBuilder();
-        
+
         for (String part : parts) {
             if (part == null || part.isEmpty()) {
                 continue;
             }
             path.append('/').append(part);
             String label = SEGMENT_NAMES.getOrDefault(part, part);
-            crumbs.add(new BreadcrumbItem(label, path.toString()));
+            String url = NON_LINKABLE_PATHS.contains(path.toString()) ? null : path.toString();
+            crumbs.add(new BreadcrumbItem(label, url));
         }
     }
 
