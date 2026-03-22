@@ -1,7 +1,5 @@
 package com.java.service.utils;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.utils.StatsProcessDto;
 import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateField;
@@ -30,7 +28,6 @@ public class StatsProcessorService {
 
     private final FileReaderUtils fileReaderUtils;
     private final FileGeneratorService fileGeneratorService;
-    private final ObjectMapper objectMapper;
     
     // Индексы колонок для дополнительных данных
     private static final int COMPETITOR_URL_COLUMN_INDEX = 27;
@@ -199,22 +196,6 @@ public class StatsProcessorService {
         }
         
         return headers;
-    }
-
-    /**
-     * Парсинг данных из JSON
-     */
-    private List<List<String>> parseSampleData(String dataJson) {
-        if (dataJson == null || dataJson.isEmpty()) {
-            return new ArrayList<>();
-        }
-        
-        try {
-            return objectMapper.readValue(dataJson, new TypeReference<List<List<String>>>() {});
-        } catch (Exception e) {
-            log.error("Ошибка парсинга данных из JSON", e);
-            return new ArrayList<>();
-        }
     }
 
     /**

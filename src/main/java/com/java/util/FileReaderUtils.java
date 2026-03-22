@@ -2,6 +2,8 @@ package com.java.util;
 
 import com.java.model.entity.FileMetadata;
 import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.CSVParserBuilder;
 import com.opencsv.exceptions.CsvValidationException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.openxml4j.opc.OPCPackage;
@@ -40,33 +42,56 @@ import java.util.List;
 public class FileReaderUtils {
 
     /**
-     * Читает полные данные из файла на основе метаданных
+     * Читает файл, пропуская строку заголовка.
+     * Используется для импорта данных, где заголовки уже известны из metadata.
      */
     public List<List<String>> readFullFileData(FileMetadata metadata) throws IOException {
-        Path filePath = Paths.get(metadata.getTempFilePath());
+        return readFile(metadata, true);
+    }
 
+    /**
+     * Читает файл целиком, включая строку заголовка как первую строку данных.
+     * Используется в утилитах, где data.get(0) — это заголовки колонок.
+     */
+    public List<List<String>> readAllRows(FileMetadata metadata) throws IOException {
+        return readFile(metadata, false);
+    }
+
+    private List<List<String>> readFile(FileMetadata metadata, boolean skipHeader) throws IOException {
+        if (metadata.getTempFilePath() == null) {
+            throw new IllegalArgumentException("Путь к файлу не задан");
+        }
+        Path filePath = Paths.get(metadata.getTempFilePath());
         if (!Files.exists(filePath)) {
             throw new IOException("Файл не найден: " + metadata.getTempFilePath());
         }
 
-        String fileType = metadata.getFileFormat().toLowerCase();
+        String filename = metadata.getOriginalFilename() != null
+                ? metadata.getOriginalFilename().toLowerCase() : "";
+        String fileFormat = metadata.getFileFormat() != null
+                ? metadata.getFileFormat().toLowerCase() : "";
 
-        if ("csv".equals(fileType)) {
-            return readCsvFile(filePath, metadata);
-        } else if ("xlsx".equals(fileType) || "xls".equals(fileType)) {
-            return readExcelFile(filePath);
+        boolean isCsv = "csv".equals(fileFormat) || filename.endsWith(".csv");
+        boolean isExcel = "xlsx".equals(fileFormat) || "xls".equals(fileFormat)
+                || filename.endsWith(".xlsx") || filename.endsWith(".xls");
+
+        if (isCsv) {
+            return readCsvFile(filePath, metadata, skipHeader);
+        } else if (isExcel) {
+            return readExcelFile(filePath, skipHeader);
         } else {
-            throw new IllegalArgumentException("Неподдерживаемый тип файла: " + fileType);
+            throw new IllegalArgumentException("Неподдерживаемый тип файла: " + metadata.getOriginalFilename());
         }
     }
 
     /**
-     * Читает CSV файл полностью
+     * Читает CSV файл с поддержкой delimiter/quoteChar из metadata,
+     * фильтрацией пустых строк и пропуском BOM-строки.
      */
-    private List<List<String>> readCsvFile(Path filePath, FileMetadata metadata) throws IOException {
-        List<List<String>> data = new ArrayList<>();
-        Charset charset = StandardCharsets.UTF_8;
+    private List<List<String>> readCsvFile(Path filePath, FileMetadata metadata, boolean skipHeader)
+            throws IOException {
 
+        Charset charset = StandardCharsets.UTF_8;
         if (metadata.getDetectedEncoding() != null) {
             try {
                 charset = Charset.forName(metadata.getDetectedEncoding());
@@ -75,15 +100,41 @@ public class FileReaderUtils {
             }
         }
 
-        try (CSVReader reader = new CSVReader(new InputStreamReader(Files.newInputStream(filePath), charset))) {
-            String[] row;
-            boolean skipHeader = metadata.getHasHeader() != null && metadata.getHasHeader();
+        char delimiter = metadata.getDetectedDelimiter() != null && !metadata.getDetectedDelimiter().isEmpty()
+                ? metadata.getDetectedDelimiter().charAt(0) : ';';
+        char quoteChar = metadata.getDetectedQuoteChar() != null && !metadata.getDetectedQuoteChar().isEmpty()
+                ? metadata.getDetectedQuoteChar().charAt(0) : '"';
 
-            if (skipHeader) {
-                reader.readNext(); // Пропускаем заголовок
-            }
+        List<List<String>> data = new ArrayList<>();
+
+        try (CSVReader reader = new CSVReaderBuilder(new InputStreamReader(Files.newInputStream(filePath), charset))
+                .withCSVParser(new CSVParserBuilder()
+                        .withSeparator(delimiter)
+                        .withQuoteChar(quoteChar)
+                        .build())
+                .build()) {
+
+            String[] row;
+            boolean firstLine = true;
+            boolean headerSkipped = false;
 
             while ((row = reader.readNext()) != null) {
+                // Пропускаем BOM/пустую первую строку
+                if (firstLine) {
+                    firstLine = false;
+                    if (row.length == 1 && (row[0] == null || row[0].trim().isEmpty())) {
+                        continue;
+                    }
+                }
+                // Фильтруем полностью пустые строки
+                if (row.length == 0 || Arrays.stream(row).allMatch(c -> c == null || c.trim().isEmpty())) {
+                    continue;
+                }
+                // Пропускаем заголовок если нужно
+                if (skipHeader && !headerSkipped) {
+                    headerSkipped = true;
+                    continue;
+                }
                 data.add(Arrays.asList(row));
             }
         } catch (CsvValidationException e) {
@@ -94,36 +145,34 @@ public class FileReaderUtils {
     }
 
     /**
-     * Читает Excel файл полностью
+     * Читает Excel файл, опционально пропуская строку заголовка.
+     * Фильтрует полностью пустые строки.
      */
-    private List<List<String>> readExcelFile(Path filePath) throws IOException {
+    private List<List<String>> readExcelFile(Path filePath, boolean skipHeader) throws IOException {
         List<List<String>> data = new ArrayList<>();
 
         IOUtils.setByteArrayMaxOverride(Integer.MAX_VALUE);
         try (Workbook workbook = WorkbookFactory.create(Files.newInputStream(filePath))) {
             Sheet sheet = workbook.getSheetAt(0);
 
-            boolean firstRow = true;
+            boolean headerSkipped = false;
             for (Row row : sheet) {
-                // Пропускаем первую строку (заголовок)
-                if (firstRow) {
-                    firstRow = false;
+                if (skipHeader && !headerSkipped) {
+                    headerSkipped = true;
                     continue;
                 }
 
                 List<String> rowData = new ArrayList<>();
                 int lastCellNum = row.getLastCellNum();
-
                 for (int i = 0; i < lastCellNum; i++) {
                     Cell cell = row.getCell(i);
-                    if (cell == null) {
-                        rowData.add("");
-                    } else {
-                        rowData.add(getCellValue(cell));
-                    }
+                    rowData.add(cell == null ? "" : getCellValue(cell));
                 }
 
-                data.add(rowData);
+                // Фильтруем полностью пустые строки
+                if (rowData.stream().anyMatch(s -> !s.isEmpty())) {
+                    data.add(rowData);
+                }
             }
         }
 

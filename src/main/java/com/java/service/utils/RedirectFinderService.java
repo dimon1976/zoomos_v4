@@ -28,8 +28,6 @@ import java.util.stream.Stream;
 import java.util.stream.Collectors;
 
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 
 /**
  * Основной сервис для обработки HTTP редиректов с использованием Strategy Pattern
@@ -51,7 +49,7 @@ public class RedirectFinderService {
     public RedirectProcessingRequest prepareAsyncRequest(FileMetadata metadata, RedirectFinderDto dto) {
         try {
             // Получаем данные из файла
-            List<List<String>> rawData = readFullFileData(metadata);
+            List<List<String>> rawData = fileReaderUtils.readAllRows(metadata);
             log.info("Прочитано строк из файла для асинхронной обработки: {}", rawData.size());
             
             if (rawData.isEmpty()) {
@@ -93,7 +91,7 @@ public class RedirectFinderService {
         
         try {
             // Получаем данные из файла
-            List<List<String>> rawData = readFullFileData(metadata);
+            List<List<String>> rawData = fileReaderUtils.readAllRows(metadata);
             log.info("Прочитано строк из файла: {}", rawData.size());
             
             int totalUrls = calculateTotalUrls(rawData, metadata);
@@ -127,108 +125,8 @@ public class RedirectFinderService {
         }
     }
     
-    /**
-     * Чтение полных данных файла
-     */
-    private List<List<String>> readFullFileData(FileMetadata metadata) throws IOException {
-        if (metadata.getTempFilePath() == null) {
-            throw new IllegalArgumentException("Файл не найден на диске");
-        }
 
-        List<List<String>> data = new ArrayList<>();
-        String filename = metadata.getOriginalFilename().toLowerCase();
-        
-        if (filename.endsWith(".csv")) {
-            data = readCsvFile(metadata);
-        } else if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
-            data = readExcelFile(metadata);
-        } else {
-            throw new IllegalArgumentException("Неподдерживаемый формат файла: " + filename);
-        }
-        
-        return data;
-    }
-    
-    private List<List<String>> readCsvFile(FileMetadata metadata) throws IOException {
-        List<List<String>> data = new ArrayList<>();
-        
-        try (Reader reader = Files.newBufferedReader(java.nio.file.Paths.get(metadata.getTempFilePath()), 
-                java.nio.charset.Charset.forName(metadata.getDetectedEncoding() != null ? metadata.getDetectedEncoding() : "UTF-8"));
-             com.opencsv.CSVReader csvReader = new com.opencsv.CSVReaderBuilder(reader)
-                .withCSVParser(new com.opencsv.CSVParserBuilder()
-                    .withSeparator(metadata.getDetectedDelimiter() != null ? metadata.getDetectedDelimiter().charAt(0) : ';')
-                    .withQuoteChar(metadata.getDetectedQuoteChar() != null ? metadata.getDetectedQuoteChar().charAt(0) : '"')
-                    .build())
-                .build()) {
 
-            String[] line;
-            boolean isFirstLine = true;
-            try {
-                while ((line = csvReader.readNext()) != null) {
-                    if (isFirstLine && line.length == 1 && (line[0] == null || line[0].trim().isEmpty())) {
-                        isFirstLine = false;
-                        continue; // Пропускаем пустую первую строку
-                    }
-                    isFirstLine = false;
-
-                    // Пропускаем полностью пустые строки
-                    if (line.length == 0 || Arrays.stream(line).allMatch(cell -> cell == null || cell.trim().isEmpty())) {
-                        continue;
-                    }
-
-                    data.add(Arrays.asList(line));
-                }
-            } catch (com.opencsv.exceptions.CsvValidationException e) {
-                throw new IOException("Ошибка парсинга CSV файла: " + e.getMessage(), e);
-            }
-        }
-        
-        return data;
-    }
-    
-    private List<List<String>> readExcelFile(FileMetadata metadata) throws IOException {
-        List<List<String>> data = new ArrayList<>();
-        Path filePath = Path.of(metadata.getTempFilePath());
-
-        try (InputStream fis = Files.newInputStream(filePath)) {
-            Workbook workbook;
-
-            String filename = metadata.getOriginalFilename().toLowerCase();
-            if (filename.endsWith(".xlsx")) {
-                workbook = new XSSFWorkbook(fis);
-            } else if (filename.endsWith(".xls")) {
-                workbook = new HSSFWorkbook(fis);
-            } else {
-                throw new IllegalArgumentException("Неподдерживаемый формат Excel файла: " + filename);
-            }
-
-            Sheet sheet = workbook.getSheetAt(0);
-
-            for (Row row : sheet) {
-                List<String> rowData = new ArrayList<>();
-                for (int i = 0; i < row.getLastCellNum(); i++) {
-                    Cell cell = row.getCell(i);
-                    rowData.add(getCellValue(cell).trim());
-                }
-                if (!rowData.isEmpty() && rowData.stream().anyMatch(s -> !s.isEmpty())) {
-                    data.add(rowData);
-                }
-            }
-
-            workbook.close();
-
-        } catch (Exception e) {
-            log.error("Ошибка чтения Excel файла: {}", metadata.getOriginalFilename(), e);
-            throw new IOException("Ошибка чтения Excel файла: " + e.getMessage(), e);
-        }
-
-        return data;
-    }
-
-    private String getCellValue(Cell cell) {
-        return fileReaderUtils.getCellValue(cell);
-    }
-    
     private List<RedirectResult> processUrls(List<List<String>> rawData, RedirectFinderDto dto, FileMetadata metadata, String operationId) {
         List<RedirectResult> results = new ArrayList<>();
         

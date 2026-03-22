@@ -1,7 +1,5 @@
 package com.java.service.utils;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.utils.LinkExtractorDto;
 import com.java.model.entity.ExportTemplate;
 import com.java.model.entity.ExportTemplateField;
@@ -10,7 +8,6 @@ import com.java.service.exports.FileGeneratorService;
 import com.java.util.FileReaderUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.Cell;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -30,7 +27,6 @@ import java.util.stream.Stream;
 public class LinkExtractorService {
 
     private final FileGeneratorService fileGeneratorService;
-    private final ObjectMapper objectMapper;
     private final FileReaderUtils fileReaderUtils;
     
     // Регулярное выражение для поиска URL
@@ -48,8 +44,7 @@ public class LinkExtractorService {
         log.info("ID колонка: {}", dto.getIdColumn());
         log.info("Формат вывода: {}", dto.getOutputFormat());
         
-        // Читаем полные данные файла, а не только sampleData
-        List<List<String>> data = readFullFileData(metadata);
+        List<List<String>> data = fileReaderUtils.readAllRows(metadata);
         log.info("Прочитано строк из файла: {}", data.size());
         
         if (data.isEmpty()) {
@@ -135,106 +130,6 @@ public class LinkExtractorService {
         map.put("Найденная ссылка", result.getUrl());
         map.put("Колонка источника", result.getSourceColumn());
         return map;
-    }
-
-    /**
-     * Чтение полных данных файла
-     */
-    private List<List<String>> readFullFileData(FileMetadata metadata) throws IOException {
-        if (metadata.getTempFilePath() == null) {
-            throw new IllegalArgumentException("Файл не найден на диске");
-        }
-
-        List<List<String>> data = new ArrayList<>();
-        String filename = metadata.getOriginalFilename().toLowerCase();
-        
-        if (filename.endsWith(".csv")) {
-            data = readCsvFile(metadata);
-        } else if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
-            data = readExcelFile(metadata);
-        } else {
-            throw new IllegalArgumentException("Неподдерживаемый формат файла");
-        }
-
-        log.info("Прочитано {} строк из файла {}", data.size(), metadata.getOriginalFilename());
-        return data;
-    }
-
-    /**
-     * Чтение CSV файла
-     */
-    private List<List<String>> readCsvFile(FileMetadata metadata) throws IOException {
-        List<List<String>> data = new ArrayList<>();
-        
-        try (Reader reader = Files.newBufferedReader(java.nio.file.Paths.get(metadata.getTempFilePath()), 
-                java.nio.charset.Charset.forName(metadata.getDetectedEncoding() != null ? metadata.getDetectedEncoding() : "UTF-8"));
-             com.opencsv.CSVReader csvReader = new com.opencsv.CSVReaderBuilder(reader)
-                .withCSVParser(new com.opencsv.CSVParserBuilder()
-                    .withSeparator(metadata.getDetectedDelimiter() != null ? metadata.getDetectedDelimiter().charAt(0) : ';')
-                    .withQuoteChar(metadata.getDetectedQuoteChar() != null ? metadata.getDetectedQuoteChar().charAt(0) : '"')
-                    .build())
-                .build()) {
-
-            String[] line;
-            boolean isFirstLine = true;
-            try {
-                while ((line = csvReader.readNext()) != null) {
-                    if (isFirstLine && line.length == 1 && (line[0] == null || line[0].trim().isEmpty())) {
-                        isFirstLine = false;
-                        continue; // Пропускаем пустую первую строку
-                    }
-                    isFirstLine = false;
-                    data.add(Arrays.asList(line));
-                }
-            } catch (com.opencsv.exceptions.CsvValidationException e) {
-                throw new IOException("Ошибка чтения CSV файла: " + e.getMessage(), e);
-            }
-        }
-        
-        return data;
-    }
-
-    /**
-     * Чтение Excel файла
-     */
-    private List<List<String>> readExcelFile(FileMetadata metadata) throws IOException {
-        List<List<String>> data = new ArrayList<>();
-
-        try (FileInputStream fis = new FileInputStream(metadata.getTempFilePath());
-             org.apache.poi.ss.usermodel.Workbook workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(fis)) {
-
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0);
-
-            for (org.apache.poi.ss.usermodel.Row row : sheet) {
-                List<String> rowData = new ArrayList<>();
-                for (Cell cell : row) {
-                    rowData.add(getCellValue(cell));
-                }
-                data.add(rowData);
-            }
-        }
-
-        return data;
-    }
-
-    private String getCellValue(Cell cell) {
-        return fileReaderUtils.getCellValue(cell);
-    }
-
-    /**
-     * Парсинг данных из JSON (для preview)
-     */
-    private List<List<String>> parseSampleData(String dataJson) {
-        if (dataJson == null || dataJson.isEmpty()) {
-            return new ArrayList<>();
-        }
-        
-        try {
-            return objectMapper.readValue(dataJson, new TypeReference<List<List<String>>>() {});
-        } catch (Exception e) {
-            log.error("Ошибка парсинга данных из JSON", e);
-            return new ArrayList<>();
-        }
     }
 
     /**

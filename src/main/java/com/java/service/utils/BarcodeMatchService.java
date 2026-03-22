@@ -1,16 +1,11 @@
 package com.java.service.utils;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.utils.BarcodeMatchDto;
 import com.java.model.entity.FileMetadata;
+import com.java.util.FileReaderUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
-
-import java.io.FileInputStream;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -27,15 +22,14 @@ import java.util.stream.Collectors;
 @Slf4j
 public class BarcodeMatchService {
 
-    private final ObjectMapper objectMapper;
+    private final FileReaderUtils fileReaderUtils;
 
     /**
      * Обработка сопоставления штрихкодов
      */
     public byte[] processBarcodeMatching(FileMetadata metadata, BarcodeMatchDto dto) throws IOException {
 
-        // Читаем ВЕСЬ файл из tempFilePath, а не только sampleData
-        List<List<String>> data = readFullFile(metadata);
+        List<List<String>> data = fileReaderUtils.readFullFileData(metadata);
 
         if (data.isEmpty()) {
             throw new IllegalArgumentException("Файл не содержит данных для обработки");
@@ -56,141 +50,6 @@ public class BarcodeMatchService {
             return generateCsvFile(results, dto);
         } else {
             return generateExcelFile(results);
-        }
-    }
-
-    /**
-     * Чтение всего файла из tempFilePath
-     */
-    private List<List<String>> readFullFile(FileMetadata metadata) throws IOException {
-        String tempFilePath = metadata.getTempFilePath();
-        String fileFormat = metadata.getFileFormat();
-
-        if (tempFilePath == null || tempFilePath.isEmpty()) {
-            throw new IllegalArgumentException("Временный файл не найден");
-        }
-
-        java.nio.file.Path path = java.nio.file.Paths.get(tempFilePath);
-        if (!java.nio.file.Files.exists(path)) {
-            throw new IllegalArgumentException("Файл не существует: " + tempFilePath);
-        }
-
-        if ("XLSX".equalsIgnoreCase(fileFormat) || "XLS".equalsIgnoreCase(fileFormat)) {
-            return readExcelFile(path);
-        } else if ("CSV".equalsIgnoreCase(fileFormat)) {
-            return readCsvFile(path, metadata);
-        } else {
-            throw new IllegalArgumentException("Неподдерживаемый формат файла: " + fileFormat);
-        }
-    }
-
-    /**
-     * Чтение Excel файла
-     */
-    private List<List<String>> readExcelFile(java.nio.file.Path path) throws IOException {
-        List<List<String>> data = new ArrayList<>();
-
-        try (java.io.FileInputStream fis = new java.io.FileInputStream(path.toFile());
-             Workbook workbook = WorkbookFactory.create(fis)) {
-
-            Sheet sheet = workbook.getSheetAt(0);
-            DataFormatter formatter = new DataFormatter();
-            boolean isFirstRow = true;
-
-            for (Row row : sheet) {
-                // Пропускаем первую строку если это заголовок
-                if (isFirstRow) {
-                    isFirstRow = false;
-                    continue;
-                }
-
-                List<String> rowData = new ArrayList<>();
-                for (int i = 0; i < row.getLastCellNum(); i++) {
-                    Cell cell = row.getCell(i);
-                    String value = "";
-                    if (cell != null) {
-                        switch (cell.getCellType()) {
-                            case STRING:
-                                value = cell.getStringCellValue();
-                                break;
-                            case NUMERIC:
-                                // Читаем как целое число для штрихкодов
-                                value = String.valueOf((long) cell.getNumericCellValue());
-                                break;
-                            default:
-                                // Fallback на DataFormatter для других типов
-                                value = formatter.formatCellValue(cell);
-                        }
-                    }
-                    rowData.add(value);
-                }
-                data.add(rowData);
-            }
-        }
-
-        log.debug("Read {} rows from Excel file: {}", data.size(), path.getFileName());
-        return data;
-    }
-
-    /**
-     * Чтение CSV файла
-     */
-    private List<List<String>> readCsvFile(java.nio.file.Path path, FileMetadata metadata) throws IOException {
-        List<List<String>> data = new ArrayList<>();
-        String encoding = metadata.getDetectedEncoding() != null ? metadata.getDetectedEncoding() : "UTF-8";
-        String delimiter = metadata.getDetectedDelimiter() != null ? metadata.getDetectedDelimiter() : ";";
-
-        try (java.io.BufferedReader reader = java.nio.file.Files.newBufferedReader(path,
-                java.nio.charset.Charset.forName(encoding))) {
-
-            String line;
-            boolean isFirstRow = true;
-
-            while ((line = reader.readLine()) != null) {
-                // Пропускаем первую строку если это заголовок
-                if (isFirstRow) {
-                    isFirstRow = false;
-                    continue;
-                }
-
-                String[] values = line.split(delimiter);
-                data.add(Arrays.asList(values));
-            }
-        }
-
-        log.debug("Read {} rows from CSV file: {}", data.size(), path.getFileName());
-        return data;
-    }
-
-    /**
-     * Парсинг заголовков из JSON
-     */
-    private List<String> parseHeaders(String headersJson) {
-        if (headersJson == null || headersJson.isEmpty()) {
-            return new ArrayList<>();
-        }
-        
-        try {
-            return objectMapper.readValue(headersJson, new TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            log.error("Ошибка парсинга заголовков из JSON", e);
-            return new ArrayList<>();
-        }
-    }
-
-    /**
-     * Парсинг данных из JSON
-     */
-    private List<List<String>> parseSampleData(String dataJson) {
-        if (dataJson == null || dataJson.isEmpty()) {
-            return new ArrayList<>();
-        }
-        
-        try {
-            return objectMapper.readValue(dataJson, new TypeReference<List<List<String>>>() {});
-        } catch (Exception e) {
-            log.error("Ошибка парсинга данных из JSON", e);
-            return new ArrayList<>();
         }
     }
 
