@@ -48,6 +48,7 @@
                     <form id="exportForm" th:action="@{/maintenance/config/export}" method="post">
                         <div class="section-checkbox mb-3">
                             <div class="form-check">
+                                <input type="hidden" name="_includeClients" value="on">
                                 <input class="form-check-input" type="checkbox" name="includeClients"
                                        id="expClients" checked>
                                 <label class="form-check-label" for="expClients">
@@ -56,16 +57,19 @@
                             </div>
                             <div class="sub-option">
                                 <div class="form-check">
+                                    <input type="hidden" name="_includeImportTemplates" value="on">
                                     <input class="form-check-input" type="checkbox" name="includeImportTemplates"
                                            id="expImport" checked>
                                     <label class="form-check-label" for="expImport">Шаблоны импорта</label>
                                 </div>
                                 <div class="form-check">
+                                    <input type="hidden" name="_includeExportTemplates" value="on">
                                     <input class="form-check-input" type="checkbox" name="includeExportTemplates"
                                            id="expExport" checked>
                                     <label class="form-check-label" for="expExport">Шаблоны экспорта</label>
                                 </div>
                                 <div class="form-check">
+                                    <input type="hidden" name="_includeZoomosShops" value="on">
                                     <input class="form-check-input" type="checkbox" name="includeZoomosShops"
                                            id="expShops" checked>
                                     <label class="form-check-label" for="expShops">
@@ -74,6 +78,7 @@
                                 </div>
                                 <div class="sub-option">
                                     <div class="form-check">
+                                        <input type="hidden" name="_includeSchedules" value="on">
                                         <input class="form-check-input" type="checkbox" name="includeSchedules"
                                                id="expSchedules" checked>
                                         <label class="form-check-label" for="expSchedules">Расписания проверок</label>
@@ -83,6 +88,7 @@
                         </div>
                         <div class="section-checkbox mb-3">
                             <div class="form-check">
+                                <input type="hidden" name="_includeKnownSites" value="on">
                                 <input class="form-check-input" type="checkbox" name="includeKnownSites"
                                        id="expSites" checked>
                                 <label class="form-check-label" for="expSites">
@@ -92,6 +98,7 @@
                         </div>
                         <div class="section-checkbox mb-4">
                             <div class="form-check">
+                                <input type="hidden" name="_includeCityDirectory" value="on">
                                 <input class="form-check-input" type="checkbox" name="includeCityDirectory"
                                        id="expCities" checked>
                                 <label class="form-check-label" for="expCities">
