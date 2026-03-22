@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/main :: html(
+      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
         'Доступ запрещен - Обработка файлов',
         ~{::section},
         ~{::script},

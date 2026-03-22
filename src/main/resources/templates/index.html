@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/main :: html(
-        'Дашборд - Обработка файлов',
+      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
+        'Дашборд — Zoomos v4',
         ~{::section},
         ~{::script},
         ~{::style},
@@ -9,47 +9,12 @@
         ~{::.page-actions}
       )}">
 <head>
-    <title>Дашборд - Обработка файлов</title>
+    <title>Дашборд — Zoomos v4</title>
     <style>
-        /* Компактные карточки */
-        .card {
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            border-radius: 8px;
-        }
-
-        /* Вертикальный разделитель для статистики */
-        .vr {
-            display: inline-block;
-            align-self: stretch;
-            width: 1px;
-            min-height: 1em;
-            background-color: currentColor;
-            opacity: 0.25;
-        }
-
-        /* Компактная таблица */
-        .operations-table {
-            font-size: 0.85rem;
-        }
-        .operations-table th,
-        .operations-table td {
-            padding: 0.5rem;
-            vertical-align: middle;
-        }
-        .status-badge {
-            font-size: 0.8rem;
-        }
-        .system-info {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        .file-size {
-            font-family: 'Courier New', monospace;
-            font-size: 0.85rem;
-        }
-        .progress-compact {
-            height: 15px;
-        }
+        .stat-card { transition: box-shadow 0.15s ease; }
+        .stat-card:hover { box-shadow: 0 4px 16px rgba(32,107,196,0.12) !important; }
+        .operations-table { font-size: 0.875rem; }
+        .progress { height: 6px; border-radius: 3px; }
         .auto-update-indicator {
             position: fixed;
             top: 70px;
@@ -57,9 +22,7 @@
             z-index: 1000;
             transition: opacity 0.3s ease;
         }
-        .pulse {
-            animation: pulse 1s infinite;
-        }
+        .pulse { animation: pulse 1s infinite; }
         @keyframes pulse {
             0% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -78,94 +41,122 @@
 <section>
     <!-- Индикатор автообновления -->
     <div class="auto-update-indicator">
-        <span class="badge bg-success" id="updateIndicator" style="display: none;">
+        <span class="badge bg-green text-white" id="updateIndicator" style="display:none;">
             <i class="fas fa-wifi me-1"></i>Обновлено
         </span>
     </div>
-    <!-- Сверхкомпактная статистика в одну строку -->
-    <div class="card mb-3" id="statsCards">
-        <div class="card-body py-2 px-3">
-            <div class="row g-3 align-items-center small">
-                <!-- Операции -->
-                <div class="col-auto">
-                    <i class="fas fa-chart-line text-muted me-1"></i>
-                    <span class="text-muted">Операции:</span>
-                    <strong class="text-primary mx-1" id="totalOperations" th:text="${dashboardStats.totalOperations}">0</strong>
-                    <span class="text-success mx-1"><span id="completedOperations" th:text="${dashboardStats.completedOperations}">0</span>✓</span>
-                    <span class="text-warning mx-1"><span id="activeOperations" th:text="${dashboardStats.activeOperations}">0</span>⚙</span>
-                    <span class="text-danger mx-1"><span id="failedOperations" th:text="${dashboardStats.failedOperations}">0</span>✗</span>
-                </div>
 
-                <!-- Разделитель -->
-                <div class="col-auto">
-                    <div class="vr" style="height: 24px;"></div>
-                </div>
-
-                <!-- Клиенты -->
-                <div class="col-auto">
-                    <i class="fas fa-users text-muted me-1"></i>
-                    <span class="text-muted">Клиенты:</span>
-                    <strong id="totalClients" th:text="${dashboardStats.totalClients}">0</strong>
-                </div>
-
-                <!-- Разделитель -->
-                <div class="col-auto">
-                    <div class="vr" style="height: 24px;"></div>
-                </div>
-
-                <!-- Дисковое пространство -->
-                <div class="col-auto">
-                    <i class="fas fa-hdd text-muted me-1"></i>
-                    <span class="text-muted">Диск:</span>
-                    <strong id="totalSize" th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</strong>
-                    <span class="text-muted small ms-2">
-                        (<i class="fas fa-folder text-warning"></i> <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0</span>
-                        / <i class="fas fa-download text-info"></i> <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0</span>
-                        / <i class="fas fa-upload text-success"></i> <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0</span>)
-                    </span>
-                </div>
-
-                <!-- Системная информация (collapse) -->
-                <div class="col-auto ms-auto" th:if="${dashboardStats.systemInfo}">
-                    <button class="btn btn-sm btn-link text-muted p-0" type="button" data-bs-toggle="collapse"
-                            data-bs-target="#systemInfoCollapse" title="Системная информация">
-                        <i class="fas fa-server"></i>
-                    </button>
+    <!-- Stat Cards -->
+    <div class="row row-deck row-cards mb-3" id="statsCards">
+        <!-- Операции -->
+        <div class="col-sm-6 col-lg-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="subheader">Всего операций</div>
+                    </div>
+                    <div class="h1 mb-3" id="totalOperations" th:text="${dashboardStats.totalOperations}">0</div>
+                    <div class="d-flex gap-3">
+                        <span class="text-green d-flex align-items-center gap-1">
+                            <i class="fas fa-check-circle fa-sm"></i>
+                            <span id="completedOperations" th:text="${dashboardStats.completedOperations}">0</span>
+                        </span>
+                        <span class="text-yellow d-flex align-items-center gap-1">
+                            <i class="fas fa-cog fa-sm"></i>
+                            <span id="activeOperations" th:text="${dashboardStats.activeOperations}">0</span>
+                        </span>
+                        <span class="text-red d-flex align-items-center gap-1">
+                            <i class="fas fa-times-circle fa-sm"></i>
+                            <span id="failedOperations" th:text="${dashboardStats.failedOperations}">0</span>
+                        </span>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Скрываемая системная информация -->
-            <div class="collapse mt-2 pt-2 border-top" id="systemInfoCollapse" th:if="${dashboardStats.systemInfo}">
-                <div class="row g-3 small text-muted">
-                    <div class="col-auto">
-                        <strong>Java:</strong> <span th:text="${dashboardStats.systemInfo.javaVersion}">17</span>
+        <!-- Клиенты -->
+        <div class="col-sm-6 col-lg-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="subheader">Клиенты</div>
+                        <div class="ms-auto">
+                            <a th:href="@{/clients}" class="btn btn-sm btn-outline-primary">
+                                Все <i class="fas fa-arrow-right ms-1 fa-xs"></i>
+                            </a>
+                        </div>
                     </div>
-                    <div class="col-auto">
-                        <strong>ОЗУ ПК:</strong>
-                        <span class="text-danger" id="systemUsedMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemUsedMemoryGb, 1, 2)}">8.00</span> /
-                        <span id="systemTotalMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemTotalMemoryGb, 1, 2)}">16.00</span> ГБ
-                        <span class="text-muted">(свободно: <span id="systemFreeMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemFreeMemoryGb, 1, 2)}">8.00</span> ГБ)</span>
+                    <div class="h1 mb-0" id="totalClients" th:text="${dashboardStats.totalClients}">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Дисковое пространство -->
+        <div class="col-sm-6 col-lg-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="subheader mb-3">Использование диска</div>
+                    <div class="h1 mb-3" id="totalSize" th:text="${dashboardStats.totalFileSizeFormatted}">0 МБ</div>
+                    <div class="d-flex gap-2 flex-wrap" style="font-size:0.8rem;">
+                        <span class="text-muted d-flex align-items-center gap-1">
+                            <i class="fas fa-folder text-yellow fa-sm"></i>Temp:
+                            <span id="tempSize" th:text="${dashboardStats.tempDirSizeFormatted}">0</span>
+                        </span>
+                        <span class="text-muted d-flex align-items-center gap-1">
+                            <i class="fas fa-download text-blue fa-sm"></i>
+                            <span id="importSize" th:text="${dashboardStats.importDirSizeFormatted}">0</span>
+                        </span>
+                        <span class="text-muted d-flex align-items-center gap-1">
+                            <i class="fas fa-upload text-green fa-sm"></i>
+                            <span id="exportSize" th:text="${dashboardStats.exportDirSizeFormatted}">0</span>
+                        </span>
                     </div>
-                    <div class="col-auto">
-                        <strong>JVM Heap:</strong>
-                        <span id="jvmUsedMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.jvmUsedMemoryMb, 1, 2)}">128.00</span> /
-                        <span id="jvmTotalMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.jvmTotalMemoryMb, 1, 2)}">256.00</span> МБ
+                </div>
+            </div>
+        </div>
+
+        <!-- Системная информация -->
+        <div class="col-sm-6 col-lg-3" th:if="${dashboardStats.systemInfo}">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="subheader mb-3">Система</div>
+                    <div class="d-flex flex-column gap-1" style="font-size:0.85rem;">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Java</span>
+                            <span th:text="${dashboardStats.systemInfo.javaVersion}">17</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">ОЗУ (своб.)</span>
+                            <span>
+                                <span id="systemFreeMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemFreeMemoryGb, 1, 2)}">0</span>
+                                / <span id="systemTotalMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemTotalMemoryGb, 1, 2)}">0</span> ГБ
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">JVM Heap</span>
+                            <span>
+                                <span id="jvmUsedMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.jvmUsedMemoryMb, 1, 2)}">0</span>
+                                / <span id="jvmTotalMemory" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.jvmTotalMemoryMb, 1, 2)}">0</span> МБ
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Uptime</span>
+                            <span id="uptimeDisplay" th:text="${dashboardStats.systemInfo.uptimeMinutes} + ' мин'">0 мин</span>
+                        </div>
                     </div>
-                    <div class="col-auto">
-                        <strong>Uptime:</strong>
-                        <span id="uptimeDisplay" th:text="${dashboardStats.systemInfo.uptimeMinutes} + ' мин'">120 мин</span>
-                    </div>
+                    <!-- скрытые элементы для JS-обновления -->
+                    <span id="systemUsedMemory" class="d-none" th:text="${#numbers.formatDecimal(dashboardStats.systemInfo.systemUsedMemoryGb, 1, 2)}">0</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Компактная панель фильтров -->
+    <!-- Фильтры -->
     <div class="card mb-3">
-        <div class="card-body py-2 px-3">
+        <div class="card-body py-2">
             <form id="filterForm" class="row g-2 align-items-end">
                 <div class="col-md-3">
-                    <label for="clientFilter" class="form-label mb-1 small text-muted">Клиент</label>
+                    <label for="clientFilter" class="form-label mb-1 small">Клиент</label>
                     <select class="form-select form-select-sm" id="clientFilter" name="clientId">
                         <option value="">Все клиенты</option>
                         <option th:each="client : ${clients}"
@@ -174,7 +165,7 @@
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <label for="operationTypeFilter" class="form-label mb-1 small text-muted">Тип</label>
+                    <label for="operationTypeFilter" class="form-label mb-1 small">Тип</label>
                     <select class="form-select form-select-sm" id="operationTypeFilter" name="operationType">
                         <option value="">Все типы</option>
                         <option th:each="type : ${operationTypes}"
@@ -185,7 +176,7 @@
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <label for="statusFilter" class="form-label mb-1 small text-muted">Статус</label>
+                    <label for="statusFilter" class="form-label mb-1 small">Статус</label>
                     <select class="form-select form-select-sm" id="statusFilter" name="status">
                         <option value="">Все статусы</option>
                         <option th:each="status : ${operationStatuses}"
@@ -197,15 +188,15 @@
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <label for="dateFromFilter" class="form-label mb-1 small text-muted">Дата с</label>
+                    <label for="dateFromFilter" class="form-label mb-1 small">Дата с</label>
                     <input type="date" class="form-control form-control-sm" id="dateFromFilter" name="dateFrom">
                 </div>
                 <div class="col-md-2">
-                    <label for="dateToFilter" class="form-label mb-1 small text-muted">Дата по</label>
+                    <label for="dateToFilter" class="form-label mb-1 small">Дата по</label>
                     <input type="date" class="form-control form-control-sm" id="dateToFilter" name="dateTo">
                 </div>
                 <div class="col-md-1">
-                    <button type="button" class="btn btn-primary btn-sm w-100" onclick="applyFilters()" title="Применить фильтры">
+                    <button type="button" class="btn btn-primary btn-sm w-100" onclick="applyFilters()" title="Применить">
                         <i class="fas fa-filter"></i>
                     </button>
                 </div>
@@ -215,61 +206,57 @@
 
     <!-- Таблица операций -->
     <div class="card">
-        <div class="card-header py-2 px-3" style="background-color: #f8f9fa;">
-            <div class="d-flex justify-content-between align-items-center">
-                <h6 class="card-title mb-0 small">
-                    <i class="fas fa-list me-2"></i>Последние операции
-                </h6>
-                <div class="d-flex align-items-center gap-2">
-                    <button type="button" id="refreshButton" class="btn btn-sm btn-outline-primary" onclick="refreshDashboard()">
-                        <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Обновить
-                    </button>
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
-                        <label class="form-check-label small" for="autoRefresh">
-                            Автообновление
-                        </label>
-                    </div>
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-list me-2 text-muted"></i>Последние операции
+            </h3>
+            <div class="card-options">
+                <div class="form-check form-switch me-3 mb-0 d-flex align-items-center">
+                    <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                    <label class="form-check-label ms-2 small" for="autoRefresh">Авто</label>
                 </div>
+                <button type="button" id="refreshButton" class="btn btn-sm btn-outline-primary" onclick="refreshDashboard()">
+                    <i class="fas fa-sync-alt me-1" id="refreshIcon"></i>Обновить
+                </button>
             </div>
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover table-sm operations-table mb-0" id="operationsTable">
-                    <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Клиент</th>
-                        <th>Тип</th>
-                        <th>Файл</th>
-                        <th>Статус</th>
-                        <th>Прогресс</th>
-                        <th>Размер</th>
-                        <th>Начало</th>
-                        <th>Действия</th>
-                    </tr>
-                    </thead>
-                    <tbody id="operationsTableBody">
-                    <!-- Данные загружаются через AJAX -->
-                    </tbody>
-                </table>
+        <div class="table-responsive">
+            <table class="table table-vcenter table-hover card-table operations-table" id="operationsTable">
+                <thead>
+                <tr>
+                    <th class="w-1">ID</th>
+                    <th>Клиент</th>
+                    <th>Тип</th>
+                    <th>Файл</th>
+                    <th>Статус</th>
+                    <th>Прогресс</th>
+                    <th>Размер</th>
+                    <th>Начало</th>
+                    <th class="w-1"></th>
+                </tr>
+                </thead>
+                <tbody id="operationsTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Пагинация -->
+        <div class="card-footer d-flex align-items-center" id="paginationContainer" style="display:none!important;"></div>
+
+        <!-- Состояние загрузки -->
+        <div id="loadingState" class="card-body text-center py-4" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
             </div>
+        </div>
 
-            <!-- Пагинация -->
-            <nav id="paginationContainer" class="mt-3"></nav>
-
-            <!-- Состояние загрузки -->
-            <div id="loadingState" class="text-center py-3" style="display: none;">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Загрузка...</span>
+        <!-- Пустое состояние -->
+        <div id="emptyState" class="card-body text-center py-5" style="display: none;">
+            <div class="empty">
+                <div class="empty-icon">
+                    <i class="fas fa-inbox fa-3x text-muted"></i>
                 </div>
-            </div>
-
-            <!-- Пустое состояние -->
-            <div id="emptyState" class="text-center py-4" style="display: none;">
-                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                <h5>Нет операций</h5>
-                <p class="text-muted">Попробуйте изменить фильтры или создать новую операцию</p>
+                <p class="empty-title mt-3">Нет операций</p>
+                <p class="empty-subtitle text-muted">Попробуйте изменить фильтры или создайте новую операцию</p>
             </div>
         </div>
     </div>
@@ -283,20 +270,18 @@
     let currentPage = 0;
     let currentFilters = {};
     let autoRefreshEnabled = true;
-    const activeSubscriptions = {}; // operationId → STOMP subscription
-    let pendingSubscriptions = [];  // операции, ожидающие подключения WS
+    const activeSubscriptions = {};
+    let pendingSubscriptions = [];
     let isLoading = false;
 
     document.addEventListener('DOMContentLoaded', function() {
         connectWebSocket();
         loadOperations();
 
-        // Обработчик автообновления
         document.getElementById('autoRefresh').addEventListener('change', function() {
             autoRefreshEnabled = this.checked;
         });
 
-        // Установка текущей даты в фильтр "до"
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('dateToFilter').value = today;
     });
@@ -304,11 +289,7 @@
     function connectWebSocket() {
         const socket = new SockJS('/ws');
         stompClient = Stomp.over(socket);
-
         stompClient.connect({}, function(frame) {
-            console.log('Connected to WebSocket for dashboard');
-
-            // Подписываемся на обновления статистики
             stompClient.subscribe('/topic/dashboard-stats', function(message) {
                 if (autoRefreshEnabled) {
                     const stats = JSON.parse(message.body);
@@ -316,26 +297,18 @@
                     showUpdateIndicator();
                 }
             });
-
-            // Подписываемся на операции, которые ждали подключения
             pendingSubscriptions.forEach(subscribeToOperationProgress);
             pendingSubscriptions = [];
-
         }, function(error) {
-            console.error('WebSocket connection error:', error);
-            // Сбрасываем подписки — stompClient невалиден после ошибки соединения
             Object.keys(activeSubscriptions).forEach(id => delete activeSubscriptions[id]);
             setTimeout(connectWebSocket, 5000);
         });
     }
 
-    // Подписаться на прогресс конкретной операции
     function subscribeToOperationProgress(op) {
-        if (activeSubscriptions[op.id]) return; // уже подписаны
+        if (activeSubscriptions[op.id]) return;
         if (!stompClient || !stompClient.connected) {
-            if (!pendingSubscriptions.some(p => p.id === op.id)) {
-                pendingSubscriptions.push(op);
-            }
+            if (!pendingSubscriptions.some(p => p.id === op.id)) pendingSubscriptions.push(op);
             return;
         }
         const topic = op.operationType === 'EXPORT'
@@ -345,13 +318,10 @@
             try {
                 const progress = JSON.parse(message.body);
                 updateRowProgress(op.id, progress);
-            } catch (e) {
-                console.error('Ошибка обновления прогресса строки:', e);
-            }
+            } catch (e) {}
         });
     }
 
-    // Обновить прогресс-бар конкретной строки в таблице
     function updateRowProgress(operationId, progress) {
         const row = document.querySelector('tr[data-op-id="' + operationId + '"]');
         if (!row) return;
@@ -385,11 +355,8 @@
 
             if (stats.systemInfo) {
                 const uptimeEl = document.getElementById('uptimeDisplay');
-                if (uptimeEl) {
-                    uptimeEl.textContent = stats.systemInfo.uptimeMinutes + ' мин';
-                }
+                if (uptimeEl) uptimeEl.textContent = stats.systemInfo.uptimeMinutes + ' мин';
 
-                // Обновление системной памяти ПК в ГБ с точностью до сотых
                 const systemUsedEl = document.getElementById('systemUsedMemory');
                 const systemTotalEl = document.getElementById('systemTotalMemory');
                 const systemFreeEl = document.getElementById('systemFreeMemory');
@@ -397,38 +364,27 @@
                 if (systemTotalEl) systemTotalEl.textContent = (stats.systemInfo.systemTotalMemoryGb || 0).toFixed(2);
                 if (systemFreeEl) systemFreeEl.textContent = (stats.systemInfo.systemFreeMemoryGb || 0).toFixed(2);
 
-                // Обновление JVM Heap памяти в МБ с точностью до сотых
                 const jvmUsedEl = document.getElementById('jvmUsedMemory');
                 const jvmTotalEl = document.getElementById('jvmTotalMemory');
                 if (jvmUsedEl) jvmUsedEl.textContent = (stats.systemInfo.jvmUsedMemoryMb || 0).toFixed(2);
                 if (jvmTotalEl) jvmTotalEl.textContent = (stats.systemInfo.jvmTotalMemoryMb || 0).toFixed(2);
             }
 
-            // При появлении новых активных операций — перезагружаем таблицу (раз в 30 сек, fallback)
             if (!skipTableRefresh && autoRefreshEnabled && (stats.activeOperations || 0) > 0
                     && Object.keys(activeSubscriptions).length === 0) {
                 loadOperations(currentPage);
             }
-        } catch (error) {
-            console.error('Ошибка обновления статистики:', error);
-        }
+        } catch (error) {}
     }
 
     function showUpdateIndicator() {
         const indicator = document.getElementById('updateIndicator');
-        if (!indicator) {
-            console.warn('Update indicator element not found');
-            return;
-        }
-
+        if (!indicator) return;
         indicator.style.display = 'block';
         indicator.classList.add('pulse');
-
         setTimeout(() => {
             indicator.classList.remove('pulse');
-            setTimeout(() => {
-                indicator.style.display = 'none';
-            }, 500);
+            setTimeout(() => { indicator.style.display = 'none'; }, 500);
         }, 2000);
     }
 
@@ -436,14 +392,7 @@
         currentPage = 0;
         const formData = new FormData(document.getElementById('filterForm'));
         currentFilters = Object.fromEntries(formData.entries());
-
-        // Удаляем пустые значения
-        Object.keys(currentFilters).forEach(key => {
-            if (!currentFilters[key]) {
-                delete currentFilters[key];
-            }
-        });
-
+        Object.keys(currentFilters).forEach(key => { if (!currentFilters[key]) delete currentFilters[key]; });
         loadOperations();
     }
 
@@ -452,40 +401,23 @@
         isLoading = true;
         showLoading(true);
 
-        const params = new URLSearchParams({
-            page: page,
-            size: 20,
-            ...currentFilters
-        });
-
+        const params = new URLSearchParams({ page, size: 20, ...currentFilters });
         fetch('/api/dashboard/operations?' + params.toString())
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Ошибка загрузки операций');
-                }
-                return response.json();
-            })
+            .then(r => { if (!r.ok) throw new Error('Ошибка'); return r.json(); })
             .then(pageData => {
                 currentPage = pageData.number;
                 displayOperations(pageData.content);
                 updatePagination(pageData);
                 showLoading(false);
             })
-            .catch(error => {
-                console.error('Ошибка загрузки операций:', error);
-                showError();
-                showLoading(false);
-            })
-            .finally(() => {
-                isLoading = false;
-            });
+            .catch(() => { showError(); showLoading(false); })
+            .finally(() => { isLoading = false; });
     }
 
     function displayOperations(operations) {
         const tbody = document.getElementById('operationsTableBody');
         const emptyState = document.getElementById('emptyState');
 
-        // Отписываемся от операций вне текущего набора (включая пустой список)
         const currentIds = new Set((operations || []).map(op => op.id));
         Object.keys(activeSubscriptions).forEach(id => {
             if (!currentIds.has(Number(id))) {
@@ -504,45 +436,43 @@
 
         tbody.innerHTML = operations.map(op => `
             <tr class="operation-row" data-op-id="${op.id}">
-                <td>${op.id}</td>
+                <td class="text-muted">${op.id}</td>
                 <td>
-                    <a href="/clients/${op.clientId}" class="text-decoration-none">
+                    <a href="/clients/${op.clientId}" class="text-decoration-none fw-medium">
                         ${escapeHtml(op.clientName)}
                     </a>
                 </td>
                 <td>
-                    <i class="fas fa-${getOperationIcon(op.operationType)} me-1"></i>
-                    ${escapeHtml(op.operationTypeDisplay)}
+                    <span class="text-muted">
+                        <i class="fas fa-${getOperationIcon(op.operationType)} me-1"></i>
+                        ${escapeHtml(op.operationTypeDisplay)}
+                    </span>
                 </td>
-                <td class="text-truncate" style="max-width: 200px;" title="${escapeHtml(op.fileName)}">
+                <td class="text-truncate text-muted" style="max-width:200px;" title="${escapeHtml(op.fileName)}">
                     ${escapeHtml(op.fileName)}
                 </td>
                 <td>
-                    <span class="badge status-badge ${getStatusClass(op.status)}">
+                    <span class="badge ${getStatusClass(op.status)}">
                         ${escapeHtml(op.statusDisplay)}
                     </span>
                 </td>
-                <td>
+                <td style="min-width:100px;">
                     ${op.status === 'PROCESSING'
-            ? `<div class="progress progress-compact">
-                               <div class="progress-bar progress-bar-striped progress-bar-animated"
-                                    style="width: ${op.processingProgress || 0}%"
-                                    title="${op.processingProgress || 0}%">
-                               </div>
+                        ? `<div class="progress">
+                               <div class="progress-bar" style="width:${op.processingProgress || 0}%"
+                                    title="${op.processingProgress || 0}%"></div>
                            </div>`
-            : (op.processingProgress !== null ? op.processingProgress + '%' : '-')}
+                        : `<span class="text-muted small">${op.processingProgress !== null ? op.processingProgress + '%' : '—'}</span>`}
                 </td>
-                <td class="file-size">${escapeHtml(op.fileSizeFormatted) || '-'}</td>
-                <td>${formatDateTime(op.startedAt)}</td>
+                <td class="text-muted small font-monospace">${escapeHtml(op.fileSizeFormatted) || '—'}</td>
+                <td class="text-muted small text-nowrap">${formatDateTime(op.startedAt)}</td>
                 <td>
-                    <div class="btn-group btn-group-sm">
+                    <div class="btn-list flex-nowrap">
                         <a href="${op.operationType === 'EXPORT' ? '/export/status/' + op.id : '/import/status/' + op.id}"
-                           class="btn btn-outline-primary btn-sm"
-                           title="Просмотр деталей">
+                           class="btn btn-sm btn-ghost-primary" title="Подробнее">
                             <i class="fas fa-eye"></i>
                         </a>
-                        <a href="/clients/${op.clientId}" class="btn btn-outline-secondary btn-sm"
-                           title="Перейти к клиенту">
+                        <a href="/clients/${op.clientId}" class="btn btn-sm btn-ghost-secondary" title="Клиент">
                             <i class="fas fa-user"></i>
                         </a>
                     </div>
@@ -550,41 +480,35 @@
             </tr>
         `).join('');
 
-        // Подписываемся на прогресс активных операций
         operations.filter(op => op.status === 'PROCESSING').forEach(subscribeToOperationProgress);
     }
 
     function updatePagination(pageData) {
         const container = document.getElementById('paginationContainer');
         if (!pageData || pageData.totalPages <= 1) {
-            container.innerHTML = '';
+            container.style.display = 'none';
             return;
         }
-
+        container.style.display = '';
         const prevDisabled = pageData.number === 0 ? 'disabled' : '';
         const nextDisabled = pageData.number >= pageData.totalPages - 1 ? 'disabled' : '';
-
         container.innerHTML = `
-            <nav>
-                <ul class="pagination justify-content-center mb-0">
-                    <li class="page-item ${prevDisabled}">
-                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.number - 1}); return false;">
-                            <i class="fas fa-chevron-left"></i>
-                        </a>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">
-                            ${pageData.number + 1} / ${pageData.totalPages}
-                            <small class="text-muted ms-1">(${pageData.totalElements})</small>
-                        </span>
-                    </li>
-                    <li class="page-item ${nextDisabled}">
-                        <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.number + 1}); return false;">
-                            <i class="fas fa-chevron-right"></i>
-                        </a>
-                    </li>
-                </ul>
-            </nav>
+            <p class="m-0 text-muted small">
+                Страница ${pageData.number + 1} из ${pageData.totalPages}
+                <span class="ms-1">(${pageData.totalElements} записей)</span>
+            </p>
+            <ul class="pagination m-0 ms-auto">
+                <li class="page-item ${prevDisabled}">
+                    <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.number - 1}); return false;">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+                <li class="page-item ${nextDisabled}">
+                    <a class="page-link" href="#" onclick="changeOperationsPage(${pageData.number + 1}); return false;">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
         `;
     }
 
@@ -598,70 +522,42 @@
     }
 
     function showError() {
-        const tbody = document.getElementById('operationsTableBody');
-        tbody.innerHTML = `
+        document.getElementById('operationsTableBody').innerHTML = `
             <tr>
-                <td colspan="9" class="text-center text-danger">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    Ошибка загрузки данных
+                <td colspan="9" class="text-center text-danger py-4">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Ошибка загрузки данных
                 </td>
             </tr>
         `;
     }
 
     function refreshDashboard() {
-        const refreshButton = document.getElementById('refreshButton');
-        const refreshIcon = document.getElementById('refreshIcon');
-        const buttonText = refreshButton.querySelector('.btn-text') || 
-                          document.createElement('span');
-        
-        // Сохраняем исходный текст кнопки
-        const originalText = refreshButton.innerHTML;
-        
-        // Состояние загрузки
-        refreshButton.disabled = true;
-        refreshIcon.classList.add('fa-spin');
-        refreshButton.innerHTML = '<i class="fas fa-sync-alt fa-spin me-1"></i>Обновление...';
-        
-        console.log('Запуск обновления дашборда...');
+        const btn = document.getElementById('refreshButton');
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-sync-alt fa-spin me-1"></i>Обновление...';
 
-        // Обновляем статистику
         fetch('/api/dashboard/refresh')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                return response.json();
-            })
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(stats => {
-                console.log('Получена обновленная статистика:', stats);
                 updateStats(stats, true);
                 loadOperations(currentPage);
                 showUpdateIndicator();
-                if (window.notificationManager) {
-                    notificationManager.showSuccess('Данные успешно обновлены');
-                }
+                if (window.notificationManager) notificationManager.showSuccess('Данные обновлены');
             })
             .catch(err => {
-                console.error('Ошибка обновления дашборда:', err);
-                if (window.notificationManager) {
-                    notificationManager.showError('Ошибка обновления данных: ' + err.message);
-                }
+                if (window.notificationManager) notificationManager.showError('Ошибка: ' + err.message);
             })
             .finally(() => {
-                // Восстанавливаем исходное состояние кнопки
-                refreshButton.innerHTML = originalText;
-                refreshButton.disabled = false;
-                console.log('Обновление дашборда завершено');
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
             });
     }
 
-    // Вспомогательные функции
     function escapeHtml(str) {
         if (str == null) return '';
-        return String(str)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
     function getOperationIcon(type) {
@@ -675,17 +571,16 @@
 
     function getStatusClass(status) {
         switch(status) {
-            case 'PENDING': return 'bg-warning';
-            case 'PROCESSING': return 'bg-info';
-            case 'COMPLETED': return 'bg-success';
-            case 'FAILED': return 'bg-danger';
-            default: return 'bg-secondary';
+            case 'PENDING': return 'bg-warning-lt text-warning';
+            case 'PROCESSING': return 'bg-blue-lt text-blue';
+            case 'COMPLETED': return 'bg-success-lt text-success';
+            case 'FAILED': return 'bg-danger-lt text-danger';
+            default: return 'bg-secondary-lt text-secondary';
         }
     }
 
     function formatDateTime(dateTime) {
-        if (!dateTime) return '-';
-
+        if (!dateTime) return '—';
         let millis;
         if (Array.isArray(dateTime)) {
             const [y, m, d, h = 0, min = 0, s = 0] = dateTime;
@@ -698,25 +593,17 @@
         } else {
             millis = Date.parse(dateTime);
         }
-
-        if (isNaN(millis)) return '-';
-
+        if (isNaN(millis)) return '—';
         return new Date(millis).toLocaleString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
         });
     }
 
-    // Отключение WebSocket при уходе со страницы
     window.addEventListener('beforeunload', function() {
         Object.keys(activeSubscriptions).forEach(id => delete activeSubscriptions[id]);
         pendingSubscriptions = [];
-        if (stompClient && stompClient.connected) {
-            stompClient.disconnect();
-        }
+        if (stompClient && stompClient.connected) stompClient.disconnect();
     });
     /*]]>*/
 </script>

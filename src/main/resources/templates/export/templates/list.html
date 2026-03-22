@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/main :: html('Шаблоны экспорта', ~{::section}, ~{::script}, ~{::style}, 'Шаблоны экспорта', ~{::.page-actions})}">
+      th:replace="~{__${_layout ?: 'layout/main'}__ :: html('Шаблоны экспорта', ~{::section}, ~{::script}, ~{::style}, 'Шаблоны экспорта', ~{::.page-actions})}">
 <head>
     <title>Шаблоны экспорта</title>
     <style></style>

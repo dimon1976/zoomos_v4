@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org" 
-      th:replace="~{layout/main :: html(
+      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
         title='Система обслуживания',
         content=~{::content},
         scripts=~{::scripts},
@@ -75,91 +75,87 @@
         </div>
 
         <!-- Модули обслуживания -->
-        <div class="row">
+        <div class="row row-cards">
             <!-- Управление файлами -->
-            <div class="col-md-4 mb-4">
+            <div class="col-md-6 col-lg-3">
                 <div class="card maintenance-card h-100">
-                    <div class="card-body text-center">
+                    <div class="card-body text-center d-flex flex-column">
                         <div class="mb-3">
-                            <i class="fas fa-folder-open fa-3x text-primary"></i>
+                            <span class="avatar avatar-lg bg-blue-lt" style="border-radius: 50%; width: 64px; height: 64px; font-size: 1.5rem; display: inline-flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-folder-open" style="color: var(--tblr-blue)"></i>
+                            </span>
                         </div>
-                        <h5 class="card-title">Управление файлами</h5>
-                        <p class="card-text">Анализ дискового пространства, архивирование старых файлов, просмотр архивов</p>
-                        <a href="/maintenance/files" class="btn btn-primary">
-                            <i class="fas fa-arrow-right"></i> Перейти
+                        <h4 class="card-title">Управление файлами</h4>
+                        <p class="text-muted flex-grow-1">Анализ дискового пространства, архивирование старых файлов, просмотр архивов</p>
+                        <a href="/maintenance/files" class="btn btn-primary mt-auto">
+                            <i class="fas fa-arrow-right me-1"></i> Перейти
                         </a>
                     </div>
-                    <div class="card-footer bg-light">
-                        <small class="text-muted">
-                            <span class="status-indicator status-healthy"></span>
-                            Активно
-                        </small>
+                    <div class="card-footer">
+                        <span class="badge bg-success-lt">Активно</span>
                     </div>
                 </div>
             </div>
 
             <!-- Обслуживание БД -->
-            <div class="col-md-4 mb-4">
+            <div class="col-md-6 col-lg-3">
                 <div class="card maintenance-card h-100">
-                    <div class="card-body text-center">
+                    <div class="card-body text-center d-flex flex-column">
                         <div class="mb-3">
-                            <i class="fas fa-database fa-3x text-success"></i>
+                            <span class="avatar avatar-lg bg-green-lt" style="border-radius: 50%; width: 64px; height: 64px; font-size: 1.5rem; display: inline-flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-database" style="color: var(--tblr-green)"></i>
+                            </span>
                         </div>
-                        <h5 class="card-title">Обслуживание БД</h5>
-                        <p class="card-text">Очистка старых данных, VACUUM, REINDEX, анализ запросов и раздутых таблиц</p>
-                        <a href="/maintenance/database" class="btn btn-success">
-                            <i class="fas fa-arrow-right"></i> Перейти
+                        <h4 class="card-title">Обслуживание БД</h4>
+                        <p class="text-muted flex-grow-1">Очистка старых данных, VACUUM, REINDEX, анализ запросов и раздутых таблиц</p>
+                        <a href="/maintenance/database" class="btn btn-success mt-auto">
+                            <i class="fas fa-arrow-right me-1"></i> Перейти
                         </a>
                     </div>
-                    <div class="card-footer bg-light">
-                        <small class="text-muted">
-                            <span class="status-indicator status-healthy"></span>
-                            Активно
-                        </small>
+                    <div class="card-footer">
+                        <span class="badge bg-success-lt">Активно</span>
                     </div>
                 </div>
             </div>
 
             <!-- Расписание -->
-            <div class="col-md-4 mb-4">
+            <div class="col-md-6 col-lg-3">
                 <div class="card maintenance-card h-100">
-                    <div class="card-body text-center">
+                    <div class="card-body text-center d-flex flex-column">
                         <div class="mb-3">
-                            <i class="fas fa-calendar-alt fa-3x text-secondary"></i>
+                            <span class="avatar avatar-lg bg-purple-lt" style="border-radius: 50%; width: 64px; height: 64px; font-size: 1.5rem; display: inline-flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-calendar-alt" style="color: var(--tblr-purple)"></i>
+                            </span>
                         </div>
-                        <h5 class="card-title">Расписание</h5>
-                        <p class="card-text">Настройка автоматических задач: cron-выражения, включение/отключение, ручной запуск</p>
-                        <a href="/maintenance/schedule" class="btn btn-secondary">
-                            <i class="fas fa-arrow-right"></i> Перейти
+                        <h4 class="card-title">Расписание</h4>
+                        <p class="text-muted flex-grow-1">Настройка автоматических задач: cron-выражения, включение/отключение, ручной запуск</p>
+                        <a href="/maintenance/schedule" class="btn btn-purple mt-auto">
+                            <i class="fas fa-arrow-right me-1"></i> Перейти
                         </a>
                     </div>
-                    <div class="card-footer bg-light">
-                        <small class="text-muted">
-                            <span class="status-indicator status-healthy"></span>
-                            Настраивается через UI
-                        </small>
+                    <div class="card-footer">
+                        <span class="badge bg-blue-lt">Настраивается через UI</span>
                     </div>
                 </div>
             </div>
 
             <!-- Экспорт/Импорт конфигурации -->
-            <div class="col-md-4 mb-4">
+            <div class="col-md-6 col-lg-3">
                 <div class="card maintenance-card h-100">
-                    <div class="card-body text-center">
+                    <div class="card-body text-center d-flex flex-column">
                         <div class="mb-3">
-                            <i class="fas fa-exchange-alt fa-3x text-warning"></i>
+                            <span class="avatar avatar-lg bg-orange-lt" style="border-radius: 50%; width: 64px; height: 64px; font-size: 1.5rem; display: inline-flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-exchange-alt" style="color: var(--tblr-orange)"></i>
+                            </span>
                         </div>
-                        <h5 class="card-title">Экспорт/Импорт</h5>
-                        <p class="card-text">Перенос конфигурации между серверами: клиенты, шаблоны, настройки Zoomos Check, справочники</p>
-                        <a href="/maintenance/config" class="btn btn-warning">
-                            <i class="fas fa-arrow-right"></i> Перейти
+                        <h4 class="card-title">Экспорт/Импорт</h4>
+                        <p class="text-muted flex-grow-1">Перенос конфигурации между серверами: клиенты, шаблоны, настройки Zoomos Check, справочники</p>
+                        <a href="/maintenance/config" class="btn btn-warning mt-auto">
+                            <i class="fas fa-arrow-right me-1"></i> Перейти
                         </a>
                     </div>
-                    <div class="card-footer bg-light">
-                        <small class="text-muted">
-                            <span class="status-indicator status-healthy"></span>
-                            dev → prod
-                        </small>
+                    <div class="card-footer">
+                        <span class="badge bg-orange-lt">dev → prod</span>
                     </div>
                 </div>
             </div>
@@ -228,22 +224,26 @@ async function loadSystemHealth() {
         const resources = await resourcesResponse.json();
         
         // Обновляем метрики
+        const memPct = resources.memoryUsagePercent.toFixed(1);
+        const diskPct = resources.diskUsagePercent.toFixed(1);
+        const memColor = resources.memoryUsagePercent > 80 ? 'bg-danger' : resources.memoryUsagePercent > 60 ? 'bg-warning' : 'bg-success';
+        const diskColor = resources.diskUsagePercent > 80 ? 'bg-danger' : resources.diskUsagePercent > 60 ? 'bg-warning' : 'bg-primary';
         document.getElementById('systemMetrics').innerHTML = `
             <div class="col-md-3 text-center">
-                <div class="metric-value text-success">${health.systemScore.toFixed(1)}</div>
-                <small class="text-muted">Оценка системы</small>
+                <div class="h1 mb-0 text-success">${health.systemScore.toFixed(1)}</div>
+                <div class="text-muted">Оценка системы</div>
+            </div>
+            <div class="col-md-3">
+                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Память</span><strong>${memPct}%</strong></div>
+                <div class="progress progress-sm"><div class="progress-bar ${memColor}" style="width:${memPct}%"></div></div>
+            </div>
+            <div class="col-md-3">
+                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Диск</span><strong>${diskPct}%</strong></div>
+                <div class="progress progress-sm"><div class="progress-bar ${diskColor}" style="width:${diskPct}%"></div></div>
             </div>
             <div class="col-md-3 text-center">
-                <div class="metric-value text-info">${resources.memoryUsagePercent.toFixed(1)}%</div>
-                <small class="text-muted">Использование памяти</small>
-            </div>
-            <div class="col-md-3 text-center">
-                <div class="metric-value text-primary">${resources.diskUsagePercent.toFixed(1)}%</div>
-                <small class="text-muted">Использование диска</small>
-            </div>
-            <div class="col-md-3 text-center">
-                <div class="metric-value text-secondary">${health.formattedUptime}</div>
-                <small class="text-muted">Время работы</small>
+                <div class="h4 mb-0 text-secondary">${health.formattedUptime}</div>
+                <div class="text-muted">Время работы</div>
             </div>
         `;
         

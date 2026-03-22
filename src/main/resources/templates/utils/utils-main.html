@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org" 
-      th:replace="~{layout/main :: html(
+      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
         title='Утилиты',
         content=~{::content},
         scripts=~{::scripts},
@@ -14,27 +14,9 @@
 
 <th:block th:fragment="styles">
     <style>
-        .utility-card {
-            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-        }
-        .utility-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-        }
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-        }
-        .status-ready { background-color: #28a745; }
-        .status-development { background-color: #ffc107; }
-        .status-disabled { background-color: #6c757d; }
-        .utility-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
+        .utility-card { transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out; }
+        .utility-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+        .utility-icon-wrap { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; font-size: 1.6rem; }
     </style>
 </th:block>
 
@@ -95,49 +77,47 @@
         </div>
 
         <!-- Список утилит -->
-        <div class="row">
-            <div th:each="utility : ${utilities}" class="col-md-6 col-lg-3 mb-4">
+        <div class="row row-cards">
+            <div th:each="utility : ${utilities}" class="col-md-6 col-lg-3">
                 <div class="card utility-card h-100 d-flex flex-column"
-                     th:classappend="${utility.status == 'disabled'} ? 'bg-light' : ''">
+                     th:classappend="${utility.status == 'disabled'} ? 'opacity-75' : ''">
                     <div class="card-body text-center flex-grow-1 d-flex flex-column">
-                        <div class="utility-icon mb-3"
-                             th:classappend="${utility.status == 'ready'} ? 'text-success' : (${utility.status == 'development'} ? 'text-warning' : 'text-muted')">
-                            <i th:class="${utility.icon}"></i>
+                        <div th:class="${utility.status == 'ready'} ? 'utility-icon-wrap bg-success-lt' : (${utility.status == 'development'} ? 'utility-icon-wrap bg-warning-lt' : 'utility-icon-wrap bg-secondary-lt')">
+                            <i th:class="${utility.icon}"
+                               th:style="${utility.status == 'ready'} ? 'color: var(--tblr-success)' : (${utility.status == 'development'} ? 'color: var(--tblr-warning)' : 'color: var(--tblr-secondary)')"></i>
                         </div>
-                        <h5 class="card-title mb-3" th:text="${utility.title}">Название утилиты</h5>
-                        <p class="card-text flex-grow-1 mb-4" th:text="${utility.description}">Описание утилиты</p>
+                        <h4 class="card-title mb-2" th:text="${utility.title}">Название утилиты</h4>
+                        <p class="text-muted flex-grow-1 mb-4" th:text="${utility.description}">Описание утилиты</p>
                         <div class="mt-auto">
                             <div th:switch="${utility.status}">
                                 <a th:case="ready"
                                    th:href="${utility.url}"
-                                   class="btn btn-success btn-lg w-100">
-                                    <i class="fas fa-arrow-right"></i> Использовать
+                                   class="btn btn-success w-100">
+                                    <i class="fas fa-arrow-right me-1"></i> Использовать
                                 </a>
                                 <button th:case="development"
                                         type="button"
-                                        class="btn btn-warning btn-lg w-100"
+                                        class="btn btn-warning w-100"
                                         disabled>
-                                    <i class="fas fa-hammer"></i> В разработке
+                                    <i class="fas fa-hammer me-1"></i> В разработке
                                 </button>
                                 <button th:case="disabled"
                                         type="button"
-                                        class="btn btn-secondary btn-lg w-100"
+                                        class="btn btn-secondary w-100"
                                         disabled>
-                                    <i class="fas fa-ban"></i> Недоступно
+                                    <i class="fas fa-ban me-1"></i> Недоступно
                                 </button>
                             </div>
                         </div>
                     </div>
-                    <div class="card-footer bg-light text-center">
-                        <small class="text-muted">
-                            <span class="status-indicator"
-                                  th:classappend="'status-' + ${utility.status}"></span>
+                    <div class="card-footer">
+                        <div class="d-flex justify-content-center">
                             <span th:switch="${utility.status}">
-                                <span th:case="ready">Готово к использованию</span>
-                                <span th:case="development">В разработке</span>
-                                <span th:case="disabled">Отключено</span>
+                                <span th:case="ready" class="badge bg-success-lt">Готово к использованию</span>
+                                <span th:case="development" class="badge bg-warning-lt">В разработке</span>
+                                <span th:case="disabled" class="badge bg-secondary-lt">Отключено</span>
                             </span>
-                        </small>
+                        </div>
                     </div>
                 </div>
             </div>

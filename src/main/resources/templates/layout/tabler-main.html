@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" th:fragment="html(title, content, scripts, styles, pageTitle, pageActions)">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title th:text="${title}">Обработка файлов</title>
+
+    <!-- Tabler CSS (включает Bootstrap 5) -->
+    <link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link th:href="@{/css/styles.css}" rel="stylesheet">
+    <link th:href="@{/css/navigation.css}" rel="stylesheet">
+
+    <!-- Стили для уведомлений -->
+    <th:block th:replace="~{fragments/notifications :: notification-styles}"></th:block>
+
+    <!-- Дополнительные стили для конкретных страниц -->
+    <th:block th:replace="${styles}"></th:block>
+</head>
+<body class="antialiased">
+<div class="page">
+
+<!-- Шапка -->
+<header class="navbar navbar-expand-md navbar-dark d-print-none" style="background-color: #206bc4;">
+    <div class="container-xl">
+        <a class="navbar-brand" th:href="@{/}">
+            <span class="navbar-brand-text">
+                <i class="fas fa-layer-group me-2"></i>Zoomos v4
+            </span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/clients}">
+                        <span class="nav-link-icon d-md-none d-lg-inline-block">
+                            <i class="fas fa-users"></i>
+                        </span>
+                        <span class="nav-link-title">Клиенты</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/handbook}">
+                        <span class="nav-link-icon d-md-none d-lg-inline-block">
+                            <i class="fas fa-barcode"></i>
+                        </span>
+                        <span class="nav-link-title">Справочник</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/zoomos}">
+                        <span class="nav-link-icon d-md-none d-lg-inline-block">
+                            <i class="fas fa-chart-line"></i>
+                        </span>
+                        <span class="nav-link-title">Анализ выкачки</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/utils}">
+                        <span class="nav-link-icon d-md-none d-lg-inline-block">
+                            <i class="fas fa-tools"></i>
+                        </span>
+                        <span class="nav-link-title">Утилиты</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/help}">
+                        <span class="nav-link-icon d-md-none d-lg-inline-block">
+                            <i class="fas fa-question-circle"></i>
+                        </span>
+                        <span class="nav-link-title">Справка</span>
+                    </a>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <span class="nav-link-icon d-md-none d-lg-inline-block">
+                            <i class="fas fa-cog"></i>
+                        </span>
+                        <span class="nav-link-title">Настройки</span>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" th:href="@{/statistics/settings}">
+                            <i class="fas fa-chart-line me-2 text-muted"></i>Статистика экспорта
+                        </a></li>
+                        <li><a class="dropdown-item" th:href="@{/maintenance}">
+                            <i class="fas fa-cogs me-2 text-muted"></i>Система обслуживания
+                        </a></li>
+                    </ul>
+                </li>
+            </ul>
+            <div class="ms-auto d-flex align-items-center">
+                <a class="nav-link px-2 text-white-50" th:href="@{'?theme=bootstrap'}" title="Переключить на Bootstrap UI">
+                    <i class="fas fa-toggle-on me-1"></i><span class="d-none d-lg-inline small">Bootstrap</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- Глобальный баннер приоритетных сайтов -->
+<div id="priority-alerts-banner" class="d-none" role="alert">
+    <div class="bg-danger text-white py-2">
+        <div class="container-xl d-flex align-items-center gap-2 flex-wrap">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong id="priority-alerts-summary">Проблемы в приоритетных сайтах</strong>
+            <button type="button" class="btn btn-sm btn-outline-light ms-1 py-0 px-2"
+                    data-bs-toggle="collapse" data-bs-target="#priority-alerts-details"
+                    id="priority-alerts-toggle" aria-expanded="false">
+                Подробнее <i class="fas fa-chevron-down ms-1" style="font-size:.75rem"></i>
+            </button>
+            <a href="/zoomos" class="btn btn-sm btn-outline-light ms-auto">Zoomos Check →</a>
+            <button type="button" class="btn-close btn-close-white" id="priority-alerts-close"
+                    title="Закрыть до следующей загрузки страницы"></button>
+        </div>
+    </div>
+    <div class="collapse" id="priority-alerts-details">
+        <div class="bg-danger bg-opacity-10 border-bottom border-danger">
+            <div class="container-xl py-2">
+                <table class="table table-sm table-borderless mb-0" id="priority-alerts-table">
+                    <tbody id="priority-alerts-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+  (function() {
+    var DISMISS_KEY = 'priority-alerts-dismissed';
+    if (sessionStorage.getItem(DISMISS_KEY)) return;
+    fetch('/zoomos/api/priority-alerts')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data || data.length === 0) return;
+        var severityOrder = {ERROR: 0, NOT_FOUND: 1, WARNING: 2};
+        data.sort(function(a, b) {
+          return (severityOrder[a.severity] || 9) - (severityOrder[b.severity] || 9);
+        });
+        var errorCount = data.filter(function(a) { return a.severity === 'ERROR'; }).length;
+        var totalCount = data.length;
+        var summaryParts = [];
+        if (errorCount > 0) summaryParts.push(errorCount + ' ошиб.' + (errorCount === 1 ? '' : ''));
+        var warnCount = totalCount - errorCount;
+        if (warnCount > 0) summaryParts.push(warnCount + ' предупр.');
+        document.getElementById('priority-alerts-summary').textContent =
+          'Проблемы в приоритетных сайтах: ' + totalCount + ' сайт' + (totalCount === 1 ? '' : (totalCount < 5 ? 'а' : 'ов')) +
+          (summaryParts.length > 0 ? ' (' + summaryParts.join(', ') + ')' : '');
+        var badgeClass = {ERROR: 'bg-danger', NOT_FOUND: 'bg-secondary', WARNING: 'bg-warning text-dark'};
+        var badgeLabel = {ERROR: 'ОШИБКА', NOT_FOUND: 'НЕТ ДАННЫХ', WARNING: 'ВНИМАНИЕ'};
+        var tbody = document.getElementById('priority-alerts-tbody');
+        data.forEach(function(alert) {
+          var issues = alert.issues || [];
+          if (issues.length === 0) {
+            issues = [{city: '', message: alert.severity, runId: null}];
+          }
+          issues.forEach(function(issue) {
+            var tr = document.createElement('tr');
+            var badge = '<span class="badge ' + (badgeClass[alert.severity] || 'bg-secondary') + ' me-1">' +
+                        (badgeLabel[alert.severity] || alert.severity) + '</span>';
+            var cityText = issue.city ? ' <span class="text-muted">· ' + escHtml(issue.city) + '</span>' : '';
+            var link = issue.runId
+              ? '<a href="/zoomos/check/results/' + issue.runId + '" class="btn btn-sm btn-outline-danger py-0 px-2 ms-2" target="_blank">Результаты</a>'
+              : '<a href="/zoomos" class="btn btn-sm btn-outline-secondary py-0 px-2 ms-2">Zoomos Check</a>';
+            tr.innerHTML = '<td class="py-1" style="width:1%;white-space:nowrap">' + badge + '</td>' +
+                           '<td class="py-1" style="width:1%;white-space:nowrap"><strong>' + escHtml(alert.siteName) + '</strong>' + cityText + '</td>' +
+                           '<td class="py-1">' + escHtml(issue.message) + '</td>' +
+                           '<td class="py-1 text-end" style="width:1%;white-space:nowrap">' + link + '</td>';
+            tbody.appendChild(tr);
+          });
+        });
+        document.getElementById('priority-alerts-banner').classList.remove('d-none');
+        var toggleBtn = document.getElementById('priority-alerts-toggle');
+        document.getElementById('priority-alerts-details').addEventListener('show.bs.collapse', function() {
+          toggleBtn.querySelector('i').classList.replace('fa-chevron-down', 'fa-chevron-up');
+        });
+        document.getElementById('priority-alerts-details').addEventListener('hide.bs.collapse', function() {
+          toggleBtn.querySelector('i').classList.replace('fa-chevron-up', 'fa-chevron-down');
+        });
+      }).catch(function() {});
+    document.getElementById('priority-alerts-close').addEventListener('click', function() {
+      document.getElementById('priority-alerts-banner').classList.add('d-none');
+      sessionStorage.setItem(DISMISS_KEY, '1');
+    });
+    function escHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  })();
+</script>
+
+<!-- Основной контент -->
+<div class="page-wrapper">
+    <div class="container-xl">
+
+        <!-- Уведомления -->
+        <div th:if="${successMessage}" class="alert alert-success alert-dismissible mt-3" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-check-circle me-2"></i>
+                <div th:text="${successMessage}">Успешно!</div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible mt-3" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <div th:text="${errorMessage}">Ошибка!</div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        <div th:if="${warningMessage}" class="alert alert-warning alert-dismissible mt-3" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <div th:text="${warningMessage}">Внимание!</div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        <div th:if="${infoMessage}" class="alert alert-info alert-dismissible mt-3" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-info-circle me-2"></i>
+                <div th:text="${infoMessage}">Информация!</div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+
+        <!-- Хлебные крошки -->
+        <div th:if="${breadcrumbs}" class="page-header d-print-none pt-3 pb-0">
+            <div class="row align-items-center">
+                <div class="col">
+                    <ol class="breadcrumb" aria-label="breadcrumbs">
+                        <li class="breadcrumb-item" th:each="crumb,stat : ${breadcrumbs}" th:classappend="${stat.last}? ' active'">
+                            <a th:if="${!stat.last}" th:href="${crumb.url}" th:text="${crumb.label}"></a>
+                            <span th:if="${stat.last}" th:text="${crumb.label}"></span>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- Заголовок страницы -->
+        <div th:if="${pageTitle}" class="page-header d-print-none pt-3">
+            <div class="row align-items-center">
+                <div class="col">
+                    <h2 class="page-title" th:text="${pageTitle}">Заголовок</h2>
+                </div>
+                <div th:if="${pageActions}" class="col-auto">
+                    <div th:replace="${pageActions}"><!-- Кнопки --></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Содержимое страницы -->
+        <div class="page-body">
+            <div th:replace="${content}">Содержимое страницы</div>
+        </div>
+    </div>
+</div>
+
+<!-- Контейнер для уведомлений -->
+<th:block th:replace="~{fragments/notifications :: notifications}"></th:block>
+
+<!-- Подвал -->
+<footer class="footer footer-transparent d-print-none">
+    <div class="container-xl">
+        <div class="row text-center align-items-center">
+            <div class="col-12 col-lg-auto mt-3 mt-lg-0">
+                <p class="text-muted mb-0">© 2025 Zoomos v4 — Обработка файлов</p>
+            </div>
+        </div>
+    </div>
+</footer>
+
+</div><!-- /.page -->
+
+<!-- Tabler JS (включает Bootstrap 5) -->
+<script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
+
+<!-- WebSocket библиотеки -->
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
+
+<!-- Chart.js для графиков -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+
+<!-- Основной JS -->
+<script th:src="@{/js/main.js}"></script>
+
+<!-- Скрипт для уведомлений -->
+<th:block th:replace="~{fragments/notifications :: notification-script}"></th:block>
+
+<!-- Дополнительные скрипты для конкретных страниц -->
+<th:block th:if="${scripts}" th:replace="${scripts}"></th:block>
+</body>
+</html>
