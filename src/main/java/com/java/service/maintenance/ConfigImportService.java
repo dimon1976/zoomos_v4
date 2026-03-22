@@ -65,6 +65,32 @@ public class ConfigImportService {
             }
         }
 
+        if (options.isIncludeZoomosShops() && config.getStandaloneZoomosShops() != null) {
+            for (ZoomosShopConfigDto shopDto : config.getStandaloneZoomosShops()) {
+                boolean shopExists = zoomosShopRepository.existsByShopName(shopDto.getShopName());
+                if (shopExists) {
+                    preview.setUpdatedZoomosShops(preview.getUpdatedZoomosShops() + 1);
+                } else {
+                    preview.setNewZoomosShops(preview.getNewZoomosShops() + 1);
+                }
+                if (options.isIncludeSchedules() && shopDto.getSchedules() != null) {
+                    ZoomosShop existingShop = shopExists
+                            ? zoomosShopRepository.findByShopName(shopDto.getShopName()).orElse(null)
+                            : null;
+                    for (ZoomosScheduleConfigDto sDto : shopDto.getSchedules()) {
+                        boolean schedExists = existingShop != null &&
+                                scheduleRepository.findAllByShopId(existingShop.getId()).stream()
+                                        .anyMatch(s -> labelMatches(s.getLabel(), sDto.getLabel()));
+                        if (schedExists) {
+                            preview.setUpdatedSchedules(preview.getUpdatedSchedules() + 1);
+                        } else {
+                            preview.setNewSchedules(preview.getNewSchedules() + 1);
+                        }
+                    }
+                }
+            }
+        }
+
         if (options.isIncludeClients() && config.getClients() != null) {
             for (ClientConfigDto clientDto : config.getClients()) {
                 boolean clientExists = clientRepository.existsByNameIgnoreCase(clientDto.getName());
@@ -158,6 +184,10 @@ public class ConfigImportService {
 
             if (options.isIncludeClients() && config.getClients() != null) {
                 importClients(config.getClients(), options, result);
+            }
+
+            if (options.isIncludeZoomosShops() && config.getStandaloneZoomosShops() != null) {
+                importShops(config.getStandaloneZoomosShops(), null, options, result);
             }
 
         } catch (Exception e) {

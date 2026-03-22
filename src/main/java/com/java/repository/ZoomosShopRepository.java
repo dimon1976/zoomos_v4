@@ -25,4 +25,6 @@ public interface ZoomosShopRepository extends JpaRepository<ZoomosShop, Long> {
     List<ZoomosShop> findAllByClientIsNotNullWithClient();
 
     boolean existsByShopName(String shopName);
+
+    List<ZoomosShop> findAllByClientIsNull();
 }

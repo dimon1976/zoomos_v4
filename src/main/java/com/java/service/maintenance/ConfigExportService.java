@@ -51,9 +51,14 @@ public class ConfigExportService {
             dto.setClients(exportClients(options));
         }
 
-        log.info("Экспорт завершён: {} секций, {} клиентов, {} известных сайтов",
+        if (options.isIncludeZoomosShops()) {
+            dto.setStandaloneZoomosShops(exportStandaloneShops(options));
+        }
+
+        log.info("Экспорт завершён: {} секций, {} клиентов, {} standalone-магазинов, {} известных сайтов",
                 sections.size(),
                 dto.getClients().size(),
+                dto.getStandaloneZoomosShops().size(),
                 dto.getKnownSites().size());
         return dto;
     }
@@ -226,6 +231,12 @@ public class ConfigExportService {
 
     private List<ZoomosShopConfigDto> exportShops(Client client, ConfigExportOptionsDto options) {
         return zoomosShopRepository.findAllByClient(client).stream()
+                .map(shop -> toShopDto(shop, options))
+                .toList();
+    }
+
+    private List<ZoomosShopConfigDto> exportStandaloneShops(ConfigExportOptionsDto options) {
+        return zoomosShopRepository.findAllByClientIsNull().stream()
                 .map(shop -> toShopDto(shop, options))
                 .toList();
     }

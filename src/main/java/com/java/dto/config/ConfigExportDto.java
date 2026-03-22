@@ -37,4 +37,8 @@ public class ConfigExportDto {
 
     @Builder.Default
     private List<ClientConfigDto> clients = new ArrayList<>();
+
+    /** Магазины Zoomos Check без привязки к клиенту */
+    @Builder.Default
+    private List<ZoomosShopConfigDto> standaloneZoomosShops = new ArrayList<>();
 }
