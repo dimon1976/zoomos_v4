@@ -17,6 +17,8 @@ public interface ZoomosShopRepository extends JpaRepository<ZoomosShop, Long> {
 
     Optional<ZoomosShop> findByClientId(Long clientId);
 
+    List<ZoomosShop> findAllByClient(com.java.model.Client client);
+
     List<ZoomosShop> findAllByClientIsNotNull();
 
     @Query("SELECT s FROM ZoomosShop s JOIN FETCH s.client WHERE s.client IS NOT NULL")

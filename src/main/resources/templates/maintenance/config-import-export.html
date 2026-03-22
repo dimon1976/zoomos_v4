@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title='Экспорт/Импорт конфигурации',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Экспорт/Импорт конфигурации',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Экспорт/Импорт конфигурации</title>
+</head>
+
+<th:block th:fragment="styles">
+    <style>
+        .section-checkbox label { font-weight: 500; }
+        .section-checkbox .sub-option { margin-left: 1.5rem; font-weight: 400; }
+        .preview-table th { white-space: nowrap; }
+        .preview-new { color: #198754; font-weight: 600; }
+        .preview-update { color: #ffc107; font-weight: 600; }
+        #importResult .created { color: #198754; }
+        #importResult .updated { color: #0d6efd; }
+        .step-indicator { font-size: 0.85rem; color: #6c757d; }
+    </style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a href="/maintenance" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> Обслуживание
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+    <div class="row g-4">
+
+        <!-- === ЭКСПОРТ === -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-download text-primary"></i> Экспорт конфигурации</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Скачайте текущую конфигурацию в формате JSON для переноса на другой сервер.
+                    </p>
+                    <form id="exportForm" th:action="@{/maintenance/config/export}" method="post">
+                        <div class="section-checkbox mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="includeClients"
+                                       id="expClients" checked>
+                                <label class="form-check-label" for="expClients">
+                                    <i class="fas fa-users text-primary"></i> Клиенты
+                                </label>
+                            </div>
+                            <div class="sub-option">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="includeImportTemplates"
+                                           id="expImport" checked>
+                                    <label class="form-check-label" for="expImport">Шаблоны импорта</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="includeExportTemplates"
+                                           id="expExport" checked>
+                                    <label class="form-check-label" for="expExport">Шаблоны экспорта</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="includeZoomosShops"
+                                           id="expShops" checked>
+                                    <label class="form-check-label" for="expShops">
+                                        <i class="fas fa-store text-success"></i> Магазины Zoomos Check
+                                    </label>
+                                </div>
+                                <div class="sub-option">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="includeSchedules"
+                                               id="expSchedules" checked>
+                                        <label class="form-check-label" for="expSchedules">Расписания проверок</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="section-checkbox mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="includeKnownSites"
+                                       id="expSites" checked>
+                                <label class="form-check-label" for="expSites">
+                                    <i class="fas fa-globe text-info"></i> Справочник известных сайтов
+                                </label>
+                            </div>
+                        </div>
+                        <div class="section-checkbox mb-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="includeCityDirectory"
+                                       id="expCities" checked>
+                                <label class="form-check-label" for="expCities">
+                                    <i class="fas fa-city text-secondary"></i> Справочник городов и адресов
+                                </label>
+                            </div>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-download"></i> Скачать конфигурацию
+                            </button>
+                        </div>
+                        <p class="text-muted small mt-2 mb-0">
+                            <i class="fas fa-info-circle"></i>
+                            Файл: <code>zoomos-config-YYYY-MM-DD.json</code>
+                        </p>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- === ИМПОРТ === -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-upload text-success"></i> Импорт конфигурации</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Загрузите JSON-файл конфигурации. Существующие записи будут обновлены (merge),
+                        новые — добавлены. Расписания при импорте всегда отключены.
+                    </p>
+
+                    <!-- Шаг 1: Загрузка файла -->
+                    <div id="step1">
+                        <h6 class="step-indicator">Шаг 1 из 3 — выберите файл</h6>
+                        <form id="previewForm" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <input type="file" class="form-control" id="importFile" accept=".json" required>
+                            </div>
+                            <div class="mb-3 border rounded p-3 bg-light">
+                                <p class="small fw-bold mb-2">Что импортировать:</p>
+                                <div class="row row-cols-2 g-1 small">
+                                    <div class="col">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="impClients" checked>
+                                            <label class="form-check-label" for="impClients">Клиенты и шаблоны</label>
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="impShops" checked>
+                                            <label class="form-check-label" for="impShops">Магазины Zoomos</label>
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="impSites" checked>
+                                            <label class="form-check-label" for="impSites">Известные сайты</label>
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="impCities" checked>
+                                            <label class="form-check-label" for="impCities">Справочник городов</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary" onclick="previewImport()">
+                                <i class="fas fa-search"></i> Проверить файл
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Шаг 2: Превью -->
+                    <div id="step2" class="d-none">
+                        <h6 class="step-indicator">Шаг 2 из 3 — просмотр изменений</h6>
+                        <div id="previewInfo" class="small text-muted mb-2"></div>
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm preview-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Секция</th>
+                                        <th class="text-center preview-new">Новых</th>
+                                        <th class="text-center preview-update">Обновить</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="previewBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-success" onclick="executeImport()">
+                                <i class="fas fa-check"></i> Подтвердить импорт
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="resetImport()">
+                                <i class="fas fa-times"></i> Отмена
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Шаг 3: Результат -->
+                    <div id="step3" class="d-none">
+                        <h6 class="step-indicator">Шаг 3 из 3 — результат</h6>
+                        <div id="importResult"></div>
+                        <button type="button" class="btn btn-outline-primary mt-3" onclick="resetImport()">
+                            <i class="fas fa-redo"></i> Новый импорт
+                        </button>
+                    </div>
+
+                    <!-- Лоадер -->
+                    <div id="importLoader" class="d-none text-center py-3">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <div class="mt-2 text-muted small">Обработка...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /row -->
+
+    <!-- Примечания -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="alert alert-info small mb-0">
+                <i class="fas fa-info-circle"></i>
+                <strong>Как работает импорт:</strong>
+                Существующие записи обновляются по бизнес-ключу (имя клиента, имя шаблона, имя магазина, название сайта).
+                Новые записи создаются. Поля расписаний при импорте устанавливаются в <em>отключено</em> —
+                включите их вручную после проверки. Добавление новых полей в сущности не ломает совместимость JSON-файлов.
+            </div>
+        </div>
+    </div>
+
+</div><!-- /container-fluid -->
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+let importedConfig = null;
+
+function getImportOptions() {
+    return {
+        includeClients: document.getElementById('impClients').checked,
+        includeImportTemplates: document.getElementById('impClients').checked,
+        includeExportTemplates: document.getElementById('impClients').checked,
+        includeZoomosShops: document.getElementById('impShops').checked,
+        includeSchedules: document.getElementById('impShops').checked,
+        includeKnownSites: document.getElementById('impSites').checked,
+        includeCityDirectory: document.getElementById('impCities').checked
+    };
+}
+
+async function previewImport() {
+    const fileInput = document.getElementById('importFile');
+    if (!fileInput.files.length) {
+        alert('Выберите JSON-файл');
+        return;
+    }
+
+    showLoader();
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    const opts = getImportOptions();
+    Object.entries(opts).forEach(([k, v]) => formData.append(k, v));
+
+    try {
+        const resp = await fetch('/maintenance/config/preview', { method: 'POST', body: formData });
+        if (!resp.ok) throw new Error('Ошибка разбора файла. Проверьте формат JSON.');
+        const preview = await resp.json();
+
+        importedConfig = fileInput.files[0];
+        showPreview(preview);
+    } catch (e) {
+        alert(e.message);
+        hideLoader();
+    }
+}
+
+function showPreview(p) {
+    hideLoader();
+
+    const info = document.getElementById('previewInfo');
+    info.textContent = 'Файл v' + p.fileVersion + ', создан: ' + (p.exportedAt || '—') +
+                       ', генератор: ' + (p.generatedBy || '—');
+
+    const rows = [
+        ['Клиенты', p.newClients, p.updatedClients],
+        ['Шаблоны импорта', p.newImportTemplates, p.updatedImportTemplates],
+        ['Шаблоны экспорта', p.newExportTemplates, p.updatedExportTemplates],
+        ['Магазины Zoomos Check', p.newZoomosShops, p.updatedZoomosShops],
+        ['Расписания проверок', p.newSchedules, p.updatedSchedules],
+        ['Известные сайты', p.newKnownSites, p.updatedKnownSites],
+        ['Города', p.newCityNames, p.updatedCityNames],
+        ['Адреса', p.newCityAddresses, p.updatedCityAddresses],
+    ];
+
+    const tbody = document.getElementById('previewBody');
+    tbody.innerHTML = rows.filter(r => r[1] + r[2] > 0).map(([name, n, u]) =>
+        `<tr>
+            <td>${name}</td>
+            <td class="text-center preview-new">${n > 0 ? '+' + n : '—'}</td>
+            <td class="text-center preview-update">${u > 0 ? u : '—'}</td>
+        </tr>`
+    ).join('');
+
+    if (!tbody.innerHTML) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Нет изменений</td></tr>';
+    }
+
+    document.getElementById('step1').classList.add('d-none');
+    document.getElementById('step2').classList.remove('d-none');
+}
+
+async function executeImport() {
+    if (!importedConfig) return;
+    showLoader();
+    document.getElementById('step2').classList.add('d-none');
+
+    const formData = new FormData();
+    formData.append('file', importedConfig);
+    const opts = getImportOptions();
+    Object.entries(opts).forEach(([k, v]) => formData.append(k, v));
+
+    try {
+        const resp = await fetch('/maintenance/config/import', { method: 'POST', body: formData });
+        const result = await resp.json();
+        showResult(result);
+    } catch (e) {
+        hideLoader();
+        alert('Ошибка импорта: ' + e.message);
+        document.getElementById('step2').classList.remove('d-none');
+    }
+}
+
+function showResult(r) {
+    hideLoader();
+    const div = document.getElementById('importResult');
+
+    if (!r.success) {
+        div.innerHTML = `<div class="alert alert-danger">
+            <strong>Ошибка импорта</strong>
+            <ul class="mb-0 mt-2">${r.errors.map(e => '<li>' + e + '</li>').join('')}</ul>
+        </div>`;
+    } else {
+        const lines = [
+            r.createdClients > 0 ? `<span class="created">+${r.createdClients} клиентов</span>` : null,
+            r.updatedClients > 0 ? `<span class="updated">${r.updatedClients} обновлено</span>` : null,
+            r.createdImportTemplates > 0 ? `<span class="created">+${r.createdImportTemplates} шаблонов импорта</span>` : null,
+            r.updatedImportTemplates > 0 ? `<span class="updated">${r.updatedImportTemplates} шаблонов импорта обновлено</span>` : null,
+            r.createdExportTemplates > 0 ? `<span class="created">+${r.createdExportTemplates} шаблонов экспорта</span>` : null,
+            r.updatedExportTemplates > 0 ? `<span class="updated">${r.updatedExportTemplates} шаблонов экспорта обновлено</span>` : null,
+            r.createdZoomosShops > 0 ? `<span class="created">+${r.createdZoomosShops} магазинов</span>` : null,
+            r.updatedZoomosShops > 0 ? `<span class="updated">${r.updatedZoomosShops} магазинов обновлено</span>` : null,
+            r.createdSchedules > 0 ? `<span class="created">+${r.createdSchedules} расписаний</span>` : null,
+            r.updatedSchedules > 0 ? `<span class="updated">${r.updatedSchedules} расписаний обновлено</span>` : null,
+            r.createdKnownSites > 0 ? `<span class="created">+${r.createdKnownSites} известных сайтов</span>` : null,
+            r.updatedKnownSites > 0 ? `<span class="updated">${r.updatedKnownSites} сайтов обновлено</span>` : null,
+            r.createdCityNames > 0 ? `<span class="created">+${r.createdCityNames} городов</span>` : null,
+            r.updatedCityNames > 0 ? `<span class="updated">${r.updatedCityNames} городов обновлено</span>` : null,
+            r.createdCityAddresses > 0 ? `<span class="created">+${r.createdCityAddresses} адресов</span>` : null,
+        ].filter(Boolean);
+
+        const errHtml = r.errors && r.errors.length > 0
+            ? `<div class="alert alert-warning mt-2 small"><ul class="mb-0">${r.errors.map(e => '<li>' + e + '</li>').join('')}</ul></div>` : '';
+
+        div.innerHTML = `<div class="alert alert-success">
+            <strong><i class="fas fa-check-circle"></i> Импорт выполнен успешно</strong>
+            <div class="mt-2">${lines.join(', ') || 'Без изменений'}</div>
+        </div>${errHtml}`;
+    }
+
+    document.getElementById('step3').classList.remove('d-none');
+}
+
+function resetImport() {
+    importedConfig = null;
+    document.getElementById('importFile').value = '';
+    document.getElementById('step1').classList.remove('d-none');
+    document.getElementById('step2').classList.add('d-none');
+    document.getElementById('step3').classList.add('d-none');
+    document.getElementById('importLoader').classList.add('d-none');
+    document.getElementById('previewBody').innerHTML = '';
+    document.getElementById('importResult').innerHTML = '';
+}
+
+function showLoader() {
+    document.getElementById('importLoader').classList.remove('d-none');
+}
+
+function hideLoader() {
+    document.getElementById('importLoader').classList.add('d-none');
+}
+
+// Экспортная форма — скачивание файла через form submit
+document.getElementById('exportForm').addEventListener('submit', function(e) {
+    // Нативный submit → браузер скачает файл
+});
+</script>
+</th:block>
+
+</html>

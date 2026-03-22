@@ -25,6 +25,9 @@ public interface ImportTemplateRepository extends JpaRepository<ImportTemplate, 
     // Найти шаблоны по типу сущности
     List<ImportTemplate> findByEntityTypeAndIsActiveTrue(EntityType entityType);
 
+    // Найти все шаблоны клиента (включая неактивные)
+    List<ImportTemplate> findByClient(Client client);
+
     // Найти шаблон по имени и клиенту
     Optional<ImportTemplate> findByNameAndClient(String name, Client client);
 

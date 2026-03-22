@@ -111,6 +111,7 @@ public class ZoomosCheckService {
                 .build();
         // Сохраняем в REQUIRES_NEW транзакции → немедленный коммит → status=RUNNING виден в БД
         run = self.saveRunImmediate(run);
+        final ZoomosCheckRun savedRun = run; // effectively final для лямбд ниже
 
         // Группируем по типу проверки
         Map<String, List<ZoomosCityId>> byType = allCityIds.stream()
@@ -166,7 +167,7 @@ public class ZoomosCheckService {
 
                 // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
                 List<ZoomosParsingStats> stats = parseWithRetry(
-                        () -> parseApiPage(page, siteName, effectiveDateFrom, dateTo, cityIdEntries, run),
+                        () -> parseApiPage(page, siteName, effectiveDateFrom, dateTo, cityIdEntries, savedRun),
                         siteName, run);
                 if (stats == null) {
                     processed += cityIdEntries.size();
@@ -198,7 +199,7 @@ public class ZoomosCheckService {
                 // Запрашиваем расширенный диапазон (включает baseline при combineBaseline=true)
                 List<ZoomosParsingStats> stats = parseWithRetry(
                         () -> parseItemPage(page, siteName, shop.getShopName(),
-                                effectiveDateFrom, dateTo, cityIdEntries, run),
+                                effectiveDateFrom, dateTo, cityIdEntries, savedRun),
                         siteName, run);
                 if (stats == null) {
                     processed += cityIdEntries.size();

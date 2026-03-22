@@ -7,6 +7,10 @@
 | URL | Метод | Назначение |
 |-----|-------|-----------|
 | `/maintenance` | GET | Главный дашборд обслуживания |
+| `/maintenance/config` | GET | Экспорт/Импорт конфигурации |
+| `/maintenance/config/export` | POST | Скачать JSON-файл конфигурации |
+| `/maintenance/config/preview` | POST | Анализ JSON-файла без сохранения (возвращает `ConfigImportPreviewDto`) |
+| `/maintenance/config/import` | POST | Выполнить импорт из JSON-файла (возвращает `ConfigImportResultDto`) |
 | `/maintenance/files` | GET | Управление файлами |
 | `/maintenance/files/archives` | GET | JSON: список ZIP-архивов |
 | `/maintenance/database` | GET | Обслуживание БД |
@@ -102,6 +106,46 @@ POST /maintenance/schedule/trigger/{key}
 
 `FileUtils.formatBytes(long bytes)` — единая точка форматирования байтов в читаемый вид.
 Используется в: `DataCleanupService`, `DatabaseMaintenanceService`, `FileManagementService`.
+
+## Экспорт/Импорт конфигурации
+
+Страница `/maintenance/config` позволяет переносить настройки между серверами (dev → prod и обратно).
+
+### Что экспортируется (опционально)
+
+| Секция | Сущности |
+|--------|---------|
+| `clients` | `Client` + `ImportTemplate` + `ExportTemplate` (с полями и фильтрами) |
+| `zoomosShops` | `ZoomosShop` + `ZoomosCityId` |
+| `schedules` | `ZoomosShopSchedule` (при импорте всегда `isEnabled=false`) |
+| `knownSites` | `ZoomosKnownSite` |
+| `cityDirectory` | `ZoomosCityName` + `ZoomosCityAddress` |
+
+### Стратегия импорта
+
+**Upsert по бизнес-ключу** (без полного удаления и пересоздания):
+- `Client` → по `name` (case-insensitive)
+- `ImportTemplate` / `ExportTemplate` → по `(clientName, templateName)`
+- `ZoomosShop` → по `shopName`
+- `ZoomosCityId` → по `(shopId, siteName)`
+- `ZoomosShopSchedule` → по `(shopId, label)`
+- `ZoomosKnownSite` → по `siteName`
+- `ZoomosCityName` → по `cityId`
+
+### Универсальность
+
+Все DTO помечены `@JsonIgnoreProperties(ignoreUnknown = true)`:
+- Старый JSON-файл (без новых полей) → новые поля получат значение `null` / дефолт из Entity.
+- Новое поле в Entity → достаточно добавить его в DTO, старые файлы продолжат работать.
+
+### Ключевые классы
+
+| Класс | Назначение |
+|-------|-----------|
+| [ConfigImportExportController.java](../src/main/java/com/java/controller/ConfigImportExportController.java) | 3 эндпоинта: page, export, preview, import |
+| [ConfigExportService.java](../src/main/java/com/java/service/maintenance/ConfigExportService.java) | Сборка DTO из БД |
+| [ConfigImportService.java](../src/main/java/com/java/service/maintenance/ConfigImportService.java) | Preview + upsert-импорт |
+| `dto/config/` | 16 DTO-классов с `@JsonIgnoreProperties(ignoreUnknown = true)` |
 
 ## Thread Pool
 

@@ -22,6 +22,9 @@ public interface ExportTemplateRepository extends JpaRepository<ExportTemplate, 
 
     List<ExportTemplate> findByClientAndEntityTypeAndIsActiveTrue(Client client, EntityType entityType);
 
+    // Найти все шаблоны клиента (включая неактивные)
+    List<ExportTemplate> findByClient(Client client);
+
     Optional<ExportTemplate> findByNameAndClient(String name, Client client);
 
     boolean existsByNameAndClient(String name, Client client);
