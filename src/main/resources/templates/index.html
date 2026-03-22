@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
-        'Дашборд — Zoomos v4',
-        ~{::section},
-        ~{::script},
-        ~{::style},
-        ${null},
-        ~{::.page-actions}
+        title='Дашборд — Zoomos v4',
+        content=~{::section},
+        scripts=~{::script},
+        styles=~{::style},
+        pageTitle=${null},
+        pageActions=~{::.page-actions}
       )}">
 <head>
     <title>Дашборд — Zoomos v4</title>

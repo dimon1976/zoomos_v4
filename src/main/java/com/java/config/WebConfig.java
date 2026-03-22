@@ -1,6 +1,7 @@
 package com.java.config;
 
 import com.java.constants.ApplicationConstants;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -75,6 +76,9 @@ public class WebConfig implements WebMvcConfigurer {
         converters.add(resourceConverter);
     }
 
+    @Value("${spring.thymeleaf.cache:true}")
+    private boolean thymeleafCache;
+
     @Bean
     public SpringResourceTemplateResolver templateResolver() {
         SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
@@ -82,7 +86,8 @@ public class WebConfig implements WebMvcConfigurer {
         templateResolver.setCharacterEncoding("UTF-8");
         templateResolver.setSuffix(".html");
         templateResolver.setTemplateMode(TemplateMode.HTML);
-        return templateResolver; //
+        templateResolver.setCacheable(thymeleafCache);
+        return templateResolver;
     }
 
     @Bean
