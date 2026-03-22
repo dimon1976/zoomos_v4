@@ -94,12 +94,22 @@ mvn spring-boot:run -Dspring-boot.run.profiles=silent
 | [`docs/zoomos-check.md`](docs/zoomos-check.md) | Zoomos Check — evaluateGroup, тренды, расписание, Redmine |
 | [`docs/maintenance.md`](docs/maintenance.md) | Система обслуживания — расписание, очистка БД, диагностика |
 | [`docs/claude-setup.md`](docs/claude-setup.md) | Агенты, скилы, команды, хуки — как пользоваться .claude/ |
+| [`docs/utils.md`](docs/utils.md) | Утилиты (/utils) — как добавить новую утилиту, FileReaderUtils, FileGeneratorService |
 
 1. **После любых изменений** в функционале — обновить соответствующий файл в `docs/`.
 2. **При добавлении нового направления** — создать `docs/{название}.md` и добавить строку в таблицу выше.
 3. Это **обязательный последний шаг** любой задачи наравне с коммитом.
 
 ## Critical Non-Obvious Behaviors
+
+### Утилиты (/utils) — чтение и запись файлов
+
+НЕ писать `readCsvFile`/`readExcelFile` в сервисе утилиты. Использовать:
+- `fileReaderUtils.readAllRows(metadata)` — все строки включая заголовок (`data.get(0)` = headers)
+- `fileReaderUtils.readFullFileData(metadata)` — данные без заголовка
+
+НЕ генерировать Excel через `XSSFWorkbook` напрямую. Использовать `FileGeneratorService.generateFile(stream, count, template, name)`.
+Полный паттерн: [`docs/utils.md`](docs/utils.md)
 
 ### HTTP Redirect — CurlStrategy
 
