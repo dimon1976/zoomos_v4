@@ -4,18 +4,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java.dto.config.*;
 import com.java.service.maintenance.ConfigExportService;
 import com.java.service.maintenance.ConfigImportService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.ContentDisposition;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.time.LocalDate;
 
 /**
@@ -42,22 +40,17 @@ public class ConfigImportExportController {
      * Скачать конфигурацию в виде JSON-файла.
      */
     @PostMapping("/export")
-    public ResponseEntity<byte[]> exportConfig(ConfigExportOptionsDto options) {
+    public void exportConfig(ConfigExportOptionsDto options, HttpServletResponse response) throws IOException {
         log.info("Запрос на экспорт конфигурации");
         try {
             ConfigExportDto dto = exportService.exportConfig(options);
-            byte[] json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(dto);
-
             String filename = "zoomos-config-" + LocalDate.now() + ".json";
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION,
-                            ContentDisposition.attachment().filename(filename).build().toString())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(json);
+            response.setContentType("application/json; charset=UTF-8");
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(response.getOutputStream(), dto);
         } catch (Exception e) {
             log.error("Ошибка при экспорте конфигурации", e);
-            return ResponseEntity.internalServerError()
-                    .body(("Ошибка экспорта: " + e.getMessage()).getBytes(StandardCharsets.UTF_8));
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Ошибка экспорта: " + e.getMessage());
         }
     }
 
