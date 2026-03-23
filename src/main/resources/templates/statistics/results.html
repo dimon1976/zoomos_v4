@@ -1054,7 +1054,7 @@
                 for (const [fieldName, values] of Object.entries(filterFieldsData)) {
                     const option = document.createElement('option');
                     option.value = fieldName;
-                    option.textContent = fieldName;
+                    option.textContent = fieldLabels[fieldName] || fieldName;
                     filterFieldSelect.appendChild(option);
                 }
 
@@ -1222,7 +1222,7 @@
             const indicator = document.getElementById('activeFilterIndicator');
             const indicatorText = document.getElementById('activeFilterText');
 
-            indicatorText.textContent = `${activeFilterField} = "${activeFilterValue}"`;
+            indicatorText.textContent = `${fieldLabels[activeFilterField] || activeFilterField} = "${activeFilterValue}"`;
             indicator.style.display = 'block';
         }
     }
