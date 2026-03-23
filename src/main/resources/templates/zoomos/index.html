@@ -165,6 +165,19 @@
         #shops-container.compact-mode .compact-settings-btn { display: inline-block !important; padding: 2px 8px !important; }
         .compact-expand-btn { display: none !important; }
         #shops-container.compact-mode .compact-expand-btn { display: inline-block !important; padding: 2px 8px !important; }
+        /* Запретить перенос бейджей на новую строку в compact mode */
+        #shops-container.compact-mode .card-header > .d-flex:first-child {
+            flex-wrap: nowrap !important;
+            overflow: hidden;
+            min-width: 0;
+        }
+        #shops-container.compact-mode .card-header .sync-status {
+            flex-shrink: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
         /* Expanded card in compact mode — только список сайтов */
         #shops-container.compact-mode .shop-card.compact-expanded { border-radius: 0.375rem !important; border: 1px solid #dee2e6 !important; margin-bottom: 0.5rem !important; }
         #shops-container.compact-mode .shop-card.compact-expanded .card-body { display: block !important; }
@@ -378,9 +391,9 @@
                 <!-- Статус-точка и результаты только в список-режиме -->
                 <span class="compact-status-dot" th:id="'status-dot-' + ${shop.id}"></span>
                 <span class="compact-result ms-1">
-                    <span class="badge bg-success d-none" th:id="'compact-ok-' + ${shop.id}"></span>
-                    <span class="badge bg-warning text-dark d-none" th:id="'compact-warn-' + ${shop.id}"></span>
-                    <span class="badge bg-danger d-none" th:id="'compact-err-' + ${shop.id}"></span>
+                    <span class="badge bg-success text-white fw-semibold d-none" th:id="'compact-ok-' + ${shop.id}"></span>
+                    <span class="badge bg-warning text-dark fw-semibold d-none" th:id="'compact-warn-' + ${shop.id}"></span>
+                    <span class="badge bg-danger text-white fw-semibold d-none" th:id="'compact-err-' + ${shop.id}"></span>
                     <a href="#" class="ms-1 small text-decoration-none compact-result-link d-none"
                        th:id="'compact-link-' + ${shop.id}" title="Открыть результаты">
                         <i class="fas fa-external-link-alt"></i>
@@ -575,11 +588,11 @@
             <div class="d-flex align-items-center gap-3 flex-wrap">
                 <span class="text-muted small"><i class="fas fa-check-circle text-success me-1"></i>Проверка завершена</span>
                 <span class="text-muted small" th:id="'result-started-' + ${shop.id}" style="display:none;"></span>
-                <span class="badge bg-light text-dark border small" th:id="'result-period-' + ${shop.id}"></span>
-                <span class="badge bg-success d-none" th:id="'result-ok-' + ${shop.id}"></span>
-                <span class="badge bg-warning text-dark d-none" th:id="'result-warn-' + ${shop.id}"></span>
-                <span class="badge bg-danger d-none" th:id="'result-err-' + ${shop.id}"></span>
-                <span class="badge bg-secondary d-none" th:id="'result-notfound-' + ${shop.id}"></span>
+                <span class="badge bg-white border text-dark small" th:id="'result-period-' + ${shop.id}"></span>
+                <span class="badge bg-success text-white fw-semibold d-none" th:id="'result-ok-' + ${shop.id}"></span>
+                <span class="badge bg-warning text-dark fw-semibold d-none" th:id="'result-warn-' + ${shop.id}"></span>
+                <span class="badge bg-danger text-white fw-semibold d-none" th:id="'result-err-' + ${shop.id}"></span>
+                <span class="badge bg-dark text-white fw-semibold d-none" th:id="'result-notfound-' + ${shop.id}"></span>
                 <a href="#" class="btn btn-sm btn-outline-primary" th:id="'result-link-' + ${shop.id}">
                     <i class="fas fa-external-link-alt me-1"></i>Результаты
                 </a>
@@ -2527,6 +2540,12 @@
                 if (el) container.appendChild(el);
             });
         }
+
+        // После восстановления из localStorage — приоритетные магазины всегда вверху
+        [...container.querySelectorAll('.shop-card')]
+            .filter(c => c.querySelector('.btn-shop-priority i.fas.fa-star') !== null)
+            .reverse()
+            .forEach(c => container.insertBefore(c, container.firstElementChild));
 
         Sortable.create(container, {
             animation: 150,

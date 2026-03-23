@@ -79,17 +79,21 @@
                     <div class="verdict-text mb-1" th:unless="${canDeliver}">Есть проблемы — проверьте перед отправкой</div>
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <div class="d-flex flex-wrap gap-2 align-items-center">
-                            <span class="badge bg-secondary">
+                            <span class="badge bg-dark text-white">
                                 <i class="fas fa-store me-1"></i>
                                 <span th:text="${run.shop.shopName}"></span>
                             </span>
-                            <span class="badge bg-light text-dark border">
+                            <span class="badge bg-white border text-dark">
                                 <i class="fas fa-calendar me-1"></i>
                                 <span th:text="${#temporals.format(run.dateFrom,'dd.MM.yyyy')}"></span>
-                                <span th:if="${run.timeFrom != null}" th:text="' ' + ${run.timeFrom}"></span>
+                                <span th:text="' ' + (${run.timeFrom} ?: '00:00')"></span>
                                 &nbsp;—&nbsp;
                                 <span th:text="${#temporals.format(run.dateTo,'dd.MM.yyyy')}"></span>
-                                <span th:if="${run.timeTo != null}" th:text="' ' + ${run.timeTo}"></span>
+                                <span th:text="' ' + (${run.timeTo} ?: '23:59')"></span>
+                            </span>
+                            <span th:if="${run.startedAt != null}" class="badge bg-white border text-dark">
+                                <i class="fas fa-clock me-1"></i>Запуск:
+                                <span th:text="${#temporals.format(run.startedAt,'dd.MM.yyyy HH:mm')}"></span>
                             </span>
                             <span class="text-muted small">
                                 Пороги: падение ≥<span th:text="${run.dropThreshold}">10</span>%,
@@ -148,7 +152,7 @@
                 <i class="fas fa-chevron-down chevron me-2"></i>
                 <i class="fas fa-clipboard-list me-1 text-warning"></i>
                 <strong>На что обратить внимание</strong>
-                <span class="badge bg-secondary ms-2" id="issuesCountBadge" th:text="${issues.size()}">0</span>
+                <span class="badge bg-dark text-white ms-2" id="issuesCountBadge" th:text="${issues.size()}">0</span>
             </span>
             <span class="d-flex align-items-center gap-2">
                 <button id="btnCopyDomains" type="button"
@@ -468,6 +472,10 @@
     </div>
 
 
+<!-- Скрытый триггер для redmineModal (без window.bootstrap, для Tabler layout) -->
+<button th:if="${redmineEnabled}" id="__triggerRedmineModal"
+        data-bs-toggle="modal" data-bs-target="#redmineModal" hidden tabindex="-1"></button>
+
 <!-- Redmine Modal -->
 <div th:if="${redmineEnabled}" id="redmineModal" class="modal fade" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -598,6 +606,44 @@
 
 <th:block th:fragment="scripts">
 <script th:inline="javascript">
+    // Совместимость с Tabler layout (не экспортирует window.bootstrap)
+    if (typeof bootstrap === 'undefined') {
+        window.bootstrap = {
+            Collapse: {
+                getOrCreateInstance: function(el) {
+                    return {
+                        show: function() {
+                            if (!el || el.classList.contains('show')) return;
+                            el.dispatchEvent(new Event('show.bs.collapse'));
+                            el.classList.add('show');
+                            el.dispatchEvent(new Event('shown.bs.collapse'));
+                        },
+                        hide: function() {
+                            if (!el || !el.classList.contains('show')) return;
+                            el.dispatchEvent(new Event('hide.bs.collapse'));
+                            el.classList.remove('show');
+                            el.dispatchEvent(new Event('hidden.bs.collapse'));
+                        },
+                        toggle: function() {
+                            if (el && el.classList.contains('show')) this.hide();
+                            else this.show();
+                        }
+                    };
+                }
+            },
+            Modal: function(el) {
+                // Используем скрытую кнопку-триггер — Tabler обрабатывает data-bs-toggle внутри
+                const triggerId = '__trigger' + el.id.charAt(0).toUpperCase() + el.id.slice(1);
+                return {
+                    show: function() {
+                        const trigger = document.getElementById(triggerId);
+                        if (trigger) trigger.click();
+                    }
+                };
+            }
+        };
+    }
+
     const RUN_ID = /*[[${run.id}]]*/ 0;
     const BASE_URL = /*[[${baseUrl}]]*/ '';
     const DATE_FROM = /*[[${#temporals.format(run.dateFrom, 'dd.MM.yyyy')}]]*/ '';
