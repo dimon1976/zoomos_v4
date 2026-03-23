@@ -803,6 +803,9 @@
             initializeHistoricalCharts();
         }
 
+        // Инициализируем данные групп (rowspan) — до фильтров метрик
+        initGroupRowspans();
+
         // Инициализируем фильтры метрик
         initMetricFilters();
     });
@@ -894,31 +897,54 @@
     }
 
     /**
-     * Обновляет rowspan ячеек групп в соответствии с количеством видимых строк.
-     * Это предотвращает наезд текста группы при скрытых метриках.
+     * Инициализирует данные групп: помечает строки groupId и сохраняет оригинальный rowspan.
+     * Вызывается один раз при загрузке страницы.
+     */
+    function initGroupRowspans() {
+        const rowspanCells = document.querySelectorAll('.statistics-table tbody td[rowspan]');
+        rowspanCells.forEach((cell, index) => {
+            const original = parseInt(cell.getAttribute('rowspan'));
+            cell.dataset.originalRowspan = original;
+            cell.dataset.groupId = index;
+
+            let row = cell.closest('tr');
+            for (let i = 0; i < original; i++) {
+                if (row) {
+                    row.dataset.groupId = index;
+                    row = row.nextElementSibling;
+                }
+            }
+        });
+    }
+
+    /**
+     * Обновляет rowspan и позицию ячеек групп в соответствии с видимыми строками.
+     * Перемещает ячейку группы в первую видимую строку, чтобы текст не выходил за границы.
      */
     function updateGroupRowspans() {
         const rowspanCells = document.querySelectorAll('.statistics-table tbody td[rowspan]');
 
         rowspanCells.forEach(cell => {
-            // Сохраняем оригинальный rowspan при первом вызове
-            if (!cell.dataset.originalRowspan) {
-                cell.dataset.originalRowspan = cell.getAttribute('rowspan');
+            const groupId = cell.dataset.groupId;
+            const groupRows = Array.from(
+                document.querySelectorAll(`.statistics-table tbody tr[data-group-id="${groupId}"]`)
+            );
+            const visibleRows = groupRows.filter(r => !r.classList.contains('metric-hidden'));
+
+            if (visibleRows.length === 0) {
+                cell.setAttribute('rowspan', 1);
+                return;
             }
 
-            const original = parseInt(cell.dataset.originalRowspan);
-            let row = cell.closest('tr');
-            const groupRows = [];
-
-            for (let i = 0; i < original; i++) {
-                if (row) {
-                    groupRows.push(row);
-                    row = row.nextElementSibling;
-                }
+            // Переместить ячейку в первую видимую строку если она в скрытой
+            const currentRow = cell.closest('tr');
+            const firstVisibleRow = visibleRows[0];
+            if (currentRow !== firstVisibleRow) {
+                currentRow.removeChild(cell);
+                firstVisibleRow.insertBefore(cell, firstVisibleRow.firstChild);
             }
 
-            const visibleCount = groupRows.filter(r => !r.classList.contains('metric-hidden')).length;
-            cell.setAttribute('rowspan', Math.max(1, visibleCount));
+            cell.setAttribute('rowspan', visibleRows.length);
         });
     }
 
