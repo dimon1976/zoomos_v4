@@ -144,6 +144,11 @@ main.container {
     border-radius: var(--border-radius-small);
 }
 
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+    color: #fff !important;
+}
+
 /* ===== Стили для карточек ===== */
 .card {
     background-color: rgba(255, 255, 255, 0.98);

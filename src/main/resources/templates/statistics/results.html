@@ -540,7 +540,8 @@
                             th:text="${totalGroup.groupFieldValue}">ОБЩЕЕ КОЛИЧЕСТВО</td>
 
                         <!-- Название метрики -->
-                        <td class="fw-bold" th:text="${metric.key}">metricName</td>
+                        <td class="fw-bold"
+                            th:text="${fieldLabels != null and fieldLabels[metric.key] != null ? fieldLabels[metric.key] : metric.key}">metricName</td>
 
                         <!-- Значения метрик по операциям -->
                         <td th:each="colOperation : ${comparison[0].operations}">
@@ -601,7 +602,8 @@
                             </td>
 
                             <!-- Название метрики -->
-                            <td class="fw-bold" th:text="${metric.key}">metricName</td>
+                            <td class="fw-bold"
+                                th:text="${fieldLabels != null and fieldLabels[metric.key] != null ? fieldLabels[metric.key] : metric.key}">metricName</td>
 
                             <!-- Значения метрик по операциям -->
                             <td th:each="colOperation : ${comparison[0].operations}">
@@ -698,6 +700,7 @@
     const warningThresholdFromTemplate = /*[[${warningPercentage}]]*/ 10;
     const criticalThresholdFromTemplate = /*[[${criticalPercentage}]]*/ 20;
     const templateId = /*[[${request.templateId}]]*/ null;
+    const fieldLabels = /*[[${fieldLabels}]]*/ {};
     const sessionIds = /*[[${request.exportSessionIds}]]*/ [];
     const activeFilterField = /*[[${filterField}]]*/ null;
     const activeFilterValue = /*[[${filterValue}]]*/ null;
@@ -779,7 +782,7 @@
             const label = document.createElement('label');
             label.className = 'form-check-label';
             label.htmlFor = checkboxId;
-            label.textContent = metricName;
+            label.textContent = fieldLabels[metricName] || metricName;
 
             formCheck.appendChild(checkbox);
             formCheck.appendChild(label);
@@ -1211,7 +1214,7 @@
                                 aria-controls="${collapseId}"
                                 style="user-select: text; outline: none !important; border: none !important; box-shadow: none !important; transition: none !important;">
                                 <span>
-                                    <i class="fas fa-chart-line me-2"></i>${metricName}
+                                    <i class="fas fa-chart-line me-2"></i>${fieldLabels[metricName] || metricName}
                                 </span>
                                 <i class="fas fa-chevron-up collapse-icon"></i>
                             </h5>

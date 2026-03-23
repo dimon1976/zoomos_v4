@@ -6,6 +6,7 @@ import com.java.dto.StatisticsComparisonDto;
 import com.java.dto.StatisticsHistoryDto;
 import com.java.dto.StatisticsRequestDto;
 import com.java.model.entity.ExportSession;
+import com.java.model.entity.ExportTemplateField;
 import com.java.repository.ClientRepository;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.ExportStatisticsRepository;
@@ -28,6 +29,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Контроллер для работы со статистикой экспорта
@@ -154,6 +156,17 @@ public class ExportStatisticsController {
                     request.getWarningPercentage() != null ? request.getWarningPercentage() : settingsService.getWarningPercentage());
             model.addAttribute("criticalPercentage",
                     request.getCriticalPercentage() != null ? request.getCriticalPercentage() : settingsService.getCriticalPercentage());
+
+            Map<String, String> fieldLabels = templateRepository
+                    .findByIdWithFieldsAndFilters(request.getTemplateId())
+                    .map(t -> t.getFields().stream()
+                            .filter(f -> f.getEntityFieldName() != null && f.getExportColumnName() != null)
+                            .collect(Collectors.toMap(
+                                    ExportTemplateField::getEntityFieldName,
+                                    ExportTemplateField::getExportColumnName,
+                                    (a, b) -> a)))
+                    .orElse(Map.of());
+            model.addAttribute("fieldLabels", fieldLabels);
 
             return "statistics/results";
 
