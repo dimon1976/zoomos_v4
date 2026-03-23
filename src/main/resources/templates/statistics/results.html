@@ -881,13 +881,44 @@
     function toggleMetricVisibility(metricName, isVisible) {
         const rows = document.querySelectorAll(`[data-metric-name="${metricName}"]`);
 
-        // Скрываем/показываем ячейки в строках (кроме ячеек с rowspan)
         rows.forEach(row => {
             if (isVisible) {
                 row.classList.remove('metric-hidden');
             } else {
                 row.classList.add('metric-hidden');
             }
+        });
+
+        // Обновляем rowspan ячеек групп, чтобы текст не выходил за границы
+        updateGroupRowspans();
+    }
+
+    /**
+     * Обновляет rowspan ячеек групп в соответствии с количеством видимых строк.
+     * Это предотвращает наезд текста группы при скрытых метриках.
+     */
+    function updateGroupRowspans() {
+        const rowspanCells = document.querySelectorAll('.statistics-table tbody td[rowspan]');
+
+        rowspanCells.forEach(cell => {
+            // Сохраняем оригинальный rowspan при первом вызове
+            if (!cell.dataset.originalRowspan) {
+                cell.dataset.originalRowspan = cell.getAttribute('rowspan');
+            }
+
+            const original = parseInt(cell.dataset.originalRowspan);
+            let row = cell.closest('tr');
+            const groupRows = [];
+
+            for (let i = 0; i < original; i++) {
+                if (row) {
+                    groupRows.push(row);
+                    row = row.nextElementSibling;
+                }
+            }
+
+            const visibleCount = groupRows.filter(r => !r.classList.contains('metric-hidden')).length;
+            cell.setAttribute('rowspan', Math.max(1, visibleCount));
         });
     }
 
