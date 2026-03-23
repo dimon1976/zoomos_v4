@@ -83,6 +83,7 @@
             padding: 0 !important;
         }
 
+
         /* Анимация фильтрации */
         .statistics-table tbody tr {
             transition: opacity 0.3s ease-in-out;
@@ -92,14 +93,11 @@
             opacity: 0.5;
         }
 
-        /* Стили для панели фильтрации метрик */
-        #metricCheckboxes .form-check {
-            min-width: 200px;
-        }
-
-        #metricCheckboxes .form-check-label {
-            cursor: pointer;
-            user-select: none;
+        /* Контейнер чекбоксов метрик */
+        #metricCheckboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 24px;
         }
 
         /* ===== Таблица статистики ===== */
@@ -122,15 +120,17 @@
         .statistics-table tbody tr { border-top: 1px solid var(--bs-gray-300); }
         .statistics-table tbody tr:hover { background-color: #f5f5f5; }
 
-        /* Ячейка группы */
+        /* Ячейка группы — текст переносится */
         .statistics-table td[rowspan] {
             background-color: var(--bs-gray-200) !important;
             border-right: 2px solid var(--bs-gray-300) !important;
+            white-space: normal;
+            word-break: break-word;
         }
         .statistics-table .group-header {
             background-color: var(--bs-gray-200);
             font-weight: bold;
-            vertical-align: middle !important;
+            vertical-align: middle;
             text-align: left;
             padding: 10px;
         }
@@ -138,7 +138,37 @@
         .statistics-table tbody tr.group-start { border-top: 2px solid var(--bs-gray-600); }
 
         /* Метрика всегда во 2-й колонке */
-        .statistics-table tbody tr td:nth-child(2) { background-color: var(--bs-gray-100); }
+        .statistics-table tbody tr td:nth-child(2) {
+            background-color: var(--bs-gray-100);
+            white-space: normal;
+            word-break: break-word;
+            max-width: 200px;
+        }
+
+        /* Чекбоксы фильтра метрик — нативный вид, без переопределений Tabler */
+        .metric-filter-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 180px;
+        }
+        .metric-filter-checkbox {
+            appearance: checkbox !important;
+            -webkit-appearance: checkbox !important;
+            display: inline-block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            position: static !important;
+            width: 1rem !important;
+            height: 1rem !important;
+            margin: 0 !important;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .metric-filter-label {
+            cursor: pointer;
+            margin: 0;
+        }
 
         /* Цветовое выделение для одинаковых метрик */
         .metric-highlight-date {
@@ -598,8 +628,7 @@
                             <td th:if="${iterStat.first}"
                                 th:rowspan="${metricsMap.size()}"
                                 class="group-header"
-                                th:text="${group.groupFieldValue}">Группа
-                            </td>
+                                th:text="${group.groupFieldValue}">Группа</td>
 
                             <!-- Название метрики -->
                             <td class="fw-bold"
@@ -769,10 +798,10 @@
             const checkboxId = `metric-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
             const formCheck = document.createElement('div');
-            formCheck.className = 'form-check';
+            formCheck.className = 'metric-filter-item';
 
             const checkbox = document.createElement('input');
-            checkbox.className = 'form-check-input';
+            checkbox.className = 'metric-filter-checkbox';
             checkbox.type = 'checkbox';
             checkbox.id = checkboxId;
             checkbox.checked = true;
@@ -780,7 +809,7 @@
             checkbox.addEventListener('change', () => onMetricCheckboxChange(metricName));
 
             const label = document.createElement('label');
-            label.className = 'form-check-label';
+            label.className = 'metric-filter-label';
             label.htmlFor = checkboxId;
             label.textContent = fieldLabels[metricName] || metricName;
 
