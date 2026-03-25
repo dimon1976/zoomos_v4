@@ -18,7 +18,6 @@ import com.java.service.ZoomosSchedulerService;
 import com.java.service.ZoomosSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -65,9 +64,8 @@ public class ZoomosAnalysisController {
     private final RedmineService redmineService;
     private final ZoomosSettingsService settingsService;
 
-    @Autowired
     @Qualifier("zoomosCheckExecutor")
-    private java.util.concurrent.Executor zoomosCheckExecutor;
+    private final java.util.concurrent.Executor zoomosCheckExecutor;
 
     @GetMapping({"", "/"})
     public String index(Model model) {
@@ -77,26 +75,30 @@ public class ZoomosAnalysisController {
                 .collect(Collectors.toList());
         List<ZoomosShop> disabledShops = allShops.stream().filter(s -> !s.isEnabled()).collect(Collectors.toList());
 
+        List<Long> allShopIds = allShops.stream().map(ZoomosShop::getId).collect(Collectors.toList());
+
+        // Batch pre-load cityIds и расписания одним запросом на всё
         Map<Long, List<ZoomosCityId>> cityIdsMap = new java.util.LinkedHashMap<>();
-        for (ZoomosShop shop : allShops) {
-            cityIdsMap.put(shop.getId(), parserService.getCityIds(shop.getId()));
-        }
+        cityIdRepository.findByShopIdInOrderBySiteName(allShopIds).stream()
+                .collect(Collectors.groupingBy(c -> c.getShop().getId()))
+                .forEach(cityIdsMap::put);
+        allShops.forEach(shop -> cityIdsMap.putIfAbsent(shop.getId(), List.of()));
+
         Map<String, String> cityNamesMap = cityNameRepository.findAll().stream()
                 .collect(java.util.stream.Collectors.toMap(
                         ZoomosCityName::getCityId, ZoomosCityName::getCityName));
 
-        // Расписания для badge'ей вкл/выкл на каждой карточке.
+        // Расписания для badge'ей вкл/выкл на каждой карточке (batch загрузка).
         // Если у магазина несколько расписаний, берём включённое (если есть), иначе любое первое.
         Map<Long, ZoomosShopSchedule> schedulesMap = new java.util.LinkedHashMap<>();
-        for (ZoomosShop shop : allShops) {
-            List<ZoomosShopSchedule> shopScheds = scheduleRepository.findAllByShopId(shop.getId());
-            if (!shopScheds.isEmpty()) {
-                ZoomosShopSchedule representative = shopScheds.stream()
-                        .filter(ZoomosShopSchedule::isEnabled).findFirst()
-                        .orElse(shopScheds.get(0));
-                schedulesMap.put(shop.getId(), representative);
-            }
-        }
+        scheduleRepository.findAllByShopIdIn(allShopIds).stream()
+                .collect(Collectors.groupingBy(ZoomosShopSchedule::getShopId))
+                .forEach((shopId, scheds) -> {
+                    ZoomosShopSchedule representative = scheds.stream()
+                            .filter(ZoomosShopSchedule::isEnabled).findFirst()
+                            .orElse(scheds.get(0));
+                    schedulesMap.put(shopId, representative);
+                });
 
         // Приоритетные сайты для иконок в таблице сайтов клиента
         Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue().stream()

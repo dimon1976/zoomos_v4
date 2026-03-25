@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -67,16 +68,14 @@ public class ConfigImportService {
 
         if (options.isIncludeZoomosShops() && config.getStandaloneZoomosShops() != null) {
             for (ZoomosShopConfigDto shopDto : config.getStandaloneZoomosShops()) {
-                boolean shopExists = zoomosShopRepository.existsByShopName(shopDto.getShopName());
-                if (shopExists) {
+                Optional<ZoomosShop> existingShopOpt = zoomosShopRepository.findByShopName(shopDto.getShopName());
+                if (existingShopOpt.isPresent()) {
                     preview.setUpdatedZoomosShops(preview.getUpdatedZoomosShops() + 1);
                 } else {
                     preview.setNewZoomosShops(preview.getNewZoomosShops() + 1);
                 }
                 if (options.isIncludeSchedules() && shopDto.getSchedules() != null) {
-                    ZoomosShop existingShop = shopExists
-                            ? zoomosShopRepository.findByShopName(shopDto.getShopName()).orElse(null)
-                            : null;
+                    ZoomosShop existingShop = existingShopOpt.orElse(null);
                     for (ZoomosScheduleConfigDto sDto : shopDto.getSchedules()) {
                         boolean schedExists = existingShop != null &&
                                 scheduleRepository.findAllByShopId(existingShop.getId()).stream()
@@ -93,16 +92,14 @@ public class ConfigImportService {
 
         if (options.isIncludeClients() && config.getClients() != null) {
             for (ClientConfigDto clientDto : config.getClients()) {
-                boolean clientExists = clientRepository.existsByNameIgnoreCase(clientDto.getName());
-                if (clientExists) {
+                Optional<Client> existingClientOpt = clientRepository.findByNameIgnoreCase(clientDto.getName());
+                if (existingClientOpt.isPresent()) {
                     preview.setUpdatedClients(preview.getUpdatedClients() + 1);
                 } else {
                     preview.setNewClients(preview.getNewClients() + 1);
                 }
 
-                Client existingClient = clientExists
-                        ? clientRepository.findByNameIgnoreCase(clientDto.getName()).orElse(null)
-                        : null;
+                Client existingClient = existingClientOpt.orElse(null);
 
                 if (options.isIncludeImportTemplates() && clientDto.getImportTemplates() != null) {
                     for (ImportTemplateConfigDto tDto : clientDto.getImportTemplates()) {
@@ -130,17 +127,15 @@ public class ConfigImportService {
 
                 if (options.isIncludeZoomosShops() && clientDto.getZoomosShops() != null) {
                     for (ZoomosShopConfigDto shopDto : clientDto.getZoomosShops()) {
-                        boolean shopExists = zoomosShopRepository.existsByShopName(shopDto.getShopName());
-                        if (shopExists) {
+                        Optional<ZoomosShop> existingShopOpt2 = zoomosShopRepository.findByShopName(shopDto.getShopName());
+                        if (existingShopOpt2.isPresent()) {
                             preview.setUpdatedZoomosShops(preview.getUpdatedZoomosShops() + 1);
                         } else {
                             preview.setNewZoomosShops(preview.getNewZoomosShops() + 1);
                         }
 
                         if (options.isIncludeSchedules() && shopDto.getSchedules() != null) {
-                            ZoomosShop existingShop = shopExists
-                                    ? zoomosShopRepository.findByShopName(shopDto.getShopName()).orElse(null)
-                                    : null;
+                            ZoomosShop existingShop = existingShopOpt2.orElse(null);
                             for (ZoomosScheduleConfigDto sDto : shopDto.getSchedules()) {
                                 boolean schedExists = existingShop != null &&
                                         scheduleRepository.findAllByShopId(existingShop.getId()).stream()
@@ -155,6 +150,10 @@ public class ConfigImportService {
                     }
                 }
             }
+        }
+
+        if (options.isIncludeSchedules() && (preview.getNewSchedules() + preview.getUpdatedSchedules()) > 0) {
+            preview.setSchedulesImportedDisabled(true);
         }
 
         return preview;

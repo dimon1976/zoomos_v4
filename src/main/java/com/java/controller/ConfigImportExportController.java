@@ -64,6 +64,11 @@ public class ConfigImportExportController {
             ConfigExportOptionsDto options) {
 
         log.info("Запрос превью импорта, файл: {}, размер: {} байт", file.getOriginalFilename(), file.getSize());
+        String previewFilename = file.getOriginalFilename();
+        if (previewFilename == null || !previewFilename.toLowerCase().endsWith(".json")) {
+            log.warn("Неверный тип файла для превью: {}", previewFilename);
+            return ResponseEntity.badRequest().build();
+        }
         try {
             ConfigExportDto config = objectMapper.readValue(file.getBytes(), ConfigExportDto.class);
             ConfigImportPreviewDto preview = importService.preview(config, options);
@@ -84,6 +89,14 @@ public class ConfigImportExportController {
             ConfigExportOptionsDto options) {
 
         log.info("Запрос на импорт конфигурации, файл: {}", file.getOriginalFilename());
+        String importFilename = file.getOriginalFilename();
+        if (importFilename == null || !importFilename.toLowerCase().endsWith(".json")) {
+            log.warn("Неверный тип файла для импорта: {}", importFilename);
+            ConfigImportResultDto error = new ConfigImportResultDto();
+            error.setSuccess(false);
+            error.getErrors().add("Ожидается файл формата .json");
+            return ResponseEntity.badRequest().body(error);
+        }
         try {
             ConfigExportDto config = objectMapper.readValue(file.getBytes(), ConfigExportDto.class);
             ConfigImportResultDto result = importService.execute(config, options);

@@ -310,6 +310,13 @@ function showPreview(p) {
         tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Нет изменений</td></tr>';
     }
 
+    if (p.schedulesImportedDisabled) {
+        const warn = document.createElement('div');
+        warn.className = 'alert alert-warning mt-2 mb-0';
+        warn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Расписания будут импортированы <strong>отключёнными</strong> — потребуется явное включение после импорта.';
+        document.getElementById('previewBody').closest('table').after(warn);
+    }
+
     document.getElementById('step1').classList.add('d-none');
     document.getElementById('step2').classList.remove('d-none');
 }

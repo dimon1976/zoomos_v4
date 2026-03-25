@@ -227,8 +227,14 @@ public class ExportStatisticsController {
                     if (setting.contains("percentage") || setting.contains("max")) {
                         try {
                             int intValue = Integer.parseInt(value);
-                            if (intValue < 0 || intValue > 100) {
-                                throw new IllegalArgumentException("Значение должно быть от 0 до 100");
+                            if (setting.contains("percentage")) {
+                                if (intValue < 0 || intValue > 100) {
+                                    throw new IllegalArgumentException("Значение должно быть от 0 до 100");
+                                }
+                            } else if (setting.contains("max")) {
+                                if (intValue < 1 || intValue > 10000) {
+                                    throw new IllegalArgumentException("Значение должно быть от 1 до 10000");
+                                }
                             }
                         } catch (NumberFormatException e) {
                             throw new IllegalArgumentException("Некорректное числовое значение: " + value);
@@ -278,49 +284,6 @@ public class ExportStatisticsController {
         }
     }
 
-
-    /**
-     * Диагностический endpoint для проверки данных
-     */
-    @GetMapping("/debug-data/client/{clientId}")
-    @ResponseBody
-    public Map<String, Object> debugData(@PathVariable Long clientId) {
-
-        Page<ExportSession> recentExports = sessionRepository.findByClientIdWithTemplate(
-                clientId,
-                PageRequest.of(0, settingsService.getMaxOperations(),
-                        Sort.by(Sort.Direction.DESC, "startedAt"))
-        );
-
-        Map<String, Object> result = new java.util.HashMap<>();
-        result.put("exportsCount", recentExports.getContent().size());
-        
-        for (ExportSession export : recentExports.getContent()) {
-            if (export.getFileOperation().getId() == 258L) {
-                result.put("export258_sessionId", export.getId());
-                result.put("export258_sessionStarted", export.getStartedAt());
-                result.put("export258_sessionStarted_formatted", 
-                    export.getStartedAt().toString());
-                result.put("export258_fileOpId", export.getFileOperation().getId());
-                result.put("export258_fileOpStarted", export.getFileOperation().getStartedAt());
-                result.put("export258_fileOpStarted_formatted", 
-                    export.getFileOperation().getStartedAt().toString());
-                
-                // Добавим системную информацию
-                result.put("serverTimeZone", java.util.TimeZone.getDefault().getID());
-                result.put("currentServerTime", java.time.Instant.now().toString());
-                
-                // Проверим разницу во времени
-                long timeDifference = export.getStartedAt().toInstant().toEpochMilli() - 
-                                    export.getFileOperation().getStartedAt().toInstant().toEpochMilli();
-                result.put("timeDifferenceMs", timeDifference);
-                
-                break;
-            }
-        }
-        
-        return result;
-    }
 
     /**
      * AJAX endpoint для предварительного просмотра статистики

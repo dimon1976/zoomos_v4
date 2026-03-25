@@ -63,4 +63,8 @@ public class ConfigImportPreviewDto {
     private int newCityAddresses = 0;
     @Builder.Default
     private int updatedCityAddresses = 0;
+
+    /** Расписания при импорте всегда отключены — требуют явного включения */
+    @Builder.Default
+    private boolean schedulesImportedDisabled = false;
 }

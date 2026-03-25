@@ -1,8 +1,9 @@
 package com.java.controller;
 
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -27,10 +28,13 @@ public class ThemeControllerAdvice {
         String theme = getThemeParam(request);
 
         if (theme != null) {
-            Cookie cookie = new Cookie(COOKIE_NAME, theme);
-            cookie.setPath("/");
-            cookie.setMaxAge(COOKIE_MAX_AGE);
-            response.addCookie(cookie);
+            ResponseCookie cookie = ResponseCookie.from(COOKIE_NAME, theme)
+                    .path("/")
+                    .maxAge(COOKIE_MAX_AGE)
+                    .httpOnly(true)
+                    .sameSite("Lax")
+                    .build();
+            response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
             return "tabler".equals(theme) ? TABLER_LAYOUT : BOOTSTRAP_LAYOUT;
         }
 

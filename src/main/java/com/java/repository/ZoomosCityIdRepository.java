@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,6 +15,8 @@ import java.util.Optional;
 public interface ZoomosCityIdRepository extends JpaRepository<ZoomosCityId, Long> {
 
     List<ZoomosCityId> findByShopIdOrderBySiteName(Long shopId);
+
+    List<ZoomosCityId> findByShopIdInOrderBySiteName(Collection<Long> shopIds);
 
     Optional<ZoomosCityId> findByShopIdAndSiteName(Long shopId, String siteName);
 
