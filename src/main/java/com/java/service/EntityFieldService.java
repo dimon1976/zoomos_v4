@@ -36,6 +36,10 @@ public class EntityFieldService {
         ENTITY_FIELDS.put(EntityType.BH_NAME_URL, List.of(
                 "name", "brand", "url", "siteName"
         ));
+
+        ENTITY_FIELDS.put(EntityType.BH_FULL, List.of(
+                "barcode", "name", "url", "brand", "manufacturerCode", "siteName"
+        ));
     }
 
     public List<String> getFields(EntityType entityType) {

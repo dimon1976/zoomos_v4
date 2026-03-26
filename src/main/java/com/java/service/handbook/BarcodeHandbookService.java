@@ -2,6 +2,7 @@ package com.java.service.handbook;
 
 import com.java.dto.handbook.BhSearchConfigDto;
 import com.java.dto.handbook.BhStatsDto;
+import com.java.dto.handbook.DomainRenameResult;
 import com.java.model.entity.*;
 import com.java.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.Optional;
 import com.java.util.BarcodeUtils;
 
 /**
@@ -38,6 +40,7 @@ public class BarcodeHandbookService {
     private final BhNameRepository nameRepo;
     private final BhUrlRepository urlRepo;
     private final BhDomainRepository domainRepo;
+    private final BhBrandService bhBrandService;
     private final JdbcTemplate jdbc;
 
     // =========================================================================
@@ -73,12 +76,26 @@ public class BarcodeHandbookService {
 
         // 2. Обработка строк со штрихкодом
         if (!withBarcode.isEmpty()) {
+            // Сортировка по штрихкоду: предотвращает дедлоки при конкурентных импортах
+            withBarcode.sort(Comparator.comparing(r -> r.get("barcode")));
+
+            // Загружаем маппинг синонимов одним запросом для всего батча
+            Set<String> rawBrandSet = withBarcode.stream()
+                    .map(r -> trim(r.get("brand")))
+                    .filter(b -> b != null && !b.isBlank())
+                    .collect(Collectors.toSet());
+            Map<String, String> synonymMap = bhBrandService.buildSynonymMap(rawBrandSet);
+
             // UPSERT продуктов по каждому штрихкоду
             List<Object[]> productParams = new ArrayList<>();
             for (Map<String, String> r : withBarcode) {
+                String rawBrand = trim(r.get("brand"));
+                String normalizedBrand = (rawBrand != null && !rawBrand.isBlank())
+                        ? synonymMap.getOrDefault(rawBrand.trim().toLowerCase(), rawBrand)
+                        : rawBrand;
                 productParams.add(new Object[]{
                         r.get("barcode"),
-                        trim(r.get("brand")),
+                        normalizedBrand,
                         trim(r.get("manufacturerCode"))
                 });
             }
@@ -167,13 +184,23 @@ public class BarcodeHandbookService {
             }
         }
 
+        // Загружаем маппинг синонимов одним запросом
+        Set<String> rawBrandSet = rows.stream()
+                .map(r -> trim(r.get("brand")))
+                .filter(b -> b != null && !b.isBlank())
+                .collect(Collectors.toSet());
+        Map<String, String> synonymMap = bhBrandService.buildSynonymMap(rawBrandSet);
+
         for (String name : newNames) {
             // Ищем бренд из первой строки с таким именем
-            String brand = rows.stream()
+            String rawBrand = rows.stream()
                     .filter(r -> name.equals(trim(r.get("name"))))
                     .map(r -> trim(r.get("brand")))
                     .filter(b -> b != null && !b.isEmpty())
                     .findFirst().orElse(null);
+            String brand = (rawBrand != null && !rawBrand.isBlank())
+                    ? synonymMap.getOrDefault(rawBrand.trim().toLowerCase(), rawBrand)
+                    : rawBrand;
             Long pid = jdbc.queryForObject(
                     "INSERT INTO bh_products (brand, created_at, updated_at) VALUES (?, NOW(), NOW()) RETURNING id",
                     Long.class, brand);
@@ -206,16 +233,164 @@ public class BarcodeHandbookService {
                     urlParams);
         }
 
-        // Обновляем реестр доменов одним батчем
-        for (String domain : uniqueDomains) {
+        // Обновляем реестр доменов: пересчёт реального url_count из bh_urls
+        if (!uniqueDomains.isEmpty()) {
+            String domainInClause = String.join(",", Collections.nCopies(uniqueDomains.size(), "?"));
             jdbc.update(
-                    "INSERT INTO bh_domains (domain, is_active, url_count, created_at) VALUES (?, true, 1, NOW()) " +
-                    "ON CONFLICT (domain) DO UPDATE SET url_count = bh_domains.url_count + 1",
-                    domain);
+                    "INSERT INTO bh_domains (domain, is_active, url_count, created_at) " +
+                    "SELECT domain, true, COUNT(*), NOW() FROM bh_urls " +
+                    "WHERE domain IN (" + domainInClause + ") GROUP BY domain " +
+                    "ON CONFLICT (domain) DO UPDATE SET url_count = EXCLUDED.url_count",
+                    uniqueDomains.toArray());
         }
 
         log.info("BH_NAME_URL батч: {} строк обработано", urlParams.size());
         return urlParams.size();
+    }
+
+    // =========================================================================
+    // ИМПОРТ: тип BH_FULL (штрихкод + наименование + URL) — БАТЧ
+    // =========================================================================
+
+    /**
+     * Батч-сохранение строк "полный импорт": штрихкод + наименование + URL + бренд.
+     * Обязательное поле: name. Хотя бы одно из barcode/url должно присутствовать.
+     * При наличии barcode: продукт ищется/создаётся по нему.
+     * При отсутствии barcode: продукт ищется/создаётся по имени (как в BH_NAME_URL).
+     */
+    @Transactional
+    public int persistFullBatch(List<Map<String, String>> rows, String source) {
+        if (rows.isEmpty()) return 0;
+
+        // --- Строки с штрихкодом ---
+        List<Map<String, String>> withBarcode = new ArrayList<>();
+        // --- Строки без штрихкода, но с именем+URL ---
+        List<Map<String, String>> withoutBarcode = new ArrayList<>();
+
+        for (Map<String, String> r : rows) {
+            String name       = trim(r.get("name"));
+            String barcodeRaw = trim(r.get("barcode"));
+            String url        = trim(r.get("url"));
+
+            boolean hasName    = name != null && !name.isEmpty();
+            boolean hasBarcode = barcodeRaw != null && !barcodeRaw.isEmpty();
+            boolean hasUrl     = url != null && !url.isEmpty();
+
+            // Нужно минимум 2 поля из 3
+            if ((hasName ? 1 : 0) + (hasBarcode ? 1 : 0) + (hasUrl ? 1 : 0) < 2) continue;
+
+            if (hasBarcode) {
+                for (String b : BarcodeUtils.parseAndNormalize(barcodeRaw)) {
+                    Map<String, String> expanded = new HashMap<>(r);
+                    expanded.put("barcode", b);
+                    withBarcode.add(expanded);
+                }
+            } else {
+                // name + url без barcode — делегируем в persistNameUrlBatch
+                withoutBarcode.add(r);
+            }
+        }
+
+        int saved = 0;
+
+        // --- Блок со штрихкодом: UPSERT продуктов ---
+        if (!withBarcode.isEmpty()) {
+            // Сортировка по штрихкоду: предотвращает дедлоки при конкурентных импортах
+            withBarcode.sort(Comparator.comparing(r -> r.get("barcode")));
+
+            // Загружаем маппинг синонимов одним запросом для всего батча
+            Set<String> rawBrandSet = withBarcode.stream()
+                    .map(r -> trim(r.get("brand")))
+                    .filter(b -> b != null && !b.isBlank())
+                    .collect(Collectors.toSet());
+            Map<String, String> synonymMap = bhBrandService.buildSynonymMap(rawBrandSet);
+
+            List<Object[]> productParams = new ArrayList<>();
+            for (Map<String, String> r : withBarcode) {
+                String rawBrand = trim(r.get("brand"));
+                String normalizedBrand = (rawBrand != null && !rawBrand.isBlank())
+                        ? synonymMap.getOrDefault(rawBrand.trim().toLowerCase(), rawBrand)
+                        : rawBrand;
+                productParams.add(new Object[]{
+                        r.get("barcode"),
+                        normalizedBrand,
+                        trim(r.get("manufacturerCode"))
+                });
+            }
+            jdbc.batchUpdate(
+                    "INSERT INTO bh_products (barcode, brand, manufacturer_code, created_at, updated_at) " +
+                    "VALUES (?, ?, ?, NOW(), NOW()) " +
+                    "ON CONFLICT (barcode) DO UPDATE SET " +
+                    "  brand = COALESCE(NULLIF(EXCLUDED.brand,''), bh_products.brand), " +
+                    "  manufacturer_code = COALESCE(NULLIF(EXCLUDED.manufacturer_code,''), bh_products.manufacturer_code), " +
+                    "  updated_at = NOW()",
+                    productParams);
+
+            List<String> barcodes = withBarcode.stream()
+                    .map(r -> r.get("barcode")).distinct().collect(Collectors.toList());
+            String inClause = String.join(",", Collections.nCopies(barcodes.size(), "?"));
+            Map<String, Long> barcodeToId = new HashMap<>();
+            jdbc.query(
+                    "SELECT id, barcode FROM bh_products WHERE barcode IN (" + inClause + ")",
+                    barcodes.toArray(),
+                    rs -> { barcodeToId.put(rs.getString("barcode"), rs.getLong("id")); });
+
+            // UPSERT наименований
+            List<Object[]> nameParams = new ArrayList<>();
+            for (Map<String, String> r : withBarcode) {
+                Long pid = barcodeToId.get(r.get("barcode"));
+                if (pid == null) continue;
+                String name = trim(r.get("name"));
+                if (name != null && !name.isEmpty()) {
+                    nameParams.add(new Object[]{pid, name, source});
+                }
+            }
+            if (!nameParams.isEmpty()) {
+                jdbc.batchUpdate(
+                        "INSERT INTO bh_names (product_id, name, source, created_at) VALUES (?, ?, ?, NOW()) " +
+                        "ON CONFLICT (product_id, name) DO NOTHING",
+                        nameParams);
+            }
+
+            // UPSERT URL
+            List<Object[]> urlParams = new ArrayList<>();
+            Set<String> uniqueDomains = new LinkedHashSet<>();
+            for (Map<String, String> r : withBarcode) {
+                Long pid = barcodeToId.get(r.get("barcode"));
+                if (pid == null) continue;
+                String url = trim(r.get("url"));
+                if (url == null || url.isEmpty()) continue;
+                String siteName = trim(r.get("siteName"));
+                String domain = extractDomain(url);
+                if (domain != null) uniqueDomains.add(domain);
+                urlParams.add(new Object[]{pid, url, domain, siteName, source});
+            }
+            if (!urlParams.isEmpty()) {
+                jdbc.batchUpdate(
+                        "INSERT INTO bh_urls (product_id, url, domain, site_name, source, created_at) " +
+                        "VALUES (?, ?, ?, ?, ?, NOW()) ON CONFLICT (product_id, url) DO NOTHING",
+                        urlParams);
+            }
+            // Обновляем реестр доменов: пересчёт реального url_count из bh_urls
+            if (!uniqueDomains.isEmpty()) {
+                String domainInClause = String.join(",", Collections.nCopies(uniqueDomains.size(), "?"));
+                jdbc.update(
+                        "INSERT INTO bh_domains (domain, is_active, url_count, created_at) " +
+                        "SELECT domain, true, COUNT(*), NOW() FROM bh_urls " +
+                        "WHERE domain IN (" + domainInClause + ") GROUP BY domain " +
+                        "ON CONFLICT (domain) DO UPDATE SET url_count = EXCLUDED.url_count",
+                        uniqueDomains.toArray());
+            }
+            saved += withBarcode.size();
+        }
+
+        // --- Блок без штрихкода: делегируем в persistNameUrlBatch ---
+        if (!withoutBarcode.isEmpty()) {
+            saved += persistNameUrlBatch(withoutBarcode, source);
+        }
+
+        log.info("BH_FULL батч: {} строк обработано", saved);
+        return saved;
     }
 
     // =========================================================================
@@ -405,21 +580,20 @@ public class BarcodeHandbookService {
         if (query == null || query.isBlank()) return Collections.emptyList();
         String q = query.trim();
 
-        // Нормализуем как штрихкод и ищем по нему
-        String normalizedBarcode = BarcodeUtils.normalize(q);
-
         List<Map<String, Object>> results = new ArrayList<>();
+        Set<Long> foundIds = new HashSet<>();
 
-        // 1. Поиск продуктов по штрихкоду (точное)
-        productRepo.findByBarcode(normalizedBarcode).ifPresent(p ->
-                results.add(buildProductResult(p, "barcode"))
-        );
+        // 1. Поиск продуктов по штрихкоду (поддержка нескольких ШК через запятую)
+        List<String> barcodes = BarcodeUtils.parseAndNormalize(q);
+        for (String bc : barcodes) {
+            productRepo.findByBarcode(bc).ifPresent(p -> {
+                if (foundIds.add(p.getId())) {
+                    results.add(buildProductResult(p, "barcode"));
+                }
+            });
+        }
 
         // 2. Поиск по части наименования через JDBC (ILIKE)
-        Set<Long> foundIds = results.stream()
-                .map(r -> (Long) r.get("productId"))
-                .collect(Collectors.toSet());
-
         String nameLike = "%" + q.toLowerCase() + "%";
         jdbc.query(
                 "SELECT DISTINCT n.product_id FROM bh_names n WHERE LOWER(n.name) LIKE ? LIMIT 30",
@@ -448,10 +622,16 @@ public class BarcodeHandbookService {
         return results;
     }
 
+    private static final int MAX_NAMES_IN_UI = 7;
+
     private Map<String, Object> buildProductResult(BhProduct p, String matchedBy) {
-        // Имена продукта
-        List<String> names = nameRepo.findByProductIdIn(List.of(p.getId()))
+        // Имена продукта — ограничиваем для читаемости UI
+        List<String> allNames = nameRepo.findByProductIdIn(List.of(p.getId()))
                 .stream().map(BhName::getName).collect(Collectors.toList());
+        List<String> names = allNames.size() > MAX_NAMES_IN_UI
+                ? allNames.subList(0, MAX_NAMES_IN_UI)
+                : allNames;
+
         // Ссылки продукта
         List<Map<String, String>> urls = urlRepo.findByProductIdIn(List.of(p.getId()))
                 .stream().map(u -> {
@@ -466,6 +646,7 @@ public class BarcodeHandbookService {
         result.put("barcode", p.getBarcode() != null ? p.getBarcode() : "");
         result.put("brand", p.getBrand() != null ? p.getBrand() : "");
         result.put("names", names);
+        result.put("totalNames", allNames.size());
         result.put("urls", urls);
         result.put("matchedBy", matchedBy);
         return result;
@@ -497,8 +678,20 @@ public class BarcodeHandbookService {
                 productRepo.count(),
                 nameRepo.count(),
                 urlRepo.count(),
-                domainRepo.count()
+                domainRepo.count(),
+                bhBrandService.countBrands()
         );
+    }
+
+    /**
+     * Пересчитывает url_count для всех доменов на основе реального количества URL в bh_urls.
+     * Используется для исправления исторических данных.
+     */
+    @Transactional
+    public int recalculateDomainCounts() {
+        return jdbc.update(
+                "UPDATE bh_domains d " +
+                "SET url_count = (SELECT COUNT(*) FROM bh_urls u WHERE u.domain = d.domain)");
     }
 
     private String extractDomain(String url) {
@@ -513,6 +706,89 @@ public class BarcodeHandbookService {
             log.debug("Не удалось извлечь домен из URL: {}", url);
             return null;
         }
+    }
+
+    /**
+     * Предварительный просмотр переименования домена: считает затронутые URL и дубли.
+     */
+    @Transactional(readOnly = true)
+    public DomainRenameResult previewRenameDomain(Long domainId, String newDomainName) {
+        BhDomain domain = domainRepo.findById(domainId)
+                .orElseThrow(() -> new IllegalArgumentException("Домен не найден: " + domainId));
+        String oldDomain = domain.getDomain();
+        String newDomain = newDomainName.trim().toLowerCase();
+
+        // Считаем дубли
+        Integer deletedDuplicates = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM bh_urls u WHERE u.domain = ? " +
+                "AND EXISTS (SELECT 1 FROM bh_urls b2 WHERE b2.product_id = u.product_id " +
+                "AND b2.url = REPLACE(u.url, '://' || ?, '://' || ?) AND b2.id != u.id)",
+                Integer.class, oldDomain, oldDomain, newDomain);
+
+        Integer totalUrls = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM bh_urls WHERE domain = ?", Integer.class, oldDomain);
+
+        boolean merged = domainRepo.findByDomain(newDomain).isPresent()
+                && !newDomain.equals(oldDomain);
+
+        return new DomainRenameResult(
+                totalUrls != null ? totalUrls : 0,
+                deletedDuplicates != null ? deletedDuplicates : 0,
+                merged,
+                newDomain
+        );
+    }
+
+    /**
+     * Переименовывает/объединяет домен: обновляет URL, удаляет дубли, обновляет реестр доменов.
+     */
+    @Transactional
+    public DomainRenameResult renameDomain(Long domainId, String newDomainName) {
+        BhDomain domain = domainRepo.findById(domainId)
+                .orElseThrow(() -> new IllegalArgumentException("Домен не найден: " + domainId));
+        String oldDomain = domain.getDomain();
+        String newDomain = newDomainName.trim().toLowerCase();
+
+        if (oldDomain.equals(newDomain)) {
+            throw new IllegalArgumentException("Новое название совпадает с текущим");
+        }
+
+        // 1. Удалить дубликаты (те URL, которые после rename совпадут с существующим URL того же продукта)
+        int deletedDuplicates = jdbc.update(
+                "DELETE FROM bh_urls WHERE domain = ? " +
+                "AND EXISTS (SELECT 1 FROM bh_urls b2 WHERE b2.product_id = bh_urls.product_id " +
+                "AND b2.url = REPLACE(bh_urls.url, '://' || ?, '://' || ?) AND b2.id != bh_urls.id)",
+                oldDomain, oldDomain, newDomain);
+
+        // 2. Обновить URL и domain
+        int updatedUrls = jdbc.update(
+                "UPDATE bh_urls SET url = REPLACE(url, '://' || ?, '://' || ?), domain = ? WHERE domain = ?",
+                oldDomain, newDomain, newDomain, oldDomain);
+
+        // 3. Обновить реестр доменов
+        boolean merged = false;
+        Optional<BhDomain> existingTarget = domainRepo.findByDomain(newDomain);
+
+        // Пересчитываем реальный url_count из bh_urls после обновления
+        Long actualCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM bh_urls WHERE domain = ?", Long.class, newDomain);
+        long realCount = actualCount != null ? actualCount : 0;
+
+        if (existingTarget.isPresent()) {
+            BhDomain target = existingTarget.get();
+            target.setUrlCount(realCount);
+            domainRepo.save(target);
+            domainRepo.delete(domain);
+            merged = true;
+        } else {
+            domain.setDomain(newDomain);
+            domain.setUrlCount(realCount);
+            domainRepo.save(domain);
+        }
+
+        log.info("Домен '{}' → '{}': обновлено {} URL, удалено {} дублей, слияние={}",
+                oldDomain, newDomain, updatedUrls, deletedDuplicates, merged);
+        return new DomainRenameResult(updatedUrls, deletedDuplicates, merged, newDomain);
     }
 
     @Transactional

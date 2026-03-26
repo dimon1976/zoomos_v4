@@ -30,6 +30,16 @@
     const matchLabels = { barcode: 'ШК', name: 'Наим.', url: 'URL' };
     const matchColors = { barcode: 'primary', name: 'success', url: 'info' };
 
+    function buildNamesHtml(p) {
+        const names = p.names || [];
+        const total = p.totalNames || names.length;
+        let html = names.join('<br>');
+        if (total > names.length) {
+            html += `<br><span class="text-muted small">...и ещё ${total - names.length}</span>`;
+        }
+        return html || '<span class="text-muted">—</span>';
+    }
+
     function doSearch() {
         const q = lookupInput.value.trim();
         if (!q) return;
@@ -55,10 +65,11 @@
                             if (ui === 0) {
                                 const label = matchLabels[p.matchedBy] || p.matchedBy;
                                 const color = matchColors[p.matchedBy] || 'secondary';
+                                const namesHtml = buildNamesHtml(p);
                                 tr.innerHTML = `
                                     <td rowspan="${rowCount}">${p.barcode || '<span class="text-muted">—</span>'}</td>
                                     <td rowspan="${rowCount}">${p.brand || '<span class="text-muted">—</span>'}</td>
-                                    <td rowspan="${rowCount}">${(p.names || []).join('<br>')}</td>
+                                    <td rowspan="${rowCount}">${namesHtml}</td>
                                     <td class="url-cell">${u.domain ? '<span class="text-muted small">' + u.domain + '</span><br>' : ''}<a href="${u.url}" target="_blank" rel="noopener">${u.url}</a></td>
                                     <td rowspan="${rowCount}"><span class="badge bg-${color} match-badge">${label}</span></td>`;
                             } else {
@@ -73,7 +84,7 @@
                             tr.innerHTML = `
                                 <td>${p.barcode || '<span class="text-muted">—</span>'}</td>
                                 <td>${p.brand || '<span class="text-muted">—</span>'}</td>
-                                <td>${(p.names || []).join('<br>')}</td>
+                                <td>${buildNamesHtml(p)}</td>
                                 <td class="text-muted small">Ссылок нет</td>
                                 <td><span class="badge bg-${color} match-badge">${label}</span></td>`;
                             resultsBody.appendChild(tr);
@@ -132,6 +143,14 @@
                 <div class="card-body py-2">
                     <div class="fs-4 fw-bold text-warning" th:text="${stats.domains}">0</div>
                     <small class="text-muted">Доменов</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3" th:if="${stats.brands > 0}">
+            <div class="card text-center border-secondary">
+                <div class="card-body py-2">
+                    <div class="fs-4 fw-bold text-secondary" th:text="${stats.brands}">0</div>
+                    <small class="text-muted">Брендов</small>
                 </div>
             </div>
         </div>
@@ -198,9 +217,20 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h5 class="card-title"><i class="fas fa-globe me-2 text-warning"></i>Управление доменами</h5>
-                    <p class="card-text text-muted">Просмотр и управление доменами сайтов. Включение/отключение доменов для фильтрации.</p>
+                    <p class="card-text text-muted">Просмотр и управление доменами сайтов. Включение/отключение, переименование и слияние доменов.</p>
                     <a th:href="@{/handbook/domains}" class="btn btn-warning">
                         <i class="fas fa-globe me-1"></i>Управление доменами
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-tag me-2 text-secondary"></i>Управление брендами</h5>
+                    <p class="card-text text-muted">Эталонные бренды и синонимы. Нормализует написание брендов при импорте данных.</p>
+                    <a th:href="@{/handbook/brands}" class="btn btn-secondary">
+                        <i class="fas fa-tag me-1"></i>Управление брендами
                     </a>
                 </div>
             </div>

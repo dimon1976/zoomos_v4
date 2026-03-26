@@ -63,9 +63,14 @@
                                 Название шаблона
                             </a>
                         </h5>
-                        <span class="badge entity-type-badge"
-                              th:classappend="${template.entityType.name() == 'PRODUCT' ? 'bg-primary' : 'bg-success'}"
-                              th:text="${template.entityType.displayName}">
+                        <span class="badge entity-type-badge text-white"
+                              th:classappend="${
+                                template.entityType.name() == 'BH_FULL' ? 'bg-success' :
+                                template.entityType.name() == 'BH_NAME_URL' ? 'bg-info' :
+                                template.entityType.name() == 'BH_BARCODE_NAME' ? 'bg-primary' :
+                                'bg-secondary'}"
+                              th:title="${template.entityType.displayName}"
+                              th:text="${template.entityType.name()}">
                             Тип
                         </span>
                     </div>

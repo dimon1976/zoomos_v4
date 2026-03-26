@@ -88,6 +88,8 @@ public class EntityPersistenceService {
                 return saveBhBarcodeNameBatch(batch, session);
             case BH_NAME_URL:
                 return saveBhNameUrlBatch(batch, session);
+            case BH_FULL:
+                return saveBhFullBatch(batch, session);
             default:
                 throw new UnsupportedOperationException("Неподдерживаемый тип сущности: " + entityType);
         }
@@ -255,6 +257,15 @@ public class EntityPersistenceService {
         String source = session.getTemplate() != null ? session.getTemplate().getName() : "import";
         List<Map<String, String>> strBatch = batch.stream().map(this::toStringMap).collect(java.util.stream.Collectors.toList());
         return barcodeHandbookService.persistNameUrlBatch(strBatch, source);
+    }
+
+    /**
+     * Сохраняет батч строк типа BH_FULL (полный импорт).
+     */
+    private int saveBhFullBatch(List<Map<String, Object>> batch, ImportSession session) {
+        String source = session.getTemplate() != null ? session.getTemplate().getName() : "import";
+        List<Map<String, String>> strBatch = batch.stream().map(this::toStringMap).collect(java.util.stream.Collectors.toList());
+        return barcodeHandbookService.persistFullBatch(strBatch, source);
     }
 
     /**
