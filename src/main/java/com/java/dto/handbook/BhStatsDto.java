@@ -10,4 +10,5 @@ public class BhStatsDto {
     private long names;
     private long urls;
     private long domains;
+    private long brands;
 }

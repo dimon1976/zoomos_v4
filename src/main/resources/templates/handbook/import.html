@@ -72,6 +72,32 @@
                 </div>
             </div>
         </div>
+        <!-- Тип 3: полный импорт -->
+        <div class="col-md-6">
+            <div class="card border-info h-100">
+                <div class="card-header bg-info text-white">
+                    <i class="fas fa-database me-2"></i>Тип: Полные данные (ШК + URL + Наименование)
+                    <span class="badge bg-light text-info ms-2 float-end">BH_FULL</span>
+                </div>
+                <div class="card-body">
+                    <p>Объединённый импорт: за один раз загружает штрихкод, наименование и URL.</p>
+                    <p><strong>Обязательные поля:</strong></p>
+                    <ul>
+                        <li><code>name</code> — Наименование товара</li>
+                    </ul>
+                    <p><strong>Дополнительные поля:</strong></p>
+                    <ul>
+                        <li><code>barcode</code> — Штрихкод (EAN-13)</li>
+                        <li><code>url</code> — Ссылка на карточку</li>
+                        <li><code>brand</code> — Бренд (нормализуется через справочник)</li>
+                        <li><code>manufacturerCode</code> — Артикул производителя</li>
+                        <li><code>siteName</code> — Название сайта</li>
+                    </ul>
+                    <hr>
+                    <p class="text-muted small">Если указан штрихкод — продукт найдётся/создастся по нему. Без штрихкода — по наименованию.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Инструкция по импорту -->
@@ -83,7 +109,7 @@
             <ol>
                 <li>Перейдите на главную страницу и выберите клиента</li>
                 <li>Нажмите <strong>"Новый импорт"</strong></li>
-                <li>Создайте шаблон импорта с типом <strong>BH_BARCODE_NAME</strong> или <strong>BH_NAME_URL</strong></li>
+                <li>Создайте шаблон импорта с типом <strong>BH_BARCODE_NAME</strong>, <strong>BH_NAME_URL</strong> или <strong>BH_FULL</strong></li>
                 <li>Настройте маппинг колонок файла на поля справочника</li>
                 <li>Загрузите файл — данные автоматически попадут в справочник</li>
             </ol>

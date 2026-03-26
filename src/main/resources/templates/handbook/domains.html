@@ -17,9 +17,74 @@
     </style>
 </th:block>
 
-<th:block th:fragment="scripts"></th:block>
+<th:block th:fragment="scripts">
+<script>
+    const filterInput = document.getElementById('domainFilter');
+    filterInput.addEventListener('input', function() {
+        const q = this.value.toLowerCase().trim();
+        document.querySelectorAll('.domain-row').forEach(row => {
+            const domain = row.dataset.domain.toLowerCase();
+            row.style.display = domain.includes(q) ? '' : 'none';
+        });
+    });
+
+    function clearFilter() {
+        filterInput.value = '';
+        filterInput.dispatchEvent(new Event('input'));
+    }
+
+    let renameDomainId = null;
+
+    function openRenameModal(btn) {
+        renameDomainId = btn.dataset.domainId;
+        document.getElementById('renameCurrentDomain').textContent = btn.dataset.domainName;
+        document.getElementById('renameNewDomain').value = btn.dataset.domainName;
+        document.getElementById('renamePreview').classList.add('d-none');
+        document.getElementById('renameSubmitBtn').disabled = true;
+        document.getElementById('renameForm').action = '/handbook/domains/' + renameDomainId + '/rename';
+        new bootstrap.Modal(document.getElementById('renameModal')).show();
+    }
+
+    function previewRename() {
+        const newDomain = document.getElementById('renameNewDomain').value.trim();
+        if (!newDomain) return;
+        const previewEl = document.getElementById('renamePreview');
+        const alertEl = document.getElementById('renamePreviewAlert');
+        alertEl.textContent = 'Загрузка...';
+        alertEl.className = 'alert alert-secondary mb-0';
+        previewEl.classList.remove('d-none');
+
+        fetch('/handbook/domains/' + renameDomainId + '/rename/preview?newDomain=' + encodeURIComponent(newDomain))
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    alertEl.className = 'alert alert-danger mb-0';
+                    alertEl.textContent = 'Ошибка: ' + data.error;
+                    document.getElementById('renameSubmitBtn').disabled = true;
+                    return;
+                }
+                const mergeNote = data.merged ? ' (слияние с существующим доменом)' : '';
+                alertEl.className = 'alert alert-info mb-0';
+                alertEl.innerHTML = `Будет обновлено <strong>${data.updatedUrls}</strong> URL, ` +
+                    `удалено <strong>${data.deletedDuplicates}</strong> дублей${mergeNote}.`;
+                document.getElementById('renameFormNewDomain').value = newDomain;
+                document.getElementById('renameSubmitBtn').disabled = false;
+            })
+            .catch(() => {
+                alertEl.className = 'alert alert-danger mb-0';
+                alertEl.textContent = 'Ошибка запроса.';
+                document.getElementById('renameSubmitBtn').disabled = true;
+            });
+    }
+</script>
+</th:block>
 
 <th:block th:fragment="pageActions">
+    <form th:action="@{/handbook/domains/recalculate-counts}" method="post" class="d-inline">
+        <button type="submit" class="btn btn-outline-info btn-sm">
+            <i class="fas fa-sync me-1"></i>Пересчитать счётчики
+        </button>
+    </form>
     <a th:href="@{/handbook}" class="btn btn-outline-secondary btn-sm">
         <i class="fas fa-arrow-left me-1"></i>Назад
     </a>
@@ -69,7 +134,7 @@
                             <th>Домен</th>
                             <th class="text-end">Ссылок</th>
                             <th class="text-center">Статус</th>
-                            <th class="text-center">Действие</th>
+                            <th class="text-center">Действия</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -98,6 +163,12 @@
                                             th:text="${d.isActive} ? 'Отключить' : 'Включить'">
                                     </button>
                                 </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        th:data-domain-id="${d.id}"
+                                        th:data-domain-name="${d.domain}"
+                                        onclick="openRenameModal(this)">
+                                    <i class="fas fa-pencil-alt"></i>
+                                </button>
                             </td>
                         </tr>
                     </tbody>
@@ -108,20 +179,42 @@
 
 </div>
 
-<script>
-    const filterInput = document.getElementById('domainFilter');
-    filterInput.addEventListener('input', function() {
-        const q = this.value.toLowerCase().trim();
-        document.querySelectorAll('.domain-row').forEach(row => {
-            const domain = row.dataset.domain.toLowerCase();
-            row.style.display = domain.includes(q) ? '' : 'none';
-        });
-    });
+<!-- Модальное окно переименования домена -->
+<div class="modal fade" id="renameModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-pencil-alt me-2"></i>Переименовать домен</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-2">Текущий домен: <strong id="renameCurrentDomain"></strong></p>
+                <div class="mb-3">
+                    <label class="form-label">Новый домен</label>
+                    <div class="input-group">
+                        <input type="text" id="renameNewDomain" class="form-control"
+                               placeholder="например perekrestok.ru">
+                        <button class="btn btn-outline-secondary" type="button" onclick="previewRename()">
+                            <i class="fas fa-eye me-1"></i>Предпросмотр
+                        </button>
+                    </div>
+                </div>
+                <div id="renamePreview" class="d-none">
+                    <div class="alert mb-0" id="renamePreviewAlert"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <form id="renameForm" method="post">
+                    <input type="hidden" name="newDomain" id="renameFormNewDomain">
+                    <button type="submit" class="btn btn-primary" id="renameSubmitBtn" disabled>
+                        <i class="fas fa-check me-1"></i>Выполнить
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 
-    function clearFilter() {
-        filterInput.value = '';
-        filterInput.dispatchEvent(new Event('input'));
-    }
-</script>
 </th:block>
 </html>

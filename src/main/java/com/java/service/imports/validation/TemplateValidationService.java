@@ -58,6 +58,11 @@ public class TemplateValidationService {
         ENTITY_FIELDS.put(EntityType.BH_NAME_URL, Set.of(
                 "name", "brand", "url", "siteName"
         ));
+
+        // Поля для полного импорта справочника
+        ENTITY_FIELDS.put(EntityType.BH_FULL, Set.of(
+                "barcode", "name", "url", "brand", "manufacturerCode", "siteName"
+        ));
     }
 
     /**
@@ -199,6 +204,9 @@ public class TemplateValidationService {
             case BH_NAME_URL:
                 requiredFields.add("name");
                 requiredFields.add("url");
+                break;
+            case BH_FULL:
+                requiredFields.add("name");
                 break;
         }
 

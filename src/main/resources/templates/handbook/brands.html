@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
+        title='Управление брендами',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Управление брендами справочника',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Управление брендами</title></head>
+
+<th:block th:fragment="styles">
+<style>
+    .synonym-tag {
+        display: inline-flex; align-items: center; gap: 4px;
+        background: #f0f0f0; border: 1px solid #ddd;
+        border-radius: 12px; padding: 1px 8px; font-size: 0.78em;
+    }
+    .synonym-tag button { background: none; border: none; padding: 0; cursor: pointer;
+        color: #888; font-size: 0.9em; line-height: 1; }
+    .synonym-tag button:hover { color: #dc3545; }
+    #brandsTableBody td { vertical-align: middle; }
+    .brand-name-cell { font-weight: 600; width: 220px; }
+    .actions-cell { width: 80px; text-align: center; white-space: nowrap; }
+    .import-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.4);
+        z-index:9999; align-items:center; justify-content:center; }
+    .import-overlay.active { display:flex; }
+</style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/handbook}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script th:inline="javascript">
+    const TOTAL_BRANDS = /*[[${totalBrands}]]*/ 0;
+
+    let currentPage = 0;
+    let currentQuery = '';
+    const PAGE_SIZE = 50;
+    let searchTimer = null;
+
+    // ---- Загрузка списка ----
+    function loadBrands(page, query) {
+        currentPage = page;
+        currentQuery = query;
+        const params = new URLSearchParams({ q: query, page, size: PAGE_SIZE });
+        document.getElementById('brandsTableBody').innerHTML =
+            '<tr><td colspan="3" class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Загрузка...</td></tr>';
+
+        fetch('/handbook/brands/list?' + params)
+            .then(r => r.json())
+            .then(data => renderBrands(data))
+            .catch(() => {
+                document.getElementById('brandsTableBody').innerHTML =
+                    '<tr><td colspan="3" class="text-danger text-center py-2">Ошибка загрузки</td></tr>';
+            });
+    }
+
+    function renderBrands(data) {
+        const tbody = document.getElementById('brandsTableBody');
+        const total = data.totalElements;
+
+        document.getElementById('brandsTotalBadge').textContent = total + ' брендов';
+
+        if (!data.brands || data.brands.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center py-3">' +
+                (currentQuery ? 'По запросу «' + esc(currentQuery) + '» ничего не найдено.' : 'Нет брендов.') +
+                '</td></tr>';
+            renderPagination(data);
+            return;
+        }
+
+        tbody.innerHTML = data.brands.map(b => {
+            const syns = (b.synonyms || []).map(s =>
+                `<span class="synonym-tag">${esc(s.synonym)}
+                    <button onclick="deleteSynonym(${b.id},${s.id},this)" title="Удалить">×</button>
+                 </span>`
+            ).join(' ');
+            const noSyns = b.synonyms && b.synonyms.length > 0 ? '' :
+                '<span class="text-muted" style="font-size:.8em">нет синонимов</span>';
+            return `<tr>
+                <td class="brand-name-cell">${esc(b.name)}</td>
+                <td>
+                    <div class="d-flex flex-wrap gap-1 align-items-center mb-1">${syns}${noSyns}</div>
+                    <div class="d-flex gap-1 mt-1">
+                        <input type="text" id="syn-${b.id}" class="form-control form-control-sm" style="max-width:180px" placeholder="Новый синоним">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="addSynonym(${b.id})">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="syn-error-${b.id}" class="text-danger small mt-1 d-none"></div>
+                </td>
+                <td class="actions-cell">
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteBrand(${b.id}, '${esc(b.name)}')" title="Удалить бренд">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        renderPagination(data);
+    }
+
+    function renderPagination(data) {
+        const el = document.getElementById('pagination');
+        if (data.totalPages <= 1) { el.innerHTML = ''; return; }
+
+        const p = data.currentPage;
+        const total = data.totalPages;
+        let html = '<ul class="pagination pagination-sm mb-0">';
+
+        html += `<li class="page-item ${!data.hasPrev ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="loadBrands(${p-1},'${esc(currentQuery)}');return false">‹</a></li>`;
+
+        // Показываем не больше 7 страниц вокруг текущей
+        let start = Math.max(0, p - 3);
+        let end = Math.min(total - 1, p + 3);
+        if (start > 0) html += `<li class="page-item disabled"><span class="page-link">…</span></li>`;
+        for (let i = start; i <= end; i++) {
+            html += `<li class="page-item ${i === p ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadBrands(${i},'${esc(currentQuery)}');return false">${i+1}</a></li>`;
+        }
+        if (end < total - 1) html += `<li class="page-item disabled"><span class="page-link">…</span></li>`;
+
+        html += `<li class="page-item ${!data.hasNext ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="loadBrands(${p+1},'${esc(currentQuery)}');return false">›</a></li>`;
+        html += '</ul>';
+
+        const from = p * PAGE_SIZE + 1;
+        const to = Math.min((p + 1) * PAGE_SIZE, data.totalElements);
+        el.innerHTML = `<div class="d-flex align-items-center gap-3 flex-wrap">
+            ${html}
+            <span class="text-muted small">${from}–${to} из ${data.totalElements}</span>
+        </div>`;
+    }
+
+    // ---- Операции с брендами ----
+    function addSynonym(brandId) {
+        const input = document.getElementById('syn-' + brandId);
+        const errEl = document.getElementById('syn-error-' + brandId);
+        const synonym = input.value.trim();
+        if (!synonym) return;
+
+        errEl.classList.add('d-none');
+        fetch('/handbook/brands/' + brandId + '/synonyms', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'synonym=' + encodeURIComponent(synonym)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                errEl.textContent = data.error;
+                errEl.classList.remove('d-none');
+            } else {
+                input.value = '';
+                loadBrands(currentPage, currentQuery);
+            }
+        });
+    }
+
+    function deleteSynonym(brandId, synonymId, btn) {
+        btn.disabled = true;
+        fetch('/handbook/brands/' + brandId + '/synonyms/' + synonymId + '/delete', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) { btn.disabled = false; showAlert('danger', data.error); }
+                else loadBrands(currentPage, currentQuery);
+            });
+    }
+
+    function deleteBrand(brandId, brandName) {
+        if (!confirm('Удалить бренд «' + brandName + '» и все его синонимы?')) return;
+        fetch('/handbook/brands/' + brandId + '/delete', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) showAlert('danger', data.error);
+                else loadBrands(currentPage, currentQuery);
+            });
+    }
+
+    // ---- Добавление бренда ----
+    function submitCreateBrand() {
+        const input = document.getElementById('newBrandInput');
+        const name = input.value.trim();
+        if (!name) return;
+        const errEl = document.getElementById('createBrandError');
+        errEl.classList.add('d-none');
+
+        fetch('/handbook/brands/create', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'name=' + encodeURIComponent(name)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                errEl.textContent = data.error;
+                errEl.classList.remove('d-none');
+            } else {
+                input.value = '';
+                bootstrap.Collapse.getInstance(document.getElementById('addBrandForm'))?.hide();
+                loadBrands(0, '');
+            }
+        });
+    }
+
+    // ---- Поиск ----
+    document.addEventListener('DOMContentLoaded', () => {
+        const searchInput = document.getElementById('brandSearch');
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => loadBrands(0, searchInput.value.trim()), 350);
+        });
+
+        document.getElementById('newBrandInput')?.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); submitCreateBrand(); }
+        });
+
+        loadBrands(0, '');
+    });
+
+    // ---- Спиннер импорта ----
+    function startImport() {
+        document.getElementById('importOverlay').classList.add('active');
+        return true;
+    }
+
+    // ---- Утилиты ----
+    function esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    function showAlert(type, msg) {
+        const el = document.createElement('div');
+        el.className = `alert alert-${type} alert-dismissible fade show`;
+        el.innerHTML = msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+        document.getElementById('alertsContainer').prepend(el);
+    }
+</script>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- Спиннер импорта -->
+    <div class="import-overlay" id="importOverlay">
+        <div class="card p-4 text-center" style="min-width:280px">
+            <div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem;margin:0 auto"></div>
+            <div class="fw-semibold">Загрузка брендов из справочника...</div>
+            <div class="text-muted small mt-1">Это может занять несколько секунд</div>
+        </div>
+    </div>
+
+    <!-- Flash сообщения -->
+    <div id="alertsContainer">
+        <div th:if="${success}" class="alert alert-success alert-dismissible fade show">
+            <i class="fas fa-check-circle me-2"></i><span th:text="${success}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        <div th:if="${error}" class="alert alert-danger alert-dismissible fade show">
+            <i class="fas fa-exclamation-triangle me-2"></i><span th:text="${error}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    </div>
+
+    <!-- Действия -->
+    <div class="d-flex gap-2 flex-wrap mb-3">
+        <form th:action="@{/handbook/brands/import-from-products}" method="post"
+              onsubmit="return startImport()">
+            <button type="submit" class="btn btn-outline-primary">
+                <i class="fas fa-download me-1"></i>Загрузить бренды из справочника
+            </button>
+        </form>
+        <button class="btn btn-success" type="button"
+                data-bs-toggle="collapse" data-bs-target="#addBrandForm">
+            <i class="fas fa-plus me-1"></i>Добавить бренд
+        </button>
+    </div>
+
+    <!-- Форма добавления бренда -->
+    <div class="collapse mb-3" id="addBrandForm">
+        <div class="card card-body py-2">
+            <div class="d-flex gap-2">
+                <input type="text" id="newBrandInput" class="form-control"
+                       placeholder="Название бренда" style="max-width:300px">
+                <button class="btn btn-success" type="button" onclick="submitCreateBrand()">
+                    <i class="fas fa-plus me-1"></i>Создать
+                </button>
+            </div>
+            <div id="createBrandError" class="text-danger small mt-1 d-none"></div>
+        </div>
+    </div>
+
+    <!-- Поиск -->
+    <div class="mb-3" style="max-width:400px">
+        <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="brandSearch" class="form-control" placeholder="Поиск по названию бренда...">
+        </div>
+    </div>
+
+    <!-- Таблица брендов -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-tag me-2"></i>Эталонные бренды</span>
+            <span class="badge bg-secondary" id="brandsTotalBadge"
+                  th:text="${totalBrands} + ' брендов'">0 брендов</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Бренд</th>
+                            <th>Синонимы</th>
+                            <th class="text-center">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="brandsTableBody">
+                        <tr>
+                            <td colspan="3" class="text-center py-3">
+                                <div class="spinner-border spinner-border-sm"></div> Загрузка...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer" id="pagination"></div>
+    </div>
+
+</div>
+</th:block>
+</html>
