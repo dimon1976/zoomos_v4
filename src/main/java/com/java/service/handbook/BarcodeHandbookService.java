@@ -79,11 +79,20 @@ public class BarcodeHandbookService {
             // Сортировка по штрихкоду: предотвращает дедлоки при конкурентных импортах
             withBarcode.sort(Comparator.comparing(r -> r.get("barcode")));
 
+            // Загружаем маппинг синонимов одним запросом для всего батча
+            Set<String> rawBrandSet = withBarcode.stream()
+                    .map(r -> trim(r.get("brand")))
+                    .filter(b -> b != null && !b.isBlank())
+                    .collect(Collectors.toSet());
+            Map<String, String> synonymMap = bhBrandService.buildSynonymMap(rawBrandSet);
+
             // UPSERT продуктов по каждому штрихкоду
             List<Object[]> productParams = new ArrayList<>();
             for (Map<String, String> r : withBarcode) {
                 String rawBrand = trim(r.get("brand"));
-                String normalizedBrand = bhBrandService.normalizeBrand(rawBrand);
+                String normalizedBrand = (rawBrand != null && !rawBrand.isBlank())
+                        ? synonymMap.getOrDefault(rawBrand.trim().toLowerCase(), rawBrand)
+                        : rawBrand;
                 productParams.add(new Object[]{
                         r.get("barcode"),
                         normalizedBrand,
@@ -175,6 +184,13 @@ public class BarcodeHandbookService {
             }
         }
 
+        // Загружаем маппинг синонимов одним запросом
+        Set<String> rawBrandSet = rows.stream()
+                .map(r -> trim(r.get("brand")))
+                .filter(b -> b != null && !b.isBlank())
+                .collect(Collectors.toSet());
+        Map<String, String> synonymMap = bhBrandService.buildSynonymMap(rawBrandSet);
+
         for (String name : newNames) {
             // Ищем бренд из первой строки с таким именем
             String rawBrand = rows.stream()
@@ -182,7 +198,9 @@ public class BarcodeHandbookService {
                     .map(r -> trim(r.get("brand")))
                     .filter(b -> b != null && !b.isEmpty())
                     .findFirst().orElse(null);
-            String brand = bhBrandService.normalizeBrand(rawBrand);
+            String brand = (rawBrand != null && !rawBrand.isBlank())
+                    ? synonymMap.getOrDefault(rawBrand.trim().toLowerCase(), rawBrand)
+                    : rawBrand;
             Long pid = jdbc.queryForObject(
                     "INSERT INTO bh_products (brand, created_at, updated_at) VALUES (?, NOW(), NOW()) RETURNING id",
                     Long.class, brand);
@@ -280,9 +298,19 @@ public class BarcodeHandbookService {
             // Сортировка по штрихкоду: предотвращает дедлоки при конкурентных импортах
             withBarcode.sort(Comparator.comparing(r -> r.get("barcode")));
 
+            // Загружаем маппинг синонимов одним запросом для всего батча
+            Set<String> rawBrandSet = withBarcode.stream()
+                    .map(r -> trim(r.get("brand")))
+                    .filter(b -> b != null && !b.isBlank())
+                    .collect(Collectors.toSet());
+            Map<String, String> synonymMap = bhBrandService.buildSynonymMap(rawBrandSet);
+
             List<Object[]> productParams = new ArrayList<>();
             for (Map<String, String> r : withBarcode) {
-                String normalizedBrand = bhBrandService.normalizeBrand(trim(r.get("brand")));
+                String rawBrand = trim(r.get("brand"));
+                String normalizedBrand = (rawBrand != null && !rawBrand.isBlank())
+                        ? synonymMap.getOrDefault(rawBrand.trim().toLowerCase(), rawBrand)
+                        : rawBrand;
                 productParams.add(new Object[]{
                         r.get("barcode"),
                         normalizedBrand,
@@ -694,7 +722,7 @@ public class BarcodeHandbookService {
         Integer deletedDuplicates = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM bh_urls u WHERE u.domain = ? " +
                 "AND EXISTS (SELECT 1 FROM bh_urls b2 WHERE b2.product_id = u.product_id " +
-                "AND b2.url = REPLACE(u.url, ?, ?) AND b2.id != u.id)",
+                "AND b2.url = REPLACE(u.url, '://' || ?, '://' || ?) AND b2.id != u.id)",
                 Integer.class, oldDomain, oldDomain, newDomain);
 
         Integer totalUrls = jdbc.queryForObject(
@@ -729,30 +757,32 @@ public class BarcodeHandbookService {
         int deletedDuplicates = jdbc.update(
                 "DELETE FROM bh_urls WHERE domain = ? " +
                 "AND EXISTS (SELECT 1 FROM bh_urls b2 WHERE b2.product_id = bh_urls.product_id " +
-                "AND b2.url = REPLACE(bh_urls.url, ?, ?) AND b2.id != bh_urls.id)",
+                "AND b2.url = REPLACE(bh_urls.url, '://' || ?, '://' || ?) AND b2.id != bh_urls.id)",
                 oldDomain, oldDomain, newDomain);
 
         // 2. Обновить URL и domain
         int updatedUrls = jdbc.update(
-                "UPDATE bh_urls SET url = REPLACE(url, ?, ?), domain = ? WHERE domain = ?",
+                "UPDATE bh_urls SET url = REPLACE(url, '://' || ?, '://' || ?), domain = ? WHERE domain = ?",
                 oldDomain, newDomain, newDomain, oldDomain);
 
         // 3. Обновить реестр доменов
         boolean merged = false;
         Optional<BhDomain> existingTarget = domainRepo.findByDomain(newDomain);
+
+        // Пересчитываем реальный url_count из bh_urls после обновления
+        Long actualCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM bh_urls WHERE domain = ?", Long.class, newDomain);
+        long realCount = actualCount != null ? actualCount : 0;
+
         if (existingTarget.isPresent()) {
-            // Слияние: добавить urlCount старого домена к целевому
             BhDomain target = existingTarget.get();
-            target.setUrlCount((target.getUrlCount() != null ? target.getUrlCount() : 0)
-                    + (domain.getUrlCount() != null ? domain.getUrlCount() : 0) - deletedDuplicates);
+            target.setUrlCount(realCount);
             domainRepo.save(target);
             domainRepo.delete(domain);
             merged = true;
         } else {
-            // Переименование
             domain.setDomain(newDomain);
-            long newCount = (domain.getUrlCount() != null ? domain.getUrlCount() : 0) - deletedDuplicates;
-            domain.setUrlCount(Math.max(newCount, 0));
+            domain.setUrlCount(realCount);
             domainRepo.save(domain);
         }
 

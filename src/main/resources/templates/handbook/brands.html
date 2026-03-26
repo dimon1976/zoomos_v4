@@ -39,6 +39,13 @@
 <script th:inline="javascript">
     const TOTAL_BRANDS = /*[[${totalBrands}]]*/ 0;
 
+    // CSRF-токен для AJAX POST (используется если Spring Security включён)
+    function csrfHeaders() {
+        const token = document.querySelector('meta[name="_csrf"]')?.content;
+        const header = document.querySelector('meta[name="_csrf_header"]')?.content;
+        return (token && header) ? { [header]: token } : {};
+    }
+
     let currentPage = 0;
     let currentQuery = '';
     const PAGE_SIZE = 50;
@@ -96,7 +103,10 @@
                     <div id="syn-error-${b.id}" class="text-danger small mt-1 d-none"></div>
                 </td>
                 <td class="actions-cell">
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteBrand(${b.id}, '${esc(b.name)}')" title="Удалить бренд">
+                    <button class="btn btn-sm btn-outline-danger delete-brand-btn"
+                            data-brand-id="${b.id}"
+                            data-brand-name="${esc(b.name)}"
+                            title="Удалить бренд">
                         <i class="fas fa-trash"></i>
                     </button>
                 </td>
@@ -149,7 +159,7 @@
         errEl.classList.add('d-none');
         fetch('/handbook/brands/' + brandId + '/synonyms', {
             method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', ...csrfHeaders()},
             body: 'synonym=' + encodeURIComponent(synonym)
         })
         .then(r => r.json())
@@ -166,7 +176,7 @@
 
     function deleteSynonym(brandId, synonymId, btn) {
         btn.disabled = true;
-        fetch('/handbook/brands/' + brandId + '/synonyms/' + synonymId + '/delete', { method: 'POST' })
+        fetch('/handbook/brands/' + brandId + '/synonyms/' + synonymId + '/delete', { method: 'POST', headers: csrfHeaders() })
             .then(r => r.json())
             .then(data => {
                 if (data.error) { btn.disabled = false; showAlert('danger', data.error); }
@@ -176,7 +186,7 @@
 
     function deleteBrand(brandId, brandName) {
         if (!confirm('Удалить бренд «' + brandName + '» и все его синонимы?')) return;
-        fetch('/handbook/brands/' + brandId + '/delete', { method: 'POST' })
+        fetch('/handbook/brands/' + brandId + '/delete', { method: 'POST', headers: csrfHeaders() })
             .then(r => r.json())
             .then(data => {
                 if (data.error) showAlert('danger', data.error);
@@ -194,7 +204,7 @@
 
         fetch('/handbook/brands/create', {
             method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', ...csrfHeaders()},
             body: 'name=' + encodeURIComponent(name)
         })
         .then(r => r.json())
@@ -223,6 +233,13 @@
         });
 
         loadBrands(0, '');
+
+        // Делегированный обработчик кнопки удаления бренда (безопасно для XSS)
+        document.getElementById('brandsTableBody').addEventListener('click', e => {
+            const btn = e.target.closest('.delete-brand-btn');
+            if (!btn) return;
+            deleteBrand(btn.dataset.brandId, btn.dataset.brandName);
+        });
     });
 
     // ---- Спиннер импорта ----
@@ -247,6 +264,9 @@
 </th:block>
 
 <th:block th:fragment="content">
+<!-- CSRF meta (для AJAX POST при включённом Spring Security) -->
+<meta th:if="${_csrf != null}" name="_csrf" th:content="${_csrf.token}"/>
+<meta th:if="${_csrf != null}" name="_csrf_header" th:content="${_csrf.headerName}"/>
 <div class="container-fluid">
 
     <!-- Спиннер импорта -->

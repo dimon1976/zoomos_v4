@@ -13,10 +13,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import org.springframework.jdbc.core.RowCallbackHandler;
 
 @Service
 @RequiredArgsConstructor
@@ -47,6 +51,14 @@ public class BhBrandService {
 
     @Transactional
     public void deleteBrand(Long id) {
+        BhBrand brand = brandRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Бренд не найден: " + id));
+        Integer usageCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM bh_products WHERE brand = ?", Integer.class, brand.getName());
+        if (usageCount != null && usageCount > 0) {
+            throw new IllegalStateException(
+                    "Бренд используется в " + usageCount + " продуктах — удаление невозможно");
+        }
         brandRepo.deleteById(id);
     }
 
@@ -82,33 +94,47 @@ public class BhBrandService {
     }
 
     /**
+     * Загружает маппинг синонимов для набора брендов одним SQL-запросом.
+     * Используется в батч-импорте для устранения N+1 запросов.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, String> buildSynonymMap(Collection<String> rawBrands) {
+        if (rawBrands == null || rawBrands.isEmpty()) return Collections.emptyMap();
+        List<String> lowerBrands = rawBrands.stream()
+                .filter(b -> b != null && !b.isBlank())
+                .map(b -> b.trim().toLowerCase())
+                .distinct()
+                .collect(Collectors.toList());
+        if (lowerBrands.isEmpty()) return Collections.emptyMap();
+        String inClause = String.join(",", Collections.nCopies(lowerBrands.size(), "?"));
+        Map<String, String> result = new HashMap<>();
+        jdbc.query(
+                "SELECT LOWER(TRIM(s.synonym)) AS syn, b.name AS canonical " +
+                "FROM bh_brand_synonyms s JOIN bh_brands b ON b.id = s.brand_id " +
+                "WHERE LOWER(TRIM(s.synonym)) IN (" + inClause + ")",
+                lowerBrands.toArray(),
+                (RowCallbackHandler) rs -> result.put(rs.getString("syn"), rs.getString("canonical")));
+        return result;
+    }
+
+    /**
      * Загружает DISTINCT бренды из bh_products и создаёт эталонные записи (UPSERT).
      * Возвращает статистику: {"created": N, "skipped": M}.
      */
     @Transactional
     public Map<String, Integer> importFromProducts() {
-        List<String> brands = jdbc.queryForList(
-                "SELECT DISTINCT brand FROM bh_products WHERE brand IS NOT NULL AND TRIM(brand) != '' ORDER BY brand",
-                String.class);
-
-        int created = 0;
-        int skipped = 0;
-        for (String brand : brands) {
-            String name = brand.trim();
-            if (brandRepo.findByNameIgnoreCase(name).isEmpty()) {
-                try {
-                    brandRepo.save(BhBrand.builder().name(name).build());
-                    created++;
-                } catch (Exception e) {
-                    log.debug("Не удалось создать бренд '{}': {}", name, e.getMessage());
-                    skipped++;
-                }
-            } else {
-                skipped++;
-            }
-        }
-        log.info("importFromProducts: создано {} брендов, пропущено {}", created, skipped);
-        return Map.of("created", created, "skipped", skipped);
+        Integer total = jdbc.queryForObject(
+                "SELECT COUNT(DISTINCT TRIM(brand)) FROM bh_products " +
+                "WHERE brand IS NOT NULL AND TRIM(brand) != ''",
+                Integer.class);
+        int inserted = jdbc.update(
+                "INSERT INTO bh_brands (name, created_at) " +
+                "SELECT DISTINCT TRIM(brand), NOW() FROM bh_products " +
+                "WHERE brand IS NOT NULL AND TRIM(brand) != '' " +
+                "ON CONFLICT (name) DO NOTHING");
+        int skipped = (total != null ? total : 0) - inserted;
+        log.info("importFromProducts: создано {} брендов, пропущено {}", inserted, skipped);
+        return Map.of("created", inserted, "skipped", Math.max(skipped, 0));
     }
 
     public long countBrands() {
