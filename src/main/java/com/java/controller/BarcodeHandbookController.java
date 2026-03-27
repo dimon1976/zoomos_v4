@@ -363,6 +363,10 @@ public class BarcodeHandbookController {
     @PostMapping("/cleanup/delete-suspect-barcodes")
     public String deleteSuspectBarcodes(@RequestParam(defaultValue = "6") int minLength,
                                         RedirectAttributes ra) {
+        if (minLength < 3 || minLength > 20) {
+            ra.addFlashAttribute("error", "Минимальная длина ШК должна быть от 3 до 20");
+            return "redirect:/handbook/cleanup";
+        }
         try {
             int count = handbookService.deleteSuspectBarcodeProducts(minLength);
             ra.addFlashAttribute("success",

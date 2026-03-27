@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -26,7 +28,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Optional;
 import com.java.util.BarcodeUtils;
 
 /**
@@ -48,6 +49,8 @@ public class BarcodeHandbookService {
 
     @Autowired @Lazy
     private BarcodeHandbookService self;
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     // =========================================================================
     // ИМПОРТ: тип BH_BARCODE_NAME (штрихкод + наименование) — БАТЧ
@@ -580,7 +583,11 @@ public class BarcodeHandbookService {
         log.info("BH search: {} input rows → {} output rows", rows.size(), resultRows.size() - 1);
 
         if (!synonymParams.isEmpty()) {
-            self.saveSynonyms(synonymParams);
+            try {
+                self.saveSynonyms(synonymParams);
+            } catch (Exception e) {
+                log.warn("BH search: не удалось сохранить синонимы: {}", e.getMessage());
+            }
         }
 
         // Генерация файла
@@ -607,109 +614,106 @@ public class BarcodeHandbookService {
     /**
      * Поиск по справочнику для отображения в UI.
      * Ищет по штрихкоду (точное совпадение), части наименования или части URL.
-     * Возвращает список Map для сериализации в JSON.
+     * Batch-загрузка продуктов, имён и URL для устранения N+1.
      */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> searchForUi(String query) {
         if (query == null || query.isBlank()) return Collections.emptyList();
         String q = query.trim();
 
-        List<Map<String, Object>> results = new ArrayList<>();
-        Set<Long> foundIds = new HashSet<>();
+        // productId → matchType (первое совпадение побеждает, порядок сохраняется)
+        Map<Long, String> matchMap = new LinkedHashMap<>();
+        Map<Long, BhProduct> barcodeProducts = new LinkedHashMap<>();
 
-        // 1. Поиск продуктов по штрихкоду (поддержка нескольких ШК через запятую)
-        List<String> barcodes = BarcodeUtils.parseAndNormalize(q);
-        for (String bc : barcodes) {
+        // 1. Поиск по штрихкоду — продукты загружаем сразу (обычно 1-2 результата)
+        for (String bc : BarcodeUtils.parseAndNormalize(q)) {
             productRepo.findByBarcode(bc).ifPresent(p -> {
-                if (foundIds.add(p.getId())) {
-                    results.add(buildProductResult(p, "barcode"));
+                if (!matchMap.containsKey(p.getId())) {
+                    matchMap.put(p.getId(), "barcode");
+                    barcodeProducts.put(p.getId(), p);
                 }
             });
         }
 
-        // 2. Поиск по части наименования через JDBC (ILIKE)
-        String nameLike = "%" + q.toLowerCase() + "%";
-        jdbc.query(
-                "SELECT DISTINCT n.product_id FROM bh_names n WHERE LOWER(n.name) LIKE ? LIMIT 30",
-                (RowCallbackHandler) rs -> {
-                    long pid = rs.getLong("product_id");
-                    if (foundIds.add(pid)) {
-                        productRepo.findById(pid).ifPresent(p ->
-                                results.add(buildProductResult(p, "name"))
-                        );
-                    }
-                }, nameLike);
+        // 2. Поиск по части наименования — собираем ID
+        String like = "%" + q.toLowerCase() + "%";
+        jdbc.query("SELECT DISTINCT n.product_id FROM bh_names n WHERE LOWER(n.name) LIKE ? LIMIT 30",
+                (RowCallbackHandler) rs -> matchMap.putIfAbsent(rs.getLong("product_id"), "name"), like);
 
-        // 3. Поиск по части URL через JDBC
-        String urlLike = "%" + q.toLowerCase() + "%";
-        jdbc.query(
-                "SELECT DISTINCT u.product_id FROM bh_urls u WHERE LOWER(u.url) LIKE ? LIMIT 30",
-                (RowCallbackHandler) rs -> {
-                    long pid = rs.getLong("product_id");
-                    if (foundIds.add(pid)) {
-                        productRepo.findById(pid).ifPresent(p ->
-                                results.add(buildProductResult(p, "url"))
-                        );
-                    }
-                }, urlLike);
+        // 3. Поиск по части URL — собираем ID
+        jdbc.query("SELECT DISTINCT u.product_id FROM bh_urls u WHERE LOWER(u.url) LIKE ? LIMIT 30",
+                (RowCallbackHandler) rs -> matchMap.putIfAbsent(rs.getLong("product_id"), "url"), like);
 
+        if (matchMap.isEmpty()) return Collections.emptyList();
+
+        // Batch-загрузка продуктов (ещё не загруженных через штрихкод)
+        Map<Long, BhProduct> productMap = new HashMap<>(barcodeProducts);
+        List<Long> remaining = matchMap.keySet().stream()
+                .filter(id -> !productMap.containsKey(id)).collect(Collectors.toList());
+        if (!remaining.isEmpty()) {
+            productRepo.findAllById(remaining).forEach(p -> productMap.put(p.getId(), p));
+        }
+
+        List<Long> allIds = new ArrayList<>(matchMap.keySet());
+
+        // Batch-загрузка имён и URL
+        Map<Long, List<String>> namesByProduct = nameRepo.findByProductIdIn(allIds).stream()
+                .collect(Collectors.groupingBy(n -> n.getProduct().getId(),
+                        Collectors.mapping(BhName::getName, Collectors.toList())));
+
+        Map<Long, List<BhUrl>> urlsByProduct = urlRepo.findByProductIdIn(allIds).stream()
+                .collect(Collectors.groupingBy(u -> u.getProduct().getId()));
+
+        // Формирование результатов
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (Map.Entry<Long, String> entry : matchMap.entrySet()) {
+            long pid = entry.getKey();
+            BhProduct p = productMap.get(pid);
+            if (p == null) continue;
+
+            List<String> allNames = namesByProduct.getOrDefault(pid, Collections.emptyList());
+            List<String> names = allNames.size() > MAX_NAMES_IN_UI
+                    ? allNames.subList(0, MAX_NAMES_IN_UI) : allNames;
+
+            List<BhUrl> productUrls = urlsByProduct.getOrDefault(pid, Collections.emptyList());
+
+            // При поиске по имени без URL: ищем URL у продуктов с теми же наименованиями
+            if (productUrls.isEmpty() && "name".equals(entry.getValue()) && !allNames.isEmpty()) {
+                List<String> nameKeys = allNames.stream()
+                        .map(n -> n.toLowerCase().trim()).distinct().collect(Collectors.toList());
+                String ph = String.join(",", Collections.nCopies(nameKeys.size(), "?"));
+                Set<Long> relatedIds = new HashSet<>();
+                relatedIds.add(pid);
+                jdbc.query(
+                    "SELECT DISTINCT n2.product_id FROM bh_names n2 WHERE LOWER(TRIM(n2.name)) IN (" + ph + ")",
+                    nameKeys.toArray(),
+                    (RowCallbackHandler) rs -> relatedIds.add(rs.getLong("product_id")));
+                if (relatedIds.size() > 1) {
+                    productUrls = urlRepo.findByProductIdIn(new ArrayList<>(relatedIds));
+                }
+            }
+
+            List<Map<String, String>> urls = productUrls.stream().map(u -> {
+                Map<String, String> m = new LinkedHashMap<>();
+                m.put("url", u.getUrl());
+                m.put("domain", u.getDomain() != null ? u.getDomain() : "");
+                return m;
+            }).collect(Collectors.toList());
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("productId", p.getId());
+            result.put("barcode", p.getBarcode() != null ? p.getBarcode() : "");
+            result.put("brand", p.getBrand() != null ? p.getBrand() : "");
+            result.put("names", names);
+            result.put("totalNames", allNames.size());
+            result.put("urls", urls);
+            result.put("matchedBy", entry.getValue());
+            results.add(result);
+        }
         return results;
     }
 
     private static final int MAX_NAMES_IN_UI = 7;
-
-    private Map<String, Object> buildProductResult(BhProduct p, String matchedBy) {
-        // Имена продукта — ограничиваем для читаемости UI
-        List<String> allNames = nameRepo.findByProductIdIn(List.of(p.getId()))
-                .stream().map(BhName::getName).collect(Collectors.toList());
-        List<String> names = allNames.size() > MAX_NAMES_IN_UI
-                ? allNames.subList(0, MAX_NAMES_IN_UI)
-                : allNames;
-
-        // Ссылки продукта
-        List<Map<String, String>> urls = urlRepo.findByProductIdIn(List.of(p.getId()))
-                .stream().map(u -> {
-                    Map<String, String> m = new java.util.LinkedHashMap<>();
-                    m.put("url", u.getUrl());
-                    m.put("domain", u.getDomain() != null ? u.getDomain() : "");
-                    return m;
-                }).collect(Collectors.toList());
-
-        // При поиске по наименованию: если у найденного продукта нет URL,
-        // ищем URL у всех продуктов с теми же наименованиями (данные могут быть фрагментированы)
-        if (urls.isEmpty() && "name".equals(matchedBy) && !allNames.isEmpty()) {
-            List<String> nameKeys = allNames.stream()
-                    .map(n -> n.toLowerCase().trim())
-                    .distinct()
-                    .collect(Collectors.toList());
-            String ph = String.join(",", Collections.nCopies(nameKeys.size(), "?"));
-            Set<Long> relatedIds = new HashSet<>();
-            relatedIds.add(p.getId());
-            jdbc.query(
-                "SELECT DISTINCT n2.product_id FROM bh_names n2 WHERE LOWER(TRIM(n2.name)) IN (" + ph + ")",
-                nameKeys.toArray(),
-                (RowCallbackHandler) rs -> relatedIds.add(rs.getLong("product_id")));
-            if (relatedIds.size() > 1) {
-                urls = urlRepo.findByProductIdIn(new ArrayList<>(relatedIds))
-                        .stream().map(u -> {
-                            Map<String, String> m = new java.util.LinkedHashMap<>();
-                            m.put("url", u.getUrl());
-                            m.put("domain", u.getDomain() != null ? u.getDomain() : "");
-                            return m;
-                        }).collect(Collectors.toList());
-            }
-        }
-
-        Map<String, Object> result = new java.util.LinkedHashMap<>();
-        result.put("productId", p.getId());
-        result.put("barcode", p.getBarcode() != null ? p.getBarcode() : "");
-        result.put("brand", p.getBrand() != null ? p.getBrand() : "");
-        result.put("names", names);
-        result.put("totalNames", allNames.size());
-        result.put("urls", urls);
-        result.put("matchedBy", matchedBy);
-        return result;
-    }
 
     // =========================================================================
     // УПРАВЛЕНИЕ ДОМЕНАМИ
@@ -877,10 +881,12 @@ public class BarcodeHandbookService {
      * Использует LIMIT-сэмплинг вместо COUNT(*): PostgreSQL останавливается при нахождении
      * первых N строк, что многократно быстрее полного сканирования таблицы.
      */
+    @Transactional(readOnly = true)
     public Map<String, Object> getCleanupStats() {
-        // Научная нотация: ШК содержит 'E' или 'e' (невозможно для числового ШК)
+        // Научная нотация: ШК содержит E/e, за которым следует опциональный знак и цифры
+        // Паттерн согласован с BarcodeUtils.isInvalid()
         List<String> invalidExamples = jdbc.queryForList(
-            "SELECT barcode FROM bh_products WHERE barcode ~ '[Ee]' LIMIT 10",
+            "SELECT barcode FROM bh_products WHERE barcode ~ '[Ee][+-]?[0-9]' LIMIT 10",
             String.class);
 
         // Короткие/нечисловые: содержит не-цифры или длина < 6
@@ -890,10 +896,10 @@ public class BarcodeHandbookService {
             String.class);
 
         // Сироты: NULL barcode + нет URL (проверяем наличие хотя бы одного через LIMIT 1)
-        List<Long> orphanCheck = jdbc.queryForList(
+        boolean orphanFound = !jdbc.queryForList(
             "SELECT id FROM bh_products WHERE barcode IS NULL " +
             "AND NOT EXISTS (SELECT 1 FROM bh_urls WHERE product_id = bh_products.id) LIMIT 1",
-            Long.class);
+            Long.class).isEmpty();
 
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("invalidBarcodeCount", invalidExamples.size());
@@ -902,7 +908,7 @@ public class BarcodeHandbookService {
         stats.put("suspectCount", suspectExamples.size());
         stats.put("suspectExamples", suspectExamples);
         stats.put("suspectHasMore", suspectExamples.size() == 10);
-        stats.put("orphanCount", orphanCheck.isEmpty() ? 0 : 1);
+        stats.put("orphanFound", orphanFound);
         return stats;
     }
 
@@ -913,7 +919,7 @@ public class BarcodeHandbookService {
     @Transactional
     public int deleteInvalidBarcodeProducts() {
         int count = jdbc.update(
-            "DELETE FROM bh_products WHERE barcode ~ '[Ee]'");
+            "DELETE FROM bh_products WHERE barcode ~ '[Ee][+-]?[0-9]'");
         log.info("Очистка: удалено {} продуктов с бракованными ШК (научная нотация)", count);
         return count;
     }
@@ -1011,8 +1017,7 @@ public class BarcodeHandbookService {
     private List<String> parseHeaders(String headersJson) {
         if (headersJson == null || headersJson.isBlank()) return new ArrayList<>();
         try {
-            com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
-            return om.readValue(headersJson, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            return OBJECT_MAPPER.readValue(headersJson, new TypeReference<List<String>>() {});
         } catch (Exception e) {
             return new ArrayList<>();
         }

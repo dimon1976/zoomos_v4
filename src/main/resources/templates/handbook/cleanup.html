@@ -29,9 +29,15 @@
 
 <th:block th:fragment="scripts">
 <script>
+function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function confirmDelete(formId, count, noun) {
     if (confirm('Удалить ' + count + ' ' + noun + '? Это действие необратимо.')) {
-        document.getElementById(formId).submit();
+        const form = document.getElementById(formId);
+        form.querySelector('button[type="button"]').disabled = true;
+        form.submit();
     }
 }
 
@@ -42,7 +48,7 @@ function spinner() {
 function renderExamples(examples, colorClass) {
     if (!examples || examples.length === 0) return '';
     return '<small class="text-muted d-block mb-1">Примеры:</small><ul class="list-unstyled mb-0">'
-        + examples.map(e => `<li><code class="${colorClass} small">${e}</code></li>`).join('')
+        + examples.map(e => `<li><code class="${colorClass} small">${escapeHtml(e)}</code></li>`).join('')
         + '</ul>';
 }
 
@@ -77,12 +83,12 @@ function applyStats(data) {
     }
 
     // --- Карточка 3: Продукты-сироты ---
-    const orphCount = data.orphanCount || 0;
-    document.getElementById('orphCount').textContent = orphCount > 0 ? 'Есть' : '0';
-    document.getElementById('orphStatus').innerHTML = orphCount === 0
+    const orphFound = data.orphanFound || false;
+    document.getElementById('orphCount').textContent = orphFound ? 'Есть' : '0';
+    document.getElementById('orphStatus').innerHTML = !orphFound
         ? '<div class="text-success small"><i class="fas fa-check-circle me-1"></i>Таких записей нет</div>'
         : '<div class="text-muted small">Найдены продукты без ШК и без URL</div>';
-    if (orphCount > 0) {
+    if (orphFound) {
         document.getElementById('cardOrphans').classList.add('has-items');
         document.getElementById('btnOrphans').onclick = () =>
             confirmDelete('formOrphans', '', 'продукты-сироты (NULL ШК + нет URL)');
