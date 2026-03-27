@@ -39,6 +39,19 @@ public final class BarcodeUtils {
     }
 
     /**
+     * Возвращает true, если штрихкод считается невалидным:
+     * - содержит научную нотацию (9.4172E+12, 94172E+12)
+     * - не является числовой строкой
+     * - короче 6 символов
+     */
+    public static boolean isInvalid(String barcode) {
+        if (barcode == null || barcode.length() < 6) return true;
+        if (barcode.matches("(?i).*[Ee][+\\-]?\\d+.*")) return true; // научная нотация
+        if (!barcode.matches("\\d+")) return true;  // не чисто цифровой
+        return false;
+    }
+
+    /**
      * Нормализует один штрихкод:
      * - убирает пробелы, табы, неразрывные пробелы (NBSP, NNBSP и др.)
      * - убирает управляющие символы
