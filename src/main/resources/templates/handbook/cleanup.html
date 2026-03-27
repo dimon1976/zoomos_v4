@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
+        title='Очистка данных справочника',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Очистка данных справочника',
+        pageActions=~{::pageActions}
+      )}">
+<head><title>Очистка данных справочника</title></head>
+
+<th:block th:fragment="styles">
+<style>
+.stat-spinner { display: inline-block; width: 1.2em; height: 1.2em;
+    border: 2px solid currentColor; border-right-color: transparent;
+    border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.cleanup-card .card-footer { display: none; }
+.cleanup-card.has-items .card-footer { display: block; }
+</style>
+</th:block>
+
+<th:block th:fragment="pageActions">
+    <a th:href="@{/handbook}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Назад к справочнику
+    </a>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script>
+function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function confirmDelete(formId, count, noun) {
+    if (confirm('Удалить ' + count + ' ' + noun + '? Это действие необратимо.')) {
+        const form = document.getElementById(formId);
+        form.querySelector('button[type="button"]').disabled = true;
+        form.submit();
+    }
+}
+
+function spinner() {
+    return '<span class="stat-spinner text-secondary"></span>';
+}
+
+function renderExamples(examples, colorClass) {
+    if (!examples || examples.length === 0) return '';
+    return '<small class="text-muted d-block mb-1">Примеры:</small><ul class="list-unstyled mb-0">'
+        + examples.map(e => `<li><code class="${colorClass} small">${escapeHtml(e)}</code></li>`).join('')
+        + '</ul>';
+}
+
+function countLabel(count, hasMore) {
+    if (count === 0) return '0';
+    return hasMore ? ('≥' + count) : String(count);
+}
+
+function applyStats(data) {
+    // --- Карточка 1: Научная нотация ---
+    const invCount = data.invalidBarcodeCount || 0;
+    document.getElementById('invCount').textContent = countLabel(invCount, data.invalidHasMore);
+    document.getElementById('invExamples').innerHTML = invCount > 0
+        ? renderExamples(data.invalidExamples, 'text-danger')
+        : '<div class="text-success small"><i class="fas fa-check-circle me-1"></i>Таких записей нет</div>';
+    if (invCount > 0) {
+        document.getElementById('cardInvalid').classList.add('has-items');
+        document.getElementById('btnInvalid').onclick = () =>
+            confirmDelete('formInvalid', countLabel(invCount, data.invalidHasMore), 'продуктов с ШК в научной нотации');
+    }
+
+    // --- Карточка 2: Короткие/нечисловые ШК ---
+    const susCount = data.suspectCount || 0;
+    document.getElementById('susCount').textContent = countLabel(susCount, data.suspectHasMore);
+    document.getElementById('susExamples').innerHTML = susCount > 0
+        ? renderExamples(data.suspectExamples, 'text-warning')
+        : '<div class="text-success small"><i class="fas fa-check-circle me-1"></i>Таких записей нет</div>';
+    if (susCount > 0) {
+        document.getElementById('cardSuspect').classList.add('has-items');
+        document.getElementById('btnSuspect').onclick = () =>
+            confirmDelete('formSuspect', countLabel(susCount, data.suspectHasMore), 'продуктов с подозрительными ШК');
+    }
+
+    // --- Карточка 3: Продукты-сироты ---
+    const orphFound = data.orphanFound || false;
+    document.getElementById('orphCount').textContent = orphFound ? 'Есть' : '0';
+    document.getElementById('orphStatus').innerHTML = !orphFound
+        ? '<div class="text-success small"><i class="fas fa-check-circle me-1"></i>Таких записей нет</div>'
+        : '<div class="text-muted small">Найдены продукты без ШК и без URL</div>';
+    if (orphFound) {
+        document.getElementById('cardOrphans').classList.add('has-items');
+        document.getElementById('btnOrphans').onclick = () =>
+            confirmDelete('formOrphans', '', 'продукты-сироты (NULL ШК + нет URL)');
+    }
+
+    document.getElementById('statsStatus').innerHTML =
+        '<span class="text-success small"><i class="fas fa-check-circle me-1"></i>Данные загружены</span>';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('statsStatus').innerHTML =
+        spinner() + ' <span class="text-muted small ms-1">Подсчёт некорректных записей...</span>';
+
+    fetch('/handbook/cleanup/stats')
+        .then(r => r.json())
+        .then(applyStats)
+        .catch(() => {
+            document.getElementById('statsStatus').innerHTML =
+                '<span class="text-danger small"><i class="fas fa-exclamation-circle me-1"></i>Ошибка загрузки статистики</span>';
+        });
+});
+</script>
+</th:block>
+
+<th:block th:fragment="content">
+<div class="container-fluid">
+
+    <!-- Уведомления -->
+    <div th:if="${success}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="fas fa-check-circle me-2"></i><span th:text="${success}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="fas fa-exclamation-circle me-2"></i><span th:text="${error}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <!-- Предупреждение -->
+    <div class="alert alert-warning mb-3">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        <strong>Внимание!</strong> Удалённые данные восстановлению не подлежат.
+        Перед очисткой убедитесь в правильности данных.
+    </div>
+
+    <!-- Статус загрузки статистики -->
+    <div class="mb-3" id="statsStatus"></div>
+
+    <div class="row g-3">
+
+        <!-- Карточка 1: Научная нотация -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 border-danger cleanup-card" id="cardInvalid">
+                <div class="card-header bg-danger text-white">
+                    <i class="fas fa-exclamation-circle me-2"></i>Научная нотация
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        Штрихкоды вида <code>94172E+12</code> или <code>9.4172E+12</code> —
+                        результат потери точности в Excel. Восстановление невозможно.
+                    </p>
+                    <div class="mb-3">
+                        <span class="fw-bold">Найдено продуктов:</span>
+                        <span class="badge bg-danger fs-6 ms-2" id="invCount"><span class="stat-spinner text-light"></span></span>
+                    </div>
+                    <div id="invExamples"></div>
+                </div>
+                <div class="card-footer">
+                    <form id="formInvalid" action="/handbook/cleanup/delete-invalid-barcodes" method="post">
+                        <button type="button" id="btnInvalid" class="btn btn-danger btn-sm w-100">
+                            <i class="fas fa-trash me-1"></i>Удалить бракованные ШК
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Карточка 2: Короткие/нечисловые ШК -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 border-warning cleanup-card" id="cardSuspect">
+                <div class="card-header bg-warning">
+                    <i class="fas fa-question-circle me-2"></i>Короткие/нечисловые ШК
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        Штрихкоды короче минимальной длины или содержащие нечисловые символы.
+                        Например: <code>6</code>, <code>abc</code>.
+                    </p>
+                    <div class="mb-3">
+                        <span class="fw-bold">Найдено продуктов:</span>
+                        <span class="badge bg-warning text-dark fs-6 ms-2" id="susCount"><span class="stat-spinner text-dark"></span></span>
+                    </div>
+                    <div id="susExamples"></div>
+                </div>
+                <div class="card-footer">
+                    <form id="formSuspect" action="/handbook/cleanup/delete-suspect-barcodes" method="post">
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text">Мин. длина ШК</span>
+                            <input type="number" name="minLength" class="form-control" value="6" min="1" max="20">
+                        </div>
+                        <button type="button" id="btnSuspect" class="btn btn-warning btn-sm w-100">
+                            <i class="fas fa-trash me-1"></i>Удалить подозрительные ШК
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Карточка 3: Продукты-сироты -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 border-secondary cleanup-card" id="cardOrphans">
+                <div class="card-header bg-secondary text-white">
+                    <i class="fas fa-unlink me-2"></i>Продукты-сироты
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        Продукты где <code>barcode IS NULL</code> <strong>и нет URL</strong>.
+                        Продукты с NULL barcode но с URL — не сироты (они нужны для поиска по наименованию).
+                    </p>
+                    <div class="mb-3">
+                        <span class="fw-bold">Найдено:</span>
+                        <span class="badge bg-secondary fs-6 ms-2" id="orphCount"><span class="stat-spinner text-light"></span></span>
+                    </div>
+                    <div id="orphStatus"></div>
+                </div>
+                <div class="card-footer">
+                    <form id="formOrphans" action="/handbook/cleanup/delete-orphans" method="post">
+                        <button type="button" id="btnOrphans" class="btn btn-secondary btn-sm w-100">
+                            <i class="fas fa-trash me-1"></i>Удалить продукты-сироты
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+</th:block>
+</html>

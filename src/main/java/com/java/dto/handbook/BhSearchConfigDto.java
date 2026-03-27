@@ -21,6 +21,9 @@ public class BhSearchConfigDto {
     /** Требовать совпадение бренда при поиске по наименованию */
     private boolean requireBrandMatch = false;
 
+    /** Сохранять наименования из входного файла как синонимы в справочник */
+    private boolean saveNamesAsSynonyms = false;
+
     /** Формат результирующего файла: CSV или XLSX */
     private String outputFormat = "XLSX";
 

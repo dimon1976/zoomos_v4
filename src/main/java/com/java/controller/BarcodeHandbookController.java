@@ -10,7 +10,6 @@ import com.java.model.entity.BhDomain;
 import com.java.model.entity.FileMetadata;
 import com.java.service.handbook.BhBrandService;
 import org.springframework.data.domain.Page;
-import org.springframework.http.ResponseEntity;
 import com.java.service.file.FileAnalyzerService;
 import com.java.service.handbook.BarcodeHandbookService;
 import lombok.RequiredArgsConstructor;
@@ -321,6 +320,61 @@ public class BarcodeHandbookController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    // =========================================================================
+    // Очистка данных
+    // =========================================================================
+
+    @GetMapping("/cleanup")
+    public String cleanup(Model model) {
+        model.addAttribute("pageTitle", "Очистка данных справочника");
+        return "handbook/cleanup";
+    }
+
+    @GetMapping("/cleanup/stats")
+    @ResponseBody
+    public Map<String, Object> cleanupStats() {
+        return handbookService.getCleanupStats();
+    }
+
+    @PostMapping("/cleanup/delete-invalid-barcodes")
+    public String deleteInvalidBarcodes(RedirectAttributes ra) {
+        try {
+            int count = handbookService.deleteInvalidBarcodeProducts();
+            ra.addFlashAttribute("success", "Удалено " + count + " продуктов с бракованными ШК (научная нотация)");
+        } catch (Exception e) {
+            ra.addFlashAttribute("error", "Ошибка: " + e.getMessage());
+        }
+        return "redirect:/handbook/cleanup";
+    }
+
+    @PostMapping("/cleanup/delete-orphans")
+    public String deleteOrphans(RedirectAttributes ra) {
+        try {
+            int count = handbookService.deleteOrphanProducts();
+            ra.addFlashAttribute("success", "Удалено " + count + " продуктов-сирот (NULL ШК + нет URL)");
+        } catch (Exception e) {
+            ra.addFlashAttribute("error", "Ошибка: " + e.getMessage());
+        }
+        return "redirect:/handbook/cleanup";
+    }
+
+    @PostMapping("/cleanup/delete-suspect-barcodes")
+    public String deleteSuspectBarcodes(@RequestParam(defaultValue = "6") int minLength,
+                                        RedirectAttributes ra) {
+        if (minLength < 3 || minLength > 20) {
+            ra.addFlashAttribute("error", "Минимальная длина ШК должна быть от 3 до 20");
+            return "redirect:/handbook/cleanup";
+        }
+        try {
+            int count = handbookService.deleteSuspectBarcodeProducts(minLength);
+            ra.addFlashAttribute("success",
+                    "Удалено " + count + " продуктов с подозрительными ШК (минимальная длина: " + minLength + ")");
+        } catch (Exception e) {
+            ra.addFlashAttribute("error", "Ошибка: " + e.getMessage());
+        }
+        return "redirect:/handbook/cleanup";
     }
 
     @PostMapping("/brands/import-from-products")

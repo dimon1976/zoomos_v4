@@ -16,8 +16,8 @@ public interface BhNameRepository extends JpaRepository<BhName, Long> {
      * Поиск по наименованию (без учёта регистра и пробелов по краям).
      * JOIN FETCH для загрузки продукта в одном запросе.
      */
-    @Query("SELECT n FROM BhName n JOIN FETCH n.product WHERE LOWER(TRIM(n.name)) = LOWER(TRIM(:name))")
-    Optional<BhName> findByNameIgnoreCase(@Param("name") String name);
+    @Query("SELECT n FROM BhName n JOIN FETCH n.product WHERE LOWER(TRIM(n.name)) = LOWER(TRIM(:name)) ORDER BY n.id ASC")
+    List<BhName> findByNameIgnoreCase(@Param("name") String name);
 
     boolean existsByProductIdAndName(Long productId, String name);
 

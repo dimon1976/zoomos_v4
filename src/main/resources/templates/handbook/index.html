@@ -114,7 +114,7 @@
 
     <!-- Статистика -->
     <div class="row mb-4" th:if="${stats}">
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="card text-center border-primary">
                 <div class="card-body py-2">
                     <div class="fs-4 fw-bold text-primary" th:text="${stats.products}">0</div>
@@ -122,7 +122,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="card text-center border-success">
                 <div class="card-body py-2">
                     <div class="fs-4 fw-bold text-success" th:text="${stats.names}">0</div>
@@ -130,7 +130,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="card text-center border-info">
                 <div class="card-body py-2">
                     <div class="fs-4 fw-bold text-info" th:text="${stats.urls}">0</div>
@@ -138,7 +138,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="card text-center border-warning">
                 <div class="card-body py-2">
                     <div class="fs-4 fw-bold text-warning" th:text="${stats.domains}">0</div>
@@ -146,7 +146,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3" th:if="${stats.brands > 0}">
+        <div class="col-6 col-md" th:if="${stats.brands > 0}">
             <div class="card text-center border-secondary">
                 <div class="card-body py-2">
                     <div class="fs-4 fw-bold text-secondary" th:text="${stats.brands}">0</div>
@@ -231,6 +231,17 @@
                     <p class="card-text text-muted">Эталонные бренды и синонимы. Нормализует написание брендов при импорте данных.</p>
                     <a th:href="@{/handbook/brands}" class="btn btn-secondary">
                         <i class="fas fa-tag me-1"></i>Управление брендами
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100 border-danger-subtle">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-broom me-2 text-danger"></i>Очистка данных</h5>
+                    <p class="card-text text-muted">Удаление некорректных штрихкодов (научная нотация), коротких значений и записей-сирот.</p>
+                    <a th:href="@{/handbook/cleanup}" class="btn btn-outline-danger">
+                        <i class="fas fa-broom me-1"></i>Открыть инструменты очистки
                     </a>
                 </div>
             </div>
