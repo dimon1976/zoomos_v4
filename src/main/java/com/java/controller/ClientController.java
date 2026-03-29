@@ -1,6 +1,7 @@
 package com.java.controller;
 
 import com.java.dto.ClientDto;
+import com.java.model.entity.CheckRunStatus;
 import com.java.model.entity.ZoomosCheckRun;
 import com.java.model.entity.ZoomosShop;
 import com.java.model.entity.ZoomosShopSchedule;
@@ -105,7 +106,7 @@ public class ClientController {
                     if (client.getLinkedShopId() != null) {
                         checkRunRepository.findByShopIdOrderByStartedAtDesc(client.getLinkedShopId())
                                 .stream()
-                                .filter(r -> "COMPLETED".equals(r.getStatus())
+                                .filter(r -> CheckRunStatus.COMPLETED == r.getStatus()
                                         && ((r.getErrorCount() != null && r.getErrorCount() > 0)
                                         || (r.getWarningCount() != null && r.getWarningCount() > 0)))
                                 .findFirst()

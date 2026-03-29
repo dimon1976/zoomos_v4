@@ -93,7 +93,7 @@
                             </td>
                             <td class="text-center">
                                 <span class="badge"
-                                      th:classappend="${r.status == 'COMPLETED'} ? 'bg-success' : (${r.status == 'FAILED'} ? 'bg-danger' : 'bg-warning')"
+                                      th:classappend="${r.status == 'COMPLETED'} ? 'bg-success' : (${r.status == 'FAILED'} ? 'bg-danger' : 'bg-warning text-dark')"
                                       th:text="${r.status}">OK</span>
                                 <span th:if="${r.timeoutCount != null and r.timeoutCount > 0}"
                                       class="badge bg-warning text-dark ms-1"

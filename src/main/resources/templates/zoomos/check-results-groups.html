@@ -130,7 +130,7 @@
                         <span class="badge ms-1"
                               th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger' :
                                              (${ag['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
-                              th:text="${ag['noData'] == true and ag['inProgressStat'] != null ? 'В процессе' : (ag['noData'] == true and ag['status'] == 'ERROR' ? 'Нет данных' : ag['status'])}"></span>
+                              th:text="${ag['displayStatus']}"></span>
                     </div>
                     <!-- Нет данных (noData) — строка-заглушка вместо таблицы -->
                     <div th:if="${ag['noData'] == true and ag['issueMessage'] != null}"

@@ -1,6 +1,8 @@
 package com.java.service;
 
 import com.java.util.CronUtils;
+import com.java.dto.zoomos.ZoomosCheckParams;
+import com.java.model.entity.CheckRunStatus;
 import com.java.model.entity.ZoomosCheckRun;
 import com.java.model.entity.ZoomosShopSchedule;
 import com.java.repository.ZoomosCheckRunRepository;
@@ -42,10 +44,10 @@ public class ZoomosSchedulerService {
     @PostConstruct
     public void init() {
         // Переводим зависшие RUNNING-проверки в FAILED (остались после рестарта приложения)
-        List<ZoomosCheckRun> stuckRuns = checkRunRepository.findAllByStatus("RUNNING");
+        List<ZoomosCheckRun> stuckRuns = checkRunRepository.findAllByStatus(CheckRunStatus.RUNNING);
         if (!stuckRuns.isEmpty()) {
             ZonedDateTime now = ZonedDateTime.now();
-            stuckRuns.forEach(r -> { r.setStatus("FAILED"); r.setCompletedAt(now); });
+            stuckRuns.forEach(r -> { r.setStatus(CheckRunStatus.FAILED); r.setCompletedAt(now); });
             checkRunRepository.saveAll(stuckRuns);
             log.warn("ZoomosSchedulerService: {} зависших RUNNING-проверок переведены в FAILED", stuckRuns.size());
         }
@@ -141,12 +143,20 @@ public class ZoomosSchedulerService {
         log.info("Автопроверка id={} shopId={}: {} — {} (offset {} .. {})",
                 s.getId(), s.getShopId(), dateFrom, dateTo, latest.getDateOffsetFrom(), latest.getDateOffsetTo());
         try {
-            checkService.runCheck(latest.getShopId(), dateFrom, dateTo,
-                    latest.getTimeFrom(), latest.getTimeTo(),
-                    latest.getDropThreshold(), latest.getErrorGrowthThreshold(),
-                    latest.getBaselineDays(), latest.getMinAbsoluteErrors(),
-                    latest.getTrendDropThreshold(), latest.getTrendErrorThreshold(),
-                    operationId);
+            checkService.runCheck(ZoomosCheckParams.builder()
+                    .shopId(latest.getShopId())
+                    .dateFrom(dateFrom)
+                    .dateTo(dateTo)
+                    .timeFrom(latest.getTimeFrom())
+                    .timeTo(latest.getTimeTo())
+                    .dropThreshold(latest.getDropThreshold())
+                    .errorGrowthThreshold(latest.getErrorGrowthThreshold())
+                    .baselineDays(latest.getBaselineDays())
+                    .minAbsoluteErrors(latest.getMinAbsoluteErrors())
+                    .trendDropThreshold(latest.getTrendDropThreshold())
+                    .trendErrorThreshold(latest.getTrendErrorThreshold())
+                    .operationId(operationId)
+                    .build());
             scheduleRepo.findById(s.getId()).ifPresent(schedule -> {
                 schedule.setLastRunAt(ZonedDateTime.now());
                 scheduleRepo.save(schedule);

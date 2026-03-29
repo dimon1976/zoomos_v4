@@ -1,6 +1,7 @@
 package com.java.controller;
 
 import com.java.config.ZoomosConfig;
+import com.java.dto.zoomos.ZoomosCheckParams;
 import com.java.model.entity.*;
 import com.java.service.RedmineService;
 import com.java.repository.ZoomosCityAddressRepository;
@@ -538,7 +539,20 @@ public class ZoomosAnalysisController {
             // Запускаем в фоне через выделенный пул (для параллельного запуска нескольких магазинов)
             CompletableFuture.runAsync(() -> {
                 try {
-                    checkService.runCheck(shopId, from, to, tf, tt, dropThreshold, errorGrowthThreshold, bl, mae, tdt, tet, operationId);
+                    checkService.runCheck(ZoomosCheckParams.builder()
+                            .shopId(shopId)
+                            .dateFrom(from)
+                            .dateTo(to)
+                            .timeFrom(tf)
+                            .timeTo(tt)
+                            .dropThreshold(dropThreshold)
+                            .errorGrowthThreshold(errorGrowthThreshold)
+                            .baselineDays(bl)
+                            .minAbsoluteErrors(mae)
+                            .trendDropThreshold(tdt)
+                            .trendErrorThreshold(tet)
+                            .operationId(operationId)
+                            .build());
                     // Обновляем lastRunAt во всех расписаниях магазина
                     java.time.ZonedDateTime now = java.time.ZonedDateTime.now();
                     java.util.List<ZoomosShopSchedule> schedules = scheduleRepository.findAllByShopId(shopId);
@@ -560,7 +574,7 @@ public class ZoomosAnalysisController {
 
     @GetMapping("/check/results/{runId}")
     public String checkResults(@PathVariable Long runId, Model model) {
-        ZoomosCheckRun run = checkRunRepository.findById(runId)
+        ZoomosCheckRun run = checkRunRepository.findByIdWithShop(runId)
                 .orElseThrow(() -> new IllegalArgumentException("Проверка не найдена: " + runId));
 
         List<ZoomosParsingStats> allStatsList = parsingStatsRepository
@@ -1073,7 +1087,7 @@ public class ZoomosAnalysisController {
      */
     @GetMapping("/check/results/{runId}/groups")
     public String checkResultsGroups(@PathVariable Long runId, Model model) {
-        ZoomosCheckRun run = checkRunRepository.findById(runId)
+        ZoomosCheckRun run = checkRunRepository.findByIdWithShop(runId)
                 .orElseThrow(() -> new IllegalArgumentException("Проверка не найдена: " + runId));
 
         List<ZoomosParsingStats> allStatsList = parsingStatsRepository
@@ -1350,7 +1364,7 @@ public class ZoomosAnalysisController {
 
         String siteName    = newest.getSiteName();
         String cityName    = newest.getCityName();
-        String checkType   = newest.getCheckType();
+        String checkType   = newest.getCheckType() != null ? newest.getCheckType().name() : "ITEM";
         String addressId   = newest.getAddressId();
         String addressName = newest.getAddressName();
         String cityId = cityName != null && cityName.contains(" - ")
@@ -1628,7 +1642,7 @@ public class ZoomosAnalysisController {
                     .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
                     .orElse("OK");
 
-            String checkType = siteStats.get(0).getCheckType();
+            String checkType = siteStats.get(0).getCheckType() != null ? siteStats.get(0).getCheckType().name() : "ITEM";
 
             Map<String, List<ZoomosParsingStats>> byCity = siteStats.stream()
                     .collect(Collectors.groupingBy(
@@ -1767,12 +1781,25 @@ public class ZoomosAnalysisController {
             }
         }
 
-        // Пересортировать все уровни с учётом новых записей
+        // Пересортировать все уровни с учётом новых записей; вычислить displayStatus для каждой addressGroup
         for (Map<String, Object> g : groups) {
             List<Map<String, Object>> cgs = (List<Map<String, Object>>) g.get("cityGroups");
             for (Map<String, Object> cg : cgs) {
                 List<Map<String, Object>> ags = (List<Map<String, Object>>) cg.get("addressGroups");
                 ags.sort(Comparator.comparingInt(ag -> statusPriority((String) ag.get("status"))));
+                // Вычисляем отображаемый статус (бизнес-логика из шаблона перенесена сюда)
+                for (Map<String, Object> ag : ags) {
+                    String agStatus = (String) ag.get("status");
+                    String displayStatus;
+                    if (Boolean.TRUE.equals(ag.get("noData")) && ag.get("inProgressStat") != null) {
+                        displayStatus = "В процессе";
+                    } else if (Boolean.TRUE.equals(ag.get("noData")) && "ERROR".equals(agStatus)) {
+                        displayStatus = "Нет данных";
+                    } else {
+                        displayStatus = agStatus;
+                    }
+                    ag.put("displayStatus", displayStatus);
+                }
                 String worstCityStatus = ags.stream().map(ag -> (String) ag.get("status"))
                         .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
                         .orElse((String) cg.get("status"));
@@ -1833,7 +1860,7 @@ public class ZoomosAnalysisController {
         result.put("warningCount", run.getWarningCount());
         result.put("errorCount", run.getErrorCount());
         result.put("notFoundCount", run.getNotFoundCount());
-        result.put("status", run.getStatus());
+        result.put("status", run.getStatus() != null ? run.getStatus().name() : null);
         result.put("dateFrom", run.getDateFrom() != null ? run.getDateFrom().toString() : null);
         result.put("dateTo", run.getDateTo() != null ? run.getDateTo().toString() : null);
         if (run.getStartedAt() != null) {
@@ -2144,7 +2171,7 @@ public class ZoomosAnalysisController {
                             Comparator.naturalOrder()));
                     boolean ignoreStk = group.get(0).getSiteName() != null
                             && ignoreStockSitesAlert.contains(group.get(0).getSiteName());
-                    String status = checkService.evaluateGroup(group, drop, errGrowth, minAbsErr, ignoreStk);
+                    String status = checkService.evaluateGroup(group, drop, errGrowth, minAbsErr, ignoreStk, null);
                     if ("OK".equals(status)) continue;
 
                     String rawName = group.get(0).getSiteName();

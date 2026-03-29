@@ -102,8 +102,9 @@ public class ZoomosParsingStats {
     @Column(name = "parsing_date", nullable = false)
     private LocalDate parsingDate;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "check_type", nullable = false)
-    private String checkType;
+    private ZoomosCheckType checkType;
 
     @Column(name = "checked_at", updatable = false)
     private ZonedDateTime checkedAt;

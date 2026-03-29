@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-03 (редизайн Block 2 + баг-фиксы v2: ручной collapse toggle без data-bs-toggle, CSS filter→background-color, site-issues по умолчанию закрыты + авто-раскрытие JS, кнопка «Проверено» сворачивает и маркирует, Phase 1 для edit-режима; блок «Проверено мной» — verified-сайты физически перемещаются в отдельный collapsible-блок; фикс isClosed для btn-class Redmine; currentSelectedIssues из Phase 1 скрываются после создания задачи; showCopyBlock при update использует shortMessage)
+> Последнее обновление: 2026-03 (рефакторинг: ZoomosCheckParams DTO, CheckRunStatus/ZoomosCheckType enum, FetchType.LAZY для shop, AddressFilterContext record, TIMESTAMPTZ миграция, индексы производительности V50)
 
 ## Назначение
 
@@ -22,7 +22,7 @@
 
 ---
 
-## Структура БД (Flyway V23–V42)
+## Структура БД (Flyway V23–V50)
 
 ```sql
 zoomos_check_runs
@@ -72,6 +72,14 @@ zoomos_settings
 clients
   ...is_active BOOLEAN NOT NULL DEFAULT TRUE
   ...sort_order INTEGER NOT NULL DEFAULT 0
+
+-- V49: конвертация created_at/updated_at в TIMESTAMPTZ для zoomos_redmine_issues
+-- V50: индексы производительности
+--   idx_check_runs_status                 ON zoomos_check_runs(status)
+--   idx_shop_schedules_shop_id            ON zoomos_shop_schedules(shop_id)
+--   idx_shop_schedules_is_enabled         ON zoomos_shop_schedules(is_enabled) WHERE is_enabled=TRUE
+--   idx_parsing_stats_baseline_lookup     ON zoomos_parsing_stats(site_name, is_baseline, start_time DESC)
+--   idx_parsing_stats_site_addr_completion ON zoomos_parsing_stats(site_name, address_id, completion_percent, start_time DESC)
 ```
 
 ---
@@ -287,6 +295,19 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 - Городское название (`cityDisplay`): в `buildGroupIssues` хранится только читаемая часть после " - " (null если ID без имени)
 
 Конфиг: `redmine.base-url`, `redmine.api-key`, `redmine.project-id`, и т.д. в `application.properties`.
+
+---
+
+## Ключевые типы и DTO
+
+| Класс | Описание |
+|-------|---------|
+| `CheckRunStatus` | enum RUNNING / COMPLETED / FAILED — хранится как STRING в `zoomos_check_runs.status` |
+| `ZoomosCheckType` | enum API / ITEM — хранится как STRING в `zoomos_parsing_stats.check_type` |
+| `ZoomosCheckParams` | @Value @Builder DTO — заменяет 12-параметровую сигнатуру `runCheck()` |
+| `AddressFilterContext` | private record внутри `ZoomosCheckService` — контекст фильтрации city/address |
+
+**Запуск проверки** через `checkService.runCheck(ZoomosCheckParams.builder()...build())` — из контроллера и планировщика.
 
 ---
 
