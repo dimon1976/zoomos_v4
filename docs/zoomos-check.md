@@ -84,7 +84,9 @@ clients
 
 ---
 
-## Логика оценки (`ZoomosCheckService.evaluateGroup`)
+## Логика оценки (`ZoomosCheckService.evaluateAndBuildIssues`)
+
+Единственная точка оценки группы выкачек — метод `evaluateAndBuildIssues(...)`. Возвращает `GroupEvalResult(status, issues)` — статус и готовые issue-сообщения за один проход. Заменяет ранее раздельные `evaluateGroup()` + `buildGroupIssues()`.
 
 ### Статусы
 
@@ -97,7 +99,7 @@ clients
 - **Сравнение**: с `baseline.inStock` если доступен, иначе с `prev.inStock` (предыдущая запись).
 - **ignoreStock** — флаг из `zoomos_sites.ignore_stock`: inStock-метрика пропускается, используется `totalProducts`.
 
-### Алгоритм evaluateGroup (sortedAsc, baseline)
+### Алгоритм evaluateAndBuildIssues (sortedAsc, baseline)
 
 ```
 1. Пусто → OK
@@ -144,7 +146,7 @@ public record MedianStats(Integer inStock, Integer totalProducts, Integer durati
 
 ---
 
-## Сообщения в issues (buildGroupIssues)
+## Сообщения в issues (формируются внутри evaluateAndBuildIssues)
 
 При наличии baseline — показывается `[медиана: X]` вместо значения prev:
 
@@ -315,8 +317,8 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 
 | Файл | Назначение |
 |------|-----------|
-| `ZoomosCheckService.java` | Playwright-парсинг, `evaluateGroup()`, `computeBaselineMedian()`, `filterByTime()`, WebSocket |
-| `ZoomosAnalysisController.java` | `/zoomos/*` роуты, `checkResults()`, `buildGroupIssues()`, schedule CRUD, priority API |
+| `ZoomosCheckService.java` | Playwright-парсинг, `evaluateAndBuildIssues()`, `computeBaselineMedian()`, `filterByTime()`, WebSocket |
+| `ZoomosAnalysisController.java` | `/zoomos/*` роуты, `checkResults()`, schedule CRUD, priority API |
 | `ZoomosParserService.java` | Магазины и city_ids |
 | `ZoomosSchedulerService.java` | Cron-расписания |
 | `ZoomosKnownSite.java` | `@Table zoomos_sites`, поля `isPriority`, `ignoreStock` |
