@@ -107,7 +107,7 @@
                             <td class="text-center" th:text="${r.errorCount}">0</td>
                             <td class="text-center" th:text="${r.notFoundCount}">0</td>
                             <td class="text-center small"
-                                th:text="${r.startedAt != null} ? ${#temporals.format(r.startedAt, 'dd.MM.yy HH:mm')} : ''"></td>
+                                th:text="${r.startedAt != null ? #temporals.format(r.startedAt.withZoneSameInstant(T(java.time.ZoneId).systemDefault()), 'dd.MM.yy HH:mm') : ''}"></td>
                             <td class="text-center">
                                 <a th:href="@{'/zoomos/check/results/' + ${r.id}}"
                                    class="btn btn-sm btn-outline-primary">

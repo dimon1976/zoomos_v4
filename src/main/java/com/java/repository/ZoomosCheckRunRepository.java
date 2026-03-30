@@ -30,5 +30,8 @@ public interface ZoomosCheckRunRepository extends JpaRepository<ZoomosCheckRun, 
     @Query("SELECT r FROM ZoomosCheckRun r JOIN FETCH r.shop WHERE r.id = :id")
     Optional<ZoomosCheckRun> findByIdWithShop(@Param("id") Long id);
 
+    @Query("SELECT r FROM ZoomosCheckRun r JOIN FETCH r.shop ORDER BY r.startedAt DESC")
+    List<ZoomosCheckRun> findAllWithShopOrderByStartedAtDesc();
+
     List<ZoomosCheckRun> findAllByStatus(CheckRunStatus status);
 }

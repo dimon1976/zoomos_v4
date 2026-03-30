@@ -964,7 +964,10 @@ public class ZoomosAnalysisController {
                 String cityName = current.getCityName();
 
                 // Используем предзагруженные baseline-записи текущего run
-                String blKey = siteName + "|" + (cityName != null ? cityName : "");
+                // Ключ должен совпадать с форматом baselineByKey: siteName|cityName|addressId
+                String addrId = current.getAddressId();
+                String blKey = siteName + "|" + (cityName != null ? cityName : "")
+                        + "|" + (addrId != null ? addrId : "");
                 List<ZoomosParsingStats> historical = baselineByKey.getOrDefault(blKey, Collections.emptyList());
 
                 if (historical.size() < 3) continue; // недостаточно данных
@@ -1703,9 +1706,7 @@ public class ZoomosAnalysisController {
 
     @GetMapping("/check/history")
     public String checkHistory(@RequestParam(required = false) String shop, Model model) {
-        List<ZoomosCheckRun> runs = checkRunRepository.findAll(
-                org.springframework.data.domain.Sort.by(
-                        org.springframework.data.domain.Sort.Direction.DESC, "startedAt"));
+        List<ZoomosCheckRun> runs = checkRunRepository.findAllWithShopOrderByStartedAtDesc();
         model.addAttribute("runs", runs);
         model.addAttribute("shopFilter", shop != null ? shop : "");
         return "zoomos/check-history";

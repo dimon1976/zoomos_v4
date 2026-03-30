@@ -94,7 +94,7 @@
                             </span>
                             <span th:if="${run.startedAt != null}" class="badge bg-white border text-dark">
                                 <i class="fas fa-clock me-1"></i>Запуск:
-                                <span th:text="${#temporals.format(run.startedAt,'dd.MM.yyyy HH:mm')}"></span>
+                                <span th:text="${#temporals.format(run.startedAt.withZoneSameInstant(T(java.time.ZoneId).systemDefault()),'dd.MM.yyyy HH:mm')}"></span>
                             </span>
                             <span class="text-muted small">
                                 Пороги: падение ≥<span th:text="${run.dropThreshold}">10</span>%,

@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-03 (рефакторинг: ZoomosCheckParams DTO, CheckRunStatus/ZoomosCheckType enum, FetchType.LAZY для shop, AddressFilterContext record, TIMESTAMPTZ миграция, индексы производительности V50)
+> Последнее обновление: 2026-03 (рефакторинг: ZoomosCheckParams DTO, CheckRunStatus/ZoomosCheckType enum, FetchType.LAZY для shop, AddressFilterContext record, TIMESTAMPTZ миграция, индексы производительности V50; исправлен ключ baseline с addressId, оптимизация JOIN FETCH для check-history, timezone-корректное форматирование дат, точечный прогресс-индикатор при ручном запуске)
 
 ## Назначение
 

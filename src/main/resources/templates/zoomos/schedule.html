@@ -707,12 +707,18 @@
     });
 
     // ---- Live-обновление "Последний запуск" ----
-    function updateLastRun(shopId) {
+    // specificRow — если передан, обновляем только эту строку; иначе — все строки магазина.
+    // Используется чтобы не затирать lastRunAt других расписаний при ручном запуске одного.
+    function updateLastRun(shopId, specificRow) {
         fetch('/zoomos/check/latest?shopId=' + shopId)
             .then(r => r.json())
             .then(d => {
                 if (!d.runId || !d.startedAt) return;
-                document.querySelectorAll('tr.sched-row[data-shop-id="' + shopId + '"] .sched-last-run-cell').forEach(cell => {
+                const cells = specificRow
+                    ? [specificRow.querySelector('.sched-last-run-cell')]
+                    : document.querySelectorAll('tr.sched-row[data-shop-id="' + shopId + '"] .sched-last-run-cell');
+                cells.forEach(cell => {
+                    if (!cell) return;
                     const spinnerEl = cell.querySelector('.sched-running-indicator');
                     cell.innerHTML = '<a href="/zoomos/check/results/' + d.runId + '" class="text-decoration-none">' + d.startedAt + '</a>';
                     if (spinnerEl) { spinnerEl.classList.add('d-none'); cell.appendChild(spinnerEl); }
@@ -724,15 +730,21 @@
     // ---- Индикатор текущей проверки (page load + обнаружение по расписанию) ----
     const activeShops = new Set();
 
-    function startShopProgress(shopId) {
+    // specificRow — конкретная строка, запустившая проверку (только для ручного запуска).
+    // Если не передан (планировщик / загрузка страницы) — показываем индикатор на всех строках магазина.
+    function startShopProgress(shopId, specificRow) {
         if (activeShops.has(shopId)) return;
         activeShops.add(shopId);
-        document.querySelectorAll('tr.sched-row[data-shop-id="' + shopId + '"] .sched-running-indicator')
-            .forEach(ind => ind.classList.remove('d-none'));
-        const firstRow = document.querySelector('tr.sched-row[data-shop-id="' + shopId + '"]');
-        const ind = firstRow ? firstRow.querySelector('.sched-running-indicator') : null;
+        if (specificRow) {
+            specificRow.querySelector('.sched-running-indicator')?.classList.remove('d-none');
+        } else {
+            document.querySelectorAll('tr.sched-row[data-shop-id="' + shopId + '"] .sched-running-indicator')
+                .forEach(ind => ind.classList.remove('d-none'));
+        }
+        const targetRow = specificRow || document.querySelector('tr.sched-row[data-shop-id="' + shopId + '"]');
+        const ind = targetRow ? targetRow.querySelector('.sched-running-indicator') : null;
         const msgEl = ind ? ind.querySelector('.sched-progress-msg') : null;
-        subscribeToShopProgress(shopId, ind, msgEl);
+        subscribeToShopProgress(shopId, ind, msgEl, specificRow);
     }
 
     // Проверяем при загрузке страницы
@@ -762,7 +774,7 @@
         }, 30000);
     });
 
-    function subscribeToShopProgress(shopId, indicator, msgEl) {
+    function subscribeToShopProgress(shopId, indicator, msgEl, specificRow) {
         let finished = false;
         function finish() {
             if (finished) return;
@@ -770,7 +782,7 @@
             activeShops.delete(shopId);
             document.querySelectorAll('tr.sched-row[data-shop-id="' + shopId + '"] .sched-running-indicator')
                 .forEach(ind => ind.classList.add('d-none'));
-            updateLastRun(shopId);
+            updateLastRun(shopId, specificRow);
         }
 
         // Polling — основной источник сигнала о завершении
@@ -840,7 +852,7 @@
                     runBtn.innerHTML = '<i class="fas fa-check"></i>';
                     runBtn.className = 'btn btn-sm btn-success py-0 px-2 btn-run-now';
                     setTimeout(() => { runBtn.innerHTML = orig; runBtn.className = 'btn btn-sm btn-outline-info py-0 px-2 btn-run-now'; runBtn.disabled = false; }, 2000);
-                    if (data.success) { startShopProgress(shopId); }
+                    if (data.success) { startShopProgress(shopId, row); }
                     else { alert('Ошибка: ' + (data.error || 'неизвестная')); }
                 })
                 .catch(() => { alert('Ошибка сети'); runBtn.innerHTML = orig; runBtn.disabled = false; });
