@@ -105,7 +105,7 @@
                     <tr class="shop-header-row"
                         th:data-shop-id="${shop.id}"
                         th:data-shop-name="${shop.shopName}">
-                        <td colspan="7" class="fw-semibold py-1 ps-2">
+                        <td colspan="8" class="fw-semibold py-1 ps-2">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span>
                                     <i class="fas fa-store me-1 text-muted"></i>
@@ -174,12 +174,15 @@
                         </td>
 
                         <!-- Скрытые поля для advanced-настроек (используются при сохранении и запуске) -->
-                        <input type="hidden" class="sched-drop"            th:value="${sched.dropThreshold}">
-                        <input type="hidden" class="sched-err"             th:value="${sched.errorGrowthThreshold}">
-                        <input type="hidden" class="sched-baseline"        th:value="${sched.baselineDays}">
-                        <input type="hidden" class="sched-min-abs-errors"  th:value="${sched.minAbsoluteErrors}">
-                        <input type="hidden" class="sched-trend-drop"      th:value="${sched.trendDropThreshold}">
-                        <input type="hidden" class="sched-trend-err"       th:value="${sched.trendErrorThreshold}">
+                        <!-- ВАЖНО: input должны быть внутри <td>, иначе браузер выталкивает их из <tr> и querySelector их не находит -->
+                        <td style="display:none">
+                            <input type="hidden" class="sched-drop"            th:value="${sched.dropThreshold}">
+                            <input type="hidden" class="sched-err"             th:value="${sched.errorGrowthThreshold}">
+                            <input type="hidden" class="sched-baseline"        th:value="${sched.baselineDays}">
+                            <input type="hidden" class="sched-min-abs-errors"  th:value="${sched.minAbsoluteErrors}">
+                            <input type="hidden" class="sched-trend-drop"      th:value="${sched.trendDropThreshold}">
+                            <input type="hidden" class="sched-trend-err"       th:value="${sched.trendErrorThreshold}">
+                        </td>
 
                         <!-- Последний запуск -->
                         <td class="text-center small text-muted sched-last-run-cell">
@@ -415,6 +418,9 @@
         </div>
     </div>
 </div>
+<!-- Скрытый триггер для модала (нужен в Tabler-лэйауте, где window.bootstrap не экспортируется) -->
+<button id="schedSettingsModalTrigger" type="button" class="d-none"
+        data-bs-toggle="modal" data-bs-target="#schedSettingsModal"></button>
 
 </th:block>
 
@@ -655,7 +661,9 @@
 
     // ---- Настройки (модал) ----
     let settingsRow = null;
-    const settingsModal = new bootstrap.Modal(document.getElementById('schedSettingsModal'));
+    const settingsModalEl = document.getElementById('schedSettingsModal');
+    // В Tabler-лэйауте window.bootstrap не экспортируется → используем data-bs-* триггер
+    const settingsModal = typeof bootstrap !== 'undefined' ? new bootstrap.Modal(settingsModalEl) : null;
 
     document.querySelectorAll('.btn-sched-settings').forEach(btn => {
         btn.addEventListener('click', function() {
@@ -666,7 +674,8 @@
             document.getElementById('ms-min-abs-errors').value = settingsRow.querySelector('.sched-min-abs-errors').value;
             document.getElementById('ms-trend-drop').value     = settingsRow.querySelector('.sched-trend-drop').value;
             document.getElementById('ms-trend-err').value      = settingsRow.querySelector('.sched-trend-err').value;
-            settingsModal.show();
+            if (settingsModal) settingsModal.show();
+            else document.getElementById('schedSettingsModalTrigger').click();
         });
     });
 
@@ -688,7 +697,10 @@
             .then(r => r.json())
             .then(data => {
                 this.innerHTML = orig; this.disabled = false;
-                if (data.success) { settingsModal.hide(); }
+                if (data.success) {
+                    if (settingsModal) settingsModal.hide();
+                    else settingsModalEl.querySelector('[data-bs-dismiss="modal"]').click();
+                }
                 else { alert('Ошибка: ' + (data.error || 'не удалось сохранить')); }
             })
             .catch(() => { this.innerHTML = orig; this.disabled = false; alert('Ошибка сети'); });
