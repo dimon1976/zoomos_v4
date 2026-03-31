@@ -21,6 +21,7 @@ import com.java.service.ZoomosSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.annotation.Transactional;
@@ -505,6 +506,7 @@ public class ZoomosAnalysisController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> runCheck(
             @RequestParam Long shopId,
+            @RequestParam(required = false) Long scheduleId,
             @RequestParam(required = false) String dateFrom,
             @RequestParam(required = false) String dateTo,
             @RequestParam(required = false) String timeFrom,
@@ -542,6 +544,7 @@ public class ZoomosAnalysisController {
                 try {
                     checkService.runCheck(ZoomosCheckParams.builder()
                             .shopId(shopId)
+                            .scheduleId(scheduleId)
                             .dateFrom(from)
                             .dateTo(to)
                             .timeFrom(tf)
@@ -554,11 +557,7 @@ public class ZoomosAnalysisController {
                             .trendErrorThreshold(tet)
                             .operationId(operationId)
                             .build());
-                    // Обновляем lastRunAt во всех расписаниях магазина
-                    java.time.ZonedDateTime now = java.time.ZonedDateTime.now();
-                    java.util.List<ZoomosShopSchedule> schedules = scheduleRepository.findAllByShopId(shopId);
-                    schedules.forEach(s -> s.setLastRunAt(now));
-                    scheduleRepository.saveAll(schedules);
+                    // lastRunAt сохраняется внутри ZoomosCheckService.runCheck() до финального WebSocket
                 } catch (Exception e) {
                     log.error("Ошибка фоновой проверки: {}", e.getMessage(), e);
                 }
@@ -650,8 +649,7 @@ public class ZoomosAnalysisController {
                 .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
         Map<String, List<ZoomosParsingStats>> baselineByKey = new LinkedHashMap<>();
         for (ZoomosParsingStats s : baselineStatsList) {
-            String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")
-                    + "|" + (s.getAddressId() != null ? s.getAddressId() : "");
+            String key = ZoomosCheckService.buildBaselineKey(s.getSiteName(), s.getCityName(), s.getAddressId());
             baselineByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
         }
 
@@ -824,6 +822,15 @@ public class ZoomosAnalysisController {
                         if (cId != null) lastFinishedByCityBatchKey.putIfAbsent(s.getSiteName() + "|" + cId, s);
                     });
         }
+        Map<String, ZoomosParsingStats> latestInProgressByCityFromDB = new HashMap<>();
+        if (expectedSiteNames.length > 0) {
+            parsingStatsRepository.findLatestInProgressBySites(expectedSiteNames)
+                    .forEach(s -> {
+                        String cId = ZoomosCheckService.extractCityId(s.getCityName());
+                        if (cId != null) latestInProgressByCityFromDB
+                                .put(s.getSiteName() + "|" + cId, s);
+                    });
+        }
 
         for (ZoomosCityId cid : allCityIds) {
             String site = cid.getSiteName();
@@ -876,9 +883,10 @@ public class ZoomosAnalysisController {
                         : null;
                 addIssueStatus(issue, ip, lastKnownAddr);
                 if (ip == null && addrCity != null) {
-                    parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, addrCity)
-                            .filter(curIp -> curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)
-                            .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
+                    ZoomosParsingStats curIp = latestInProgressByCityFromDB.get(site + "|" + addrCity);
+                    if (curIp != null && (curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)) {
+                        putCurrentInProgress(issue, curIp);
+                    }
                 }
                 issues.add(issue);
             }
@@ -901,9 +909,10 @@ public class ZoomosAnalysisController {
                         : null;
                 addIssueStatus(issue, ip, lastKnownCity);
                 if (ip == null) {
-                    parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, cityId)
-                            .filter(curIp -> curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)
-                            .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
+                    ZoomosParsingStats curIp = latestInProgressByCityFromDB.get(site + "|" + cityId);
+                    if (curIp != null && (curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)) {
+                        putCurrentInProgress(issue, curIp);
+                    }
                 }
                 issues.add(issue);
             }
@@ -936,6 +945,8 @@ public class ZoomosAnalysisController {
             issues.add(issue);
         }
 
+        // NOTE: canDeliver вычисляется ДО добавления TREND_WARNING — тренды информационны,
+        // они не блокируют выкачку. Не перемещать блок trend analysis выше этой строки.
         boolean canDeliver = issues.stream()
                 .noneMatch(i -> "ERROR".equals(i.get("type")));
 
@@ -966,8 +977,7 @@ public class ZoomosAnalysisController {
                 // Используем предзагруженные baseline-записи текущего run
                 // Ключ должен совпадать с форматом baselineByKey: siteName|cityName|addressId
                 String addrId = current.getAddressId();
-                String blKey = siteName + "|" + (cityName != null ? cityName : "")
-                        + "|" + (addrId != null ? addrId : "");
+                String blKey = ZoomosCheckService.buildBaselineKey(siteName, cityName, addrId);
                 List<ZoomosParsingStats> historical = baselineByKey.getOrDefault(blKey, Collections.emptyList());
 
                 if (historical.size() < 3) continue; // недостаточно данных
@@ -1145,8 +1155,7 @@ public class ZoomosAnalysisController {
                 .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
         Map<String, List<ZoomosParsingStats>> baselineByKey = new LinkedHashMap<>();
         for (ZoomosParsingStats s : baselineStatsList) {
-            String key = s.getSiteName() + "|" + (s.getCityName() != null ? s.getCityName() : "")
-                    + "|" + (s.getAddressId() != null ? s.getAddressId() : "");
+            String key = ZoomosCheckService.buildBaselineKey(s.getSiteName(), s.getCityName(), s.getAddressId());
             baselineByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
         }
 
@@ -1191,8 +1200,7 @@ public class ZoomosAnalysisController {
                     String siteForBl = group.get(0).getSiteName();
                     String cityForBl = group.get(0).getCityName();
                     String addrForBl = group.get(0).getAddressId();
-                    String blKey = siteForBl + "|" + (cityForBl != null ? cityForBl : "")
-                            + "|" + (addrForBl != null ? addrForBl : "");
+                    String blKey = ZoomosCheckService.buildBaselineKey(siteForBl, cityForBl, addrForBl);
                     groupBaseline = checkService.computeBaselineMedian(
                             baselineByKey.getOrDefault(blKey, Collections.emptyList()));
                 }
@@ -1225,6 +1233,15 @@ public class ZoomosAnalysisController {
                     .forEach(s -> {
                         String cId = ZoomosCheckService.extractCityId(s.getCityName());
                         if (cId != null) lastFinishedByCityBatchKey.putIfAbsent(s.getSiteName() + "|" + cId, s);
+                    });
+        }
+        Map<String, ZoomosParsingStats> latestInProgressByCityFromDB = new HashMap<>();
+        if (expectedSiteNames.length > 0) {
+            parsingStatsRepository.findLatestInProgressBySites(expectedSiteNames)
+                    .forEach(s -> {
+                        String cId = ZoomosCheckService.extractCityId(s.getCityName());
+                        if (cId != null) latestInProgressByCityFromDB
+                                .put(s.getSiteName() + "|" + cId, s);
                     });
         }
 
@@ -1290,9 +1307,10 @@ public class ZoomosAnalysisController {
                 ZoomosParsingStats lastKnownAddr = ip == null ? lastFinishedByAddrKey.get(site + "|" + aid) : null;
                 addIssueStatus(issue, ip, lastKnownAddr);
                 if (ip == null && addrCity != null) {
-                    parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, addrCity)
-                            .filter(curIp -> curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)
-                            .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
+                    ZoomosParsingStats curIp = latestInProgressByCityFromDB.get(site + "|" + addrCity);
+                    if (curIp != null && (curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)) {
+                        putCurrentInProgress(issue, curIp);
+                    }
                 }
                 issues.add(issue);
             }
@@ -1306,9 +1324,10 @@ public class ZoomosAnalysisController {
                 ZoomosParsingStats lastKnownCity = ip == null ? lastFinishedByCityBatchKey.get(site + "|" + cityId) : null;
                 addIssueStatus(issue, ip, lastKnownCity);
                 if (ip == null) {
-                    parsingStatsRepository.findLatestInProgressBySiteAndCityId(site, cityId)
-                            .filter(curIp -> curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)
-                            .ifPresent(curIp -> putCurrentInProgress(issue, curIp));
+                    ZoomosParsingStats curIp = latestInProgressByCityFromDB.get(site + "|" + cityId);
+                    if (curIp != null && (curIp.getCompletionPercent() == null || curIp.getCompletionPercent() < 100)) {
+                        putCurrentInProgress(issue, curIp);
+                    }
                 }
                 issues.add(issue);
             }
@@ -1647,9 +1666,7 @@ public class ZoomosAnalysisController {
         if (!baselineStatsList.isEmpty()) {
             Map<String, List<ZoomosParsingStats>> blBySca = new LinkedHashMap<>();
             for (ZoomosParsingStats s : baselineStatsList) {
-                String key = s.getSiteName() + "|"
-                        + (s.getCityName() != null ? s.getCityName() : "") + "|"
-                        + (s.getAddressId() != null ? s.getAddressId() : "");
+                String key = ZoomosCheckService.buildBaselineKey(s.getSiteName(), s.getCityName(), s.getAddressId());
                 blBySca.computeIfAbsent(key, k -> new ArrayList<>()).add(s);
             }
             for (Map<String, Object> g : groups) {
@@ -1706,7 +1723,7 @@ public class ZoomosAnalysisController {
 
     @GetMapping("/check/history")
     public String checkHistory(@RequestParam(required = false) String shop, Model model) {
-        List<ZoomosCheckRun> runs = checkRunRepository.findAllWithShopOrderByStartedAtDesc();
+        List<ZoomosCheckRun> runs = checkRunRepository.findAllWithShopOrderByStartedAtDesc(PageRequest.of(0, 500));
         model.addAttribute("runs", runs);
         model.addAttribute("shopFilter", shop != null ? shop : "");
         return "zoomos/check-history";
@@ -1868,6 +1885,22 @@ public class ZoomosAnalysisController {
         return "zoomos/schedule";
     }
 
+    /** Последний lastRunAt для каждого расписания магазина (ключ — scheduleId). */
+    @GetMapping("/schedule/last-run-times")
+    @ResponseBody
+    public ResponseEntity<Map<Long, String>> getScheduleLastRunTimes(@RequestParam Long shopId) {
+        List<ZoomosShopSchedule> schedules = scheduleRepository.findAllByShopId(shopId);
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+        Map<Long, String> result = new LinkedHashMap<>();
+        for (ZoomosShopSchedule s : schedules) {
+            if (s.getLastRunAt() != null) {
+                result.put(s.getId(),
+                        s.getLastRunAt().withZoneSameInstant(java.time.ZoneId.systemDefault()).format(fmt));
+            }
+        }
+        return ResponseEntity.ok(result);
+    }
+
     /** Создать новое расписание для магазина с дефолтными значениями из zoomos_settings */
     @PostMapping("/schedule/{shopId}/new")
     @ResponseBody
@@ -1997,7 +2030,7 @@ public class ZoomosAnalysisController {
                             Comparator.naturalOrder()));
                     boolean ignoreStk = group.get(0).getSiteName() != null
                             && ignoreStockSitesAlert.contains(group.get(0).getSiteName());
-                    String status = checkService.evaluateGroup(group, drop, errGrowth, minAbsErr, ignoreStk, null);
+                    String status = checkService.evaluateGroup(group, drop, errGrowth, minAbsErr, ignoreStk, null, "");
                     if ("OK".equals(status)) continue;
 
                     String rawName = group.get(0).getSiteName();

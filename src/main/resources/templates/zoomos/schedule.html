@@ -707,24 +707,52 @@
     });
 
     // ---- Live-обновление "Последний запуск" ----
-    // specificRow — если передан, обновляем только эту строку; иначе — все строки магазина.
-    // Используется чтобы не затирать lastRunAt других расписаний при ручном запуске одного.
+    // specificRow — если передан, обновляем только эту строку (ручной запуск).
+    // Без specificRow — каждая строка магазина получает своё время из schedule.lastRunAt.
     function updateLastRun(shopId, specificRow) {
-        fetch('/zoomos/check/latest?shopId=' + shopId)
-            .then(r => r.json())
-            .then(d => {
-                if (!d.runId || !d.startedAt) return;
-                const cells = specificRow
-                    ? [specificRow.querySelector('.sched-last-run-cell')]
-                    : document.querySelectorAll('tr.sched-row[data-shop-id="' + shopId + '"] .sched-last-run-cell');
-                cells.forEach(cell => {
+        if (specificRow) {
+            fetch('/zoomos/check/latest?shopId=' + shopId)
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.runId || !d.startedAt) return;
+                    const cell = specificRow.querySelector('.sched-last-run-cell');
                     if (!cell) return;
                     const spinnerEl = cell.querySelector('.sched-running-indicator');
-                    cell.innerHTML = '<a href="/zoomos/check/results/' + d.runId + '" class="text-decoration-none">' + d.startedAt + '</a>';
+                    const a = document.createElement('a');
+                    a.href = '/zoomos/check/results/' + d.runId;
+                    a.className = 'text-decoration-none';
+                    a.textContent = d.startedAt;
+                    cell.innerHTML = '';
+                    cell.appendChild(a);
                     if (spinnerEl) { spinnerEl.classList.add('d-none'); cell.appendChild(spinnerEl); }
-                });
-            })
-            .catch(() => {});
+                })
+                .catch(() => {});
+        } else {
+            // Scheduled / page-load: каждая строка обновляется своим schedule.lastRunAt
+            Promise.all([
+                fetch('/zoomos/check/latest?shopId=' + shopId).then(r => r.json()),
+                fetch('/zoomos/schedule/last-run-times?shopId=' + shopId).then(r => r.json())
+            ]).then(([run, times]) => {
+                if (!run.runId) return;
+                document.querySelectorAll('tr.sched-row[data-shop-id="' + shopId + '"] .sched-last-run-cell')
+                    .forEach(cell => {
+                        const row = cell.closest('tr');
+                        const schedId = row ? row.dataset.scheduleId : null;
+                        // Если schedule.lastRunAt ещё не сохранён (race condition после WebSocket),
+                        // используем run.startedAt как fallback — оба значения равны "now"
+                        const lastRunAt = (schedId && times[schedId]) ? times[schedId] : run.startedAt;
+                        if (!lastRunAt) return;
+                        const spinnerEl = cell.querySelector('.sched-running-indicator');
+                        const a = document.createElement('a');
+                        a.href = '/zoomos/check/results/' + run.runId;
+                        a.className = 'text-decoration-none';
+                        a.textContent = lastRunAt;
+                        cell.innerHTML = '';
+                        cell.appendChild(a);
+                        if (spinnerEl) { spinnerEl.classList.add('d-none'); cell.appendChild(spinnerEl); }
+                    });
+            }).catch(() => {});
+        }
     }
 
     // ---- Индикатор текущей проверки (page load + обнаружение по расписанию) ----
@@ -803,6 +831,10 @@
                     const data = JSON.parse(msg.body);
                     document.querySelectorAll('tr.sched-row[data-shop-id="' + shopId + '"] .sched-progress-msg')
                         .forEach(el => el.textContent = data.message || 'Идёт...');
+                    if (data.total > 0 && data.current >= data.total) {
+                        clearInterval(poll);
+                        finish();
+                    }
                 });
             }, function() {});
         } catch (e) {}
@@ -826,8 +858,10 @@
             const dateFrom = fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + offsetFrom));
             const dateTo   = fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + offsetTo));
 
+            const scheduleId = row.dataset.scheduleId;
             const fd = new FormData();
             fd.append('shopId', shopId);
+            if (scheduleId) fd.append('scheduleId', scheduleId);
             fd.append('dateFrom', dateFrom);
             fd.append('dateTo', dateTo);
             const tf = row.querySelector('.sched-time-from').value;

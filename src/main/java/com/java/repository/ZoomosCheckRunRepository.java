@@ -2,6 +2,7 @@ package com.java.repository;
 
 import com.java.model.entity.CheckRunStatus;
 import com.java.model.entity.ZoomosCheckRun;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,6 +33,9 @@ public interface ZoomosCheckRunRepository extends JpaRepository<ZoomosCheckRun, 
 
     @Query("SELECT r FROM ZoomosCheckRun r JOIN FETCH r.shop ORDER BY r.startedAt DESC")
     List<ZoomosCheckRun> findAllWithShopOrderByStartedAtDesc();
+
+    @Query("SELECT r FROM ZoomosCheckRun r JOIN FETCH r.shop ORDER BY r.startedAt DESC")
+    List<ZoomosCheckRun> findAllWithShopOrderByStartedAtDesc(Pageable pageable);
 
     List<ZoomosCheckRun> findAllByStatus(CheckRunStatus status);
 }

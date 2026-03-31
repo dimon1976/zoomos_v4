@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-03 (рефакторинг: ZoomosCheckParams DTO, CheckRunStatus/ZoomosCheckType enum, FetchType.LAZY для shop, AddressFilterContext record, TIMESTAMPTZ миграция, индексы производительности V50; исправлен ключ baseline с addressId, оптимизация JOIN FETCH для check-history, timezone-корректное форматирование дат, точечный прогресс-индикатор при ручном запуске)
+> Последнее обновление: 2026-03 (рефакторинг: ZoomosCheckParams DTO, CheckRunStatus/ZoomosCheckType enum, FetchType.LAZY для shop, AddressFilterContext record, TIMESTAMPTZ миграция, индексы производительности V50; исправлен ключ baseline с addressId, оптимизация JOIN FETCH для check-history, timezone-корректное форматирование дат, точечный прогресс-индикатор при ручном запуске; scheduleId в params — lastRunAt сохраняется до WebSocket через REQUIRES_NEW; batch-запрос findLatestInProgressBySites вместо N+1; buildBaselineKey в static-хелпер; check-history лимит 500; дефолт checkType=API)
 
 ## Назначение
 

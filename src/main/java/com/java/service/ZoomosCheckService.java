@@ -45,6 +45,7 @@ public class ZoomosCheckService {
     private final ZoomosCityAddressRepository cityAddressRepository;
     private final ZoomosKnownSiteRepository knownSiteRepository;
     private final ZoomosParserPatternRepository parserPatternRepository;
+    private final ZoomosShopScheduleRepository scheduleRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -55,15 +56,30 @@ public class ZoomosCheckService {
     /**
      * Сохраняет ZoomosCheckRun в отдельной транзакции (REQUIRES_NEW) — коммитится немедленно,
      * чтобы запись с status=RUNNING была видна другим транзакциям во время проверки.
+     * Используется также для финального сохранения COMPLETED до отправки WebSocket.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public ZoomosCheckRun saveRunImmediate(ZoomosCheckRun run) {
         return checkRunRepository.save(run);
     }
 
+    /**
+     * Сохраняет lastRunAt расписания в отдельной транзакции (REQUIRES_NEW) — коммитится немедленно,
+     * чтобы к моменту реакции JS на WebSocket данные уже были в БД.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void saveScheduleLastRunAt(Long scheduleId) {
+        scheduleRepository.findById(scheduleId).ifPresent(s -> {
+            s.setLastRunAt(ZonedDateTime.now());
+            scheduleRepository.save(s);
+        });
+    }
+
     private static final DateTimeFormatter DATE_PARAM_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     private static final DateTimeFormatter DATETIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yy H:mm");
     private static final DateTimeFormatter DD_MM = DateTimeFormatter.ofPattern("dd.MM");
+    private static final com.fasterxml.jackson.databind.ObjectMapper STATIC_MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
 
     /**
      * Запуск проверки выкачки по всем активным сайтам клиента.
@@ -319,7 +335,13 @@ public class ZoomosCheckService {
         updateRunSummary(run, allStats, allCityIds);
         run.setStatus(CheckRunStatus.COMPLETED);
         run.setCompletedAt(ZonedDateTime.now());
-        run = checkRunRepository.save(run);
+        // REQUIRES_NEW: коммит COMPLETED до WebSocket — иначе JS читает БД раньше коммита и видит RUNNING
+        run = self.saveRunImmediate(run);
+
+        // REQUIRES_NEW: коммит lastRunAt до WebSocket — JS сразу видит актуальное время
+        if (params.getScheduleId() != null) {
+            self.saveScheduleLastRunAt(params.getScheduleId());
+        }
 
         sendProgress(shopId, operationId, run.getTotalSites(), run.getTotalSites(), "Проверка завершена");
         return run;
@@ -496,7 +518,7 @@ public class ZoomosCheckService {
                                                           LocalDate dateFrom, LocalDate dateTo,
                                                           ZoomosCheckRun run) {
         String siteName = cid.getSiteName();
-        String checkType = cid.getCheckType() != null ? cid.getCheckType() : "ITEM";
+        String checkType = cid.getCheckType() != null ? cid.getCheckType() : "API";
 
         String shopParam = "ITEM".equals(checkType) ? shopName : "-";
         // Смотрим на 1 день назад от dateFrom: overnight-парсинги стартуют накануне,
@@ -889,7 +911,7 @@ public class ZoomosCheckService {
         if (trimmed.startsWith("{")) {
             try {
                 @SuppressWarnings("unchecked")
-                Map<String, Object> raw = new com.fasterxml.jackson.databind.ObjectMapper().readValue(trimmed, Map.class);
+                Map<String, Object> raw = STATIC_MAPPER.readValue(trimmed, Map.class);
                 Map<String, Set<String>> result = new LinkedHashMap<>();
                 for (Map.Entry<String, Object> entry : raw.entrySet()) {
                     Set<String> addrs = new HashSet<>();
@@ -1294,12 +1316,11 @@ public class ZoomosCheckService {
                     String siteForBl = group.get(0).getSiteName();
                     String cityForBl = group.get(0).getCityName();
                     String addrForBl = group.get(0).getAddressId();
-                    String blKey = siteForBl + "|" + (cityForBl != null ? cityForBl : "")
-                            + "|" + (addrForBl != null ? addrForBl : "");
+                    String blKey = buildBaselineKey(siteForBl, cityForBl, addrForBl);
                     baseline = computeBaselineMedian(baselineByKey.getOrDefault(blKey, Collections.emptyList()));
                 }
                 status = evaluateGroup(group, run.getDropThreshold(), run.getErrorGrowthThreshold(),
-                        minAbsErrors, ignoreStock, baseline);
+                        minAbsErrors, ignoreStock, baseline, run.getShop().getShopName());
             }
             switch (status) {
                 case "ERROR": error++; break;
@@ -1514,9 +1535,14 @@ public class ZoomosCheckService {
     public String evaluateGroup(List<ZoomosParsingStats> sortedGroup,
                                  int dropThreshold, int errorGrowthThreshold,
                                  int minAbsoluteErrors, boolean ignoreStock,
-                                 MedianStats baseline) {
+                                 MedianStats baseline, String shopName) {
         return evaluateAndBuildIssues(sortedGroup, dropThreshold, errorGrowthThreshold,
-                minAbsoluteErrors, ignoreStock, baseline, "").status();
+                minAbsoluteErrors, ignoreStock, baseline, shopName).status();
+    }
+
+    public static String buildBaselineKey(String siteName, String cityName, String addressId) {
+        return siteName + "|" + (cityName != null ? cityName : "")
+                + "|" + (addressId != null ? addressId : "");
     }
 
     private Map<String, Object> makeIssueMap(String siteName, String cityName, String cityId,

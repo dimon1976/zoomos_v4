@@ -145,6 +145,7 @@ public class ZoomosSchedulerService {
         try {
             checkService.runCheck(ZoomosCheckParams.builder()
                     .shopId(latest.getShopId())
+                    .scheduleId(s.getId())
                     .dateFrom(dateFrom)
                     .dateTo(dateTo)
                     .timeFrom(latest.getTimeFrom())
@@ -157,10 +158,6 @@ public class ZoomosSchedulerService {
                     .trendErrorThreshold(latest.getTrendErrorThreshold())
                     .operationId(operationId)
                     .build());
-            scheduleRepo.findById(s.getId()).ifPresent(schedule -> {
-                schedule.setLastRunAt(ZonedDateTime.now());
-                scheduleRepo.save(schedule);
-            });
         } catch (Exception e) {
             log.error("Ошибка автопроверки id={} shopId={}: {}", s.getId(), s.getShopId(), e.getMessage(), e);
         }

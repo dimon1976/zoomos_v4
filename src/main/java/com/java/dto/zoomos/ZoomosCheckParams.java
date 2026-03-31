@@ -13,6 +13,7 @@ import java.time.LocalDate;
 @Builder
 public class ZoomosCheckParams {
     Long shopId;
+    Long scheduleId;   // null если запуск не привязан к конкретному расписанию
     LocalDate dateFrom;
     LocalDate dateTo;
     String timeFrom;
