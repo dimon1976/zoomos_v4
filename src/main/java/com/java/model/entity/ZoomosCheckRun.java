@@ -21,7 +21,7 @@ public class ZoomosCheckRun {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "shop_id", nullable = false)
     private ZoomosShop shop;
 
@@ -83,9 +83,10 @@ public class ZoomosCheckRun {
     @Builder.Default
     private Integer trendErrorThreshold = 100;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status")
     @Builder.Default
-    private String status = "RUNNING";
+    private CheckRunStatus status = CheckRunStatus.RUNNING;
 
     @Column(name = "error_message", length = 1000)
     private String errorMessage;

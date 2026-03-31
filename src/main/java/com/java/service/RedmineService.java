@@ -21,7 +21,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -252,8 +252,8 @@ public class RedmineService {
             entity.setIssueStatus(dto.getStatusName());
             entity.setClosed(dto.isClosed());
             entity.setIssueUrl(dto.getUrl());
-            entity.setUpdatedAt(LocalDateTime.now());
-            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+            entity.setUpdatedAt(ZonedDateTime.now());
+            if (entity.getCreatedAt() == null) entity.setCreatedAt(ZonedDateTime.now());
             repo.save(entity);
         } catch (Exception e) {
             log.warn("Redmine saveIssueToDb '{}': {}", site, e.getMessage());
@@ -297,8 +297,8 @@ public class RedmineService {
             entity.setIssueId(issueId);
             entity.setIssueStatus(status);
             entity.setIssueUrl(issueUrl);
-            entity.setUpdatedAt(LocalDateTime.now());
-            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
+            entity.setUpdatedAt(ZonedDateTime.now());
+            if (entity.getCreatedAt() == null) entity.setCreatedAt(ZonedDateTime.now());
             return repo.save(entity);
         } catch (Exception e) {
             log.error("Redmine createIssue '{}': {}", req.getSite(), e.getMessage());
@@ -375,8 +375,8 @@ public class RedmineService {
                 log.warn("Redmine: не удалось получить обновлённый статус #{}: {}", issueId, fe.getMessage());
             }
 
-            if (entity.getCreatedAt() == null) entity.setCreatedAt(LocalDateTime.now());
-            entity.setUpdatedAt(LocalDateTime.now());
+            if (entity.getCreatedAt() == null) entity.setCreatedAt(ZonedDateTime.now());
+            entity.setUpdatedAt(ZonedDateTime.now());
             return repo.save(entity);
 
         } catch (Exception e) {
@@ -430,7 +430,7 @@ public class RedmineService {
                     changed = true;
                 }
                 if (changed) {
-                    issue.setUpdatedAt(LocalDateTime.now());
+                    issue.setUpdatedAt(ZonedDateTime.now());
                     repo.save(issue);
                 }
             } catch (Exception e) {

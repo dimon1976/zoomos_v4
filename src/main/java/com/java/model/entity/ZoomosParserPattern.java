@@ -6,9 +6,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Паттерн парсера для сайта.
+ * Уникальность обеспечивается функциональным индексом в БД:
+ * UNIQUE (site_name, md5(pattern)) — см. миграцию V36.
+ * Используется в upsert через ON CONFLICT (site_name, md5(pattern)).
+ */
 @Entity
-@Table(name = "zoomos_parser_patterns",
-       uniqueConstraints = @UniqueConstraint(columnNames = {"site_name", "pattern"}))
+@Table(name = "zoomos_parser_patterns")
 @Data
 @Builder
 @NoArgsConstructor

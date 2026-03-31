@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-03 (редизайн Block 2 + баг-фиксы v2: ручной collapse toggle без data-bs-toggle, CSS filter→background-color, site-issues по умолчанию закрыты + авто-раскрытие JS, кнопка «Проверено» сворачивает и маркирует, Phase 1 для edit-режима; блок «Проверено мной» — verified-сайты физически перемещаются в отдельный collapsible-блок; фикс isClosed для btn-class Redmine; currentSelectedIssues из Phase 1 скрываются после создания задачи; showCopyBlock при update использует shortMessage)
+> Последнее обновление: 2026-03 (рефакторинг: ZoomosCheckParams DTO, CheckRunStatus/ZoomosCheckType enum, FetchType.LAZY для shop, AddressFilterContext record, TIMESTAMPTZ миграция, индексы производительности V50; исправлен ключ baseline с addressId, оптимизация JOIN FETCH для check-history, timezone-корректное форматирование дат, точечный прогресс-индикатор при ручном запуске; scheduleId в params — lastRunAt сохраняется до WebSocket через REQUIRES_NEW; batch-запрос findLatestInProgressBySites вместо N+1; buildBaselineKey в static-хелпер; check-history лимит 500; дефолт checkType=API)
 
 ## Назначение
 
@@ -22,7 +22,7 @@
 
 ---
 
-## Структура БД (Flyway V23–V42)
+## Структура БД (Flyway V23–V50)
 
 ```sql
 zoomos_check_runs
@@ -72,11 +72,21 @@ zoomos_settings
 clients
   ...is_active BOOLEAN NOT NULL DEFAULT TRUE
   ...sort_order INTEGER NOT NULL DEFAULT 0
+
+-- V49: конвертация created_at/updated_at в TIMESTAMPTZ для zoomos_redmine_issues
+-- V50: индексы производительности
+--   idx_check_runs_status                 ON zoomos_check_runs(status)
+--   idx_shop_schedules_shop_id            ON zoomos_shop_schedules(shop_id)
+--   idx_shop_schedules_is_enabled         ON zoomos_shop_schedules(is_enabled) WHERE is_enabled=TRUE
+--   idx_parsing_stats_baseline_lookup     ON zoomos_parsing_stats(site_name, is_baseline, start_time DESC)
+--   idx_parsing_stats_site_addr_completion ON zoomos_parsing_stats(site_name, address_id, completion_percent, start_time DESC)
 ```
 
 ---
 
-## Логика оценки (`ZoomosCheckService.evaluateGroup`)
+## Логика оценки (`ZoomosCheckService.evaluateAndBuildIssues`)
+
+Единственная точка оценки группы выкачек — метод `evaluateAndBuildIssues(...)`. Возвращает `GroupEvalResult(status, issues)` — статус и готовые issue-сообщения за один проход. Заменяет ранее раздельные `evaluateGroup()` + `buildGroupIssues()`.
 
 ### Статусы
 
@@ -89,7 +99,7 @@ clients
 - **Сравнение**: с `baseline.inStock` если доступен, иначе с `prev.inStock` (предыдущая запись).
 - **ignoreStock** — флаг из `zoomos_sites.ignore_stock`: inStock-метрика пропускается, используется `totalProducts`.
 
-### Алгоритм evaluateGroup (sortedAsc, baseline)
+### Алгоритм evaluateAndBuildIssues (sortedAsc, baseline)
 
 ```
 1. Пусто → OK
@@ -136,7 +146,7 @@ public record MedianStats(Integer inStock, Integer totalProducts, Integer durati
 
 ---
 
-## Сообщения в issues (buildGroupIssues)
+## Сообщения в issues (формируются внутри evaluateAndBuildIssues)
 
 При наличии baseline — показывается `[медиана: X]` вместо значения prev:
 
@@ -290,12 +300,25 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 
 ---
 
+## Ключевые типы и DTO
+
+| Класс | Описание |
+|-------|---------|
+| `CheckRunStatus` | enum RUNNING / COMPLETED / FAILED — хранится как STRING в `zoomos_check_runs.status` |
+| `ZoomosCheckType` | enum API / ITEM — хранится как STRING в `zoomos_parsing_stats.check_type` |
+| `ZoomosCheckParams` | @Value @Builder DTO — заменяет 12-параметровую сигнатуру `runCheck()` |
+| `AddressFilterContext` | private record внутри `ZoomosCheckService` — контекст фильтрации city/address |
+
+**Запуск проверки** через `checkService.runCheck(ZoomosCheckParams.builder()...build())` — из контроллера и планировщика.
+
+---
+
 ## Ключевые файлы
 
 | Файл | Назначение |
 |------|-----------|
-| `ZoomosCheckService.java` | Playwright-парсинг, `evaluateGroup()`, `computeBaselineMedian()`, `filterByTime()`, WebSocket |
-| `ZoomosAnalysisController.java` | `/zoomos/*` роуты, `checkResults()`, `buildGroupIssues()`, schedule CRUD, priority API |
+| `ZoomosCheckService.java` | Playwright-парсинг, `evaluateAndBuildIssues()`, `computeBaselineMedian()`, `filterByTime()`, WebSocket |
+| `ZoomosAnalysisController.java` | `/zoomos/*` роуты, `checkResults()`, schedule CRUD, priority API |
 | `ZoomosParserService.java` | Магазины и city_ids |
 | `ZoomosSchedulerService.java` | Cron-расписания |
 | `ZoomosKnownSite.java` | `@Table zoomos_sites`, поля `isPriority`, `ignoreStock` |

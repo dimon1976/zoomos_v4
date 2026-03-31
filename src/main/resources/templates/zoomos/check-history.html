@@ -39,6 +39,7 @@
         <button class="btn btn-sm btn-outline-secondary" type="button" id="historySearchClear" title="Сбросить фильтр">
             <i class="fas fa-times"></i>
         </button>
+        <!-- Пагинация клиентская: все данные загружены сервером (макс. 500 записей) -->
         <select id="historyPageSize" class="form-select form-select-sm w-auto" title="Строк на странице">
             <option value="10">10</option>
             <option value="25">25</option>
@@ -93,7 +94,7 @@
                             </td>
                             <td class="text-center">
                                 <span class="badge"
-                                      th:classappend="${r.status == 'COMPLETED'} ? 'bg-success' : (${r.status == 'FAILED'} ? 'bg-danger' : 'bg-warning')"
+                                      th:classappend="${r.status == 'COMPLETED'} ? 'bg-success' : (${r.status == 'FAILED'} ? 'bg-danger' : 'bg-warning text-dark')"
                                       th:text="${r.status}">OK</span>
                                 <span th:if="${r.timeoutCount != null and r.timeoutCount > 0}"
                                       class="badge bg-warning text-dark ms-1"
@@ -107,7 +108,7 @@
                             <td class="text-center" th:text="${r.errorCount}">0</td>
                             <td class="text-center" th:text="${r.notFoundCount}">0</td>
                             <td class="text-center small"
-                                th:text="${r.startedAt != null} ? ${#temporals.format(r.startedAt, 'dd.MM.yy HH:mm')} : ''"></td>
+                                th:text="${r.startedAt != null ? #temporals.format(r.startedAt.withZoneSameInstant(T(java.time.ZoneId).systemDefault()), 'dd.MM.yy HH:mm') : ''}"></td>
                             <td class="text-center">
                                 <a th:href="@{'/zoomos/check/results/' + ${r.id}}"
                                    class="btn btn-sm btn-outline-primary">
