@@ -17,7 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -256,11 +259,57 @@ public class FileAnalyzerService {
             detector.reset();
 
             if (encoding == null) {
-                log.warn("Не удалось определить кодировку, используем UTF-8");
-                encoding = StandardCharsets.UTF_8.name();
+                encoding = detectFallbackEncoding(filePath);
+                log.warn("juniversalchardet не определил кодировку, используем fallback: {}", encoding);
+            } else {
+                encoding = normalizeEncoding(encoding);
+                log.debug("Определена кодировка: {}", encoding);
             }
 
             return encoding;
+        }
+    }
+
+    /**
+     * Нормализует имена кодировок от juniversalchardet к именам, которые понимает Java.
+     * juniversalchardet часто путает windows-1251 и MACCYRILLIC для русских файлов.
+     */
+    private String normalizeEncoding(String encoding) {
+        if (encoding == null) return StandardCharsets.UTF_8.name();
+        return switch (encoding.toUpperCase()) {
+            // juniversalchardet путает windows-1251 и mac cyrillic для русских файлов
+            case "MACCYRILLIC" -> "windows-1251";
+            // Альтернативные имена windows-1251
+            case "WIN1251", "CP1251", "ANSI1251" -> "windows-1251";
+            // Альтернативные имена windows-1252
+            case "WIN1252", "CP1252" -> "windows-1252";
+            // KOI8-R оставляем как есть (Java поддерживает)
+            default -> encoding;
+        };
+    }
+
+    /**
+     * Fallback-определение кодировки: если файл не является валидным UTF-8 — возвращает windows-1251.
+     * Покрывает случай когда juniversalchardet возвращает null для Windows-1251 файлов.
+     */
+    private String detectFallbackEncoding(Path filePath) throws IOException {
+        byte[] sample = new byte[ENCODING_BUFFER_SIZE];
+        int bytesRead;
+        try (FileInputStream fis = new FileInputStream(filePath.toFile())) {
+            bytesRead = fis.read(sample);
+        }
+        if (bytesRead <= 0) {
+            return StandardCharsets.UTF_8.name();
+        }
+        try {
+            StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(sample, 0, bytesRead));
+            return StandardCharsets.UTF_8.name();
+        } catch (CharacterCodingException e) {
+            log.debug("Файл не является валидным UTF-8, используем windows-1251");
+            return "windows-1251";
         }
     }
 

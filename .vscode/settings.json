@@ -47,5 +47,6 @@
     // Spring Boot settings
     "spring-boot.ls.problem.application-properties.UNKNOWN_PROPERTY": "ignore",
     "claudeCode.useTerminal": true,
-    "claudeCodeChat.permissions.yoloMode": false
+    "claudeCodeChat.permissions.yoloMode": false,
+    "java.jdt.ls.vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx4G -Xms100m -Xlog:disable"
 }
