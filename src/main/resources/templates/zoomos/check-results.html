@@ -186,6 +186,10 @@
                     <!-- Приоритет -->
                     <i th:if="${entry.value[0]['isPriority']}" class="fas fa-star text-warning" title="Приоритетный сайт" style="font-size:0.8em;"></i>
                     <span class="fw-bold" th:text="${entry.key}"></span>
+                    <span th:if="${masterCityBySite != null and masterCityBySite[entry.key] != null}"
+                          class="badge bg-info bg-opacity-75 text-dark ms-1"
+                          title="Выкачка только по мастер-городу"
+                          th:text="'↗ мастер: ' + ${masterCityBySite[entry.key]}"></span>
                     <!-- Счётчики ERROR/WARNING -->
                     <span th:if="${errorCountBySite[entry.key] != null and errorCountBySite[entry.key] > 0}"
                           class="badge bg-danger"

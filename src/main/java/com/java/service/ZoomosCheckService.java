@@ -437,8 +437,11 @@ public class ZoomosCheckService {
         Map<String, Set<String>> allowedAddressesByCityId = new HashMap<>();
         Map<String, ZoomosCityId> cityIdMap = new HashMap<>();
         for (ZoomosCityId entry : entries) {
-            if (entry.getCityIds() != null && !entry.getCityIds().isBlank()) {
-                for (String cid : entry.getCityIds().split(",")) {
+            String effectiveCityIds = (entry.getMasterCityId() != null && !entry.getMasterCityId().isBlank())
+                    ? entry.getMasterCityId()   // только мастер-город
+                    : entry.getCityIds();        // все города как прежде
+            if (effectiveCityIds != null && !effectiveCityIds.isBlank()) {
+                for (String cid : effectiveCityIds.split(",")) {
                     String trimmed = cid.trim();
                     if (!trimmed.isEmpty()) {
                         allowedCityIds.add(trimmed);
@@ -446,13 +449,16 @@ public class ZoomosCheckService {
                     }
                 }
             }
-            parseAddressMapping(entry.getAddressIds()).forEach((cityId, addrIds) -> {
-                if (cityId != null && !cityId.isBlank()) {
-                    allowedAddressesByCityId.computeIfAbsent(cityId.trim(), k -> new HashSet<>()).addAll(addrIds);
-                } else {
-                    allowedAddressIds.addAll(addrIds);
-                }
-            });
+            // address_ids обрабатываем только если master_city_id не задан
+            if (entry.getMasterCityId() == null || entry.getMasterCityId().isBlank()) {
+                parseAddressMapping(entry.getAddressIds()).forEach((cityId, addrIds) -> {
+                    if (cityId != null && !cityId.isBlank()) {
+                        allowedAddressesByCityId.computeIfAbsent(cityId.trim(), k -> new HashSet<>()).addAll(addrIds);
+                    } else {
+                        allowedAddressIds.addAll(addrIds);
+                    }
+                });
+            }
         }
         return new AddressFilterContext(allowedCityIds, allowedAddressIds, allowedAddressesByCityId, cityIdMap);
     }

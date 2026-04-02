@@ -34,6 +34,9 @@ public class ZoomosCityId {
     @Column(name = "address_ids", columnDefinition = "TEXT")
     private String addressIds;   // "14342,15234" или null
 
+    @Column(name = "master_city_id", length = 50)
+    private String masterCityId;
+
     @Column(name = "check_type")
     @Builder.Default
     private String checkType = "API";

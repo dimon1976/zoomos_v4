@@ -38,6 +38,30 @@
             border-color: #dee2e6;
             border-radius: 4px;
         }
+        .master-city-input {
+            font-size: 0.8em;
+            border: 1px solid transparent;
+            background: transparent;
+            width: 80px;
+            cursor: text;
+        }
+        .master-city-input:focus {
+            border-color: #86b7fe;
+            background: #fff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
+            border-radius: 4px;
+            padding: 2px 4px;
+        }
+        .master-city-input:hover:not(:focus) {
+            background: #f8f9fa;
+            border-color: #dee2e6;
+            border-radius: 4px;
+        }
+        .master-city-input:not(:placeholder-shown) {
+            color: #0a58ca;
+            font-weight: 500;
+        }
         .addr-badge {
             display: inline-flex; align-items: center; gap: 3px;
             background: #dbeafe; color: #1e3a8a;
@@ -644,6 +668,7 @@
                                         <th style="width:250px">Сайт-конкурент</th>
                                         <th style="width:130px" class="text-center">Тип проверки</th>
                                         <th class="city-ids-col">ID городов</th>
+                                        <th style="width:90px" class="text-center" title="Мастер-город: если задан, проверяется только этот город">Мастер</th>
                                         <th style="width:100px" class="text-center">ID адресов</th>
                                         <th style="width:90px" class="text-center">Парсер</th>
                                         <th style="width:44px"></th>
@@ -690,6 +715,14 @@
                                                    th:data-id="${entry.id}"
                                                    th:title="${entry.cityIds}"
                                                    placeholder="ID не заданы">
+                                        </td>
+                                        <td class="text-center">
+                                            <input type="text"
+                                                   class="form-control-plaintext master-city-input"
+                                                   th:value="${entry.masterCityId}"
+                                                   th:data-id="${entry.id}"
+                                                   th:title="${entry.masterCityId != null ? 'Мастер-город: ' + entry.masterCityId : 'Не задан — проверяются все города из city_ids'}"
+                                                   placeholder="—">
                                         </td>
                                         <td class="text-center">
                                             <button type="button"
@@ -1414,6 +1447,45 @@
                     if (data.success) {
                         originalValue = newValue;
                         this.title = newValue;
+                        this.style.borderColor = '#198754';
+                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+                    } else {
+                        alert('Ошибка сохранения: ' + (data.error || ''));
+                        this.value = originalValue;
+                    }
+                })
+                .catch(() => { this.value = originalValue; });
+        });
+    });
+
+    // ---- Редактирование master_city_id — сохранение по blur или Enter ----
+    document.querySelectorAll('.master-city-input').forEach(input => {
+        let originalValue = input.value;
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+            if (e.key === 'Escape') { this.value = originalValue; this.blur(); }
+        });
+
+        input.addEventListener('focus', function() {
+            originalValue = this.value;
+        });
+
+        input.addEventListener('blur', function() {
+            if (this.value === originalValue) return;
+            const id = this.dataset.id;
+            const newValue = this.value.trim();
+
+            const fd = new FormData();
+            fd.append('masterCityId', newValue);
+
+            fetch('/zoomos/city-ids/' + id + '/master-city', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        originalValue = newValue;
+                        this.value = newValue;
+                        this.title = newValue ? 'Мастер-город: ' + newValue : 'Не задан — проверяются все города из city_ids';
                         this.style.borderColor = '#198754';
                         setTimeout(() => { this.style.borderColor = ''; }, 1000);
                     } else {

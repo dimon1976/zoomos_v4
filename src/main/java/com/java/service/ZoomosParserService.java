@@ -108,6 +108,17 @@ public class ZoomosParserService {
     }
 
     /**
+     * Обновить master_city_id для строки
+     */
+    @Transactional
+    public ZoomosCityId updateMasterCityId(Long id, String masterCityId) {
+        ZoomosCityId entry = cityIdRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Запись не найдена: " + id));
+        entry.setMasterCityId(masterCityId == null || masterCityId.isBlank() ? null : masterCityId.trim());
+        return cityIdRepository.save(entry);
+    }
+
+    /**
      * Обновить тип проверки для строки (API / ITEM)
      */
     @Transactional

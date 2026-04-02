@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-03 (рефакторинг: ZoomosCheckParams DTO, CheckRunStatus/ZoomosCheckType enum, FetchType.LAZY для shop, AddressFilterContext record, TIMESTAMPTZ миграция, индексы производительности V50; исправлен ключ baseline с addressId, оптимизация JOIN FETCH для check-history, timezone-корректное форматирование дат, точечный прогресс-индикатор при ручном запуске; scheduleId в params — lastRunAt сохраняется до WebSocket через REQUIRES_NEW; batch-запрос findLatestInProgressBySites вместо N+1; buildBaselineKey в static-хелпер; check-history лимит 500; дефолт checkType=API)
+> Последнее обновление: 2026-04 (master_city_id в ZoomosCityId — мастер-город: проверяется только он, остальные city_ids и address_ids игнорируются; V51 миграция; редактирование в UI на index.html; эндпоинт POST /city-ids/{id}/master-city; badge masterCityBySite в check-results)
 
 ## Назначение
 
@@ -22,7 +22,7 @@
 
 ---
 
-## Структура БД (Flyway V23–V50)
+## Структура БД (Flyway V23–V51)
 
 ```sql
 zoomos_check_runs
@@ -80,6 +80,8 @@ clients
 --   idx_shop_schedules_is_enabled         ON zoomos_shop_schedules(is_enabled) WHERE is_enabled=TRUE
 --   idx_parsing_stats_baseline_lookup     ON zoomos_parsing_stats(site_name, is_baseline, start_time DESC)
 --   idx_parsing_stats_site_addr_completion ON zoomos_parsing_stats(site_name, address_id, completion_percent, start_time DESC)
+-- V51: колонка master_city_id в zoomos_city_ids
+--   Мастер-город: если задан — проверяется только он; остальные города из city_ids и address_ids игнорируются
 ```
 
 ---
@@ -308,6 +310,7 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | `ZoomosCheckType` | enum API / ITEM — хранится как STRING в `zoomos_parsing_stats.check_type` |
 | `ZoomosCheckParams` | @Value @Builder DTO — заменяет 12-параметровую сигнатуру `runCheck()` |
 | `AddressFilterContext` | private record внутри `ZoomosCheckService` — контекст фильтрации city/address |
+| `ZoomosCityId.masterCityId` | Мастер-город: если задан, проверяется только этот город; остальные из `city_ids` и `address_ids` игнорируются |
 
 **Запуск проверки** через `checkService.runCheck(ZoomosCheckParams.builder()...build())` — из контроллера и планировщика.
 

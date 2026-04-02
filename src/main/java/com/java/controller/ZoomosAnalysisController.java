@@ -437,6 +437,18 @@ public class ZoomosAnalysisController {
         }
     }
 
+    @PostMapping("/city-ids/{id}/master-city")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> updateMasterCityId(@PathVariable Long id,
+                                                                    @RequestParam(required = false) String masterCityId) {
+        try {
+            parserService.updateMasterCityId(id, masterCityId);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/city-ids/{id}/check-type")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> updateCheckType(@PathVariable Long id,
@@ -671,6 +683,13 @@ public class ZoomosAnalysisController {
                 .stream().filter(c -> Boolean.TRUE.equals(c.getIsActive()))
                 .collect(Collectors.toList());
 
+        // Карта siteName → masterCityId (для badge в шаблоне)
+        Map<String, String> masterCityBySite = new HashMap<>();
+        for (ZoomosCityId cid : allCityIds) {
+            if (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
+                masterCityBySite.put(cid.getSiteName(), cid.getMasterCityId().trim());
+        }
+
         // Карта siteName → cityId config для сайтов с парсер-фильтром
         Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
                 .filter(c -> c.getParserInclude() != null && !c.getParserInclude().isBlank())
@@ -834,8 +853,15 @@ public class ZoomosAnalysisController {
 
         for (ZoomosCityId cid : allCityIds) {
             String site = cid.getSiteName();
-            Set<String> expectedCities = ZoomosCheckService.parseCommaSeparated(cid.getCityIds());
-            Map<String, Set<String>> addrMapping = ZoomosCheckService.parseAddressMapping(cid.getAddressIds());
+            // Если задан master_city_id — ожидаем только его, остальные города не проверяем
+            String effectiveCityIdsStr = (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
+                    ? cid.getMasterCityId()
+                    : cid.getCityIds();
+            Set<String> expectedCities = ZoomosCheckService.parseCommaSeparated(effectiveCityIdsStr);
+            // address_ids проверяем только если master_city_id не задан
+            Map<String, Set<String>> addrMapping = (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
+                    ? new java.util.LinkedHashMap<>()
+                    : ZoomosCheckService.parseAddressMapping(cid.getAddressIds());
 
             // Для плоского формата (key="") определяем город из данных парсинга
             // Строим полный маппинг addressId → cityId с учётом конфигурации и данных
@@ -1064,6 +1090,7 @@ public class ZoomosAnalysisController {
         model.addAttribute("warnCountBySite", warnCountBySite);
         model.addAttribute("trendIssues", trendIssues);
         model.addAttribute("parserIncludeBysite", parserIncludeBysite);
+        model.addAttribute("masterCityBySite", masterCityBySite);
         model.addAttribute("prioritySiteNames", prioritySiteNames);
         model.addAttribute("canDeliver", canDeliver);
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
@@ -1174,6 +1201,11 @@ public class ZoomosAnalysisController {
         Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
                 .filter(c -> c.getParserInclude() != null && !c.getParserInclude().isBlank())
                 .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
+        Map<String, String> masterCityBySite = new HashMap<>();
+        for (ZoomosCityId cid : allCityIds) {
+            if (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
+                masterCityBySite.put(cid.getSiteName(), cid.getMasterCityId().trim());
+        }
 
         // Evaluate siteCityStatuses
         Map<String, String> siteCityStatuses = new LinkedHashMap<>();
@@ -1278,8 +1310,15 @@ public class ZoomosAnalysisController {
         }
         for (ZoomosCityId cid : allCityIds) {
             String site = cid.getSiteName();
-            Set<String> expectedCities = ZoomosCheckService.parseCommaSeparated(cid.getCityIds());
-            Map<String, Set<String>> addrMapping = ZoomosCheckService.parseAddressMapping(cid.getAddressIds());
+            // Если задан master_city_id — ожидаем только его, остальные города не проверяем (аналогично checkResults)
+            String effectiveCityIdsStr = (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
+                    ? cid.getMasterCityId()
+                    : cid.getCityIds();
+            Set<String> expectedCities = ZoomosCheckService.parseCommaSeparated(effectiveCityIdsStr);
+            // address_ids проверяем только если master_city_id не задан
+            Map<String, Set<String>> addrMapping = (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
+                    ? new java.util.LinkedHashMap<>()
+                    : ZoomosCheckService.parseAddressMapping(cid.getAddressIds());
             Set<String> addressCoveredCities = new HashSet<>();
             Map<String, String> addrToCityResolved = new HashMap<>();
             for (Map.Entry<String, Set<String>> addrEntry : addrMapping.entrySet()) {
@@ -1333,8 +1372,30 @@ public class ZoomosAnalysisController {
             }
         }
 
+        // Добавляем COPIED-записи для покрытых городов (master_city_id задан)
+        for (ZoomosCityId cid : allCityIds) {
+            if (cid.getMasterCityId() == null || cid.getMasterCityId().isBlank()) continue;
+            String site = cid.getSiteName();
+            String master = cid.getMasterCityId().trim();
+            Set<String> allConfigCities = ZoomosCheckService.parseCommaSeparated(cid.getCityIds());
+            for (String city : allConfigCities) {
+                if (city.equals(master)) continue;                             // мастер не дублируем
+                if (foundCityKeys.contains(site + "|" + city)) continue;       // есть реальные данные
+                Map<String, Object> issue = new LinkedHashMap<>();
+                issue.put("site", site);
+                issue.put("city", city);
+                issue.put("cityId", city);
+                issue.put("checkType", cid.getCheckType() != null ? cid.getCheckType() : "API");
+                issue.put("noData", true);
+                issue.put("type", "COPIED");
+                issue.put("masterCityId", master);
+                issue.put("message", "Цены копируются из города " + master);
+                issues.add(issue);
+            }
+        }
+
         List<Map<String, Object>> groups = buildGroups(stats, inProgressStats, cityIdBySite,
-                siteCityStatuses, issues, prioritySiteNames, baselineStatsList);
+                siteCityStatuses, issues, prioritySiteNames, baselineStatsList, masterCityBySite);
 
         // Baseline dates for separator in table
         if (baselineDays > 0) {
@@ -1438,6 +1499,7 @@ public class ZoomosAnalysisController {
         return switch (st != null ? st : "") {
             case "ERROR" -> 0;
             case "WARNING" -> 1;
+            case "COPIED" -> 2; // информационный, наравне с OK
             default -> 2; // OK
         };
     }
@@ -1450,7 +1512,8 @@ public class ZoomosAnalysisController {
             Map<String, String> siteCityStatuses,
             List<Map<String, Object>> issues,
             Set<String> prioritySiteNames,
-            List<ZoomosParsingStats> baselineStatsList) {
+            List<ZoomosParsingStats> baselineStatsList,
+            Map<String, String> masterCityBySite) {
 
         // Группируем по сайту (верхний уровень)
         Map<String, List<ZoomosParsingStats>> bySite = stats.stream()
@@ -1560,6 +1623,7 @@ public class ZoomosAnalysisController {
             g.put("count", siteStats.size());
             g.put("cityGroups", cityGroups);
             g.put("isPriority", prioritySiteNames.contains(siteName));
+            g.put("masterCityId", masterCityBySite.get(siteName));
             groups.add(g);
         });
 
@@ -1590,6 +1654,7 @@ public class ZoomosAnalysisController {
                 ng.put("status", iType);
                 ng.put("count", 0);
                 ng.put("cityGroups", new ArrayList<>());
+                ng.put("masterCityId", masterCityBySite.get(iSite));
                 groups.add(ng);
                 return ng;
             });
@@ -1642,20 +1707,26 @@ public class ZoomosAnalysisController {
                         displayStatus = "В процессе";
                     } else if (Boolean.TRUE.equals(ag.get("noData")) && "ERROR".equals(agStatus)) {
                         displayStatus = "Нет данных";
+                    } else if ("COPIED".equals(agStatus)) {
+                        displayStatus = "Копируется";
                     } else {
                         displayStatus = agStatus;
                     }
                     ag.put("displayStatus", displayStatus);
                 }
-                String worstCityStatus = ags.stream().map(ag -> (String) ag.get("status"))
+                String worstCityStatus = ags.stream()
+                        .map(ag -> (String) ag.get("status"))
+                        .filter(s -> !"COPIED".equals(s))
                         .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
-                        .orElse((String) cg.get("status"));
+                        .orElse("COPIED"); // если всё покрыто → COPIED
                 cg.put("status", worstCityStatus);
             }
             cgs.sort(Comparator.comparingInt(cg -> statusPriority((String) cg.get("status"))));
-            String worstSiteStatus = cgs.stream().map(cg -> (String) cg.get("status"))
+            String worstSiteStatus = cgs.stream()
+                    .map(cg -> (String) cg.get("status"))
+                    .filter(s -> !"COPIED".equals(s))
                     .min(Comparator.comparingInt(ZoomosAnalysisController::statusPriority))
-                    .orElse((String) g.get("status"));
+                    .orElse("OK"); // если только COPIED → сайт ОК
             g.put("status", worstSiteStatus);
         }
         groups.sort(Comparator.comparingInt((Map<String, Object> g) -> Boolean.TRUE.equals(g.get("isPriority")) ? 0 : 1)
