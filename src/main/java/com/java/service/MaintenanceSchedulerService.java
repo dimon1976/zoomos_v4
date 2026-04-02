@@ -126,6 +126,10 @@ public class MaintenanceSchedulerService {
         settingsService.set("maint." + key + ".lastRunAt", LocalDateTime.now().format(FORMATTER));
     }
 
+    private void recordCompletedAt(String key) {
+        settingsService.set("maint." + key + ".lastCompletedAt", LocalDateTime.now().format(FORMATTER));
+    }
+
     // ─── Тела задач ──────────────────────────────────────────────────────────
 
     public void scheduleFileArchiving() {
@@ -150,6 +154,8 @@ public class MaintenanceSchedulerService {
                     "Ошибка архивирования",
                     "Ошибка при выполнении планового архивирования: " + e.getMessage(),
                     "error");
+        } finally {
+            recordCompletedAt("fileArchive");
         }
     }
 
@@ -177,6 +183,8 @@ public class MaintenanceSchedulerService {
                     "Ошибка очистки БД",
                     "Ошибка при выполнении плановой очистки БД: " + e.getMessage(),
                     "error");
+        } finally {
+            recordCompletedAt("dbCleanup");
         }
     }
 
@@ -218,6 +226,8 @@ public class MaintenanceSchedulerService {
                     "Ошибка мониторинга",
                     "Ошибка при выполнении проверки состояния системы: " + e.getMessage(),
                     "error");
+        } finally {
+            recordCompletedAt("healthCheck");
         }
     }
 
@@ -244,6 +254,8 @@ public class MaintenanceSchedulerService {
                     "Ошибка анализа производительности",
                     "Ошибка при выполнении анализа производительности БД: " + e.getMessage(),
                     "error");
+        } finally {
+            recordCompletedAt("perfAnalysis");
         }
     }
 
@@ -266,6 +278,8 @@ public class MaintenanceSchedulerService {
                     "Ошибка VACUUM FULL",
                     "Ошибка при выполнении VACUUM FULL: " + e.getMessage(),
                     "error");
+        } finally {
+            recordCompletedAt("vacuum");
         }
     }
 
@@ -288,6 +302,8 @@ public class MaintenanceSchedulerService {
                     "Ошибка REINDEX",
                     "Ошибка при выполнении REINDEX: " + e.getMessage(),
                     "error");
+        } finally {
+            recordCompletedAt("reindex");
         }
     }
 
@@ -326,6 +342,8 @@ public class MaintenanceSchedulerService {
                     "Ошибка полного обслуживания",
                     "Ошибка при выполнении полного обслуживания: " + e.getMessage(),
                     "error");
+        } finally {
+            recordCompletedAt("fullMaintenance");
         }
     }
 }

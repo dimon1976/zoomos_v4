@@ -49,7 +49,7 @@
                         <th style="width:220px">Задача</th>
                         <th style="width:70px" class="text-center">Вкл</th>
                         <th>Cron-выражение</th>
-                        <th style="width:180px">Последний запуск</th>
+                        <th style="width:220px">Запуск / Завершение</th>
                         <th style="width:110px" class="text-center">Действие</th>
                     </tr>
                 </thead>
@@ -71,9 +71,16 @@
                                    placeholder="0 0 2 * * *">
                         </td>
                         <td>
-                            <span class="last-run" th:id="'lastRun-' + ${entry.key}"
-                                  th:text="${entry.value['lastRunAt'] != null && !entry.value['lastRunAt'].isEmpty()} ? ${entry.value['lastRunAt']} : '—'">
-                            </span>
+                            <div class="last-run">
+                                <span class="text-muted" style="font-size:0.75rem">&#9654;</span>
+                                <span th:id="'lastRun-' + ${entry.key}"
+                                      th:text="${entry.value['lastRunAt'] != null && !entry.value['lastRunAt'].isEmpty()} ? ${entry.value['lastRunAt']} : '—'"></span>
+                            </div>
+                            <div class="last-run mt-1">
+                                <span class="text-muted" style="font-size:0.75rem">&#9632;</span>
+                                <span th:id="'lastCompleted-' + ${entry.key}"
+                                      th:text="${entry.value['lastCompletedAt'] != null && !entry.value['lastCompletedAt'].isEmpty()} ? ${entry.value['lastCompletedAt']} : '—'"></span>
+                            </div>
                         </td>
                         <td class="text-center">
                             <button class="btn btn-sm btn-outline-secondary"

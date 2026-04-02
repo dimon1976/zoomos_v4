@@ -493,7 +493,8 @@ public class MaintenanceController {
             t.put("name",      TASK_NAMES.getOrDefault(key, key));
             t.put("enabled",   settings.getOrDefault("maint." + key + ".enabled", "true"));
             t.put("cron",      settings.getOrDefault("maint." + key + ".cron", ""));
-            t.put("lastRunAt", settings.getOrDefault("maint." + key + ".lastRunAt", ""));
+            t.put("lastRunAt",       settings.getOrDefault("maint." + key + ".lastRunAt", ""));
+            t.put("lastCompletedAt", settings.getOrDefault("maint." + key + ".lastCompletedAt", ""));
             tasks.put(key, t);
         }
         model.addAttribute("tasks", tasks);

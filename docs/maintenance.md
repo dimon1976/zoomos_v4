@@ -32,6 +32,7 @@
 | `maint.{key}.enabled` | boolean | Включение конкретной задачи |
 | `maint.{key}.cron` | string | Cron-выражение (6 полей). День недели: 1=Вс, 2=Пн, 3=Вт, 4=Ср, 5=Чт, 6=Пт, 7=Сб |
 | `maint.{key}.lastRunAt` | string | Дата/время последнего запуска (`yyyy-MM-dd HH:mm:ss`) |
+| `maint.{key}.lastCompletedAt` | string | Дата/время завершения последнего запуска (`yyyy-MM-dd HH:mm:ss`) |
 
 ### Задачи планировщика
 
@@ -85,6 +86,7 @@ POST /maintenance/schedule/trigger/{key}
   → maintenanceSchedulerService.triggerTask(key)
   → taskScheduler.execute(getTaskRunnable(key))  -- async, не блокирует HTTP
   → recordLastRun(key)                           -- обновляет maint.{key}.lastRunAt
+  → (в finally) recordCompletedAt(key)           -- обновляет maint.{key}.lastCompletedAt
 ```
 
 ### toSpringCron()
