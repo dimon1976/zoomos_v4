@@ -496,14 +496,15 @@ public class ZoomosParserService {
     // Парсинг CITIES_EQUAL_PRICES
     // =========================================================================
 
+    // Структура строки таблицы: [0]=пустая 8px | [1]=название параметра | [2]=тип (select) | [3]=значение (input)
     private static final String CITIES_EQUAL_PRICES_JS =
             "() => {" +
             "  const rows = Array.from(document.querySelectorAll('tr'));" +
             "  for (const row of rows) {" +
             "    const cells = row.querySelectorAll('td');" +
-            "    if (cells.length >= 2 && cells[0].textContent.includes('CITIES_EQUAL_PRICES')) {" +
-            "      const inp = cells[1].querySelector('input');" +
-            "      return inp ? inp.value : cells[1].textContent.trim();" +
+            "    if (cells.length >= 4 && cells[1].textContent.includes('CITIES_EQUAL_PRICES')) {" +
+            "      const inp = cells[3].querySelector('input');" +
+            "      return inp ? inp.value : cells[3].textContent.trim();" +
             "    }" +
             "  }" +
             "  return null;" +
