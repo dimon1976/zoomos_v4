@@ -1,6 +1,6 @@
 # План: 3 фичи для Zoomos Check — настройки сайтов
 
-**Статус:** ⏳ Не начато  
+**Статус:** 🔄 Задача 3 реализована
 **Ветка:** `feature/master-city-id`  
 **Последнее обновление:** 2026-04-02
 
@@ -154,15 +154,15 @@
 `CITIES_EQUAL_PRICES=1` → цены одинаковы во всех городах → достаточно одного города.  
 Парсинг только по кнопке (не при каждой проверке).
 
-- [ ] **3.1 — Миграция V54**  
-  `src/main/resources/db/migration/V54__add_cities_equal_prices_to_sites.sql`
+- [x] **3.1 — Миграция V52** (V52, т.к. V52/V53 ещё не созданы)
+  `src/main/resources/db/migration/V52__add_cities_equal_prices_to_sites.sql`
   ```sql
   ALTER TABLE zoomos_sites
       ADD COLUMN cities_equal_prices BOOLEAN,
       ADD COLUMN cities_equal_prices_checked_at TIMESTAMPTZ;
   ```
 
-- [ ] **3.2 — Entity `ZoomosKnownSite.java`**
+- [x] **3.2 — Entity `ZoomosKnownSite.java`**
   ```java
   @Column(name = "cities_equal_prices")
   private Boolean citiesEqualPrices;  // null = ещё не проверялось
@@ -171,7 +171,7 @@
   private ZonedDateTime citiesEqualPricesCheckedAt;
   ```
 
-- [ ] **3.3 — Метод `fetchCitiesEqualPrices(String siteName)` в `ZoomosParserService.java`**  
+- [x] **3.3 — Метод `fetchCitiesEqualPrices(String siteName)` в `ZoomosParserService.java`**
   Паттерн: тот же Playwright что в `parseApiPage()`:
   1. `page.navigate("…/shops-parser/{siteName}/settings?upd=…")`
   2. `page.waitForLoadState(NETWORKIDLE)`
@@ -181,14 +181,14 @@
 
   Batch-метод `fetchCitiesEqualPricesForAll()` — один Playwright-контекст на все сайты, запускать через `zoomosCheckExecutor`.
 
-- [ ] **3.4 — `ZoomosParsingStatsRepository.java`**  
+- [x] **3.4 — `ZoomosParsingStatsRepository.java`**
   Добавить:
   ```java
   @Query("SELECT DISTINCT s.cityName FROM ZoomosParsingStats s WHERE s.siteName = :siteName AND s.cityName IS NOT NULL ORDER BY s.cityName")
   List<String> findDistinctCityNamesBySiteName(@Param("siteName") String siteName);
   ```
 
-- [ ] **3.5 — Endpoints в `ZoomosAnalysisController.java`**
+- [x] **3.5 — Endpoints в `ZoomosAnalysisController.java`**
   ```
   POST /zoomos/sites/{id}/fetch-equal-prices
     → parserService.fetchCitiesEqualPrices(siteName)
@@ -202,12 +202,12 @@
     → return List<String>
   ```
 
-- [ ] **3.6 — UI `zoomos/sites.html`**  
+- [x] **3.6 — UI `zoomos/sites.html`**
   Колонка "Равные цены": кнопка `fa-sync-alt`, после проверки бейдж `=1` (зелёный) / `=0` (серый) + дата.  
   Кнопка "Проверить все" в шапке.  
   Модальное окно: если `citiesEqualPrices=1` и `masterCityId` не задан → список исторических городов для выбора.
 
-- [ ] **3.7 — UI `zoomos/check-results.html`**  
+- [x] **3.7 — UI `zoomos/check-results.html`**
   В модель добавить `equalPricesBySite: Map<siteName, Boolean>` и `siteIdByName: Map<siteName, Long>`.  
   Рядом с именем сайта (строка ~192): кнопка `fa-cog` + бейдж "= цены" / "разные цены".
 

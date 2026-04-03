@@ -1092,6 +1092,17 @@ public class ZoomosAnalysisController {
         model.addAttribute("parserIncludeBysite", parserIncludeBysite);
         model.addAttribute("masterCityBySite", masterCityBySite);
         model.addAttribute("prioritySiteNames", prioritySiteNames);
+
+        // equalPricesBySite и siteIdByName — для бейджей на check-results
+        Map<String, Boolean> equalPricesBySite = new HashMap<>();
+        Map<String, Long> siteIdByName = new HashMap<>();
+        knownSiteRepository.findAll().forEach(s -> {
+            if (s.getCitiesEqualPrices() != null) equalPricesBySite.put(s.getSiteName(), s.getCitiesEqualPrices());
+            siteIdByName.put(s.getSiteName(), s.getId());
+        });
+        model.addAttribute("equalPricesBySite", equalPricesBySite);
+        model.addAttribute("siteIdByName", siteIdByName);
+
         model.addAttribute("canDeliver", canDeliver);
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
         model.addAttribute("liveOkCount", liveOkCount);
@@ -2252,6 +2263,41 @@ public class ZoomosAnalysisController {
             knownSiteRepository.save(site);
             return ResponseEntity.ok(Map.<String, Object>of("success", true, "ignoreStock", site.isIgnoreStock()));
         }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден")));
+    }
+
+    @PostMapping("/sites/{id}/fetch-equal-prices")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> fetchEqualPrices(@PathVariable Long id) {
+        return knownSiteRepository.findById(id).map(site -> {
+            try {
+                Map<String, Object> result = parserService.fetchCitiesEqualPrices(site.getSiteName());
+                return ResponseEntity.ok(result);
+            } catch (Exception e) {
+                log.warn("Ошибка fetchEqualPrices для {}: {}", site.getSiteName(), e.getMessage());
+                return ResponseEntity.ok(Map.<String, Object>of("success", false, "error", e.getMessage()));
+            }
+        }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден")));
+    }
+
+    @PostMapping("/sites/fetch-equal-prices-all")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> fetchEqualPricesAll() {
+        CompletableFuture.runAsync(() -> {
+            try {
+                parserService.fetchCitiesEqualPricesForAll();
+            } catch (Exception e) {
+                log.warn("Ошибка fetchEqualPricesForAll: {}", e.getMessage());
+            }
+        }, zoomosCheckExecutor);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Запущено в фоне"));
+    }
+
+    @GetMapping("/sites/{id}/historical-cities")
+    @ResponseBody
+    public ResponseEntity<List<String>> getHistoricalCities(@PathVariable Long id) {
+        return knownSiteRepository.findById(id).map(site ->
+                ResponseEntity.ok(parsingStatsRepository.findDistinctCityNamesBySiteName(site.getSiteName()))
+        ).orElse(ResponseEntity.ok(List.of()));
     }
 
     @PostMapping("/sites/by-name/priority")

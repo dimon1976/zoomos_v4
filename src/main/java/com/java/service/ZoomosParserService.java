@@ -9,6 +9,7 @@ import com.java.model.entity.ZoomosSession;
 import com.java.model.entity.ZoomosShop;
 import com.java.repository.ZoomosCityIdRepository;
 import com.java.repository.ZoomosKnownSiteRepository;
+import com.java.repository.ZoomosParsingStatsRepository;
 import com.java.repository.ZoomosSessionRepository;
 import com.java.repository.ZoomosShopRepository;
 import com.microsoft.playwright.*;
@@ -34,6 +35,7 @@ public class ZoomosParserService {
     private final ZoomosCityIdRepository cityIdRepository;
     private final ZoomosSessionRepository sessionRepository;
     private final ZoomosKnownSiteRepository knownSiteRepository;
+    private final ZoomosParsingStatsRepository parsingStatsRepository;
     private final ObjectMapper objectMapper;
 
     /**
@@ -488,6 +490,144 @@ public class ZoomosParserService {
             log.error("Ошибка синхронизации из матчинга {}: {}", shopName, e.getMessage(), e);
             throw new RuntimeException("Ошибка: " + e.getMessage(), e);
         }
+    }
+
+    // =========================================================================
+    // Парсинг CITIES_EQUAL_PRICES
+    // =========================================================================
+
+    private static final String CITIES_EQUAL_PRICES_JS =
+            "() => {" +
+            "  const rows = Array.from(document.querySelectorAll('tr'));" +
+            "  for (const row of rows) {" +
+            "    const cells = row.querySelectorAll('td');" +
+            "    if (cells.length >= 2 && cells[0].textContent.includes('CITIES_EQUAL_PRICES')) {" +
+            "      const inp = cells[1].querySelector('input');" +
+            "      return inp ? inp.value : cells[1].textContent.trim();" +
+            "    }" +
+            "  }" +
+            "  return null;" +
+            "}";
+
+    /**
+     * Парсит CITIES_EQUAL_PRICES для одного сайта со страницы /shops-parser/{siteName}/settings.
+     * Возвращает {success, citiesEqualPrices, historicalCities (если =1)}.
+     */
+    @Transactional
+    public Map<String, Object> fetchCitiesEqualPrices(String siteName) {
+        ZoomosKnownSite site = knownSiteRepository.findBySiteName(siteName.trim().toLowerCase())
+                .orElseThrow(() -> new IllegalArgumentException("Сайт не найден: " + siteName));
+
+        log.info("Парсинг CITIES_EQUAL_PRICES для: {}", siteName);
+
+        try (Playwright playwright = Playwright.create()) {
+            Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+            BrowserContext context = browser.newContext(new Browser.NewContextOptions().setViewportSize(1920, 1080));
+            context.setDefaultTimeout(config.getTimeoutSeconds() * 1000L);
+
+            if (!loadSession(context)) login(context);
+
+            Page page = context.newPage();
+            String url = config.getBaseUrl() + "/shops-parser/" + siteName + "/settings?upd=" + System.currentTimeMillis();
+            page.navigate(url);
+            page.waitForLoadState(LoadState.NETWORKIDLE);
+
+            if (page.url().contains("/login")) {
+                login(context);
+                page.navigate(url);
+                page.waitForLoadState(LoadState.NETWORKIDLE);
+            }
+            saveSession(context);
+
+            String rawValue = (String) page.evaluate(CITIES_EQUAL_PRICES_JS);
+            page.close();
+
+            Boolean equalPrices = rawValue != null ? "1".equals(rawValue.trim()) : null;
+            site.setCitiesEqualPrices(equalPrices);
+            site.setCitiesEqualPricesCheckedAt(ZonedDateTime.now());
+            knownSiteRepository.save(site);
+
+            log.info("CITIES_EQUAL_PRICES для {}: rawValue='{}', result={}", siteName, rawValue, equalPrices);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("citiesEqualPrices", equalPrices);
+            if (Boolean.TRUE.equals(equalPrices)) {
+                result.put("historicalCities", parsingStatsRepository.findDistinctCityNamesBySiteName(siteName));
+            }
+            return result;
+
+        } catch (Exception e) {
+            log.error("Ошибка парсинга CITIES_EQUAL_PRICES для {}: {}", siteName, e.getMessage(), e);
+            throw new RuntimeException("Ошибка: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Batch-парсинг CITIES_EQUAL_PRICES для всех сайтов справочника.
+     * Использует один Playwright-контекст. Не транзакционный — каждый save независимый.
+     * Запускать через zoomosCheckExecutor.
+     */
+    public Map<String, Object> fetchCitiesEqualPricesForAll() {
+        List<ZoomosKnownSite> sites = knownSiteRepository.findAllByOrderBySiteNameAsc();
+        if (sites.isEmpty()) {
+            return Map.of("success", true, "processed", 0, "errors", 0);
+        }
+
+        log.info("Batch парсинг CITIES_EQUAL_PRICES для {} сайтов", sites.size());
+        int processed = 0, errors = 0;
+
+        try (Playwright playwright = Playwright.create()) {
+            Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+            BrowserContext context = browser.newContext(new Browser.NewContextOptions().setViewportSize(1920, 1080));
+            context.setDefaultTimeout(config.getTimeoutSeconds() * 1000L);
+
+            if (!loadSession(context)) login(context);
+            boolean needReauth = false;
+
+            for (ZoomosKnownSite site : sites) {
+                try {
+                    Page page = context.newPage();
+                    String url = config.getBaseUrl() + "/shops-parser/" + site.getSiteName()
+                            + "/settings?upd=" + System.currentTimeMillis();
+                    page.navigate(url);
+                    page.waitForLoadState(LoadState.NETWORKIDLE);
+
+                    if (page.url().contains("/login")) {
+                        page.close();
+                        if (!needReauth) {
+                            login(context);
+                            needReauth = true;
+                        }
+                        page = context.newPage();
+                        page.navigate(url);
+                        page.waitForLoadState(LoadState.NETWORKIDLE);
+                    }
+
+                    String rawValue = (String) page.evaluate(CITIES_EQUAL_PRICES_JS);
+                    page.close();
+
+                    Boolean equalPrices = rawValue != null ? "1".equals(rawValue.trim()) : null;
+                    site.setCitiesEqualPrices(equalPrices);
+                    site.setCitiesEqualPricesCheckedAt(ZonedDateTime.now());
+                    knownSiteRepository.save(site);
+                    processed++;
+
+                } catch (Exception e) {
+                    log.warn("Ошибка CITIES_EQUAL_PRICES для {}: {}", site.getSiteName(), e.getMessage());
+                    errors++;
+                }
+            }
+
+            saveSession(context);
+
+        } catch (Exception e) {
+            log.error("Ошибка batch парсинга CITIES_EQUAL_PRICES: {}", e.getMessage(), e);
+            throw new RuntimeException("Ошибка: " + e.getMessage(), e);
+        }
+
+        log.info("Batch CITIES_EQUAL_PRICES завершён: processed={}, errors={}", processed, errors);
+        return Map.of("success", true, "processed", processed, "errors", errors);
     }
 
     /**
