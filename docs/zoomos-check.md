@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-04 (master_city_id в ZoomosCityId — мастер-город: проверяется только он, остальные city_ids и address_ids игнорируются; V51 миграция; редактирование в UI на index.html; эндпоинт POST /city-ids/{id}/master-city; badge masterCityBySite в check-results)
+> Последнее обновление: 2026-04 (V53: master_city_id перенесён с уровня zoomos_city_ids на уровень zoomos_sites; поле в ZoomosKnownSite, редактирование в UI sites.html; устаревший master_city_id в zoomos_city_ids помечен DEPRECATED; иконки сайтов, белый текст на красном фоне для ошибок)
 
 ## Назначение
 
@@ -46,6 +46,7 @@ zoomos_sites
   id, site_name (UNIQUE), check_type (API/ITEM)
   is_priority BOOLEAN DEFAULT FALSE
   ignore_stock BOOLEAN DEFAULT FALSE  -- сайты без данных inStock
+  master_city_id VARCHAR(50) NULL     -- V53: перенесено из zoomos_city_ids (мастер-город для точечной фильтрации)
 
 zoomos_shop_schedules
   id, shop_id (UNIQUE FK → zoomos_shops), cron_expression, is_enabled

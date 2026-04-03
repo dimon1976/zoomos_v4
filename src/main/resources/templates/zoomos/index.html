@@ -719,9 +719,10 @@
                                         <td class="text-center">
                                             <input type="text"
                                                    class="form-control-plaintext master-city-input"
-                                                   th:value="${entry.masterCityId}"
+                                                   th:value="${siteMasterCityMap != null and siteMasterCityMap[entry.siteName] != null ? siteMasterCityMap[entry.siteName] : entry.masterCityId}"
+                                                   th:data-siteid="${knownSiteIdMap != null ? knownSiteIdMap[entry.siteName] : null}"
                                                    th:data-id="${entry.id}"
-                                                   th:title="${entry.masterCityId != null ? 'Мастер-город: ' + entry.masterCityId : 'Не задан — проверяются все города из city_ids'}"
+                                                   th:title="${(siteMasterCityMap != null and siteMasterCityMap[entry.siteName] != null) ? 'Мастер-город: ' + siteMasterCityMap[entry.siteName] : 'Не задан — проверяются все города из city_ids'}"
                                                    placeholder="—">
                                         </td>
                                         <td class="text-center">
@@ -1473,13 +1474,18 @@
 
         input.addEventListener('blur', function() {
             if (this.value === originalValue) return;
-            const id = this.dataset.id;
+            const siteId = this.dataset.siteid;
+            const cityIdId = this.dataset.id;
             const newValue = this.value.trim();
 
             const fd = new FormData();
             fd.append('masterCityId', newValue);
 
-            fetch('/zoomos/city-ids/' + id + '/master-city', { method: 'POST', body: fd })
+            // Site-level endpoint (Task 2); fallback на legacy city-ids endpoint
+            const url = siteId ? '/zoomos/sites/' + siteId + '/master-city'
+                                : '/zoomos/city-ids/' + cityIdId + '/master-city';
+
+            fetch(url, { method: 'POST', body: fd })
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {

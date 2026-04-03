@@ -430,16 +430,23 @@ public class ZoomosCheckService {
             Map<String, Set<String>> allowedAddressesByCityId,
             Map<String, ZoomosCityId> cityIdMap) {}
 
-    /** Строит контекст фильтрации адресов из списка ZoomosCityId. */
+    /** Строит контекст фильтрации адресов из списка ZoomosCityId.
+     *  master_city_id берётся из zoomos_sites (site-level override) → fallback на zoomos_city_ids (legacy). */
     private AddressFilterContext buildAddressFilterContext(List<ZoomosCityId> entries) {
+        // Site-level masterCityId override (Task 2: перенос из city_ids → sites)
+        Map<String, String> siteMasterOverride = knownSiteRepository.findAllByMasterCityIdNotNull()
+                .stream().collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getMasterCityId));
+
         Set<String> allowedCityIds = new HashSet<>();
         Set<String> allowedAddressIds = new HashSet<>();
         Map<String, Set<String>> allowedAddressesByCityId = new HashMap<>();
         Map<String, ZoomosCityId> cityIdMap = new HashMap<>();
         for (ZoomosCityId entry : entries) {
-            String effectiveCityIds = (entry.getMasterCityId() != null && !entry.getMasterCityId().isBlank())
-                    ? entry.getMasterCityId()   // только мастер-город
-                    : entry.getCityIds();        // все города как прежде
+            // Site-level master override; если нет — legacy per-client значение
+            String effectiveMasterCityId = siteMasterOverride.getOrDefault(entry.getSiteName(), entry.getMasterCityId());
+            String effectiveCityIds = (effectiveMasterCityId != null && !effectiveMasterCityId.isBlank())
+                    ? effectiveMasterCityId   // только мастер-город
+                    : entry.getCityIds();     // все города как прежде
             if (effectiveCityIds != null && !effectiveCityIds.isBlank()) {
                 for (String cid : effectiveCityIds.split(",")) {
                     String trimmed = cid.trim();
@@ -449,8 +456,8 @@ public class ZoomosCheckService {
                     }
                 }
             }
-            // address_ids обрабатываем только если master_city_id не задан
-            if (entry.getMasterCityId() == null || entry.getMasterCityId().isBlank()) {
+            // address_ids обрабатываем только если effective master_city_id не задан
+            if (effectiveMasterCityId == null || effectiveMasterCityId.isBlank()) {
                 parseAddressMapping(entry.getAddressIds()).forEach((cityId, addrIds) -> {
                     if (cityId != null && !cityId.isBlank()) {
                         allowedAddressesByCityId.computeIfAbsent(cityId.trim(), k -> new HashSet<>()).addAll(addrIds);

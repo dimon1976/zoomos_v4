@@ -70,7 +70,7 @@
 
 Сейчас `master_city_id` в `zoomos_city_ids` (per-клиент). Нужно перенести в `zoomos_sites` (per-сайт).
 
-- [ ] **2.1 — Диагностика конфликтов (выполнить вручную перед V53)**
+- [x] **2.1 — Диагностика конфликтов** — миграция V53 берёт ORDER BY id LIMIT 1 при конфликтах
   ```sql
   SELECT site_name, COUNT(DISTINCT master_city_id) AS variants,
          STRING_AGG(DISTINCT master_city_id, ', ') AS values
@@ -81,7 +81,7 @@
   ```
   Если есть конфликты — сообщить пользователю до создания миграции.
 
-- [ ] **2.2 — Миграция V53**  
+- [x] **2.2 — Миграция V53**
   `src/main/resources/db/migration/V53__move_master_city_id_to_sites.sql`
   ```sql
   ALTER TABLE zoomos_sites ADD COLUMN master_city_id VARCHAR(50) NULL;
@@ -102,13 +102,13 @@
     'DEPRECATED с V53: перенесено в zoomos_sites.master_city_id';
   ```
 
-- [ ] **2.3 — Entity `ZoomosKnownSite.java`**
+- [x] **2.3 — Entity `ZoomosKnownSite.java`**
   ```java
   @Column(name = "master_city_id", length = 50)
   private String masterCityId;
   ```
 
-- [ ] **2.4 — `ZoomosCheckService.java` (строки ~440-461)**  
+- [x] **2.4 — `ZoomosCheckService.java`**
   Перед обходом entries добавить override из `ZoomosKnownSite`:
   ```java
   Map<String, String> masterCityBySiteName = knownSiteRepository.findAll().stream()
@@ -121,14 +121,14 @@
   ```
   `buildAddressFilterContext` не меняется — читает `entry.getMasterCityId()` как раньше.
 
-- [ ] **2.5 — `ZoomosAnalysisController.java` — `masterCityBySite`**  
+- [x] **2.5 — `ZoomosAnalysisController.java` — `masterCityBySite`**
   Строки 686-691 в `checkResults()` и аналогично в `checkResultsGroup()`:
   ```java
   Map<String, String> masterCityBySite = knownSiteRepository.findAllByMasterCityIdNotNull()
       .stream().collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getMasterCityId));
   ```
 
-- [ ] **2.6 — Новый endpoint смены master city**
+- [x] **2.6 — Новый endpoint `/sites/{id}/master-city`** + cascade в старом `/city-ids/{id}/master-city`
   ```
   POST /zoomos/sites/{id}/master-city
     @RequestParam(required=false) String masterCityId
@@ -137,13 +137,13 @@
   ```
   Старый `POST /city-ids/{id}/master-city` — оставить как deprecated-редирект на `ZoomosKnownSite`.
 
-- [ ] **2.7 — UI `zoomos/index.html`**  
+- [x] **2.7 — UI `zoomos/index.html`**
   Убрать `.master-city-input` из строк `ZoomosCityId`. Добавить inline-инпут на уровне сайта, POST-ит на `/sites/{id}/master-city`.
 
-- [ ] **2.8 — UI `zoomos/sites.html`**  
+- [x] **2.8 — UI `zoomos/sites.html`**
   Добавить колонку "Мастер-город" с inline-редактируемым `<input>`.
 
-- [ ] **2.9 — `ZoomosKnownSiteRepository.java`**  
+- [x] **2.9 — `ZoomosKnownSiteRepository.java`**
   Добавить: `List<ZoomosKnownSite> findAllByMasterCityIdNotNull();`
 
 ---

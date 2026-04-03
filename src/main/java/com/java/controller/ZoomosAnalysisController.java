@@ -107,12 +107,22 @@ public class ZoomosAnalysisController {
         Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue().stream()
                 .map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
 
+        // Site-level master city (Task 2) для отображения в index
+        List<ZoomosKnownSite> allKnownSites = knownSiteRepository.findAll();
+        Map<String, Long> knownSiteIdMap = allKnownSites.stream()
+                .collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getId, (a, b) -> a));
+        Map<String, String> siteMasterCityMap = allKnownSites.stream()
+                .filter(s -> s.getMasterCityId() != null && !s.getMasterCityId().isBlank())
+                .collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getMasterCityId));
+
         model.addAttribute("shops", shops);
         model.addAttribute("disabledShops", disabledShops);
         model.addAttribute("cityIdsMap", cityIdsMap);
         model.addAttribute("cityNamesMap", cityNamesMap);
         model.addAttribute("schedulesMap", schedulesMap);
         model.addAttribute("prioritySiteNames", prioritySiteNames);
+        model.addAttribute("knownSiteIdMap", knownSiteIdMap);
+        model.addAttribute("siteMasterCityMap", siteMasterCityMap);
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
         Map<String, String> dt = settingsService.getAllSettings();
         model.addAttribute("defaultThresholds", dt);
@@ -683,12 +693,9 @@ public class ZoomosAnalysisController {
                 .stream().filter(c -> Boolean.TRUE.equals(c.getIsActive()))
                 .collect(Collectors.toList());
 
-        // Карта siteName → masterCityId (для badge в шаблоне)
-        Map<String, String> masterCityBySite = new HashMap<>();
-        for (ZoomosCityId cid : allCityIds) {
-            if (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
-                masterCityBySite.put(cid.getSiteName(), cid.getMasterCityId().trim());
-        }
+        // Карта siteName → masterCityId (site-level, Task 2)
+        Map<String, String> masterCityBySite = knownSiteRepository.findAllByMasterCityIdNotNull()
+                .stream().collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getMasterCityId));
 
         // Карта siteName → cityId config для сайтов с парсер-фильтром
         Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
@@ -1212,11 +1219,9 @@ public class ZoomosAnalysisController {
         Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
                 .filter(c -> c.getParserInclude() != null && !c.getParserInclude().isBlank())
                 .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
-        Map<String, String> masterCityBySite = new HashMap<>();
-        for (ZoomosCityId cid : allCityIds) {
-            if (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
-                masterCityBySite.put(cid.getSiteName(), cid.getMasterCityId().trim());
-        }
+        // Карта siteName → masterCityId (site-level, Task 2)
+        Map<String, String> masterCityBySite = knownSiteRepository.findAllByMasterCityIdNotNull()
+                .stream().collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getMasterCityId));
 
         // Evaluate siteCityStatuses
         Map<String, String> siteCityStatuses = new LinkedHashMap<>();
@@ -2262,6 +2267,17 @@ public class ZoomosAnalysisController {
             site.setIgnoreStock(!site.isIgnoreStock());
             knownSiteRepository.save(site);
             return ResponseEntity.ok(Map.<String, Object>of("success", true, "ignoreStock", site.isIgnoreStock()));
+        }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден")));
+    }
+
+    @PostMapping("/sites/{id}/master-city")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> updateSiteMasterCity(@PathVariable Long id,
+                                                                     @RequestParam(required = false) String masterCityId) {
+        return knownSiteRepository.findById(id).map(site -> {
+            site.setMasterCityId(masterCityId == null || masterCityId.isBlank() ? null : masterCityId.trim());
+            knownSiteRepository.save(site);
+            return ResponseEntity.ok(Map.<String, Object>of("success", true));
         }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден")));
     }
 

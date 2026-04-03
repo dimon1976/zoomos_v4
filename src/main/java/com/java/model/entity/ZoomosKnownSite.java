@@ -38,6 +38,9 @@ public class ZoomosKnownSite {
     @Builder.Default
     private boolean ignoreStock = false;
 
+    @Column(name = "master_city_id", length = 50)
+    private String masterCityId;
+
     @Column(name = "cities_equal_prices")
     private Boolean citiesEqualPrices;  // null = ещё не проверялось
 

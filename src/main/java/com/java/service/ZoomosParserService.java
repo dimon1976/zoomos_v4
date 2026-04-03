@@ -110,14 +110,22 @@ public class ZoomosParserService {
     }
 
     /**
-     * Обновить master_city_id для строки
+     * Обновить master_city_id для строки (DEPRECATED: теперь хранится в zoomos_sites).
+     * Cascade: обновляет и ZoomosKnownSite, чтобы обе таблицы оставались синхронными.
      */
     @Transactional
     public ZoomosCityId updateMasterCityId(Long id, String masterCityId) {
         ZoomosCityId entry = cityIdRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Запись не найдена: " + id));
-        entry.setMasterCityId(masterCityId == null || masterCityId.isBlank() ? null : masterCityId.trim());
-        return cityIdRepository.save(entry);
+        String normalizedValue = masterCityId == null || masterCityId.isBlank() ? null : masterCityId.trim();
+        entry.setMasterCityId(normalizedValue);
+        cityIdRepository.save(entry);
+        // Cascade: синхронизируем site-level (V53)
+        knownSiteRepository.findBySiteName(entry.getSiteName()).ifPresent(site -> {
+            site.setMasterCityId(normalizedValue);
+            knownSiteRepository.save(site);
+        });
+        return entry;
     }
 
     /**

@@ -196,7 +196,7 @@
                           title="CITIES_EQUAL_PRICES"></span>
                     <!-- Счётчики ERROR/WARNING -->
                     <span th:if="${errorCountBySite[entry.key] != null and errorCountBySite[entry.key] > 0}"
-                          class="badge bg-danger"
+                          class="badge bg-danger text-white"
                           th:text="${errorCountBySite[entry.key]} + ' ошиб.'"></span>
                     <span th:if="${warnCountBySite[entry.key] != null and warnCountBySite[entry.key] > 0}"
                           class="badge bg-warning text-dark"
@@ -264,7 +264,7 @@
                             <div class="flex-grow-1">
                                 <div class="mb-1">
                                     <span class="badge me-2"
-                                          th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger' : 'bg-warning text-dark'"
+                                          th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger text-white' : 'bg-warning text-dark'"
                                           th:text="${issue['noData'] == true and issue['inProgress'] != null ? 'В процессе' : (issue['noData'] == true ? 'Нет данных' : issue['type'])}">
                                     </span>
                                     <i th:if="${issue['noData'] == true and issue['inProgress'] != null}"
@@ -1325,7 +1325,7 @@
                 cb.type = 'checkbox'; cb.checked = true; cb.value = idx;
                 cb.className = 'form-check-input flex-shrink-0';
                 const badge = document.createElement('span');
-                badge.className = 'badge ' + (isError ? 'bg-danger' : 'bg-warning text-dark');
+                badge.className = 'badge ' + (isError ? 'bg-danger text-white' : 'bg-warning text-dark');
                 badge.textContent = iss.type;
                 const text = document.createElement('span');
                 text.style.fontSize = '0.85rem';

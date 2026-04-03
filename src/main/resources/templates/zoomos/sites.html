@@ -13,6 +13,13 @@
 <th:block th:fragment="styles">
 <style>
     .site-name-cell { font-family: monospace; font-size: 0.9em; }
+    .site-master-city-input {
+        font-size: 0.8em; border: 1px solid transparent;
+        padding: 2px 4px; cursor: text; text-align: center;
+    }
+    .site-master-city-input:focus { border-color: #86b7fe; background: #fff; outline: none; }
+    .site-master-city-input:hover:not(:focus) { background: #f8f9fa; border-color: #dee2e6; border-radius: 4px; }
+    .site-master-city-input:not(:placeholder-shown) { color: #0a58ca; font-weight: 500; }
 </style>
 </th:block>
 
@@ -74,11 +81,12 @@
                         <th style="width:150px" class="text-center">Тип выкачки</th>
                         <th style="width:80px" class="text-center">Приоритет</th>
                         <th style="width:80px" class="text-center" title="Не отслеживать «В наличии» для этого сайта">Без наличия</th>
+                        <th style="width:120px" class="text-center" title="Мастер-город: если задан, проверяется только этот город">Мастер-город</th>
                         <th style="width:140px" class="text-center" title="CITIES_EQUAL_PRICES — цены одинаковы во всех городах">
                             Равные цены
                             <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1" id="fetchAllEqualPricesBtn"
                                     title="Проверить все сайты">
-                                <i class="fas fa-sync-alt"></i>
+                                <i class="fas fa-arrows-rotate"></i>
                             </button>
                         </th>
                         <th style="width:150px" class="text-center d-none d-lg-table-cell">Добавлен</th>
@@ -113,6 +121,15 @@
                                 <i th:class="${site.ignoreStock} ? 'fas fa-eye-slash' : 'far fa-eye'"></i>
                             </button>
                         </td>
+                        <td class="text-center">
+                            <input type="text"
+                                   class="form-control-plaintext site-master-city-input text-center"
+                                   th:value="${site.masterCityId}"
+                                   th:data-id="${site.id}"
+                                   th:title="${site.masterCityId != null ? 'Мастер-город: ' + site.masterCityId : 'Не задан — проверяются все города'}"
+                                   placeholder="—"
+                                   style="font-size:0.8em; min-width:70px;">
+                        </td>
                         <td class="text-center equal-prices-cell" th:data-id="${site.id}"
                             th:data-equal="${site.citiesEqualPrices}"
                             th:data-checked="${site.citiesEqualPricesCheckedAt != null} ? ${#temporals.format(site.citiesEqualPricesCheckedAt, 'dd.MM.yyyy HH:mm')} : ''">
@@ -126,7 +143,7 @@
                                     th:data-id="${site.id}"
                                     th:data-name="${site.siteName}"
                                     title="Проверить CITIES_EQUAL_PRICES">
-                                <i class="fas fa-sync-alt" style="font-size:0.75em"></i>
+                                <i class="fas fa-arrows-rotate" style="font-size:0.75em"></i>
                             </button>
                         </td>
                         <td class="text-center small text-muted d-none d-lg-table-cell"
@@ -396,6 +413,37 @@
     }
 
     filterSites();
+
+    // ---- Редактирование мастер-города (site-level) ----
+    document.querySelectorAll('.site-master-city-input').forEach(input => {
+        let origVal = input.value;
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            if (e.key === 'Escape') { input.value = origVal; input.blur(); }
+        });
+        input.addEventListener('focus', () => { origVal = input.value; });
+        input.addEventListener('blur', function() {
+            if (this.value === origVal) return;
+            const siteId = this.dataset.id;
+            const newVal = this.value.trim();
+            const fd = new FormData();
+            fd.append('masterCityId', newVal);
+            fetch('/zoomos/sites/' + siteId + '/master-city', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        origVal = newVal;
+                        this.title = newVal ? 'Мастер-город: ' + newVal : 'Не задан — проверяются все города';
+                        this.style.borderColor = '#198754';
+                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+                    } else {
+                        alert('Ошибка: ' + (data.error || ''));
+                        this.value = origVal;
+                    }
+                })
+                .catch(() => { this.value = origVal; });
+        });
+    });
 
     // ---- Проверка CITIES_EQUAL_PRICES для одного сайта ----
     document.querySelectorAll('.fetch-equal-prices-btn').forEach(btn => {
