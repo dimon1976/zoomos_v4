@@ -122,6 +122,59 @@
 
 ---
 
+## Исправленные проблемы (в ходе реализации)
+
+### Баг 1: CITIES_EQUAL_PRICES не парсился (Задача 3)
+**Проблема:** JS-скрипт в `ZoomosParserService` использовал `cells[0]` для проверки названия параметра
+и `cells[1]` для значения — но реальная DOM-структура таблицы настроек другая:
+- `cells[0]` — пустая ячейка 8px
+- `cells[1]` — название параметра (`<b>CITIES_EQUAL_PRICES</b>`)
+- `cells[2]` — тип (select)
+- `cells[3]` — значение (input)
+
+**Исправление:** `cells[0]→cells[1]` для проверки названия, `cells[1]→cells[3]` для чтения значения.
+
+---
+
+### Баг 2: NOT_FOUND и COPIED циклы игнорировали site-level master_city_id (Задача 2)
+**Проблема:** После переноса `master_city_id` из `zoomos_city_ids` в `zoomos_sites` (миграция V53),
+NOT_FOUND-проверки в `checkResults()` и `checkResultsGroups()` по-прежнему читали
+`cid.getMasterCityId()` из `ZoomosCityId` (устаревшее поле). В результате, если мастер-город
+был задан через новый UI (записывается в `ZoomosKnownSite`), все остальные города сайта
+продолжали генерировать NOT_FOUND ошибки.
+
+**Затронутые места (3 штуки):**
+- `checkResults()` — NOT_FOUND цикл по `allCityIds` (строка ~864)
+- `checkResultsGroups()` — NOT_FOUND цикл (строка ~1330)
+- `checkResultsGroups()` — COPIED секция (строка ~1393)
+
+**Исправление:** `cid.getMasterCityId()` → `masterCityBySite.getOrDefault(site, cid.getMasterCityId())`
+во всех трёх местах. `masterCityBySite` уже был в scope — загружался из `knownSiteRepository.findAllByMasterCityIdNotNull()`.
+
+---
+
+### Проблема 3: Иконки выглядели некорректно в Tabler / FA6 Free (Задача 3, sites.html)
+**Проблема:** Использовались `far fa-star` и `far fa-eye` (Regular стиль Font Awesome),
+которые **недоступны** в бесплатной версии FA6. Браузер отображал пустые квадраты.
+Также `fa-sync-alt` переименован в `fa-arrows-rotate` в FA6.
+
+**Исправление:**
+- `far fa-star` → `fas fa-star` + `style="opacity:0.35"` для неактивного состояния
+- `far fa-eye` → `fas fa-eye` + `style="opacity:0.35"` для неактивного состояния
+- Кнопка «Проверить равные цены»: `fa-arrows-rotate` → `fa-magnifying-glass` (чтобы не путать с toggle-кнопками)
+- JS обновлён аналогично
+
+---
+
+### Проблема 4: Белый текст на красном фоне в check-results.html
+**Проблема:** В теме Tabler `badge bg-danger` не наследует `color: white` автоматически —
+в отличие от Bootstrap по умолчанию. Текст на красных бейджах был нечитаем.
+
+**Исправление:** `badge bg-danger` → `badge bg-danger text-white` в трёх местах
+(HTML-шаблон + 2 места в JS где `badge.className` задаётся программно).
+
+---
+
 ## Верификация
 
 - [x] Компиляция: `mvn compile` — без ошибок
