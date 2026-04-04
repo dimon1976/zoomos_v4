@@ -55,6 +55,13 @@ public class ZoomosCityId {
     @Column(name = "parser_exclude", columnDefinition = "TEXT")
     private String parserExclude;
 
+    @Column(name = "has_config_issue", nullable = false)
+    @Builder.Default
+    private boolean hasConfigIssue = false;
+
+    @Column(name = "config_issue_note", columnDefinition = "TEXT")
+    private String configIssueNote;
+
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
 

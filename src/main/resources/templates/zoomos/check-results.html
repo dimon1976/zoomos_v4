@@ -194,6 +194,11 @@
                           th:class="${equalPricesBySite[entry.key]} ? 'badge bg-success ms-1' : 'badge bg-secondary ms-1'"
                           th:text="${equalPricesBySite[entry.key]} ? '= цены' : 'разные цены'"
                           title="CITIES_EQUAL_PRICES"></span>
+                    <span th:if="${configIssueByShopSite != null and configIssueByShopSite[entry.key] != null}"
+                          class="badge bg-warning text-dark ms-1"
+                          th:title="${'Конфиг. проблема: ' + configIssueByShopSite[entry.key]}">
+                        <i class="fas fa-wrench"></i> Конфиг
+                    </span>
                     <!-- Счётчики ERROR/WARNING -->
                     <span th:if="${errorCountBySite[entry.key] != null and errorCountBySite[entry.key] > 0}"
                           class="badge bg-danger text-white"

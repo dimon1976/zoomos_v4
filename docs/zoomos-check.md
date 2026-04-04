@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-04 (V53: master_city_id перенесён с уровня zoomos_city_ids на уровень zoomos_sites; поле в ZoomosKnownSite, редактирование в UI sites.html; устаревший master_city_id в zoomos_city_ids помечен DEPRECATED; иконки сайтов, белый текст на красном фоне для ошибок)
+> Последнее обновление: 2026-04 (V54: has_config_issue + config_issue_note в zoomos_city_ids — флаг конфигурационной проблемы для пары клиент→сайт; endpoint POST /zoomos/city-ids/{id}/config-issue; отображение в check-results, index, sites; master_city_id fallback с уровня ZoomosKnownSite в ZoomosCityId)
 
 ## Назначение
 
@@ -312,6 +312,7 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | `ZoomosCheckParams` | @Value @Builder DTO — заменяет 12-параметровую сигнатуру `runCheck()` |
 | `AddressFilterContext` | private record внутри `ZoomosCheckService` — контекст фильтрации city/address |
 | `ZoomosCityId.masterCityId` | Мастер-город: если задан, проверяется только этот город; остальные из `city_ids` и `address_ids` игнорируются |
+| `ZoomosCityId.hasConfigIssue` / `configIssueNote` | Флаг конфигурационной проблемы (V54): помечает пару клиент→сайт как проблемную; note — произвольный текст; endpoint `POST /zoomos/city-ids/{id}/config-issue` |
 
 **Запуск проверки** через `checkService.runCheck(ZoomosCheckParams.builder()...build())` — из контроллера и планировщика.
 

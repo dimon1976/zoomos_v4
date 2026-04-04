@@ -751,6 +751,16 @@
                                         </td>
                                         <td class="text-center">
                                             <button type="button"
+                                                    th:classappend="${entry.hasConfigIssue} ? 'bg-warning border-warning' : ''"
+                                                    class="btn btn-sm btn-outline-secondary btn-config-issue me-1"
+                                                    th:data-id="${entry.id}"
+                                                    th:data-site="${entry.siteName}"
+                                                    th:data-has-issue="${entry.hasConfigIssue}"
+                                                    th:data-note="${entry.configIssueNote}"
+                                                    th:title="${entry.hasConfigIssue ? 'Конфиг. проблема: ' + entry.configIssueNote : 'Отметить конфигурационную проблему'}">
+                                                <i class="fas fa-wrench"></i>
+                                            </button>
+                                            <button type="button"
                                                     class="btn btn-sm btn-outline-danger btn-delete-cityid"
                                                     th:data-id="${entry.id}"
                                                     th:data-site="${entry.siteName}"
@@ -1135,12 +1145,40 @@
         </div>
     </div>
 
+    <!-- Modal: конфигурационная проблема (Task 1) -->
+    <div class="modal fade" id="configIssueModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-wrench me-2"></i>Конфигурационная проблема</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">Сайт: <strong id="configIssueSiteName"></strong></p>
+                    <label class="form-label">Заметка (пусто — снять флаг)</label>
+                    <textarea id="configIssueNote" class="form-control" rows="3"
+                              placeholder="Опишите проблему конфигурации..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-warning" id="btnSaveConfigIssue">
+                        <i class="fas fa-save me-1"></i>Сохранить
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" id="btnClearConfigIssue">
+                        <i class="fas fa-times me-1"></i>Снять флаг
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Скрытые триггеры для программного открытия модалок (без window.bootstrap) -->
     <button id="__triggerSyncModal"    data-bs-toggle="modal" data-bs-target="#syncConfirmModal"    hidden tabindex="-1"></button>
     <button id="__triggerSchedModal"   data-bs-toggle="modal" data-bs-target="#scheduleToggleModal" hidden tabindex="-1"></button>
     <button id="__triggerParserModal"  data-bs-toggle="modal" data-bs-target="#parserFilterModal"   hidden tabindex="-1"></button>
     <button id="__triggerAddrModal"    data-bs-toggle="modal" data-bs-target="#addressModal"        hidden tabindex="-1"></button>
     <button id="__triggerCompactModal" data-bs-toggle="modal" data-bs-target="#compactShopSettingsModal" hidden tabindex="-1"></button>
+    <button id="__triggerConfigIssueModal" data-bs-toggle="modal" data-bs-target="#configIssueModal" hidden tabindex="-1"></button>
 
 </div>
 </th:block>
@@ -1622,6 +1660,52 @@
             saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
             alert('Ошибка при сохранении фильтра парсера');
         });
+    });
+
+    // ---- Task 1: конфигурационная проблема ----
+    let configIssueEntryId = null;
+
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-config-issue');
+        if (!btn) return;
+        configIssueEntryId = btn.dataset.id;
+        document.getElementById('configIssueSiteName').textContent = btn.dataset.site || '';
+        document.getElementById('configIssueNote').value = btn.dataset.note || '';
+        showModal('__triggerConfigIssueModal');
+    });
+
+    function saveConfigIssue(note) {
+        const params = new URLSearchParams();
+        if (note) params.append('note', note);
+        return fetch('/zoomos/city-ids/' + configIssueEntryId + '/config-issue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                hideModal('configIssueModal');
+                const btn = document.querySelector('.btn-config-issue[data-id="' + configIssueEntryId + '"]');
+                if (btn) {
+                    const hasIssue = data.hasConfigIssue;
+                    btn.dataset.hasIssue = hasIssue;
+                    btn.dataset.note = note || '';
+                    btn.classList.toggle('bg-warning', hasIssue);
+                    btn.classList.toggle('border-warning', hasIssue);
+                    btn.title = hasIssue ? 'Конфиг. проблема: ' + note : 'Отметить конфигурационную проблему';
+                }
+            } else {
+                alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+            }
+        }).catch(() => alert('Ошибка при сохранении'));
+    }
+
+    document.getElementById('btnSaveConfigIssue').addEventListener('click', function() {
+        const note = (document.getElementById('configIssueNote').value || '').trim();
+        saveConfigIssue(note);
+    });
+
+    document.getElementById('btnClearConfigIssue').addEventListener('click', function() {
+        saveConfigIssue('');
     });
 
     // ---- Модалка адресов ----

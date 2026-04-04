@@ -390,6 +390,19 @@ public class ZoomosAnalysisController {
         }
     }
 
+    @PostMapping("/city-ids/{id}/config-issue")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> updateConfigIssue(@PathVariable Long id,
+                                                                  @RequestParam(required = false) String note) {
+        return cityIdRepository.findById(id).map(cityId -> {
+            boolean hasIssue = note != null && !note.isBlank();
+            cityId.setHasConfigIssue(hasIssue);
+            cityId.setConfigIssueNote(hasIssue ? note.trim() : null);
+            cityIdRepository.save(cityId);
+            return ResponseEntity.ok(Map.<String, Object>of("success", true, "hasConfigIssue", cityId.isHasConfigIssue()));
+        }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Запись не найдена")));
+    }
+
     @PostMapping("/shops/{shopId}/city-ids/delete-all")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> deleteAllCityIds(@PathVariable Long shopId) {
@@ -860,13 +873,15 @@ public class ZoomosAnalysisController {
 
         for (ZoomosCityId cid : allCityIds) {
             String site = cid.getSiteName();
+            // Task 2: master_city_id берём с уровня сайта (ZoomosKnownSite), fallback — legacy поле в ZoomosCityId
+            String effectiveMaster = masterCityBySite.getOrDefault(site, cid.getMasterCityId());
             // Если задан master_city_id — ожидаем только его, остальные города не проверяем
-            String effectiveCityIdsStr = (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
-                    ? cid.getMasterCityId()
+            String effectiveCityIdsStr = (effectiveMaster != null && !effectiveMaster.isBlank())
+                    ? effectiveMaster
                     : cid.getCityIds();
             Set<String> expectedCities = ZoomosCheckService.parseCommaSeparated(effectiveCityIdsStr);
             // address_ids проверяем только если master_city_id не задан
-            Map<String, Set<String>> addrMapping = (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
+            Map<String, Set<String>> addrMapping = (effectiveMaster != null && !effectiveMaster.isBlank())
                     ? new java.util.LinkedHashMap<>()
                     : ZoomosCheckService.parseAddressMapping(cid.getAddressIds());
 
@@ -1110,6 +1125,14 @@ public class ZoomosAnalysisController {
         model.addAttribute("equalPricesBySite", equalPricesBySite);
         model.addAttribute("siteIdByName", siteIdByName);
 
+        // Task 1: configIssueByShopSite — карта siteName → note для сайтов с флагом конфиг-проблемы
+        Map<String, String> configIssueByShopSite = allCityIds.stream()
+                .filter(ZoomosCityId::isHasConfigIssue)
+                .collect(Collectors.toMap(ZoomosCityId::getSiteName,
+                        c -> c.getConfigIssueNote() != null ? c.getConfigIssueNote() : "",
+                        (a, b) -> a.isBlank() ? b : a));
+        model.addAttribute("configIssueByShopSite", configIssueByShopSite);
+
         model.addAttribute("canDeliver", canDeliver);
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());
         model.addAttribute("liveOkCount", liveOkCount);
@@ -1326,13 +1349,15 @@ public class ZoomosAnalysisController {
         }
         for (ZoomosCityId cid : allCityIds) {
             String site = cid.getSiteName();
+            // Task 2: master_city_id берём с уровня сайта (ZoomosKnownSite), fallback — legacy поле в ZoomosCityId
+            String effectiveMaster = masterCityBySite.getOrDefault(site, cid.getMasterCityId());
             // Если задан master_city_id — ожидаем только его, остальные города не проверяем (аналогично checkResults)
-            String effectiveCityIdsStr = (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
-                    ? cid.getMasterCityId()
+            String effectiveCityIdsStr = (effectiveMaster != null && !effectiveMaster.isBlank())
+                    ? effectiveMaster
                     : cid.getCityIds();
             Set<String> expectedCities = ZoomosCheckService.parseCommaSeparated(effectiveCityIdsStr);
             // address_ids проверяем только если master_city_id не задан
-            Map<String, Set<String>> addrMapping = (cid.getMasterCityId() != null && !cid.getMasterCityId().isBlank())
+            Map<String, Set<String>> addrMapping = (effectiveMaster != null && !effectiveMaster.isBlank())
                     ? new java.util.LinkedHashMap<>()
                     : ZoomosCheckService.parseAddressMapping(cid.getAddressIds());
             Set<String> addressCoveredCities = new HashSet<>();
@@ -1390,9 +1415,10 @@ public class ZoomosAnalysisController {
 
         // Добавляем COPIED-записи для покрытых городов (master_city_id задан)
         for (ZoomosCityId cid : allCityIds) {
-            if (cid.getMasterCityId() == null || cid.getMasterCityId().isBlank()) continue;
             String site = cid.getSiteName();
-            String master = cid.getMasterCityId().trim();
+            String effectiveMasterCopied = masterCityBySite.getOrDefault(site, cid.getMasterCityId());
+            if (effectiveMasterCopied == null || effectiveMasterCopied.isBlank()) continue;
+            String master = effectiveMasterCopied.trim();
             Set<String> allConfigCities = ZoomosCheckService.parseCommaSeparated(cid.getCityIds());
             for (String city : allConfigCities) {
                 if (city.equals(master)) continue;                             // мастер не дублируем
