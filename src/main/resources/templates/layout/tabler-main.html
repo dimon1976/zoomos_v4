@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru" xmlns:th="http://www.thymeleaf.org" th:fragment="html(title, content, scripts, styles, pageTitle, pageActions)">
+<html lang="ru" xmlns:th="http://www.thymeleaf.org" th:fragment="html(title, content, scripts, styles, pageTitle, pageActions, hideThemeSwitcher)">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -94,7 +94,7 @@
                     </ul>
                 </li>
             </ul>
-            <div class="ms-auto d-flex align-items-center">
+            <div class="ms-auto d-flex align-items-center" th:unless="${hideThemeSwitcher}">
                 <a class="nav-link px-2 text-white-50" th:href="@{'?theme=bootstrap'}" title="Переключить на Bootstrap UI">
                     <i class="fas fa-toggle-on me-1"></i><span class="d-none d-lg-inline small">Bootstrap</span>
                 </a>
