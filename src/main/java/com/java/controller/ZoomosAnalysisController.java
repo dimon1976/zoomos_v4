@@ -66,6 +66,7 @@ public class ZoomosAnalysisController {
     private final ZoomosParserPatternRepository parserPatternRepository;
     private final RedmineService redmineService;
     private final ZoomosSettingsService settingsService;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     @Qualifier("zoomosCheckExecutor")
     private final java.util.concurrent.Executor zoomosCheckExecutor;
@@ -395,6 +396,15 @@ public class ZoomosAnalysisController {
     public ResponseEntity<Map<String, Object>> updateConfigIssue(@PathVariable Long id,
                                                                   @RequestParam(required = false) String type,
                                                                   @RequestParam(required = false) String note) {
+        if (type != null && !type.isBlank()) {
+            try { ConfigIssueType.valueOf(type.trim()); }
+            catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Недопустимый тип: " + type));
+            }
+        }
+        if (note != null && note.length() > 2000) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Заметка слишком длинная (макс. 2000 символов)"));
+        }
         return cityIdRepository.findById(id).map(cityId -> {
             boolean hasIssue = type != null && !type.isBlank();
             cityId.setHasConfigIssue(hasIssue);
@@ -500,7 +510,7 @@ public class ZoomosAnalysisController {
                 entry.setAddressIds(null);
             } else {
                 try {
-                    entry.setAddressIds(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(addressMapping));
+                    entry.setAddressIds(objectMapper.writeValueAsString(addressMapping));
                 } catch (Exception e) {
                     return ResponseEntity.badRequest().body(Map.<String, Object>of("success", false, "error", e.getMessage()));
                 }
@@ -679,10 +689,16 @@ public class ZoomosAnalysisController {
             baselineDatesTo   = blTo.atTime(23, 59).atZone(ZoneOffset.UTC);
         }
 
-        Set<String> ignoreStockSites = knownSiteRepository.findAllByIgnoreStockTrue()
-                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
-        Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue()
-                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+        // Один запрос вместо трёх (ignoreStock, priority, masterCity)
+        List<ZoomosKnownSite> allKnownSites = knownSiteRepository.findAll();
+        Set<String> ignoreStockSites = allKnownSites.stream()
+                .filter(ZoomosKnownSite::isIgnoreStock)
+                .map(ZoomosKnownSite::getSiteName)
+                .collect(Collectors.toSet());
+        Set<String> prioritySiteNames = allKnownSites.stream()
+                .filter(ZoomosKnownSite::isPriority)
+                .map(ZoomosKnownSite::getSiteName)
+                .collect(Collectors.toSet());
 
         // Предзагружаем baseline-записи текущего run один раз.
         // Фильтруем по check_run_id — иначе findForBaseline включает записи других run
@@ -713,9 +729,10 @@ public class ZoomosAnalysisController {
                 .stream().filter(c -> Boolean.TRUE.equals(c.getIsActive()))
                 .collect(Collectors.toList());
 
-        // Карта siteName → masterCityId (site-level, Task 2)
-        Map<String, String> masterCityBySite = knownSiteRepository.findAllByMasterCityIdNotNull()
-                .stream().collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getMasterCityId));
+        // Карта siteName → masterCityId (site-level, Task 2) — из уже загруженного allKnownSites
+        Map<String, String> masterCityBySite = allKnownSites.stream()
+                .filter(s -> s.getMasterCityId() != null)
+                .collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getMasterCityId, (a, b) -> a));
 
         // Карта siteName → cityId config для сайтов с парсер-фильтром
         Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
@@ -1122,11 +1139,11 @@ public class ZoomosAnalysisController {
         model.addAttribute("masterCityBySite", masterCityBySite);
         model.addAttribute("prioritySiteNames", prioritySiteNames);
 
-        // equalPricesBySite и siteIdByName — для бейджей на check-results
+        // equalPricesBySite и siteIdByName — для бейджей на check-results (переиспользуем allKnownSites)
         Map<String, Boolean> equalPricesBySite = new HashMap<>();
         Map<String, Long> siteIdByName = new HashMap<>();
         Map<String, String> equalPricesCheckedAtBySite = new HashMap<>();
-        knownSiteRepository.findAll().forEach(s -> {
+        allKnownSites.forEach(s -> {
             if (s.getCitiesEqualPrices() != null) equalPricesBySite.put(s.getSiteName(), s.getCitiesEqualPrices());
             if (s.getCitiesEqualPricesCheckedAt() != null)
                 equalPricesCheckedAtBySite.put(s.getSiteName(),
@@ -1137,40 +1154,35 @@ public class ZoomosAnalysisController {
         model.addAttribute("equalPricesCheckedAtBySite", equalPricesCheckedAtBySite);
         model.addAttribute("siteIdByName", siteIdByName);
 
-        // Task 1: configIssueByShopSite — карта siteName → note для сайтов с флагом конфиг-проблемы
-        Map<String, String> configIssueByShopSite = allCityIds.stream()
-                .filter(ZoomosCityId::isHasConfigIssue)
-                .collect(Collectors.toMap(ZoomosCityId::getSiteName,
-                        c -> c.getConfigIssueNote() != null ? c.getConfigIssueNote() : "",
-                        (a, b) -> a.isBlank() ? b : a));
+        // Task 1/Fix 3: один цикл вместо 5 stream-операций над allCityIds
+        Map<String, String> configIssueByShopSite = new LinkedHashMap<>();
+        Map<String, Long> cityIdIdBySite = new LinkedHashMap<>();
+        Map<String, String> configIssueTypeBySite = new LinkedHashMap<>();
+        Map<String, String> configIssueTypeLabelBySite = new LinkedHashMap<>();
+        Set<String> notConfiguredSites = new LinkedHashSet<>();
+        for (ZoomosCityId c : allCityIds) {
+            String site = c.getSiteName();
+            cityIdIdBySite.putIfAbsent(site, c.getId());
+            boolean empty = (c.getCityIds() == null || c.getCityIds().isBlank())
+                         && (c.getAddressIds() == null || c.getAddressIds().isBlank());
+            if (empty) notConfiguredSites.add(site);
+            if (c.isHasConfigIssue()) {
+                configIssueByShopSite.merge(site,
+                        c.getConfigIssueNote() != null ? c.getConfigIssueNote() : "",
+                        (a, b) -> a.isBlank() ? b : a);
+                if (c.getConfigIssueType() != null) {
+                    configIssueTypeBySite.putIfAbsent(site, c.getConfigIssueType());
+                    String label;
+                    try { label = ConfigIssueType.valueOf(c.getConfigIssueType()).label; }
+                    catch (Exception e) { label = c.getConfigIssueType(); }
+                    configIssueTypeLabelBySite.putIfAbsent(site, label);
+                }
+            }
+        }
         model.addAttribute("configIssueByShopSite", configIssueByShopSite);
-
-        // Task 1: cityIdIdBySite — siteName → ZoomosCityId.id для endpoint /city-ids/{id}/config-issue
-        Map<String, Long> cityIdIdBySite = allCityIds.stream()
-                .collect(Collectors.toMap(ZoomosCityId::getSiteName, ZoomosCityId::getId, (a, b) -> a));
         model.addAttribute("cityIdIdBySite", cityIdIdBySite);
-
-        // Task 1: configIssueTypeBySite — siteName → тип проблемы
-        Map<String, String> configIssueTypeBySite = allCityIds.stream()
-                .filter(c -> c.isHasConfigIssue() && c.getConfigIssueType() != null)
-                .collect(Collectors.toMap(ZoomosCityId::getSiteName, ZoomosCityId::getConfigIssueType, (a, b) -> a));
         model.addAttribute("configIssueTypeBySite", configIssueTypeBySite);
-
-        // Fix 6: configIssueTypeLabelBySite — siteName → человекочитаемый label типа
-        Map<String, String> configIssueTypeLabelBySite = allCityIds.stream()
-                .filter(c -> c.isHasConfigIssue() && c.getConfigIssueType() != null)
-                .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> {
-                    try { return ConfigIssueType.valueOf(c.getConfigIssueType()).label; }
-                    catch (Exception e) { return c.getConfigIssueType(); }
-                }, (a, b) -> a));
         model.addAttribute("configIssueTypeLabelBySite", configIssueTypeLabelBySite);
-
-        // Fix 3: notConfiguredSites — сайты без cityIds и addressIds
-        Set<String> notConfiguredSites = allCityIds.stream()
-                .filter(c -> (c.getCityIds() == null || c.getCityIds().isBlank())
-                          && (c.getAddressIds() == null || c.getAddressIds().isBlank()))
-                .map(ZoomosCityId::getSiteName)
-                .collect(Collectors.toSet());
         model.addAttribute("notConfiguredSites", notConfiguredSites);
 
         // Task 1: список типов для select в модале
@@ -1257,10 +1269,16 @@ public class ZoomosAnalysisController {
             baselineDatesFrom = run.getDateFrom().minusDays(baselineDays).atStartOfDay(ZoneOffset.UTC);
         }
 
-        Set<String> ignoreStockSites = knownSiteRepository.findAllByIgnoreStockTrue()
-                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
-        Set<String> prioritySiteNames = knownSiteRepository.findAllByIsPriorityTrue()
-                .stream().map(ZoomosKnownSite::getSiteName).collect(Collectors.toSet());
+        // Один запрос вместо трёх (ignoreStock, priority, masterCity)
+        List<ZoomosKnownSite> allKnownSites = knownSiteRepository.findAll();
+        Set<String> ignoreStockSites = allKnownSites.stream()
+                .filter(ZoomosKnownSite::isIgnoreStock)
+                .map(ZoomosKnownSite::getSiteName)
+                .collect(Collectors.toSet());
+        Set<String> prioritySiteNames = allKnownSites.stream()
+                .filter(ZoomosKnownSite::isPriority)
+                .map(ZoomosKnownSite::getSiteName)
+                .collect(Collectors.toSet());
 
         List<ZoomosParsingStats> baselineStatsList = parsingStatsRepository
                 .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(runId);
@@ -1285,9 +1303,10 @@ public class ZoomosAnalysisController {
         Map<String, ZoomosCityId> cityIdBySite = allCityIds.stream()
                 .filter(c -> c.getParserInclude() != null && !c.getParserInclude().isBlank())
                 .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
-        // Карта siteName → masterCityId (site-level, Task 2)
-        Map<String, String> masterCityBySite = knownSiteRepository.findAllByMasterCityIdNotNull()
-                .stream().collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getMasterCityId));
+        // Карта siteName → masterCityId (site-level, Task 2) — из уже загруженного allKnownSites
+        Map<String, String> masterCityBySite = allKnownSites.stream()
+                .filter(s -> s.getMasterCityId() != null)
+                .collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::getMasterCityId, (a, b) -> a));
 
         // Evaluate siteCityStatuses
         Map<String, String> siteCityStatuses = new LinkedHashMap<>();
@@ -1961,6 +1980,10 @@ public class ZoomosAnalysisController {
         for (String raw : siteNames.split(",")) {
             String name = raw.trim().toLowerCase();
             if (name.isEmpty()) continue;
+            if (!name.matches("[a-z0-9._-]+")) {
+                skipped.add(name + " (недопустимые символы)");
+                continue;
+            }
             if (knownSiteRepository.existsBySiteName(name)) {
                 skipped.add(name);
             } else {

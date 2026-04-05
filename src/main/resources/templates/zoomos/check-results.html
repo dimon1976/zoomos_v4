@@ -188,11 +188,23 @@
         </div>
         <div id="issuesCollapse" class="collapse show">
             <!-- Группы по сайту -->
-            <th:block th:each="entry, entryStat : ${issuesBySite}">
+            <th:block th:each="entry, entryStat : ${issuesBySite}"
+                      th:with="
+                        siteName=${entry.key},
+                        eqResult=${equalPricesBySite != null ? equalPricesBySite[entry.key] : null},
+                        eqChecked=${equalPricesCheckedAtBySite != null ? equalPricesCheckedAtBySite[entry.key] : null},
+                        confNote=${configIssueByShopSite != null ? configIssueByShopSite[entry.key] : null},
+                        confType=${configIssueTypeBySite != null ? configIssueTypeBySite[entry.key] : null},
+                        confLabel=${configIssueTypeLabelBySite != null ? configIssueTypeLabelBySite[entry.key] : null},
+                        cityIdId=${cityIdIdBySite != null ? cityIdIdBySite[entry.key] : null},
+                        siteId=${siteIdByName != null ? siteIdByName[entry.key] : null},
+                        masterCity=${masterCityBySite != null ? masterCityBySite[entry.key] : null},
+                        isNotConfigured=${notConfiguredSites != null and notConfiguredSites.contains(entry.key)}
+                      ">
             <div class="site-issues-block border-bottom"
-                 th:data-site="${entry.key}"
+                 th:data-site="${siteName}"
                  th:data-site-idx="${entryStat.index}"
-                 th:style="${notConfiguredSites != null and notConfiguredSites.contains(entry.key)} ? 'background: #fff3cd; border-left: 3px solid #dc3545;' : ''">
+                 th:style="${isNotConfigured} ? 'background: #fff3cd; border-left: 3px solid #dc3545;' : ''">
                 <!-- Заголовок сайта (раскрыть/свернуть) -->
                 <div class="d-flex align-items-center gap-2 px-3 py-2 site-issues-header"
                      style="background: var(--bs-light); cursor:pointer"
@@ -201,39 +213,39 @@
                     <!-- Приоритет -->
                     <i th:if="${entry.value[0]['isPriority']}" class="fas fa-star text-warning" title="Приоритетный сайт" style="font-size:0.8em;"></i>
                     <!-- Badge: сайт не настроен — ссылка на настройку в Zoomos -->
-                    <a th:if="${notConfiguredSites != null and notConfiguredSites.contains(entry.key)}"
+                    <a th:if="${isNotConfigured}"
                        class="badge bg-danger ms-1 text-white text-decoration-none"
-                       th:href="${baseUrl + '/shops-parser/' + entry.key + '/settings'}"
+                       th:href="${baseUrl + '/shops-parser/' + siteName + '/settings'}"
                        target="_blank"
                        title="Нет city_ids и address_ids — сайт не настроен. Нажмите для настройки"
                        onclick="event.stopPropagation()">Не настроен</a>
-                    <span class="fw-bold" th:text="${entry.key}"
+                    <span class="fw-bold" th:text="${siteName}"
                           style="user-select:text; cursor:text"
                           onclick="event.stopPropagation()"></span>
-                    <span th:if="${masterCityBySite != null and masterCityBySite[entry.key] != null}"
+                    <span th:if="${masterCity != null}"
                           class="badge bg-info bg-opacity-75 text-dark ms-1"
                           title="Выкачка только по мастер-городу"
-                          th:text="'↗ мастер: ' + ${masterCityBySite[entry.key]}"></span>
+                          th:text="'↗ мастер: ' + ${masterCity}"></span>
                     <button type="button"
                             class="btn btn-sm btn-outline-info py-0 px-2 btn-fetch-eq-prices"
-                            th:if="${siteIdByName != null and siteIdByName[entry.key] != null}"
-                            th:data-site="${entry.key}"
-                            th:data-site-id="${siteIdByName[entry.key]}"
-                            th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[entry.key] != null ? equalPricesCheckedAtBySite[entry.key] : ''}"
-                            th:classappend="${equalPricesBySite != null and equalPricesBySite[entry.key] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[entry.key] != null} ? 'btn-outline-info' : 'btn-outline-secondary')"
-                            th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[entry.key] != null} ? ('= цены: ' + (${equalPricesBySite != null and equalPricesBySite[entry.key] == true} ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[entry.key]) : 'Проверить CITIES_EQUAL_PRICES'"
+                            th:if="${siteId != null}"
+                            th:data-site="${siteName}"
+                            th:data-site-id="${siteId}"
+                            th:data-checked-at="${eqChecked != null ? eqChecked : ''}"
+                            th:classappend="${eqResult == true} ? 'btn-outline-success' : (${eqChecked != null} ? 'btn-outline-info' : 'btn-outline-secondary')"
+                            th:title="${eqChecked != null} ? ('= цены: ' + (${eqResult == true} ? 'ДА' : 'НЕТ') + ', проверка ' + eqChecked) : 'Проверить CITIES_EQUAL_PRICES'"
                             onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
                         <i class="fas fa-sync-alt me-1"></i>=цены
                     </button>
                     <!-- Счётчики ERROR/WARNING -->
-                    <span th:if="${errorCountBySite[entry.key] != null and errorCountBySite[entry.key] > 0}"
+                    <span th:if="${errorCountBySite[siteName] != null and errorCountBySite[siteName] > 0}"
                           class="badge bg-danger text-white"
-                          th:text="${errorCountBySite[entry.key]} + ' ошиб.'"></span>
-                    <span th:if="${warnCountBySite[entry.key] != null and warnCountBySite[entry.key] > 0}"
+                          th:text="${errorCountBySite[siteName]} + ' ошиб.'"></span>
+                    <span th:if="${warnCountBySite[siteName] != null and warnCountBySite[siteName] > 0}"
                           class="badge bg-warning text-dark"
-                          th:text="${warnCountBySite[entry.key]} + ' предупр.'"></span>
+                          th:text="${warnCountBySite[siteName]} + ' предупр.'"></span>
                     <!-- Verified badge (показывается из localStorage через JS) -->
-                    <span class="verified-badge ms-1" th:data-site="${entry.key}" style="display:none"
+                    <span class="verified-badge ms-1" th:data-site="${siteName}" style="display:none"
                           title="Отмечено как проверено">
                         <i class="fas fa-check-circle text-success"></i>
                     </span>
@@ -247,53 +259,54 @@
                     <!-- Правая панель: конфиг-проблема + Redmine -->
                     <div class="ms-auto d-flex align-items-center gap-1">
                         <!-- Кнопка конфиг-проблемы (всегда, если есть запись) -->
-                        <span th:if="${configIssueByShopSite != null and configIssueByShopSite[entry.key] != null}"
+                        <span th:if="${confNote != null}"
                               class="badge bg-warning text-dark config-issue-badge"
-                              th:data-site="${entry.key}"
-                              th:title="${'Конфиг. проблема [' + (configIssueTypeLabelBySite != null and configIssueTypeLabelBySite[entry.key] != null ? configIssueTypeLabelBySite[entry.key] : '?') + ']: ' + configIssueByShopSite[entry.key]}">
-                            <i class="fas fa-wrench me-1"></i><span th:text="${configIssueTypeLabelBySite != null and configIssueTypeLabelBySite[entry.key] != null ? configIssueTypeLabelBySite[entry.key] : 'Конфиг'}"></span>
+                              th:data-site="${siteName}"
+                              th:title="${'Конфиг. проблема [' + (confLabel != null ? confLabel : '?') + ']: ' + confNote}">
+                            <i class="fas fa-wrench me-1"></i><span th:text="${confLabel != null ? confLabel : 'Конфиг'}"></span>
                         </span>
                         <button type="button"
                                 class="btn btn-sm py-0 px-2 btn-config-issue"
-                                th:if="${cityIdIdBySite != null and cityIdIdBySite[entry.key] != null}"
-                                th:data-site="${entry.key}"
-                                th:data-cityid-id="${cityIdIdBySite[entry.key]}"
-                                th:data-current-type="${configIssueTypeBySite != null and configIssueTypeBySite[entry.key] != null ? configIssueTypeBySite[entry.key] : ''}"
-                                th:data-current-note="${configIssueByShopSite != null and configIssueByShopSite[entry.key] != null ? configIssueByShopSite[entry.key] : ''}"
-                                th:data-has-issue="${configIssueByShopSite != null and configIssueByShopSite[entry.key] != null}"
-                                th:classappend="${configIssueByShopSite != null and configIssueByShopSite[entry.key] != null} ? 'btn-warning' : 'btn-outline-secondary'"
-                                th:title="${configIssueByShopSite != null and configIssueByShopSite[entry.key] != null} ? 'Конфиг. проблема: изменить/снять' : 'Отметить: проблема не в выкачке'"
+                                th:if="${cityIdId != null}"
+                                th:data-site="${siteName}"
+                                th:data-cityid-id="${cityIdId}"
+                                th:data-current-type="${confType != null ? confType : ''}"
+                                th:data-current-note="${confNote != null ? confNote : ''}"
+                                th:data-has-issue="${confNote != null}"
+                                th:classappend="${confNote != null} ? 'btn-warning' : 'btn-outline-secondary'"
+                                th:title="${confNote != null} ? 'Конфиг. проблема: изменить/снять' : 'Отметить: проблема не в выкачке'"
                                 onclick="event.stopPropagation(); openConfigIssueModal(this)">
-                            <i class="fas fa-wrench me-1"></i><span th:text="${configIssueByShopSite != null and configIssueByShopSite[entry.key] != null} ? 'Конфиг' : 'Не выкачка'"></span>
+                            <i class="fas fa-wrench me-1"></i><span th:text="${confNote != null} ? 'Конфиг' : 'Не выкачка'"></span>
                         </button>
                         <!-- Redmine кнопки -->
-                        <th:block th:if="${redmineEnabled}">
-                            <th:block th:if="${redmineIssues[entry.key] != null}">
+                        <th:block th:if="${redmineEnabled}"
+                                  th:with="rmIssue=${redmineIssues[siteName]}, checkType=${entry.value[0]['checkType'] != null ? entry.value[0]['checkType'] : ''}">
+                            <th:block th:if="${rmIssue != null}">
                                 <div class="btn-group btn-group-sm" role="group"
-                                     th:data-rm-site="${entry.key}">
-                                    <a th:href="${redmineIssues[entry.key].issueUrl}"
+                                     th:data-rm-site="${siteName}">
+                                    <a th:href="${rmIssue.issueUrl}"
                                        target="_blank"
-                                       th:class="'btn py-0 px-2 ' + (${redmineIssues[entry.key].closed} ? 'btn-success' : 'btn-danger')"
-                                       th:title="'Redmine #' + ${redmineIssues[entry.key].issueId} + ' — ' + ${redmineIssues[entry.key].issueStatus}"
-                                       th:text="'#' + ${redmineIssues[entry.key].issueId}">
+                                       th:class="'btn py-0 px-2 ' + (${rmIssue.closed} ? 'btn-success' : 'btn-danger')"
+                                       th:title="'Redmine #' + ${rmIssue.issueId} + ' — ' + ${rmIssue.issueStatus}"
+                                       th:text="'#' + ${rmIssue.issueId}">
                                     </a>
                                     <button type="button"
                                             class="btn btn-outline-secondary py-0 px-2 btn-redmine-site-edit"
-                                            th:data-issueid="${redmineIssues[entry.key].issueId}"
-                                            th:data-issueurl="${redmineIssues[entry.key].issueUrl}"
-                                            th:data-site="${entry.key}"
-                                            th:data-checktype="${entry.value[0]['checkType'] != null ? entry.value[0]['checkType'] : ''}"
+                                            th:data-issueid="${rmIssue.issueId}"
+                                            th:data-issueurl="${rmIssue.issueUrl}"
+                                            th:data-site="${siteName}"
+                                            th:data-checktype="${checkType}"
                                             th:data-siteidx="${entryStat.index}"
                                             title="Редактировать задачу в Redmine">
                                         <i class="fas fa-pen"></i>
                                     </button>
                                 </div>
                             </th:block>
-                            <button th:unless="${redmineIssues[entry.key] != null}"
+                            <button th:unless="${rmIssue != null}"
                                     type="button"
                                     class="btn btn-sm btn-outline-danger py-0 px-2 btn-redmine-site"
-                                    th:data-site="${entry.key}"
-                                    th:data-checktype="${entry.value[0]['checkType'] != null ? entry.value[0]['checkType'] : ''}"
+                                    th:data-site="${siteName}"
+                                    th:data-checktype="${checkType}"
                                     th:data-siteidx="${entryStat.index}"
                                     title="Создать задачу в Redmine">
                                 <i class="fas fa-bug me-1"></i>Redmine
@@ -740,6 +753,13 @@
 
 <th:block th:fragment="scripts">
 <script th:inline="javascript">
+    // Безопасное экранирование HTML для динамических вставок через innerHTML
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
     // Tabler не экспортирует window.bootstrap — определяем шим всегда
     window.bootstrap = {
             Collapse: {
@@ -963,7 +983,14 @@
             const hdr = document.createElement('div');
             hdr.className = 'px-3 py-1 d-flex align-items-center gap-2';
             hdr.style.background = 'var(--bs-light)';
-            hdr.innerHTML = '<i class="fas fa-chevron-right text-muted" style="font-size:0.7rem"></i><span class="fw-semibold small">' + site + '</span>';
+            const _icon = document.createElement('i');
+            _icon.className = 'fas fa-chevron-right text-muted';
+            _icon.style.fontSize = '0.7rem';
+            const _label = document.createElement('span');
+            _label.className = 'fw-semibold small';
+            _label.textContent = site;
+            hdr.appendChild(_icon);
+            hdr.appendChild(_label);
             group.appendChild(hdr);
             container.insertBefore(group, container.firstChild);
         }
@@ -1768,7 +1795,14 @@
             const issueUrl = btn.dataset.issueurl || '';
             const siteNameEl = document.getElementById('rmSiteName');
             if (issueUrl) {
-                siteNameEl.innerHTML = '<a href="' + issueUrl + '" target="_blank" class="text-dark text-decoration-none">#' + currentIssueId + '</a> — ' + site;
+                siteNameEl.innerHTML = '';
+                const _a = document.createElement('a');
+                _a.href = issueUrl;
+                _a.target = '_blank';
+                _a.className = 'text-dark text-decoration-none';
+                _a.textContent = '#' + currentIssueId;
+                siteNameEl.appendChild(_a);
+                siteNameEl.appendChild(document.createTextNode(' — ' + site));
             } else {
                 siteNameEl.textContent = '#' + currentIssueId + ' — ' + site;
             }
@@ -1808,13 +1842,27 @@
                 const comments = issueData.comments || [];
                 if (comments.length > 0) {
                     const list = document.getElementById('rmCommentsList');
-                    list.innerHTML = comments.map(function(c) {
-                        return '<div class="border-start border-secondary ps-2 mb-2" style="font-size:0.78rem">' +
-                            '<span class="fw-semibold">' + c.author + '</span>' +
-                            '<span class="text-muted ms-2" style="font-size:0.75rem">' + c.date + '</span>' +
-                            '<div class="text-secondary mt-1" style="white-space:pre-wrap">' + c.text + '</div>' +
-                            '</div>';
-                    }).join('');
+                    list.innerHTML = '';
+                    comments.forEach(function(c) {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'border-start border-secondary ps-2 mb-2';
+                        wrap.style.fontSize = '0.78rem';
+                        const author = document.createElement('span');
+                        author.className = 'fw-semibold';
+                        author.textContent = c.author || '';
+                        const date = document.createElement('span');
+                        date.className = 'text-muted ms-2';
+                        date.style.fontSize = '0.75rem';
+                        date.textContent = c.date || '';
+                        const text = document.createElement('div');
+                        text.className = 'text-secondary mt-1';
+                        text.style.whiteSpace = 'pre-wrap';
+                        text.textContent = c.text || '';
+                        wrap.appendChild(author);
+                        wrap.appendChild(date);
+                        wrap.appendChild(text);
+                        list.appendChild(wrap);
+                    });
                     document.getElementById('rmCommentsBlock').classList.remove('d-none');
                     document.getElementById('rmCommentsList').classList.remove('d-none');
                 }
@@ -2042,7 +2090,7 @@
                     }
                     const typeLabel = getTypeLabel(data.configIssueType);
                     badge.title = 'Конфиг. проблема [' + data.configIssueType + ']: ' + (data.configIssueNote || '');
-                    badge.innerHTML = '⚙ ' + typeLabel;
+                    badge.textContent = '⚙ ' + typeLabel;
                 } else if (badge) {
                     badge.remove();
                 }

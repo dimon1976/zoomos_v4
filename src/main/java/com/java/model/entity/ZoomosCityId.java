@@ -1,7 +1,8 @@
 package com.java.model.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,7 +12,8 @@ import java.time.ZonedDateTime;
 @Entity
 @Table(name = "zoomos_city_ids",
         uniqueConstraints = @UniqueConstraint(columnNames = {"shop_id", "site_name"}))
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -70,6 +72,16 @@ public class ZoomosCityId {
 
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof ZoomosCityId other)) return false;
+        return id != null && id.equals(other.id);
+    }
+
+    @Override
+    public int hashCode() { return getClass().hashCode(); }
 
     @PrePersist
     public void prePersist() {
