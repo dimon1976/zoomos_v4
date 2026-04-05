@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
+      th:replace="~{layout/tabler-main :: html(
         title='Результаты проверки',
         content=~{::content},
         scripts=~{::scripts},
@@ -535,10 +535,6 @@
     </div>
 
 
-<!-- Скрытый триггер для redmineModal (без window.bootstrap, для Tabler layout) -->
-<button th:if="${redmineEnabled}" id="__triggerRedmineModal"
-        data-bs-toggle="modal" data-bs-target="#redmineModal" hidden tabindex="-1"></button>
-
 <!-- Redmine Modal -->
 <div th:if="${redmineEnabled}" id="redmineModal" class="modal fade" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -667,7 +663,6 @@
 <!-- ═══════════════════════════════════════════════
      Modal: Конфигурационная проблема (не в выкачке)
 ═══════════════════════════════════════════════ -->
-<button id="__triggerConfigIssueModal" data-bs-toggle="modal" data-bs-target="#configIssueModal" hidden tabindex="-1"></button>
 <div id="configIssueModal" class="modal fade" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -707,7 +702,6 @@
 <!-- ═══════════════════════════════════════════════
      Modal: CITIES_EQUAL_PRICES — выбор мастер-города
 ═══════════════════════════════════════════════ -->
-<button id="__triggerEqPricesModal" data-bs-toggle="modal" data-bs-target="#eqPricesModal" hidden tabindex="-1"></button>
 <div id="eqPricesModal" class="modal fade" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -746,9 +740,8 @@
 
 <th:block th:fragment="scripts">
 <script th:inline="javascript">
-    // Совместимость с Tabler layout (не экспортирует window.bootstrap)
-    if (typeof bootstrap === 'undefined') {
-        window.bootstrap = {
+    // Tabler не экспортирует window.bootstrap — определяем шим всегда
+    window.bootstrap = {
             Collapse: {
                 getOrCreateInstance: function(el) {
                     return {
@@ -813,10 +806,12 @@
                     if (!_instances.has(el)) _instances.set(el, _makeInstance(el));
                     return _instances.get(el);
                 };
+                Modal.getInstance = function(el) {
+                    return _instances.get(el) || null;
+                };
                 return Modal;
             })()
-        };
-    }
+    };
 
     const RUN_ID = /*[[${run.id}]]*/ 0;
     const BASE_URL = /*[[${baseUrl}]]*/ '';
@@ -1383,7 +1378,7 @@
         const modalEl = document.getElementById('redmineModal');
         if (!modalEl) return;
 
-        const modal = new bootstrap.Modal(modalEl);
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
         let currentBtn  = null;
         let currentMode = 'create'; // 'create' | 'edit'
         let currentIssueId = null;
@@ -2028,7 +2023,7 @@
             .then(data => {
                 self.disabled = false;
                 if (!data.success) { errEl.textContent = data.error || 'Ошибка'; errEl.classList.remove('d-none'); return; }
-                bootstrap.Modal.getInstance(document.getElementById('configIssueModal'))?.hide();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('configIssueModal')).hide();
                 const hasNow = data.hasConfigIssue;
                 _ciBtn.dataset.hasIssue = hasNow ? 'true' : 'false';
                 _ciBtn.dataset.currentType = data.configIssueType || '';
