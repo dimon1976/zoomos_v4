@@ -393,13 +393,20 @@ public class ZoomosAnalysisController {
     @PostMapping("/city-ids/{id}/config-issue")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> updateConfigIssue(@PathVariable Long id,
+                                                                  @RequestParam(required = false) String type,
                                                                   @RequestParam(required = false) String note) {
         return cityIdRepository.findById(id).map(cityId -> {
-            boolean hasIssue = note != null && !note.isBlank();
+            boolean hasIssue = type != null && !type.isBlank();
             cityId.setHasConfigIssue(hasIssue);
-            cityId.setConfigIssueNote(hasIssue ? note.trim() : null);
+            cityId.setConfigIssueType(hasIssue ? type.trim() : null);
+            cityId.setConfigIssueNote(hasIssue && note != null && !note.isBlank() ? note.trim() : null);
             cityIdRepository.save(cityId);
-            return ResponseEntity.ok(Map.<String, Object>of("success", true, "hasConfigIssue", cityId.isHasConfigIssue()));
+            Map<String, Object> resp = new java.util.LinkedHashMap<>();
+            resp.put("success", true);
+            resp.put("hasConfigIssue", cityId.isHasConfigIssue());
+            resp.put("configIssueType", cityId.getConfigIssueType() != null ? cityId.getConfigIssueType() : "");
+            resp.put("configIssueNote", cityId.getConfigIssueNote() != null ? cityId.getConfigIssueNote() : "");
+            return ResponseEntity.ok(resp);
         }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Запись не найдена")));
     }
 
@@ -1118,11 +1125,16 @@ public class ZoomosAnalysisController {
         // equalPricesBySite и siteIdByName — для бейджей на check-results
         Map<String, Boolean> equalPricesBySite = new HashMap<>();
         Map<String, Long> siteIdByName = new HashMap<>();
+        Map<String, String> equalPricesCheckedAtBySite = new HashMap<>();
         knownSiteRepository.findAll().forEach(s -> {
             if (s.getCitiesEqualPrices() != null) equalPricesBySite.put(s.getSiteName(), s.getCitiesEqualPrices());
+            if (s.getCitiesEqualPricesCheckedAt() != null)
+                equalPricesCheckedAtBySite.put(s.getSiteName(),
+                        s.getCitiesEqualPricesCheckedAt().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")));
             siteIdByName.put(s.getSiteName(), s.getId());
         });
         model.addAttribute("equalPricesBySite", equalPricesBySite);
+        model.addAttribute("equalPricesCheckedAtBySite", equalPricesCheckedAtBySite);
         model.addAttribute("siteIdByName", siteIdByName);
 
         // Task 1: configIssueByShopSite — карта siteName → note для сайтов с флагом конфиг-проблемы
@@ -1132,6 +1144,37 @@ public class ZoomosAnalysisController {
                         c -> c.getConfigIssueNote() != null ? c.getConfigIssueNote() : "",
                         (a, b) -> a.isBlank() ? b : a));
         model.addAttribute("configIssueByShopSite", configIssueByShopSite);
+
+        // Task 1: cityIdIdBySite — siteName → ZoomosCityId.id для endpoint /city-ids/{id}/config-issue
+        Map<String, Long> cityIdIdBySite = allCityIds.stream()
+                .collect(Collectors.toMap(ZoomosCityId::getSiteName, ZoomosCityId::getId, (a, b) -> a));
+        model.addAttribute("cityIdIdBySite", cityIdIdBySite);
+
+        // Task 1: configIssueTypeBySite — siteName → тип проблемы
+        Map<String, String> configIssueTypeBySite = allCityIds.stream()
+                .filter(c -> c.isHasConfigIssue() && c.getConfigIssueType() != null)
+                .collect(Collectors.toMap(ZoomosCityId::getSiteName, ZoomosCityId::getConfigIssueType, (a, b) -> a));
+        model.addAttribute("configIssueTypeBySite", configIssueTypeBySite);
+
+        // Fix 6: configIssueTypeLabelBySite — siteName → человекочитаемый label типа
+        Map<String, String> configIssueTypeLabelBySite = allCityIds.stream()
+                .filter(c -> c.isHasConfigIssue() && c.getConfigIssueType() != null)
+                .collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> {
+                    try { return ConfigIssueType.valueOf(c.getConfigIssueType()).label; }
+                    catch (Exception e) { return c.getConfigIssueType(); }
+                }, (a, b) -> a));
+        model.addAttribute("configIssueTypeLabelBySite", configIssueTypeLabelBySite);
+
+        // Fix 3: notConfiguredSites — сайты без cityIds и addressIds
+        Set<String> notConfiguredSites = allCityIds.stream()
+                .filter(c -> (c.getCityIds() == null || c.getCityIds().isBlank())
+                          && (c.getAddressIds() == null || c.getAddressIds().isBlank()))
+                .map(ZoomosCityId::getSiteName)
+                .collect(Collectors.toSet());
+        model.addAttribute("notConfiguredSites", notConfiguredSites);
+
+        // Task 1: список типов для select в модале
+        model.addAttribute("configIssueTypes", ConfigIssueType.values());
 
         model.addAttribute("canDeliver", canDeliver);
         model.addAttribute("baseUrl", zoomosConfig.getBaseUrl());

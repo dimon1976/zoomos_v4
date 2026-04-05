@@ -62,6 +62,9 @@ public class ZoomosCityId {
     @Column(name = "config_issue_note", columnDefinition = "TEXT")
     private String configIssueNote;
 
+    @Column(name = "config_issue_type", length = 30)
+    private String configIssueType;
+
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
 
