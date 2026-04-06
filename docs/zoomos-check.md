@@ -335,4 +335,4 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | `check-results.html` | Страница результатов (4 блока + тренды) |
 | `alert-settings.html` | Страница настройки порогов оповещений (маршрут `/zoomos/alert-settings`) |
 | `layout/main.html` | Глобальный priority-alerts баннер |
-| `static/react/zoomos-check/AlertSettings.jsx` | React-компонент интерактивной настройки порогов оповещений (базовый и продвинутый режимы, симулятор сценариев) |
+| `static/react/zoomos-check/alert-settings-cdn.js` | React-компонент настройки порогов оповещений (CDN-сборка для Babel standalone; базовый и продвинутый режимы, симулятор сценариев) |
