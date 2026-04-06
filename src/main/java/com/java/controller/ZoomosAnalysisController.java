@@ -554,6 +554,11 @@ public class ZoomosAnalysisController {
         return "redirect:/zoomos";
     }
 
+    @GetMapping("/alert-settings")
+    public String alertSettings() {
+        return "zoomos/alert-settings";
+    }
+
     @PostMapping("/check/run")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> runCheck(

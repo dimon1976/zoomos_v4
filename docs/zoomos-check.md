@@ -18,6 +18,7 @@
 | `/zoomos/check/history` | История всех запусков |
 | `/zoomos/sites` | Справочник сайтов (checkType, ignoreStock, isPriority) |
 | `/zoomos/schedule` | CRUD cron-расписаний per-магазин |
+| `/zoomos/alert-settings` | Страница настройки порогов оповещений |
 | `/zoomos/api/priority-alerts` | JSON проблем приоритетных сайтов (для баннера) |
 
 ---
@@ -332,5 +333,6 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | `RedmineService.java` | Вся бизнес-логика Redmine |
 | `ZoomosRedmineController.java` | REST endpoints `/zoomos/redmine/*` |
 | `check-results.html` | Страница результатов (4 блока + тренды) |
+| `alert-settings.html` | Страница настройки порогов оповещений (маршрут `/zoomos/alert-settings`) |
 | `layout/main.html` | Глобальный priority-alerts баннер |
 | `static/react/zoomos-check/AlertSettings.jsx` | React-компонент интерактивной настройки порогов оповещений (базовый и продвинутый режимы, симулятор сценариев) |
