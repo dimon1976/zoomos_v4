@@ -251,21 +251,18 @@ public class ImportTemplateController {
     public String cloneTemplate(@PathVariable Long clientId,
                                 @PathVariable Long templateId,
                                 @RequestParam String newName,
+                                @RequestParam(value = "clientId", required = false) Long targetClientId,
                                 RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на клонирование шаблона ID: {} с именем: {} для клиента {}",
-                templateId, newName, clientId);
+        long destClientId = targetClientId != null ? targetClientId : clientId;
+        log.debug("POST клонирование шаблона ID: {} → клиент {} с именем: {}", templateId, destClientId, newName);
 
         try {
-            ImportTemplateDto cloned = templateService.cloneTemplate(templateId, newName, clientId);
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Шаблон успешно клонирован");
-
-            return "redirect:/clients/" + clientId + "/import/templates/" + cloned.getId();
-
+            ImportTemplateDto cloned = templateService.cloneTemplate(templateId, newName, destClientId);
+            redirectAttributes.addFlashAttribute("successMessage", "Шаблон успешно клонирован");
+            return "redirect:/clients/" + destClientId + "/import/templates/" + cloned.getId();
         } catch (Exception e) {
             log.error("Ошибка клонирования шаблона", e);
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Ошибка клонирования шаблона: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", "Ошибка клонирования шаблона: " + e.getMessage());
             return "redirect:/clients/" + clientId + "/import/templates/" + templateId;
         }
     }

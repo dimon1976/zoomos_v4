@@ -216,14 +216,15 @@ public class ExportTemplateController {
     public String cloneTemplate(@PathVariable Long clientId,
                                 @PathVariable Long templateId,
                                 @RequestParam String newName,
+                                @RequestParam(value = "clientId", required = false) Long targetClientId,
                                 RedirectAttributes redirectAttributes) {
-        log.debug("POST запрос на клонирование шаблона ID: {} с именем: {} для клиента {}",
-                templateId, newName, clientId);
+        long destClientId = targetClientId != null ? targetClientId : clientId;
+        log.debug("POST клонирование шаблона ID: {} → клиент {} с именем: {}", templateId, destClientId, newName);
 
         try {
-            ExportTemplateDto cloned = templateService.cloneTemplate(templateId, newName, clientId);
+            ExportTemplateDto cloned = templateService.cloneTemplate(templateId, newName, destClientId);
             redirectAttributes.addFlashAttribute("successMessage", "Шаблон успешно клонирован");
-            return "redirect:/clients/" + clientId + "/export/templates/" + cloned.getId();
+            return "redirect:/clients/" + destClientId + "/export/templates/" + cloned.getId();
         } catch (Exception e) {
             log.error("Ошибка клонирования шаблона", e);
             redirectAttributes.addFlashAttribute("errorMessage", "Ошибка клонирования шаблона: " + e.getMessage());
