@@ -323,6 +323,7 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | Файл | Назначение |
 |------|-----------|
 | `ZoomosCheckService.java` | Playwright-парсинг, `evaluateAndBuildIssues()`, `computeBaselineMedian()`, `filterByTime()`, WebSocket |
+| `ZoomosPlaywrightHelper.java` | Вспомогательный компонент: `navigateWithRetry(page, url)` — навигация с retry при timeout; `isTimeoutException(e)` — определение таймаута |
 | `ZoomosAnalysisController.java` | `/zoomos/*` роуты, `checkResults()`, schedule CRUD, priority API |
 | `ZoomosParserService.java` | Магазины и city_ids |
 | `ZoomosSchedulerService.java` | Cron-расписания |

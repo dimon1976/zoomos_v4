@@ -80,11 +80,6 @@ public class ZoomosSchedulerService {
         scheduleRepo.findById(scheduleId).ifPresent(scheduleRepo::delete);
     }
 
-    /** @deprecated используется только для обратной совместимости с index.html */
-    public void deleteSchedule(Long shopId) {
-        scheduleRepo.findFirstByShopId(shopId).ifPresent(s -> deleteScheduleById(s.getId()));
-    }
-
     /** Переключает одно конкретное расписание по scheduleId */
     public void toggleEnabledById(Long scheduleId) {
         scheduleRepo.findById(scheduleId).ifPresent(schedule -> {
@@ -104,11 +99,6 @@ public class ZoomosSchedulerService {
             saveAndReschedule(s);
         }
         log.info("toggleAllByShopId shopId={}: anyWasEnabled={}, теперь={}", shopId, anyEnabled, !anyEnabled);
-    }
-
-    /** @deprecated используется для обратной совместимости с index.html */
-    public void toggleEnabled(Long shopId) {
-        toggleAllByShopId(shopId);
     }
 
     private void unschedule(Long scheduleId) {
