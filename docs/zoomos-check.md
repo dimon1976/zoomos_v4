@@ -333,3 +333,4 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | `ZoomosRedmineController.java` | REST endpoints `/zoomos/redmine/*` |
 | `check-results.html` | Страница результатов (4 блока + тренды) |
 | `layout/main.html` | Глобальный priority-alerts баннер |
+| `static/react/zoomos-check/AlertSettings.jsx` | React-компонент интерактивной настройки порогов оповещений (базовый и продвинутый режимы, симулятор сценариев) |
