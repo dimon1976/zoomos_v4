@@ -41,6 +41,9 @@ public class ZoomosKnownSite {
     @Column(name = "master_city_id", length = 50)
     private String masterCityId;
 
+    @Column(name = "item_price_configured")
+    private Boolean itemPriceConfigured;  // null = не проверялось, false = не настроен, true = настроен
+
     @Column(name = "cities_equal_prices")
     private Boolean citiesEqualPrices;  // null = ещё не проверялось
 

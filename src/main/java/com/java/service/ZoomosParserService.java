@@ -549,18 +549,21 @@ public class ZoomosParserService {
             saveSession(context);
 
             String rawValue = (String) page.evaluate(CITIES_EQUAL_PRICES_JS);
+            Boolean itemPriceConfigured = parseItemPriceFromPage(page, siteName);
             page.close();
 
             Boolean equalPrices = rawValue != null ? "1".equals(rawValue.trim()) : null;
             site.setCitiesEqualPrices(equalPrices);
             site.setCitiesEqualPricesCheckedAt(ZonedDateTime.now());
+            site.setItemPriceConfigured(itemPriceConfigured);
             knownSiteRepository.save(site);
 
-            log.info("CITIES_EQUAL_PRICES для {}: rawValue='{}', result={}", siteName, rawValue, equalPrices);
+            log.info("CITIES_EQUAL_PRICES для {}: rawValue='{}', result={}; ITEM_PRICE: {}", siteName, rawValue, equalPrices, itemPriceConfigured);
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("citiesEqualPrices", equalPrices);
+            result.put("itemPriceConfigured", itemPriceConfigured);
             if (Boolean.TRUE.equals(equalPrices)) {
                 result.put("historicalCities", parsingStatsRepository.findDistinctCityNamesBySiteName(siteName));
             }
@@ -614,11 +617,13 @@ public class ZoomosParserService {
                     }
 
                     String rawValue = (String) page.evaluate(CITIES_EQUAL_PRICES_JS);
+                    Boolean itemPriceConfigured = parseItemPriceFromPage(page, site.getSiteName());
                     page.close();
 
                     Boolean equalPrices = rawValue != null ? "1".equals(rawValue.trim()) : null;
                     site.setCitiesEqualPrices(equalPrices);
                     site.setCitiesEqualPricesCheckedAt(ZonedDateTime.now());
+                    site.setItemPriceConfigured(itemPriceConfigured);
                     knownSiteRepository.save(site);
                     processed++;
 
@@ -782,5 +787,45 @@ public class ZoomosParserService {
 
         cityIdRepository.saveAll(toUpdate);
         return toUpdate.size();
+    }
+
+    /**
+     * Парсит страницу настроек сайта и проверяет настроен ли ITEM_PRICE.
+     * ITEM_PRICE настроен если: select > 0 ИЛИ text-input не пустой.
+     * Возвращает null если строка ITEM_PRICE не найдена на странице.
+     */
+    private Boolean parseItemPriceFromPage(Page page, String siteName) {
+        List<ElementHandle> rows = page.querySelectorAll("tr");
+        for (ElementHandle row : rows) {
+            try {
+                ElementHandle bold = row.querySelector("b");
+                if (bold == null) continue;
+                if (!"ITEM_PRICE".equals(bold.innerText().trim())) continue;
+
+                // Найдена строка ITEM_PRICE
+                ElementHandle select = row.querySelector("select");
+                ElementHandle input = row.querySelector("input[type='text']");
+
+                String selectVal = "0";
+                if (select != null) {
+                    Object val = select.evaluate("el => el.value");
+                    if (val != null) selectVal = val.toString();
+                }
+
+                String inputVal = "";
+                if (input != null) {
+                    String attr = input.getAttribute("value");
+                    if (attr != null) inputVal = attr.trim();
+                }
+
+                boolean configured = !"0".equals(selectVal) || !inputVal.isEmpty();
+                return configured;
+
+            } catch (Exception e) {
+                log.debug("Ошибка парсинга строки для {}: {}", siteName, e.getMessage());
+            }
+        }
+        log.warn("Строка ITEM_PRICE не найдена на странице для {}", siteName);
+        return null;
     }
 }

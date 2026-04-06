@@ -1154,18 +1154,20 @@ public class ZoomosAnalysisController {
         model.addAttribute("equalPricesCheckedAtBySite", equalPricesCheckedAtBySite);
         model.addAttribute("siteIdByName", siteIdByName);
 
+        // notConfiguredSites: сайты у которых ITEM_PRICE не настроен (явно false, не null)
+        Set<String> notConfiguredSites = allKnownSites.stream()
+                .filter(s -> Boolean.FALSE.equals(s.getItemPriceConfigured()))
+                .map(ZoomosKnownSite::getSiteName)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
         // Task 1/Fix 3: один цикл вместо 5 stream-операций над allCityIds
         Map<String, String> configIssueByShopSite = new LinkedHashMap<>();
         Map<String, Long> cityIdIdBySite = new LinkedHashMap<>();
         Map<String, String> configIssueTypeBySite = new LinkedHashMap<>();
         Map<String, String> configIssueTypeLabelBySite = new LinkedHashMap<>();
-        Set<String> notConfiguredSites = new LinkedHashSet<>();
         for (ZoomosCityId c : allCityIds) {
             String site = c.getSiteName();
             cityIdIdBySite.putIfAbsent(site, c.getId());
-            boolean empty = (c.getCityIds() == null || c.getCityIds().isBlank())
-                         && (c.getAddressIds() == null || c.getAddressIds().isBlank());
-            if (empty) notConfiguredSites.add(site);
             if (c.isHasConfigIssue()) {
                 configIssueByShopSite.merge(site,
                         c.getConfigIssueNote() != null ? c.getConfigIssueNote() : "",
