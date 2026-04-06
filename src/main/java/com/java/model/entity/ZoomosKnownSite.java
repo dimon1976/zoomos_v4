@@ -38,6 +38,18 @@ public class ZoomosKnownSite {
     @Builder.Default
     private boolean ignoreStock = false;
 
+    @Column(name = "master_city_id", length = 50)
+    private String masterCityId;
+
+    @Column(name = "item_price_configured")
+    private Boolean itemPriceConfigured;  // null = не проверялось, false = не настроен, true = настроен
+
+    @Column(name = "cities_equal_prices")
+    private Boolean citiesEqualPrices;  // null = ещё не проверялось
+
+    @Column(name = "cities_equal_prices_checked_at")
+    private ZonedDateTime citiesEqualPricesCheckedAt;
+
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
 

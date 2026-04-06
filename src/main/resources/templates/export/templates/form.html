@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(${template.id != null ? 'Редактирование шаблона экспорта' : 'Новый шаблон экспорта'}, ~{::section}, ~{::script}, ~{::style}, ${template.id != null ? 'Редактирование шаблона' : 'Новый шаблон'}, ~{::.page-actions})}">
+      th:replace="~{__${_layout ?: 'layout/tabler-main'}__ :: html(${template.id != null ? 'Редактирование шаблона экспорта' : 'Новый шаблон экспорта'}, ~{::section}, ~{::script}, ~{::style}, ${template.id != null ? 'Редактирование шаблона' : 'Новый шаблон'}, ~{::.page-actions})}">
 <head>
     <title th:text="${template.id != null ? 'Редактирование шаблона экспорта' : 'Новый шаблон экспорта'}">Шаблон экспорта</title>
     <style></style>

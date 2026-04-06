@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
+      th:replace="~{__${_layout ?: 'layout/tabler-main'}__ :: html(
         title='Анализ выкачки',
         content=~{::content},
         scripts=~{::scripts},
@@ -37,6 +37,30 @@
             background: #f8f9fa;
             border-color: #dee2e6;
             border-radius: 4px;
+        }
+        .master-city-input {
+            font-size: 0.8em;
+            border: 1px solid transparent;
+            background: transparent;
+            width: 80px;
+            cursor: text;
+        }
+        .master-city-input:focus {
+            border-color: #86b7fe;
+            background: #fff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
+            border-radius: 4px;
+            padding: 2px 4px;
+        }
+        .master-city-input:hover:not(:focus) {
+            background: #f8f9fa;
+            border-color: #dee2e6;
+            border-radius: 4px;
+        }
+        .master-city-input:not(:placeholder-shown) {
+            color: #0a58ca;
+            font-weight: 500;
         }
         .addr-badge {
             display: inline-flex; align-items: center; gap: 3px;
@@ -644,6 +668,7 @@
                                         <th style="width:250px">Сайт-конкурент</th>
                                         <th style="width:130px" class="text-center">Тип проверки</th>
                                         <th class="city-ids-col">ID городов</th>
+                                        <th style="width:90px" class="text-center" title="Мастер-город: если задан, проверяется только этот город">Мастер</th>
                                         <th style="width:100px" class="text-center">ID адресов</th>
                                         <th style="width:90px" class="text-center">Парсер</th>
                                         <th style="width:44px"></th>
@@ -692,6 +717,15 @@
                                                    placeholder="ID не заданы">
                                         </td>
                                         <td class="text-center">
+                                            <input type="text"
+                                                   class="form-control-plaintext master-city-input"
+                                                   th:value="${siteMasterCityMap != null and siteMasterCityMap[entry.siteName] != null ? siteMasterCityMap[entry.siteName] : entry.masterCityId}"
+                                                   th:data-siteid="${knownSiteIdMap != null ? knownSiteIdMap[entry.siteName] : null}"
+                                                   th:data-id="${entry.id}"
+                                                   th:title="${(siteMasterCityMap != null and siteMasterCityMap[entry.siteName] != null) ? 'Мастер-город: ' + siteMasterCityMap[entry.siteName] : 'Не задан — проверяются все города из city_ids'}"
+                                                   placeholder="—">
+                                        </td>
+                                        <td class="text-center">
                                             <button type="button"
                                                     class="btn btn-sm btn-outline-secondary btn-edit-addresses"
                                                     th:data-id="${entry.id}"
@@ -716,6 +750,16 @@
                                             </button>
                                         </td>
                                         <td class="text-center">
+                                            <button type="button"
+                                                    th:classappend="${entry.hasConfigIssue} ? 'bg-warning border-warning' : ''"
+                                                    class="btn btn-sm btn-outline-secondary btn-config-issue me-1"
+                                                    th:data-id="${entry.id}"
+                                                    th:data-site="${entry.siteName}"
+                                                    th:data-has-issue="${entry.hasConfigIssue}"
+                                                    th:data-note="${entry.configIssueNote}"
+                                                    th:title="${entry.hasConfigIssue ? 'Конфиг. проблема: ' + entry.configIssueNote : 'Отметить конфигурационную проблему'}">
+                                                <i class="fas fa-wrench"></i>
+                                            </button>
                                             <button type="button"
                                                     class="btn btn-sm btn-outline-danger btn-delete-cityid"
                                                     th:data-id="${entry.id}"
@@ -1101,12 +1145,40 @@
         </div>
     </div>
 
+    <!-- Modal: конфигурационная проблема (Task 1) -->
+    <div class="modal fade" id="configIssueModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-wrench me-2"></i>Конфигурационная проблема</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">Сайт: <strong id="configIssueSiteName"></strong></p>
+                    <label class="form-label">Заметка (пусто — снять флаг)</label>
+                    <textarea id="configIssueNote" class="form-control" rows="3"
+                              placeholder="Опишите проблему конфигурации..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-warning" id="btnSaveConfigIssue">
+                        <i class="fas fa-save me-1"></i>Сохранить
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" id="btnClearConfigIssue">
+                        <i class="fas fa-times me-1"></i>Снять флаг
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Скрытые триггеры для программного открытия модалок (без window.bootstrap) -->
     <button id="__triggerSyncModal"    data-bs-toggle="modal" data-bs-target="#syncConfirmModal"    hidden tabindex="-1"></button>
     <button id="__triggerSchedModal"   data-bs-toggle="modal" data-bs-target="#scheduleToggleModal" hidden tabindex="-1"></button>
     <button id="__triggerParserModal"  data-bs-toggle="modal" data-bs-target="#parserFilterModal"   hidden tabindex="-1"></button>
     <button id="__triggerAddrModal"    data-bs-toggle="modal" data-bs-target="#addressModal"        hidden tabindex="-1"></button>
     <button id="__triggerCompactModal" data-bs-toggle="modal" data-bs-target="#compactShopSettingsModal" hidden tabindex="-1"></button>
+    <button id="__triggerConfigIssueModal" data-bs-toggle="modal" data-bs-target="#configIssueModal" hidden tabindex="-1"></button>
 
 </div>
 </th:block>
@@ -1425,6 +1497,50 @@
         });
     });
 
+    // ---- Редактирование master_city_id — сохранение по blur или Enter ----
+    document.querySelectorAll('.master-city-input').forEach(input => {
+        let originalValue = input.value;
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+            if (e.key === 'Escape') { this.value = originalValue; this.blur(); }
+        });
+
+        input.addEventListener('focus', function() {
+            originalValue = this.value;
+        });
+
+        input.addEventListener('blur', function() {
+            if (this.value === originalValue) return;
+            const siteId = this.dataset.siteid;
+            const cityIdId = this.dataset.id;
+            const newValue = this.value.trim();
+
+            const fd = new FormData();
+            fd.append('masterCityId', newValue);
+
+            // Site-level endpoint (Task 2); fallback на legacy city-ids endpoint
+            const url = siteId ? '/zoomos/sites/' + siteId + '/master-city'
+                                : '/zoomos/city-ids/' + cityIdId + '/master-city';
+
+            fetch(url, { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        originalValue = newValue;
+                        this.value = newValue;
+                        this.title = newValue ? 'Мастер-город: ' + newValue : 'Не задан — проверяются все города из city_ids';
+                        this.style.borderColor = '#198754';
+                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+                    } else {
+                        alert('Ошибка сохранения: ' + (data.error || ''));
+                        this.value = originalValue;
+                    }
+                })
+                .catch(() => { this.value = originalValue; });
+        });
+    });
+
     // ---- Утилиты для модалок без window.bootstrap ----
     function showModal(triggerId)  { document.getElementById(triggerId)?.click(); }
     function hideModal(modalId) {
@@ -1544,6 +1660,52 @@
             saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Сохранить';
             alert('Ошибка при сохранении фильтра парсера');
         });
+    });
+
+    // ---- Task 1: конфигурационная проблема ----
+    let configIssueEntryId = null;
+
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-config-issue');
+        if (!btn) return;
+        configIssueEntryId = btn.dataset.id;
+        document.getElementById('configIssueSiteName').textContent = btn.dataset.site || '';
+        document.getElementById('configIssueNote').value = btn.dataset.note || '';
+        showModal('__triggerConfigIssueModal');
+    });
+
+    function saveConfigIssue(note) {
+        const params = new URLSearchParams();
+        if (note) params.append('note', note);
+        return fetch('/zoomos/city-ids/' + configIssueEntryId + '/config-issue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                hideModal('configIssueModal');
+                const btn = document.querySelector('.btn-config-issue[data-id="' + configIssueEntryId + '"]');
+                if (btn) {
+                    const hasIssue = data.hasConfigIssue;
+                    btn.dataset.hasIssue = hasIssue;
+                    btn.dataset.note = note || '';
+                    btn.classList.toggle('bg-warning', hasIssue);
+                    btn.classList.toggle('border-warning', hasIssue);
+                    btn.title = hasIssue ? 'Конфиг. проблема: ' + note : 'Отметить конфигурационную проблему';
+                }
+            } else {
+                alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+            }
+        }).catch(() => alert('Ошибка при сохранении'));
+    }
+
+    document.getElementById('btnSaveConfigIssue').addEventListener('click', function() {
+        const note = (document.getElementById('configIssueNote').value || '').trim();
+        saveConfigIssue(note);
+    });
+
+    document.getElementById('btnClearConfigIssue').addEventListener('click', function() {
+        saveConfigIssue('');
     });
 
     // ---- Модалка адресов ----

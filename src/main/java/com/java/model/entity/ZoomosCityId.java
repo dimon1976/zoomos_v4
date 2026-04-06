@@ -1,7 +1,8 @@
 package com.java.model.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,7 +12,8 @@ import java.time.ZonedDateTime;
 @Entity
 @Table(name = "zoomos_city_ids",
         uniqueConstraints = @UniqueConstraint(columnNames = {"shop_id", "site_name"}))
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -34,6 +36,9 @@ public class ZoomosCityId {
     @Column(name = "address_ids", columnDefinition = "TEXT")
     private String addressIds;   // "14342,15234" или null
 
+    @Column(name = "master_city_id", length = 50)
+    private String masterCityId;
+
     @Column(name = "check_type")
     @Builder.Default
     private String checkType = "API";
@@ -52,11 +57,31 @@ public class ZoomosCityId {
     @Column(name = "parser_exclude", columnDefinition = "TEXT")
     private String parserExclude;
 
+    @Column(name = "has_config_issue", nullable = false)
+    @Builder.Default
+    private boolean hasConfigIssue = false;
+
+    @Column(name = "config_issue_note", columnDefinition = "TEXT")
+    private String configIssueNote;
+
+    @Column(name = "config_issue_type", length = 30)
+    private String configIssueType;
+
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;
 
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof ZoomosCityId other)) return false;
+        return id != null && id.equals(other.id);
+    }
+
+    @Override
+    public int hashCode() { return getClass().hashCode(); }
 
     @PrePersist
     public void prePersist() {

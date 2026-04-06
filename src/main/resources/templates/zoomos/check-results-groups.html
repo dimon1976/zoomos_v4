@@ -40,6 +40,10 @@
                           th:classappend="${group['checkType'] == 'API'} ? 'badge-api' : 'badge-item'"
                           th:text="${group['checkType']}">API</span>
                     <span th:if="${group['count'] > 1}" class="text-muted ms-2 small" th:text="${group['count']} + ' выкач.'"></span>
+                    <span th:if="${group['masterCityId'] != null}"
+                          class="badge bg-info bg-opacity-75 text-dark ms-1"
+                          title="Данные только по мастер-городу, остальные копируются"
+                          th:text="'↗ мастер: ' + ${group['masterCityId']}"></span>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <!-- Ссылка на матчинг -->
@@ -106,12 +110,15 @@
                 <div th:if="${group['cityGroups'].size() > 1}"
                      class="px-3 py-1 small fw-semibold border-bottom"
                      th:classappend="${cg['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10 text-danger' :
-                                    (${cg['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' : 'bg-light text-muted')">
+                                    (${cg['status'] == 'WARNING'} ? 'bg-warning bg-opacity-10' :
+                                    (${cg['status'] == 'COPIED'} ? 'bg-info bg-opacity-10 text-info-emphasis' : 'bg-light text-muted'))">
                     <i class="fas fa-map-marker-alt me-1"></i>
                     <span th:text="${cg['cityName'] != null} ? ${cg['cityName']} : 'Без города'"></span>
                     <span class="badge ms-1 small"
-                          th:classappend="${cg['status'] == 'ERROR'} ? 'bg-danger' : (${cg['status'] == 'WARNING'} ? 'bg-warning text-dark' : 'bg-success')"
-                          th:text="${cg['status']}"></span>
+                          th:classappend="${cg['status'] == 'ERROR'} ? 'bg-danger' :
+                                         (${cg['status'] == 'WARNING'} ? 'bg-warning text-dark' :
+                                         (${cg['status'] == 'COPIED'} ? 'bg-info' : 'bg-success'))"
+                          th:text="${cg['status'] == 'COPIED'} ? 'Копируется' : ${cg['status']}"></span>
                     <span th:if="${cg['issueMessages'] != null}"
                           th:each="msg : ${cg['issueMessages']}"
                           class="ms-2 small fw-normal"
@@ -135,8 +142,10 @@
                     <!-- Нет данных (noData) — строка-заглушка вместо таблицы -->
                     <div th:if="${ag['noData'] == true and ag['issueMessage'] != null}"
                          class="px-3 py-2 border-bottom text-muted small"
-                         th:classappend="${ag['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10' : 'bg-warning bg-opacity-10'">
-                        <i th:classappend="${ag['inProgressStat'] != null} ? 'fas fa-spinner me-1' : 'fas fa-ban me-1'"></i>
+                         th:classappend="${ag['status'] == 'COPIED'} ? 'bg-info bg-opacity-10' :
+                                        (${ag['status'] == 'ERROR'} ? 'bg-danger bg-opacity-10' : 'bg-warning bg-opacity-10')">
+                        <i th:classappend="${ag['inProgressStat'] != null} ? 'fas fa-spinner me-1' :
+                                          (${ag['status'] == 'COPIED'} ? 'fas fa-copy me-1 text-info' : 'fas fa-ban me-1')"></i>
                         <span th:text="${ag['issueMessage']}"></span>
                     </div>
                     <!-- Таблица выкачек (если данные есть) -->

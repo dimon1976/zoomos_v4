@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
+      th:replace="~{__${_layout ?: 'layout/tabler-main'}__ :: html(
         title='Справочник сайтов',
         content=~{::content},
         scripts=~{::scripts},
@@ -13,6 +13,13 @@
 <th:block th:fragment="styles">
 <style>
     .site-name-cell { font-family: monospace; font-size: 0.9em; }
+    .site-master-city-input {
+        font-size: 0.8em; border: 1px solid transparent;
+        padding: 2px 4px; cursor: text; text-align: center;
+    }
+    .site-master-city-input:focus { border-color: #86b7fe; background: #fff; outline: none; }
+    .site-master-city-input:hover:not(:focus) { background: #f8f9fa; border-color: #dee2e6; border-radius: 4px; }
+    .site-master-city-input:not(:placeholder-shown) { color: #0a58ca; font-weight: 500; }
 </style>
 </th:block>
 
@@ -74,6 +81,14 @@
                         <th style="width:150px" class="text-center">Тип выкачки</th>
                         <th style="width:80px" class="text-center">Приоритет</th>
                         <th style="width:80px" class="text-center" title="Не отслеживать «В наличии» для этого сайта">Без наличия</th>
+                        <th style="width:120px" class="text-center" title="Мастер-город: если задан, проверяется только этот город">Мастер-город</th>
+                        <th style="width:140px" class="text-center" title="CITIES_EQUAL_PRICES — цены одинаковы во всех городах">
+                            Равные цены
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1" id="fetchAllEqualPricesBtn"
+                                    title="Проверить все сайты">
+                                <i class="fas fa-arrows-rotate"></i>
+                            </button>
+                        </th>
                         <th style="width:150px" class="text-center d-none d-lg-table-cell">Добавлен</th>
                         <th style="width:80px" class="text-center">Действия</th>
                     </tr>
@@ -95,7 +110,7 @@
                                     th:class="${site.isPriority} ? 'btn btn-sm py-0 px-2 priority-toggle-btn btn-warning' : 'btn btn-sm py-0 px-2 priority-toggle-btn btn-outline-secondary'"
                                     th:data-id="${site.id}"
                                     th:title="${site.isPriority} ? 'Приоритетный — показывать в баннере' : 'Обычный — нажмите чтобы отметить как приоритетный'">
-                                <i th:class="${site.isPriority} ? 'fas fa-star' : 'far fa-star'"></i>
+                                <i class="fas fa-star" th:style="${site.isPriority} ? '' : 'opacity:0.35'"></i>
                             </button>
                         </td>
                         <td class="text-center">
@@ -103,7 +118,32 @@
                                     th:class="${site.ignoreStock} ? 'btn btn-sm py-0 px-2 ignore-stock-btn btn-warning' : 'btn btn-sm py-0 px-2 ignore-stock-btn btn-outline-secondary'"
                                     th:data-id="${site.id}"
                                     th:title="${site.ignoreStock} ? 'Наличие не отслеживается — нажмите чтобы включить' : 'Нажмите чтобы отключить отслеживание наличия'">
-                                <i th:class="${site.ignoreStock} ? 'fas fa-eye-slash' : 'far fa-eye'"></i>
+                                <i th:class="${site.ignoreStock} ? 'fas fa-eye-slash' : 'fas fa-eye'" th:style="${site.ignoreStock} ? '' : 'opacity:0.35'"></i>
+                            </button>
+                        </td>
+                        <td class="text-center">
+                            <input type="text"
+                                   class="form-control-plaintext site-master-city-input text-center"
+                                   th:value="${site.masterCityId}"
+                                   th:data-id="${site.id}"
+                                   th:title="${site.masterCityId != null ? 'Мастер-город: ' + site.masterCityId : 'Не задан — проверяются все города'}"
+                                   placeholder="—"
+                                   style="font-size:0.8em; min-width:70px;">
+                        </td>
+                        <td class="text-center equal-prices-cell" th:data-id="${site.id}"
+                            th:data-equal="${site.citiesEqualPrices}"
+                            th:data-checked="${site.citiesEqualPricesCheckedAt != null} ? ${#temporals.format(site.citiesEqualPricesCheckedAt, 'dd.MM.yyyy HH:mm')} : ''">
+                            <th:block th:if="${site.citiesEqualPrices != null}">
+                                <span th:class="${site.citiesEqualPrices} ? 'badge bg-success' : 'badge bg-secondary'"
+                                      th:text="${site.citiesEqualPrices} ? '= цены' : 'разные'"
+                                      th:title="${'Проверено: ' + (#temporals.format(site.citiesEqualPricesCheckedAt, 'dd.MM.yyyy HH:mm'))}"></span>
+                            </th:block>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary py-0 px-1 fetch-equal-prices-btn"
+                                    th:data-id="${site.id}"
+                                    th:data-name="${site.siteName}"
+                                    title="Проверить CITIES_EQUAL_PRICES">
+                                <i class="fas fa-magnifying-glass" style="font-size:0.75em"></i>
                             </button>
                         </td>
                         <td class="text-center small text-muted d-none d-lg-table-cell"
@@ -119,6 +159,21 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Модальное окно: исторические города -->
+    <div class="modal fade" id="equalPricesModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-city me-2"></i>Города для <span id="equalPricesModalSite"></span></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="equalPricesModalBody" class="small">Загрузка...</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -226,7 +281,9 @@
                         this.className = isPriority
                             ? 'btn btn-sm py-0 px-2 priority-toggle-btn btn-warning'
                             : 'btn btn-sm py-0 px-2 priority-toggle-btn btn-outline-secondary';
-                        this.querySelector('i').className = isPriority ? 'fas fa-star' : 'far fa-star';
+                        const iStar = this.querySelector('i');
+                        iStar.className = 'fas fa-star';
+                        iStar.style.opacity = isPriority ? '' : '0.35';
                         this.title = isPriority
                             ? 'Приоритетный — показывать в баннере'
                             : 'Обычный — нажмите чтобы отметить как приоритетный';
@@ -250,7 +307,9 @@
                         this.className = ignored
                             ? 'btn btn-sm py-0 px-2 ignore-stock-btn btn-warning'
                             : 'btn btn-sm py-0 px-2 ignore-stock-btn btn-outline-secondary';
-                        this.querySelector('i').className = ignored ? 'fas fa-eye-slash' : 'far fa-eye';
+                        const iEye = this.querySelector('i');
+                        iEye.className = ignored ? 'fas fa-eye-slash' : 'fas fa-eye';
+                        iEye.style.opacity = ignored ? '' : '0.35';
                         this.title = ignored
                             ? 'Наличие не отслеживается — нажмите чтобы включить'
                             : 'Нажмите чтобы отключить отслеживание наличия';
@@ -358,6 +417,114 @@
     }
 
     filterSites();
+
+    // ---- Редактирование мастер-города (site-level) ----
+    document.querySelectorAll('.site-master-city-input').forEach(input => {
+        let origVal = input.value;
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            if (e.key === 'Escape') { input.value = origVal; input.blur(); }
+        });
+        input.addEventListener('focus', () => { origVal = input.value; });
+        input.addEventListener('blur', function() {
+            if (this.value === origVal) return;
+            const siteId = this.dataset.id;
+            const newVal = this.value.trim();
+            const fd = new FormData();
+            fd.append('masterCityId', newVal);
+            fetch('/zoomos/sites/' + siteId + '/master-city', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        origVal = newVal;
+                        this.title = newVal ? 'Мастер-город: ' + newVal : 'Не задан — проверяются все города';
+                        this.style.borderColor = '#198754';
+                        setTimeout(() => { this.style.borderColor = ''; }, 1000);
+                    } else {
+                        alert('Ошибка: ' + (data.error || ''));
+                        this.value = origVal;
+                    }
+                })
+                .catch(() => { this.value = origVal; });
+        });
+    });
+
+    // ---- Проверка CITIES_EQUAL_PRICES для одного сайта ----
+    document.querySelectorAll('.fetch-equal-prices-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const name = this.dataset.name;
+            const icon = this.querySelector('i');
+            icon.classList.add('fa-spin');
+            this.disabled = true;
+
+            fetch('/zoomos/sites/' + id + '/fetch-equal-prices', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    icon.classList.remove('fa-spin');
+                    this.disabled = false;
+                    if (data.success) {
+                        const cell = this.closest('.equal-prices-cell');
+                        // обновляем бейдж
+                        let badge = cell.querySelector('.badge');
+                        if (!badge) {
+                            badge = document.createElement('span');
+                            cell.insertBefore(badge, this);
+                        }
+                        if (data.citiesEqualPrices === true) {
+                            badge.className = 'badge bg-success';
+                            badge.textContent = '= цены';
+                            // показываем исторические города в модальном окне
+                            const modal = new bootstrap.Modal(document.getElementById('equalPricesModal'));
+                            document.getElementById('equalPricesModalSite').textContent = name;
+                            const cities = data.historicalCities || [];
+                            document.getElementById('equalPricesModalBody').innerHTML = cities.length
+                                ? '<p class="text-success mb-2"><i class="fas fa-check-circle me-1"></i>Цены одинаковы во всех городах.</p>'
+                                  + '<p class="text-muted mb-1">Исторические города:</p>'
+                                  + '<ul class="list-unstyled mb-0">' + cities.map(c => '<li><code>' + c + '</code></li>').join('') + '</ul>'
+                                : '<p class="text-success mb-0"><i class="fas fa-check-circle me-1"></i>Цены одинаковы во всех городах. Исторических городов нет.</p>';
+                            modal.show();
+                        } else if (data.citiesEqualPrices === false) {
+                            badge.className = 'badge bg-secondary';
+                            badge.textContent = 'разные';
+                        } else {
+                            badge.remove();
+                        }
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                    }
+                })
+                .catch(() => {
+                    icon.classList.remove('fa-spin');
+                    this.disabled = false;
+                    alert('Ошибка сети');
+                });
+        });
+    });
+
+    // ---- Проверка CITIES_EQUAL_PRICES для всех сайтов ----
+    document.getElementById('fetchAllEqualPricesBtn').addEventListener('click', function() {
+        if (!confirm('Запустить проверку CITIES_EQUAL_PRICES для всех сайтов в фоне?')) return;
+        const icon = this.querySelector('i');
+        icon.classList.add('fa-spin');
+        this.disabled = true;
+        fetch('/zoomos/sites/fetch-equal-prices-all', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                icon.classList.remove('fa-spin');
+                this.disabled = false;
+                if (data.success) {
+                    alert('Проверка запущена в фоне. Обновите страницу через несколько минут.');
+                } else {
+                    alert('Ошибка: ' + (data.error || 'неизвестная'));
+                }
+            })
+            .catch(() => {
+                icon.classList.remove('fa-spin');
+                this.disabled = false;
+                alert('Ошибка сети');
+            });
+    });
 </script>
 </th:block>
 

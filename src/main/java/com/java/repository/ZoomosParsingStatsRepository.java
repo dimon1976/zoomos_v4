@@ -123,6 +123,9 @@ public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsin
      * cityId — первое слово city_name до пробела.
      * Заменяет N вызовов findLatestInProgressBySiteAndCityId в NOT_FOUND цикле.
      */
+    @Query("SELECT DISTINCT s.cityName FROM ZoomosParsingStats s WHERE s.siteName = :siteName AND s.cityName IS NOT NULL ORDER BY s.cityName")
+    List<String> findDistinctCityNamesBySiteName(@Param("siteName") String siteName);
+
     @Query(value = "SELECT DISTINCT ON (site_name, SPLIT_PART(city_name, ' ', 1)) * " +
                    "FROM zoomos_parsing_stats " +
                    "WHERE site_name = ANY(:siteNames) AND is_finished = false " +

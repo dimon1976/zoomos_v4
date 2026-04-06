@@ -17,4 +17,6 @@ public interface ZoomosKnownSiteRepository extends JpaRepository<ZoomosKnownSite
     List<ZoomosKnownSite> findAllByIsPriorityTrue();
 
     List<ZoomosKnownSite> findAllByIgnoreStockTrue();
+
+    List<ZoomosKnownSite> findAllByMasterCityIdNotNull();
 }

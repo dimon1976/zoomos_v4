@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{__${_layout ?: 'layout/main'}__ :: html(
+      th:replace="~{layout/tabler-main :: html(
         title='Результаты проверки',
         content=~{::content},
         scripts=~{::scripts},
@@ -170,14 +170,41 @@
                         class="btn btn-sm btn-outline-secondary py-0 px-2" title="Обновить статусы из Redmine">
                     <i class="fas fa-arrow-clockwise me-1"></i>Статусы Redmine
                 </button>
+                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2"
+                        title="Скопировать список ненастроенных сайтов"
+                        onclick="event.stopPropagation(); copyNotConfiguredSites(this)">
+                    <i class="fas fa-exclamation-triangle me-1"></i>Ненастроенные
+                </button>
+                <button id="btnFetchAllEqPrices" type="button"
+                        class="btn btn-sm btn-outline-info py-0 px-2"
+                        title="Проверить CITIES_EQUAL_PRICES для всех сайтов блока"
+                        onclick="event.stopPropagation(); fetchAllEqPrices()">
+                    <i class="fas fa-sync-alt me-1"></i>= цены (все)
+                </button>
+                <span id="eqPricesProgress" class="small text-muted d-none">
+                    <i class="fas fa-spinner fa-spin me-1"></i><span id="eqPricesProgressText">0/0</span>
+                </span>
             </span>
         </div>
         <div id="issuesCollapse" class="collapse show">
             <!-- Группы по сайту -->
-            <th:block th:each="entry, entryStat : ${issuesBySite}">
+            <th:block th:each="entry, entryStat : ${issuesBySite}"
+                      th:with="
+                        siteName=${entry.key},
+                        eqResult=${equalPricesBySite != null ? equalPricesBySite[entry.key] : null},
+                        eqChecked=${equalPricesCheckedAtBySite != null ? equalPricesCheckedAtBySite[entry.key] : null},
+                        confNote=${configIssueByShopSite != null ? configIssueByShopSite[entry.key] : null},
+                        confType=${configIssueTypeBySite != null ? configIssueTypeBySite[entry.key] : null},
+                        confLabel=${configIssueTypeLabelBySite != null ? configIssueTypeLabelBySite[entry.key] : null},
+                        cityIdId=${cityIdIdBySite != null ? cityIdIdBySite[entry.key] : null},
+                        siteId=${siteIdByName != null ? siteIdByName[entry.key] : null},
+                        masterCity=${masterCityBySite != null ? masterCityBySite[entry.key] : null},
+                        isNotConfigured=${notConfiguredSites != null and notConfiguredSites.contains(entry.key)}
+                      ">
             <div class="site-issues-block border-bottom"
-                 th:data-site="${entry.key}"
-                 th:data-site-idx="${entryStat.index}">
+                 th:data-site="${siteName}"
+                 th:data-site-idx="${entryStat.index}"
+                 th:style="${isNotConfigured} ? 'background: #fff3cd; border-left: 3px solid #dc3545;' : ''">
                 <!-- Заголовок сайта (раскрыть/свернуть) -->
                 <div class="d-flex align-items-center gap-2 px-3 py-2 site-issues-header"
                      style="background: var(--bs-light); cursor:pointer"
@@ -185,16 +212,43 @@
                     <i class="fas fa-chevron-down chevron-site me-1" style="font-size:0.75rem; transition: transform 0.2s;"></i>
                     <!-- Приоритет -->
                     <i th:if="${entry.value[0]['isPriority']}" class="fas fa-star text-warning" title="Приоритетный сайт" style="font-size:0.8em;"></i>
-                    <span class="fw-bold" th:text="${entry.key}"></span>
+                    <!-- Badge: сайт не настроен — ссылка на настройку в Zoomos -->
+                    <a class="badge bg-danger ms-1 text-white text-decoration-none badge-not-configured"
+                       th:data-site="${siteName}"
+                       th:href="${baseUrl + '/shops-parser/' + siteName + '/settings'}"
+                       th:style="${isNotConfigured} ? '' : 'display:none'"
+                       target="_blank"
+                       title="ITEM_PRICE не настроен — нажмите для настройки в Zoomos"
+                       onclick="event.stopPropagation()">
+                        <i class="fas fa-external-link-alt me-1" style="font-size:0.75em"></i>Не настроен
+                    </a>
+                    <span class="fw-bold" th:text="${siteName}"
+                          style="user-select:text; cursor:text"
+                          onclick="event.stopPropagation()"></span>
+                    <span th:if="${masterCity != null}"
+                          class="badge bg-info bg-opacity-75 text-dark ms-1"
+                          title="Выкачка только по мастер-городу"
+                          th:text="'↗ мастер: ' + ${masterCity}"></span>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-info py-0 px-2 btn-fetch-eq-prices"
+                            th:if="${siteId != null}"
+                            th:data-site="${siteName}"
+                            th:data-site-id="${siteId}"
+                            th:data-checked-at="${eqChecked != null ? eqChecked : ''}"
+                            th:classappend="${eqResult == true} ? 'btn-outline-success' : (${eqChecked != null} ? 'btn-outline-info' : 'btn-outline-secondary')"
+                            th:title="${eqChecked != null} ? ('= цены: ' + (${eqResult == true} ? 'ДА' : 'НЕТ') + ', проверка ' + eqChecked) : 'Проверить CITIES_EQUAL_PRICES'"
+                            onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                        <i class="fas fa-sync-alt me-1"></i>=цены
+                    </button>
                     <!-- Счётчики ERROR/WARNING -->
-                    <span th:if="${errorCountBySite[entry.key] != null and errorCountBySite[entry.key] > 0}"
-                          class="badge bg-danger"
-                          th:text="${errorCountBySite[entry.key]} + ' ошиб.'"></span>
-                    <span th:if="${warnCountBySite[entry.key] != null and warnCountBySite[entry.key] > 0}"
+                    <span th:if="${errorCountBySite[siteName] != null and errorCountBySite[siteName] > 0}"
+                          class="badge bg-danger text-white"
+                          th:text="${errorCountBySite[siteName]} + ' ошиб.'"></span>
+                    <span th:if="${warnCountBySite[siteName] != null and warnCountBySite[siteName] > 0}"
                           class="badge bg-warning text-dark"
-                          th:text="${warnCountBySite[entry.key]} + ' предупр.'"></span>
+                          th:text="${warnCountBySite[siteName]} + ' предупр.'"></span>
                     <!-- Verified badge (показывается из localStorage через JS) -->
-                    <span class="verified-badge ms-1" th:data-site="${entry.key}" style="display:none"
+                    <span class="verified-badge ms-1" th:data-site="${siteName}" style="display:none"
                           title="Отмечено как проверено">
                         <i class="fas fa-check-circle text-success"></i>
                     </span>
@@ -205,38 +259,62 @@
                             title="Пометить весь сайт как проверенный">
                         <i class="far fa-circle me-1"></i>Сайт проверен
                     </button>
-                    <!-- Кнопка Redmine — одна на сайт -->
-                    <div class="ms-auto" th:if="${redmineEnabled}">
-                        <th:block th:if="${redmineIssues[entry.key] != null}">
-                            <div class="btn-group btn-group-sm" role="group"
-                                 th:data-rm-site="${entry.key}">
-                                <a th:href="${redmineIssues[entry.key].issueUrl}"
-                                   target="_blank"
-                                   th:class="'btn py-0 px-2 ' + (${redmineIssues[entry.key].closed} ? 'btn-success' : 'btn-danger')"
-                                   th:title="'Redmine #' + ${redmineIssues[entry.key].issueId} + ' — ' + ${redmineIssues[entry.key].issueStatus}"
-                                   th:text="'#' + ${redmineIssues[entry.key].issueId}">
-                                </a>
-                                <button type="button"
-                                        class="btn btn-outline-secondary py-0 px-1 btn-redmine-site-edit"
-                                        th:data-issueid="${redmineIssues[entry.key].issueId}"
-                                        th:data-issueurl="${redmineIssues[entry.key].issueUrl}"
-                                        th:data-site="${entry.key}"
-                                        th:data-checktype="${entry.value[0]['checkType'] != null ? entry.value[0]['checkType'] : ''}"
-                                        th:data-siteidx="${entryStat.index}"
-                                        title="Редактировать задачу в Redmine">
-                                    <i class="fas fa-pen" style="font-size:0.65rem"></i>
-                                </button>
-                            </div>
-                        </th:block>
-                        <button th:unless="${redmineIssues[entry.key] != null}"
-                                type="button"
-                                class="btn btn-sm btn-outline-danger py-0 px-2 btn-redmine-site"
-                                th:data-site="${entry.key}"
-                                th:data-checktype="${entry.value[0]['checkType'] != null ? entry.value[0]['checkType'] : ''}"
-                                th:data-siteidx="${entryStat.index}"
-                                title="Создать задачу в Redmine">
-                            <i class="fas fa-bug"></i>
+                    <!-- Правая панель: конфиг-проблема + Redmine -->
+                    <div class="ms-auto d-flex align-items-center gap-1">
+                        <!-- Кнопка конфиг-проблемы (всегда, если есть запись) -->
+                        <span th:if="${confNote != null}"
+                              class="badge bg-warning text-dark config-issue-badge"
+                              th:data-site="${siteName}"
+                              th:title="${'Конфиг. проблема [' + (confLabel != null ? confLabel : '?') + ']: ' + confNote}">
+                            <i class="fas fa-wrench me-1"></i><span th:text="${confLabel != null ? confLabel : 'Конфиг'}"></span>
+                        </span>
+                        <button type="button"
+                                class="btn btn-sm py-0 px-2 btn-config-issue"
+                                th:if="${cityIdId != null}"
+                                th:data-site="${siteName}"
+                                th:data-cityid-id="${cityIdId}"
+                                th:data-current-type="${confType != null ? confType : ''}"
+                                th:data-current-note="${confNote != null ? confNote : ''}"
+                                th:data-has-issue="${confNote != null}"
+                                th:classappend="${confNote != null} ? 'btn-warning' : 'btn-outline-secondary'"
+                                th:title="${confNote != null} ? 'Конфиг. проблема: изменить/снять' : 'Отметить: проблема не в выкачке'"
+                                onclick="event.stopPropagation(); openConfigIssueModal(this)">
+                            <i class="fas fa-wrench me-1"></i><span th:text="${confNote != null} ? 'Конфиг' : 'Не выкачка'"></span>
                         </button>
+                        <!-- Redmine кнопки -->
+                        <th:block th:if="${redmineEnabled}"
+                                  th:with="rmIssue=${redmineIssues[siteName]}, checkType=${entry.value[0]['checkType'] != null ? entry.value[0]['checkType'] : ''}">
+                            <th:block th:if="${rmIssue != null}">
+                                <div class="btn-group btn-group-sm" role="group"
+                                     th:data-rm-site="${siteName}">
+                                    <a th:href="${rmIssue.issueUrl}"
+                                       target="_blank"
+                                       th:class="'btn py-0 px-2 ' + (${rmIssue.closed} ? 'btn-success' : 'btn-danger')"
+                                       th:title="'Redmine #' + ${rmIssue.issueId} + ' — ' + ${rmIssue.issueStatus}"
+                                       th:text="'#' + ${rmIssue.issueId}">
+                                    </a>
+                                    <button type="button"
+                                            class="btn btn-outline-secondary py-0 px-2 btn-redmine-site-edit"
+                                            th:data-issueid="${rmIssue.issueId}"
+                                            th:data-issueurl="${rmIssue.issueUrl}"
+                                            th:data-site="${siteName}"
+                                            th:data-checktype="${checkType}"
+                                            th:data-siteidx="${entryStat.index}"
+                                            title="Редактировать задачу в Redmine">
+                                        <i class="fas fa-pen"></i>
+                                    </button>
+                                </div>
+                            </th:block>
+                            <button th:unless="${rmIssue != null}"
+                                    type="button"
+                                    class="btn btn-sm btn-outline-danger py-0 px-2 btn-redmine-site"
+                                    th:data-site="${siteName}"
+                                    th:data-checktype="${checkType}"
+                                    th:data-siteidx="${entryStat.index}"
+                                    title="Создать задачу в Redmine">
+                                <i class="fas fa-bug me-1"></i>Redmine
+                            </button>
+                        </th:block>
                     </div>
                 </div>
                 <!-- Список проблем сайта (свёрнут/развёрнут) -->
@@ -256,7 +334,7 @@
                             <div class="flex-grow-1">
                                 <div class="mb-1">
                                     <span class="badge me-2"
-                                          th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger' : 'bg-warning text-dark'"
+                                          th:classappend="${issue['type'] == 'ERROR'} ? 'bg-danger text-white' : 'bg-warning text-dark'"
                                           th:text="${issue['noData'] == true and issue['inProgress'] != null ? 'В процессе' : (issue['noData'] == true ? 'Нет данных' : issue['type'])}">
                                     </span>
                                     <i th:if="${issue['noData'] == true and issue['inProgress'] != null}"
@@ -473,10 +551,6 @@
     </div>
 
 
-<!-- Скрытый триггер для redmineModal (без window.bootstrap, для Tabler layout) -->
-<button th:if="${redmineEnabled}" id="__triggerRedmineModal"
-        data-bs-toggle="modal" data-bs-target="#redmineModal" hidden tabindex="-1"></button>
-
 <!-- Redmine Modal -->
 <div th:if="${redmineEnabled}" id="redmineModal" class="modal fade" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -602,14 +676,95 @@
     </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════
+     Modal: Конфигурационная проблема (не в выкачке)
+═══════════════════════════════════════════════ -->
+<div id="configIssueModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="fas fa-wrench me-2 text-warning"></i>
+                    Конфиг. проблема — <span id="ciSiteName" class="fw-bold"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="text-muted small mb-2">Укажите тип проблемы (не связанной с выкачкой):</p>
+                <select id="ciType" class="form-select form-select-sm mb-2">
+                    <option value="">— выберите тип —</option>
+                    <option th:each="t : ${configIssueTypes}"
+                            th:value="${t.name()}"
+                            th:text="${t.label}"></option>
+                </select>
+                <textarea id="ciNote" class="form-control form-control-sm" rows="2"
+                          placeholder="Комментарий (необязательно)"></textarea>
+                <div class="form-check mt-2" id="ciClearRow" style="display:none">
+                    <input class="form-check-input" type="checkbox" id="ciClearFlag">
+                    <label class="form-check-label small" for="ciClearFlag">Снять флаг (проблема устранена)</label>
+                </div>
+                <div id="ciError" class="text-danger small mt-2 d-none"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button id="ciSaveBtn" class="btn btn-sm btn-warning">
+                    <i class="fas fa-save me-1"></i>Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Modal: CITIES_EQUAL_PRICES — выбор мастер-города
+═══════════════════════════════════════════════ -->
+<div id="eqPricesModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="fas fa-city me-2 text-success"></i>
+                    Цены копируются — <span id="eqSiteName" class="fw-bold"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-1">Выберите из выкачанных городов:</p>
+                <div id="eqCitiesList" class="list-group list-group-flush mb-2" style="max-height:200px;overflow-y:auto"></div>
+                <hr class="my-2">
+                <p class="small text-muted mb-1">Или введите ID города вручную:</p>
+                <div class="input-group input-group-sm">
+                    <input type="text" id="eqManualCityId" class="form-control" placeholder="напр. 4400 - Москва">
+                    <button class="btn btn-outline-primary" type="button" id="eqManualSetBtn">Установить</button>
+                </div>
+                <button class="btn btn-sm btn-outline-danger w-100 mt-2" type="button" id="eqClearBtn">
+                    <i class="fas fa-times me-1"></i>Снять мастер-город
+                </button>
+                <div id="eqMasterMsg" class="alert alert-success py-1 small mt-2 d-none">
+                    <i class="fas fa-check me-1"></i>Сохранено
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 </div>
 </th:block>
 
 <th:block th:fragment="scripts">
 <script th:inline="javascript">
-    // Совместимость с Tabler layout (не экспортирует window.bootstrap)
-    if (typeof bootstrap === 'undefined') {
-        window.bootstrap = {
+    // Безопасное экранирование HTML для динамических вставок через innerHTML
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    // Tabler не экспортирует window.bootstrap — определяем шим всегда
+    window.bootstrap = {
             Collapse: {
                 getOrCreateInstance: function(el) {
                     return {
@@ -632,18 +787,54 @@
                     };
                 }
             },
-            Modal: function(el) {
-                // Используем скрытую кнопку-триггер — Tabler обрабатывает data-bs-toggle внутри
-                const triggerId = '__trigger' + el.id.charAt(0).toUpperCase() + el.id.slice(1);
-                return {
-                    show: function() {
-                        const trigger = document.getElementById(triggerId);
-                        if (trigger) trigger.click();
-                    }
+            Modal: (function() {
+                const _instances = new WeakMap();
+                function _makeInstance(el) {
+                    const inst = {
+                        show: function() {
+                            if (el.classList.contains('show')) return;
+                            el.classList.add('show');
+                            el.style.display = 'block';
+                            el.removeAttribute('aria-hidden');
+                            el.setAttribute('aria-modal', 'true');
+                            document.body.classList.add('modal-open');
+                            // backdrop
+                            if (!document.getElementById('_bsShimBackdrop')) {
+                                const bd = document.createElement('div');
+                                bd.id = '_bsShimBackdrop';
+                                bd.className = 'modal-backdrop fade show';
+                                document.body.appendChild(bd);
+                                bd.addEventListener('click', function() { inst.hide(); });
+                            }
+                            // Кнопки data-bs-dismiss="modal" закрывают через шим
+                            el.querySelectorAll('[data-bs-dismiss="modal"]').forEach(function(btn) {
+                                btn.addEventListener('click', function() { inst.hide(); }, { once: true });
+                            });
+                        },
+                        hide: function() {
+                            if (!el.classList.contains('show')) return;
+                            el.classList.remove('show');
+                            el.style.display = '';
+                            el.setAttribute('aria-hidden', 'true');
+                            el.removeAttribute('aria-modal');
+                            document.body.classList.remove('modal-open');
+                            const bd = document.getElementById('_bsShimBackdrop');
+                            if (bd) bd.remove();
+                        }
+                    };
+                    return inst;
+                }
+                function Modal(el) { return _makeInstance(el); }
+                Modal.getOrCreateInstance = function(el) {
+                    if (!_instances.has(el)) _instances.set(el, _makeInstance(el));
+                    return _instances.get(el);
                 };
-            }
-        };
-    }
+                Modal.getInstance = function(el) {
+                    return _instances.get(el) || null;
+                };
+                return Modal;
+            })()
+    };
 
     const RUN_ID = /*[[${run.id}]]*/ 0;
     const BASE_URL = /*[[${baseUrl}]]*/ '';
@@ -795,7 +986,14 @@
             const hdr = document.createElement('div');
             hdr.className = 'px-3 py-1 d-flex align-items-center gap-2';
             hdr.style.background = 'var(--bs-light)';
-            hdr.innerHTML = '<i class="fas fa-chevron-right text-muted" style="font-size:0.7rem"></i><span class="fw-semibold small">' + site + '</span>';
+            const _icon = document.createElement('i');
+            _icon.className = 'fas fa-chevron-right text-muted';
+            _icon.style.fontSize = '0.7rem';
+            const _label = document.createElement('span');
+            _label.className = 'fw-semibold small';
+            _label.textContent = site;
+            hdr.appendChild(_icon);
+            hdr.appendChild(_label);
             group.appendChild(hdr);
             container.insertBefore(group, container.firstChild);
         }
@@ -1095,7 +1293,8 @@
 
         // Ручной toggle: не реагируем на клики по кнопкам действий
         header.addEventListener('click', function(e) {
-            if (e.target.closest('.ms-auto') || e.target.closest('.btn-mark-site-done')) return;
+            if (e.target.closest('.ms-auto') || e.target.closest('.btn-mark-site-done')
+                || e.target.closest('.btn-fetch-eq-prices')) return;
             bootstrap.Collapse.getOrCreateInstance(collapseEl).toggle();
         });
     });
@@ -1209,7 +1408,7 @@
         const modalEl = document.getElementById('redmineModal');
         if (!modalEl) return;
 
-        const modal = new bootstrap.Modal(modalEl);
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
         let currentBtn  = null;
         let currentMode = 'create'; // 'create' | 'edit'
         let currentIssueId = null;
@@ -1317,7 +1516,7 @@
                 cb.type = 'checkbox'; cb.checked = true; cb.value = idx;
                 cb.className = 'form-check-input flex-shrink-0';
                 const badge = document.createElement('span');
-                badge.className = 'badge ' + (isError ? 'bg-danger' : 'bg-warning text-dark');
+                badge.className = 'badge ' + (isError ? 'bg-danger text-white' : 'bg-warning text-dark');
                 badge.textContent = iss.type;
                 const text = document.createElement('span');
                 text.style.fontSize = '0.85rem';
@@ -1599,7 +1798,14 @@
             const issueUrl = btn.dataset.issueurl || '';
             const siteNameEl = document.getElementById('rmSiteName');
             if (issueUrl) {
-                siteNameEl.innerHTML = '<a href="' + issueUrl + '" target="_blank" class="text-dark text-decoration-none">#' + currentIssueId + '</a> — ' + site;
+                siteNameEl.innerHTML = '';
+                const _a = document.createElement('a');
+                _a.href = issueUrl;
+                _a.target = '_blank';
+                _a.className = 'text-dark text-decoration-none';
+                _a.textContent = '#' + currentIssueId;
+                siteNameEl.appendChild(_a);
+                siteNameEl.appendChild(document.createTextNode(' — ' + site));
             } else {
                 siteNameEl.textContent = '#' + currentIssueId + ' — ' + site;
             }
@@ -1639,13 +1845,27 @@
                 const comments = issueData.comments || [];
                 if (comments.length > 0) {
                     const list = document.getElementById('rmCommentsList');
-                    list.innerHTML = comments.map(function(c) {
-                        return '<div class="border-start border-secondary ps-2 mb-2" style="font-size:0.78rem">' +
-                            '<span class="fw-semibold">' + c.author + '</span>' +
-                            '<span class="text-muted ms-2" style="font-size:0.75rem">' + c.date + '</span>' +
-                            '<div class="text-secondary mt-1" style="white-space:pre-wrap">' + c.text + '</div>' +
-                            '</div>';
-                    }).join('');
+                    list.innerHTML = '';
+                    comments.forEach(function(c) {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'border-start border-secondary ps-2 mb-2';
+                        wrap.style.fontSize = '0.78rem';
+                        const author = document.createElement('span');
+                        author.className = 'fw-semibold';
+                        author.textContent = c.author || '';
+                        const date = document.createElement('span');
+                        date.className = 'text-muted ms-2';
+                        date.style.fontSize = '0.75rem';
+                        date.textContent = c.date || '';
+                        const text = document.createElement('div');
+                        text.className = 'text-secondary mt-1';
+                        text.style.whiteSpace = 'pre-wrap';
+                        text.textContent = c.text || '';
+                        wrap.appendChild(author);
+                        wrap.appendChild(date);
+                        wrap.appendChild(text);
+                        list.appendChild(wrap);
+                    });
                     document.getElementById('rmCommentsBlock').classList.remove('d-none');
                     document.getElementById('rmCommentsList').classList.remove('d-none');
                 }
@@ -1808,6 +2028,250 @@
             btn.classList.replace('btn-outline-secondary', 'btn-success');
             setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-success', 'btn-outline-secondary'); }, 2000);
         });
+    }
+
+    // ═══════════════════════════════════════════════
+    // ФИЧА: Конфигурационная проблема (не в выкачке)
+    // ═══════════════════════════════════════════════
+    function getTypeLabel(typeVal) {
+        const opt = document.querySelector('#ciType option[value="' + CSS.escape(typeVal) + '"]');
+        return opt ? opt.textContent.trim() : typeVal;
+    }
+
+    let _ciCityIdId = null, _ciBtn = null;
+
+    function openConfigIssueModal(btn) {
+        _ciBtn = btn;
+        _ciCityIdId = btn.dataset.cityidId;
+        const hasIssue = btn.dataset.hasIssue === 'true';
+        document.getElementById('ciSiteName').textContent = btn.dataset.site;
+        document.getElementById('ciType').value = btn.dataset.currentType || '';
+        document.getElementById('ciNote').value = btn.dataset.currentNote || '';
+        document.getElementById('ciClearFlag').checked = false;
+        document.getElementById('ciClearRow').style.display = hasIssue ? '' : 'none';
+        document.getElementById('ciError').classList.add('d-none');
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('configIssueModal')).show();
+    }
+
+    document.getElementById('ciSaveBtn')?.addEventListener('click', function () {
+        if (!_ciCityIdId) return;
+        const clearFlag = document.getElementById('ciClearFlag').checked;
+        const type = clearFlag ? '' : document.getElementById('ciType').value.trim();
+        const note = clearFlag ? '' : document.getElementById('ciNote').value.trim();
+        const errEl = document.getElementById('ciError');
+        if (!clearFlag && !type) {
+            errEl.textContent = 'Выберите тип проблемы';
+            errEl.classList.remove('d-none');
+            return;
+        }
+        errEl.classList.add('d-none');
+        this.disabled = true;
+        const self = this;
+        const fd = new FormData();
+        if (!clearFlag) { fd.append('type', type); if (note) fd.append('note', note); }
+        fetch('/zoomos/city-ids/' + _ciCityIdId + '/config-issue', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                self.disabled = false;
+                if (!data.success) { errEl.textContent = data.error || 'Ошибка'; errEl.classList.remove('d-none'); return; }
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('configIssueModal')).hide();
+                const hasNow = data.hasConfigIssue;
+                _ciBtn.dataset.hasIssue = hasNow ? 'true' : 'false';
+                _ciBtn.dataset.currentType = data.configIssueType || '';
+                _ciBtn.dataset.currentNote = data.configIssueNote || '';
+                _ciBtn.classList.toggle('btn-warning', hasNow);
+                _ciBtn.classList.toggle('btn-outline-secondary', !hasNow);
+                _ciBtn.title = hasNow ? 'Конфиг. проблема: изменить/снять' : 'Отметить: проблема не в выкачке';
+                const header = _ciBtn.closest('.site-issues-header');
+                let badge = header?.querySelector('.config-issue-badge[data-site="' + _ciBtn.dataset.site + '"]');
+                if (hasNow) {
+                    if (!badge) {
+                        badge = document.createElement('span');
+                        badge.className = 'badge bg-warning text-dark ms-1 config-issue-badge';
+                        badge.dataset.site = _ciBtn.dataset.site;
+                        _ciBtn.insertAdjacentElement('beforebegin', badge);
+                    }
+                    const typeLabel = getTypeLabel(data.configIssueType);
+                    badge.title = 'Конфиг. проблема [' + data.configIssueType + ']: ' + (data.configIssueNote || '');
+                    badge.textContent = '⚙ ' + typeLabel;
+                } else if (badge) {
+                    badge.remove();
+                }
+            })
+            .catch(() => { self.disabled = false; errEl.textContent = 'Ошибка сети'; errEl.classList.remove('d-none'); });
+    });
+
+    // ═══════════════════════════════════════════════
+    // ФИЧА: CITIES_EQUAL_PRICES кнопки
+    // ═══════════════════════════════════════════════
+    function fetchEqPricesForSite(btn) {
+        const siteId = btn.dataset.siteId, siteName = btn.dataset.site;
+        // Если = цены (зелёная) ИЛИ уже установлен мастер-город — открыть модал без Playwright
+        const siteBlock = btn.closest('.site-issues-block');
+        const hasMasterCity = siteBlock?.querySelector('.badge[title="Выкачка только по мастер-городу"]') != null;
+        if (btn.classList.contains('btn-outline-success') || hasMasterCity) {
+            fetch('/zoomos/sites/' + siteId + '/historical-cities')
+                .then(r => r.json())
+                .then(cities => showEqModal(siteName, siteId, cities))
+                .catch(() => showEqModal(siteName, siteId, []));
+            return;
+        }
+        // Полная проверка через Playwright
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Проверка…';
+        fetch('/zoomos/sites/' + siteId + '/fetch-equal-prices', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                const now = new Date().toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+                btn.dataset.checkedAt = now;
+                updateEqBadge(siteName, data.citiesEqualPrices, now);
+                updateNotConfiguredBadge(siteName, data.itemPriceConfigured);
+                if (data.success && data.citiesEqualPrices === true && data.historicalCities?.length)
+                    showEqModal(siteName, siteId, data.historicalCities);
+            })
+            .catch(() => { btn.disabled = false; btn.innerHTML = origHtml; });
+    }
+
+    function updateEqBadge(siteName, val, checkedAt) {
+        document.querySelectorAll(
+            '.site-issues-block[data-site="' + CSS.escape(siteName) + '"] .btn-fetch-eq-prices'
+        ).forEach(syncBtn => {
+            syncBtn.classList.remove('btn-outline-info', 'btn-outline-success', 'btn-outline-secondary');
+            if (val === true)        syncBtn.classList.add('btn-outline-success');
+            else if (val === false)  syncBtn.classList.add('btn-outline-info');
+            else                     syncBtn.classList.add('btn-outline-secondary');
+            const when = checkedAt || syncBtn.dataset.checkedAt || '';
+            const label = val === true ? 'ДА' : 'НЕТ';
+            syncBtn.title = when ? ('= цены: ' + label + ', проверка ' + when) : 'Проверить CITIES_EQUAL_PRICES';
+            // Обновить текст кнопки
+            syncBtn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>=цены';
+        });
+    }
+
+    function updateNotConfiguredBadge(siteName, itemPriceConfigured) {
+        const badge = document.querySelector('.badge-not-configured[data-site="' + CSS.escape(siteName) + '"]');
+        if (!badge) return;
+        badge.style.display = (itemPriceConfigured === false) ? '' : 'none';
+    }
+
+    let _eqSiteId = null, _eqSiteName = null;
+
+    function applyMasterCity(city) {
+        if (!_eqSiteId) return;
+        const trimmedCity = (city || '').trim();
+        const msgEl = document.getElementById('eqMasterMsg');
+        msgEl.classList.add('d-none');
+        fetch('/zoomos/sites/' + _eqSiteId + '/master-city', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'masterCityId=' + encodeURIComponent(trimmedCity)
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    msgEl.textContent = trimmedCity ? '✓ Мастер-город: ' + trimmedCity : '✓ Мастер-город снят';
+                    msgEl.classList.remove('d-none');
+                    // Обновить badge на странице
+                    const siteBlock = document.querySelector('.site-issues-block[data-site="' + CSS.escape(_eqSiteName) + '"]');
+                    if (siteBlock) {
+                        let masterBadge = siteBlock.querySelector('.badge[title="Выкачка только по мастер-городу"]');
+                        if (trimmedCity) {
+                            if (!masterBadge) {
+                                const siteNameSpan = siteBlock.querySelector('.site-issues-header .fw-bold');
+                                masterBadge = document.createElement('span');
+                                masterBadge.className = 'badge bg-info bg-opacity-75 text-dark ms-1';
+                                masterBadge.title = 'Выкачка только по мастер-городу';
+                                siteNameSpan?.insertAdjacentElement('afterend', masterBadge);
+                            }
+                            masterBadge.textContent = '↗ мастер: ' + trimmedCity;
+                        } else if (masterBadge) {
+                            masterBadge.remove();
+                        }
+                    }
+                }
+            })
+            .catch(() => {});
+    }
+
+    function showEqModal(siteName, siteId, cities) {
+        _eqSiteName = siteName;
+        _eqSiteId = siteId;
+        document.getElementById('eqSiteName').textContent = siteName;
+        document.getElementById('eqMasterMsg').classList.add('d-none');
+        document.getElementById('eqManualCityId').value = '';
+
+        const list = document.getElementById('eqCitiesList');
+        list.innerHTML = '';
+        if (cities.length === 0) {
+            list.innerHTML = '<div class="text-muted small py-1">Нет данных</div>';
+        } else {
+            cities.forEach(city => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'list-group-item list-group-item-action py-1 small';
+                btn.textContent = city;
+                btn.onclick = function () {
+                    list.querySelectorAll('.list-group-item').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    document.getElementById('eqManualCityId').value = city;
+                    applyMasterCity(city);
+                };
+                list.appendChild(btn);
+            });
+        }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('eqPricesModal')).show();
+    }
+
+    document.getElementById('eqManualSetBtn')?.addEventListener('click', function () {
+        applyMasterCity(document.getElementById('eqManualCityId').value);
+    });
+
+    document.getElementById('eqClearBtn')?.addEventListener('click', function () {
+        applyMasterCity('');
+    });
+
+    function copyNotConfiguredSites(btn) {
+        const sites = [...document.querySelectorAll('.badge-not-configured')]
+            .filter(badge => badge.style.display !== 'none')
+            .map(badge => badge.dataset.site)
+            .filter(Boolean);
+        if (!sites.length) return;
+        navigator.clipboard.writeText(sites.join('\n')).then(() => {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check me-1"></i>Скопировано ' + sites.length;
+            btn.classList.replace('btn-outline-danger', 'btn-danger');
+            setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-danger', 'btn-outline-danger'); }, 2000);
+        });
+    }
+
+    async function fetchAllEqPrices() {
+        const btns = [...document.querySelectorAll('.btn-fetch-eq-prices')];
+        if (!btns.length) return;
+        const globalBtn = document.getElementById('btnFetchAllEqPrices');
+        const progressEl = document.getElementById('eqPricesProgress');
+        const progressText = document.getElementById('eqPricesProgressText');
+        if (globalBtn) globalBtn.disabled = true;
+        if (progressEl) progressEl.classList.remove('d-none');
+        let done = 0;
+        if (progressText) progressText.textContent = '0/' + btns.length;
+        for (const btn of btns) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Проверка…';
+            try {
+                const data = await fetch('/zoomos/sites/' + btn.dataset.siteId + '/fetch-equal-prices', { method: 'POST' }).then(r => r.json());
+                const now = new Date().toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+                updateEqBadge(btn.dataset.site, data.citiesEqualPrices, now);
+                updateNotConfiguredBadge(btn.dataset.site, data.itemPriceConfigured);
+            } catch(e) {
+                btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>=цены';
+            }
+            btn.disabled = false;
+            if (progressText) progressText.textContent = (++done) + '/' + btns.length;
+        }
+        if (globalBtn) globalBtn.disabled = false;
+        if (progressEl) progressEl.classList.add('d-none');
     }
 
 </script>

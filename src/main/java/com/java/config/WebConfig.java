@@ -56,8 +56,13 @@ public class WebConfig implements WebMvcConfigurer {
      */
     @Override
     public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
-        // Конвертер для JSON
-        converters.add(new MappingJackson2HttpMessageConverter());
+        // Конвертер для JSON — включая application/javascript на случай error-dispatch
+        // когда Tomcat async error dispatch наследует Content-Type от статических ресурсов
+        MappingJackson2HttpMessageConverter jsonConverter = new MappingJackson2HttpMessageConverter();
+        List<MediaType> jsonMediaTypes = new ArrayList<>(jsonConverter.getSupportedMediaTypes());
+        jsonMediaTypes.add(MediaType.parseMediaType("application/javascript"));
+        jsonConverter.setSupportedMediaTypes(jsonMediaTypes);
+        converters.add(jsonConverter);
 
         // Конвертер для массивов байтов (byte[])
         ByteArrayHttpMessageConverter byteArrayConverter = new ByteArrayHttpMessageConverter();

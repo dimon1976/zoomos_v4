@@ -327,8 +327,10 @@ public class GlobalExceptionHandler {
      * @return корневая причина исключения
      */
     private Throwable findRootCause(HttpServletRequest request, Exception ex) {
-        return Optional.ofNullable((Throwable) request.getAttribute("javax.servlet.error.exception"))
-                .orElse(ex);
+        // Jakarta EE 10 (Spring Boot 3+) использует jakarta.servlet.error.exception
+        // javax.servlet.error.exception — устаревший атрибут, всегда null в этом проекте
+        Throwable fromRequest = (Throwable) request.getAttribute("jakarta.servlet.error.exception");
+        return fromRequest != null ? fromRequest : ex;
     }
 
     /**
