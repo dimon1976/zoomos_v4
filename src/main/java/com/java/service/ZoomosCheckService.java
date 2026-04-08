@@ -48,6 +48,7 @@ public class ZoomosCheckService {
     private final ZoomosShopScheduleRepository scheduleRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ZoomosPlaywrightHelper playwrightHelper;
 
     // Self-injection для REQUIRES_NEW транзакций (немедленный коммит run-записи)
     @Autowired @Lazy
@@ -359,7 +360,7 @@ public class ZoomosCheckService {
             try {
                 return action.get();
             } catch (Exception e) {
-                boolean isTimeout = isTimeoutException(e);
+                boolean isTimeout = playwrightHelper.isTimeoutException(e);
                 if (!isTimeout) throw e;
                 if (attempt == maxAttempts) {
                     run.setTimeoutCount((run.getTimeoutCount() != null ? run.getTimeoutCount() : 0) + 1);
@@ -379,16 +380,6 @@ public class ZoomosCheckService {
             }
         }
         return null; // unreachable
-    }
-
-    private boolean isTimeoutException(Exception e) {
-        String msg = e.getMessage();
-        if (msg != null && (msg.contains("Timeout") || msg.contains("timeout"))) return true;
-        if (e.getCause() != null) {
-            String cause = e.getCause().getMessage();
-            return cause != null && (cause.contains("Timeout") || cause.contains("timeout"));
-        }
-        return false;
     }
 
     /**

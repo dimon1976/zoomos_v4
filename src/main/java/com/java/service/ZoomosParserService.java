@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 public class ZoomosParserService {
 
     private final ZoomosConfig config;
+    private final ZoomosPlaywrightHelper playwrightHelper;
     private final ZoomosShopRepository shopRepository;
     private final ZoomosCityIdRepository cityIdRepository;
     private final ZoomosSessionRepository sessionRepository;
@@ -200,14 +201,12 @@ public class ZoomosParserService {
 
             Page page = context.newPage();
             String settingsUrl = config.getBaseUrl() + "/shop/" + shopName + "/settings?upd=" + System.currentTimeMillis();
-            page.navigate(settingsUrl);
-            page.waitForLoadState(LoadState.NETWORKIDLE);
+            playwrightHelper.navigateWithRetry(page, settingsUrl);
 
             if (page.url().contains("/login")) {
                 log.info("Сессия устарела, повторная авторизация...");
                 login(context);
-                page.navigate(settingsUrl);
-                page.waitForLoadState(LoadState.NETWORKIDLE);
+                playwrightHelper.navigateWithRetry(page, settingsUrl);
             }
 
             saveSession(context);
@@ -246,13 +245,11 @@ public class ZoomosParserService {
 
             Page page = context.newPage();
             String settingsUrl = config.getBaseUrl() + "/shop/" + shopName + "/settings?upd=" + System.currentTimeMillis();
-            page.navigate(settingsUrl);
-            page.waitForLoadState(LoadState.NETWORKIDLE);
+            playwrightHelper.navigateWithRetry(page, settingsUrl);
 
             if (page.url().contains("/login")) {
                 login(context);
-                page.navigate(settingsUrl);
-                page.waitForLoadState(LoadState.NETWORKIDLE);
+                playwrightHelper.navigateWithRetry(page, settingsUrl);
             }
             saveSession(context);
 
@@ -338,13 +335,11 @@ public class ZoomosParserService {
 
             Page page = context.newPage();
             String url = config.getBaseUrl() + "/shop/" + shopName + "/sites-items-mapping?upd=" + System.currentTimeMillis();
-            page.navigate(url);
-            page.waitForLoadState(LoadState.NETWORKIDLE);
+            playwrightHelper.navigateWithRetry(page, url);
 
             if (page.url().contains("/login")) {
                 login(context);
-                page.navigate(url);
-                page.waitForLoadState(LoadState.NETWORKIDLE);
+                playwrightHelper.navigateWithRetry(page, url);
             }
             saveSession(context);
 
@@ -450,13 +445,11 @@ public class ZoomosParserService {
             Page page = context.newPage();
             String url = config.getBaseUrl() + "/shop/" + shopName + "/sites-items-mapping"
                     + "?upd=" + System.currentTimeMillis();
-            page.navigate(url);
-            page.waitForLoadState(LoadState.NETWORKIDLE);
+            playwrightHelper.navigateWithRetry(page, url);
 
             if (page.url().contains("/login")) {
                 login(context);
-                page.navigate(url);
-                page.waitForLoadState(LoadState.NETWORKIDLE);
+                playwrightHelper.navigateWithRetry(page, url);
             }
             saveSession(context);
 
@@ -538,13 +531,11 @@ public class ZoomosParserService {
 
             Page page = context.newPage();
             String url = config.getBaseUrl() + "/shops-parser/" + siteName + "/settings?upd=" + System.currentTimeMillis();
-            page.navigate(url);
-            page.waitForLoadState(LoadState.NETWORKIDLE);
+            playwrightHelper.navigateWithRetry(page, url);
 
             if (page.url().contains("/login")) {
                 login(context);
-                page.navigate(url);
-                page.waitForLoadState(LoadState.NETWORKIDLE);
+                playwrightHelper.navigateWithRetry(page, url);
             }
             saveSession(context);
 
@@ -602,8 +593,7 @@ public class ZoomosParserService {
                     Page page = context.newPage();
                     String url = config.getBaseUrl() + "/shops-parser/" + site.getSiteName()
                             + "/settings?upd=" + System.currentTimeMillis();
-                    page.navigate(url);
-                    page.waitForLoadState(LoadState.NETWORKIDLE);
+                    playwrightHelper.navigateWithRetry(page, url);
 
                     if (page.url().contains("/login")) {
                         page.close();
@@ -612,8 +602,7 @@ public class ZoomosParserService {
                             needReauth = true;
                         }
                         page = context.newPage();
-                        page.navigate(url);
-                        page.waitForLoadState(LoadState.NETWORKIDLE);
+                        playwrightHelper.navigateWithRetry(page, url);
                     }
 
                     String rawValue = (String) page.evaluate(CITIES_EQUAL_PRICES_JS);
@@ -651,8 +640,7 @@ public class ZoomosParserService {
         Page page = context.newPage();
         try {
             log.info("Авторизация на {}", config.getBaseUrl());
-            page.navigate(config.getBaseUrl() + "/login");
-            page.waitForLoadState(LoadState.NETWORKIDLE);
+            playwrightHelper.navigateWithRetry(page, config.getBaseUrl() + "/login");
 
             page.fill("input[name='j_username']", config.getUsername());
             page.fill("input[name='j_password']", config.getPassword());

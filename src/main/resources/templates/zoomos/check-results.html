@@ -156,24 +156,32 @@
                 <span class="badge bg-dark text-white ms-2" id="issuesCountBadge" th:text="${issues.size()}">0</span>
             </span>
             <span class="d-flex align-items-center gap-2">
-                <button id="btnCopyDomains" type="button"
-                        class="btn btn-sm btn-outline-secondary py-0 px-2" title="Скопировать список доменов"
-                        onclick="event.stopPropagation(); copyIssueDomains(this)">
-                    <i class="fas fa-copy me-1"></i>Копировать домены
-                </button>
-                <button id="btnCopyIssues" type="button"
-                        class="btn btn-sm btn-outline-secondary py-0 px-2" title="Скопировать проблемы: Сайт - город - адрес (проблема)"
-                        onclick="event.stopPropagation(); copyIssueProblems(this)">
-                    <i class="fas fa-list me-1"></i>Копировать проблемы
-                </button>
+                <div class="btn-group">
+                    <button id="btnCopyDropdown" type="button"
+                            class="btn btn-sm btn-outline-secondary py-0 px-2 dropdown-toggle"
+                            data-bs-toggle="dropdown" aria-expanded="false"
+                            onclick="event.stopPropagation()">
+                        <i class="fas fa-copy me-1"></i>Копировать
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item small" href="#"
+                               onclick="event.preventDefault(); event.stopPropagation(); copyIssueDomains(document.getElementById('btnCopyDropdown'))">
+                            <i class="fas fa-copy me-1"></i>Домены</a></li>
+                        <li><a class="dropdown-item small" href="#"
+                               onclick="event.preventDefault(); event.stopPropagation(); copyIssueProblems(document.getElementById('btnCopyDropdown'))">
+                            <i class="fas fa-list me-1"></i>Проблемы</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item small" href="#"
+                               onclick="event.preventDefault(); event.stopPropagation(); copyNotConfiguredSites(document.getElementById('btnCopyDropdown'))">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Ненастроенные</a></li>
+                        <li><a class="dropdown-item small" href="#"
+                               onclick="event.preventDefault(); event.stopPropagation(); copyConfigIssues(document.getElementById('btnCopyDropdown'))">
+                            <i class="fas fa-wrench me-1"></i>Не выкачка</a></li>
+                    </ul>
+                </div>
                 <button th:if="${redmineEnabled}" id="btnRefreshRedmine" type="button"
                         class="btn btn-sm btn-outline-secondary py-0 px-2" title="Обновить статусы из Redmine">
                     <i class="fas fa-arrow-clockwise me-1"></i>Статусы Redmine
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2"
-                        title="Скопировать список ненастроенных сайтов"
-                        onclick="event.stopPropagation(); copyNotConfiguredSites(this)">
-                    <i class="fas fa-exclamation-triangle me-1"></i>Ненастроенные
                 </button>
                 <button id="btnFetchAllEqPrices" type="button"
                         class="btn btn-sm btn-outline-info py-0 px-2"
@@ -1327,6 +1335,38 @@
         });
     });
 
+    // ── Redmine: вспомогательные функции (используются и в batch-check, и внутри IIFE) ──
+    /** Заменяет кнопку создания для сайта на btn-group (ссылка + кнопка редактирования) */
+    function replaceAllSiteBtns(site, issue, srcBtn) {
+        const btnClass = issue.btnClass || (issue.isClosed ? 'btn-success' : 'btn-danger');
+        function makeGroup(b) {
+            const group = document.createElement('div');
+            group.className = 'btn-group btn-group-sm';
+            group.dataset.rmSite = site;
+            const a = document.createElement('a');
+            a.href = issue.url || '#'; a.target = '_blank';
+            a.className = 'btn py-0 px-2 ' + btnClass;
+            a.title = 'Redmine #' + issue.id + ' — ' + (issue.status || issue.statusName || '');
+            a.textContent = '#' + issue.id;
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'btn btn-outline-secondary py-0 px-1 btn-redmine-site-edit';
+            editBtn.dataset.issueid = issue.id;
+            editBtn.dataset.issueurl = issue.url || '';
+            editBtn.dataset.site = site;
+            editBtn.title = 'Редактировать задачу в Redmine';
+            editBtn.innerHTML = '<i class="fas fa-pen" style="font-size:0.65rem"></i>';
+            if (b) {
+                ['checktype','siteidx'].forEach(function(k) { if (b.dataset[k]) editBtn.dataset[k] = b.dataset[k]; });
+            }
+            group.appendChild(a);
+            group.appendChild(editBtn);
+            return group;
+        }
+        document.querySelectorAll('.btn-redmine-site[data-site="' + CSS.escape(site) + '"]')
+            .forEach(function(b) { b.replaceWith(makeGroup(b)); });
+    }
+
     // ── Redmine: batch-check ─────────────────────────────────────────
     function runBatchCheck() {
         const allSites = new Set();
@@ -1624,41 +1664,6 @@
                 assignedToId: parseInt(document.getElementById('rmSelectAssignee').value) || 0,
                 customFields: customFields
             };
-        }
-
-        /** Заменяет кнопку создания для сайта на btn-group (ссылка + кнопка редактирования) */
-        function replaceAllSiteBtns(site, issue, srcBtn) {
-            const btnClass = issue.btnClass || (issue.isClosed ? 'btn-success' : 'btn-danger');
-            function makeGroup(b) {
-                const group = document.createElement('div');
-                group.className = 'btn-group btn-group-sm';
-                group.dataset.rmSite = site;
-                const a = document.createElement('a');
-                a.href = issue.url || '#'; a.target = '_blank';
-                a.className = 'btn py-0 px-2 ' + btnClass;
-                a.title = 'Redmine #' + issue.id + ' — ' + (issue.status || issue.statusName || '');
-                a.textContent = '#' + issue.id;
-                const editBtn = document.createElement('button');
-                editBtn.type = 'button';
-                editBtn.className = 'btn btn-outline-secondary py-0 px-1 btn-redmine-site-edit';
-                editBtn.dataset.issueid = issue.id;
-                editBtn.dataset.issueurl = issue.url || '';
-                editBtn.dataset.site = site;
-                editBtn.title = 'Редактировать задачу в Redmine';
-                editBtn.innerHTML = '<i class="fas fa-pen" style="font-size:0.65rem"></i>';
-                if (b) {
-                    ['checktype','siteidx'].forEach(function(k) { if (b.dataset[k]) editBtn.dataset[k] = b.dataset[k]; });
-                }
-                group.appendChild(a);
-                group.appendChild(editBtn);
-                return group;
-            }
-            document.querySelectorAll('.btn-redmine-site[data-site="' + CSS.escape(site) + '"]')
-                .forEach(function(b) { b.replaceWith(makeGroup(b)); });
-            // Если был передан конкретный srcBtn — используем его как источник данных для editBtn
-            if (srcBtn && srcBtn.classList && srcBtn.classList.contains('btn-redmine-site')) {
-                // уже заменён выше
-            }
         }
 
         function showCopyBlock(site, shortMessage, issueUrl, mode) {
@@ -1994,6 +1999,15 @@
     })();
     // ── /Redmine ──────────────────────────────────────────────────────
 
+    function animateCopyBtn(btn, label) {
+        const orig = btn.innerHTML;
+        const origClass = [...btn.classList].find(c => c.startsWith('btn-outline-')) || 'btn-outline-secondary';
+        const activeClass = origClass.replace('btn-outline-', 'btn-');
+        btn.innerHTML = '<i class="fas fa-check me-1"></i>' + label;
+        btn.classList.replace(origClass, activeClass);
+        setTimeout(() => { btn.innerHTML = orig; btn.classList.replace(activeClass, origClass); }, 2000);
+    }
+
     function copyIssueDomains(btn) {
         const domains = [...document.querySelectorAll('#issuesCollapse .site-issues-block')]
             .filter(el => !el.closest('#verifiedSitesCollapse'))
@@ -2001,10 +2015,7 @@
             .filter(Boolean)
             .join('\n');
         navigator.clipboard.writeText(domains).then(() => {
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-check me-1"></i>Скопировано';
-            btn.classList.replace('btn-outline-secondary', 'btn-success');
-            setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-success', 'btn-outline-secondary'); }, 2000);
+            animateCopyBtn(btn, 'Скопировано');
         });
     }
 
@@ -2023,10 +2034,7 @@
             });
         });
         navigator.clipboard.writeText(lines.join('\n')).then(() => {
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-check me-1"></i>Скопировано';
-            btn.classList.replace('btn-outline-secondary', 'btn-success');
-            setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-success', 'btn-outline-secondary'); }, 2000);
+            animateCopyBtn(btn, 'Скопировано');
         });
     }
 
@@ -2239,10 +2247,25 @@
             .filter(Boolean);
         if (!sites.length) return;
         navigator.clipboard.writeText(sites.join('\n')).then(() => {
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-check me-1"></i>Скопировано ' + sites.length;
-            btn.classList.replace('btn-outline-danger', 'btn-danger');
-            setTimeout(() => { btn.innerHTML = orig; btn.classList.replace('btn-danger', 'btn-outline-danger'); }, 2000);
+            animateCopyBtn(btn, 'Скопировано ' + sites.length);
+        });
+    }
+
+    function copyConfigIssues(btn) {
+        const lines = [];
+        document.querySelectorAll('.btn-config-issue[data-has-issue="true"]').forEach(function(b) {
+            const site  = b.dataset.site        || '';
+            const type  = b.dataset.currentType || '';
+            const note  = b.dataset.currentNote || '';
+            const label = getTypeLabel(type) || type;
+            let line = site;
+            if (label) line += ' — ' + label;
+            if (note)  line += ': ' + note;
+            lines.push(line);
+        });
+        if (!lines.length) return;
+        navigator.clipboard.writeText(lines.join('\n')).then(() => {
+            animateCopyBtn(btn, 'Скопировано ' + lines.length);
         });
     }
 

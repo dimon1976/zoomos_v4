@@ -964,14 +964,17 @@ public class ZoomosAnalysisController {
             }
 
             // Проверяем города без покрытия адресами
-            for (String cityId : expectedCities) {
-                if (addressCoveredCities.contains(cityId)) continue;
+            for (String rawCityId : expectedCities) {
+                // Нормализуем: "4400 - Москва" → "4400" (foundCityKeys строится через extractCityId)
+                String cityId = ZoomosCheckService.extractCityId(rawCityId);
+                if (cityId == null || cityId.isBlank()) cityId = rawCityId;
+                if (addressCoveredCities.contains(rawCityId)) continue;
                 if (foundCityKeys.contains(site + "|" + cityId)) continue;
 
                 Map<String, Object> issue = new LinkedHashMap<>();
                 issue.put("site", site);
-                issue.put("city", cityId);
-                issue.put("cityId", cityId);
+                issue.put("city", rawCityId);   // отображение: "4400 - Москва"
+                issue.put("cityId", cityId);     // URL: только "4400"
                 issue.put("checkType", cid.getCheckType());
                 issue.put("shopName", run.getShop().getShopName());
 
@@ -1458,11 +1461,13 @@ public class ZoomosAnalysisController {
                 }
                 issues.add(issue);
             }
-            for (String cityId : expectedCities) {
-                if (addressCoveredCities.contains(cityId)) continue;
+            for (String rawCityId : expectedCities) {
+                String cityId = ZoomosCheckService.extractCityId(rawCityId);
+                if (cityId == null || cityId.isBlank()) cityId = rawCityId;
+                if (addressCoveredCities.contains(rawCityId)) continue;
                 if (foundCityKeys.contains(site + "|" + cityId)) continue;
                 Map<String, Object> issue = new LinkedHashMap<>();
-                issue.put("site", site); issue.put("city", cityId); issue.put("cityId", cityId);
+                issue.put("site", site); issue.put("city", rawCityId); issue.put("cityId", cityId);
                 issue.put("checkType", cid.getCheckType()); issue.put("shopName", run.getShop().getShopName());
                 ZoomosParsingStats ip = inProgressByCityKey.get(site + "|" + cityId);
                 ZoomosParsingStats lastKnownCity = ip == null ? lastFinishedByCityBatchKey.get(site + "|" + cityId) : null;
