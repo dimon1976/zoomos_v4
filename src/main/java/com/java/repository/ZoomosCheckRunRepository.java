@@ -38,4 +38,14 @@ public interface ZoomosCheckRunRepository extends JpaRepository<ZoomosCheckRun, 
     List<ZoomosCheckRun> findAllWithShopOrderByStartedAtDesc(Pageable pageable);
 
     List<ZoomosCheckRun> findAllByStatus(CheckRunStatus status);
+
+    /**
+     * PERF-001: batch-загрузка последнего run для каждого магазина из списка.
+     * Заменяет N вызовов findFirstByShopIdOrderByStartedAtDesc.
+     */
+    @Query(value = "SELECT DISTINCT ON (shop_id) * FROM zoomos_check_runs " +
+                   "WHERE shop_id = ANY(:shopIds) " +
+                   "ORDER BY shop_id, started_at DESC",
+           nativeQuery = true)
+    List<ZoomosCheckRun> findLastRunsForShops(@Param("shopIds") Long[] shopIds);
 }

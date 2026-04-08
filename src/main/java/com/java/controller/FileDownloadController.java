@@ -5,13 +5,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 
 /**
@@ -31,31 +34,39 @@ public class FileDownloadController {
     @GetMapping("/download/{filename}")
     public ResponseEntity<Resource> downloadFile(@PathVariable String filename) {
         try {
-            // Получаем путь к файлу в директории экспорта
-            Path filePath = pathResolver.getAbsoluteExportDir().resolve(filename);
-            
+            Path baseDir = pathResolver.getAbsoluteExportDir().toRealPath(LinkOption.NOFOLLOW_LINKS);
+
+            // SEC-002: нормализация пути предотвращает path traversal через ../
+            Path filePath = baseDir.resolve(filename).normalize();
+
             // Проверяем существование файла
             if (!Files.exists(filePath)) {
                 log.error("Файл не найден: {}", filePath);
                 return ResponseEntity.notFound().build();
             }
-            
-            // Проверяем, что файл находится в директории экспорта (безопасность)
-            if (!filePath.startsWith(pathResolver.getAbsoluteExportDir())) {
-                log.error("Попытка доступа к файлу за пределами директории экспорта: {}", filePath);
-                return ResponseEntity.badRequest().build();
+
+            // Проверяем, что файл находится в директории экспорта (после нормализации)
+            Path realFilePath = filePath.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            if (!realFilePath.startsWith(baseDir)) {
+                log.error("Попытка path traversal: {}", filename);
+                return ResponseEntity.status(403).build();
             }
-            
-            Resource resource = new FileSystemResource(filePath);
-            
+
+            Resource resource = new FileSystemResource(realFilePath);
+
             // Определяем тип контента
             MediaType contentType = getContentType(filename);
-            
+
+            // SEC-006: безопасный Content-Disposition без возможности header injection
+            ContentDisposition disposition = ContentDisposition.attachment()
+                    .filename(realFilePath.getFileName().toString(), StandardCharsets.UTF_8)
+                    .build();
+
             log.info("Скачивается файл: {}", filename);
-            
+
             return ResponseEntity.ok()
                     .contentType(contentType)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                     .body(resource);
                     
         } catch (Exception e) {

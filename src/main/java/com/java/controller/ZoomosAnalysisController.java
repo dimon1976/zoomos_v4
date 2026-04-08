@@ -18,6 +18,7 @@ import com.java.service.ZoomosCheckService;
 import com.java.service.ZoomosParserService;
 import com.java.service.ZoomosSchedulerService;
 import com.java.service.ZoomosSettingsService;
+import com.java.service.ZoomosViewService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -67,6 +68,8 @@ public class ZoomosAnalysisController {
     private final RedmineService redmineService;
     private final ZoomosSettingsService settingsService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    private final ZoomosViewService zoomosViewService;
 
     @Qualifier("zoomosCheckExecutor")
     private final java.util.concurrent.Executor zoomosCheckExecutor;
@@ -192,12 +195,13 @@ public class ZoomosAnalysisController {
     public ResponseEntity<?> getCityAddresses(
             @RequestParam(required = false) String cityIds,
             @RequestParam(required = false) String siteName) {
+        // PERF-003: без фильтра возвращаем пустой список вместо полной загрузки таблицы
         List<com.java.model.entity.ZoomosCityAddress> addrs;
         if (cityIds != null && !cityIds.isBlank()) {
             List<String> ids = Arrays.asList(cityIds.split(","));
             addrs = cityAddressRepository.findByCityIdInOrderByCityIdAscAddressIdAsc(ids);
         } else {
-            addrs = cityAddressRepository.findAll();
+            addrs = List.of();
         }
         // Если передан siteName — фильтруем по адресам, настроенным для этого сайта
         if (siteName != null && !siteName.isBlank()) {
@@ -1912,14 +1916,10 @@ public class ZoomosAnalysisController {
     }
 
     @PostMapping("/check/history/delete")
-    @Transactional
     public String deleteCheckHistory(@RequestParam List<Long> ids,
                                      org.springframework.web.servlet.mvc.support.RedirectAttributes ra) {
-        for (Long id : ids) {
-            parsingStatsRepository.deleteByCheckRunId(id);
-            checkRunRepository.deleteById(id);
-        }
-        ra.addFlashAttribute("success", "Удалено записей: " + ids.size());
+        int deleted = zoomosViewService.deleteCheckRuns(ids);
+        ra.addFlashAttribute("success", "Удалено записей: " + deleted);
         return "redirect:/zoomos/check/history";
     }
 
@@ -2026,15 +2026,12 @@ public class ZoomosAnalysisController {
 
     @PostMapping("/sites/{id}/delete")
     @ResponseBody
-    @Transactional
     public ResponseEntity<Map<String, Object>> deleteKnownSite(@PathVariable Long id) {
-        return knownSiteRepository.findById(id).map(site -> {
-            String siteName = site.getSiteName();
-            List<ZoomosCityId> cityIds = cityIdRepository.findAllBySiteName(siteName);
-            cityIdRepository.deleteAll(cityIds);
-            knownSiteRepository.delete(site);
-            return ResponseEntity.ok(Map.<String, Object>of("success", true, "deletedCityIds", cityIds.size()));
-        }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден")));
+        int deleted = zoomosViewService.deleteKnownSite(id);
+        if (deleted < 0) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Сайт не найден"));
+        }
+        return ResponseEntity.ok(Map.<String, Object>of("success", true, "deletedCityIds", deleted));
     }
 
     // =========================================================================
@@ -2043,31 +2040,9 @@ public class ZoomosAnalysisController {
 
     @GetMapping("/schedule")
     public String schedulePage(Model model) {
-        List<ZoomosShop> shops = parserService.getAllShops();
-        // Ключ — scheduleId, для lastRunFormatted и lastRunIds
-        Map<Long, String> lastRunFormatted = new LinkedHashMap<>();
-        Map<Long, Long> lastRunIds = new LinkedHashMap<>();
-        // Ключ — shopId → список расписаний
-        Map<Long, List<ZoomosShopSchedule>> schedules = new LinkedHashMap<>();
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
-        for (ZoomosShop shop : shops) {
-            List<ZoomosShopSchedule> list = scheduleRepository.findAllByShopId(shop.getId());
-            schedules.put(shop.getId(), list);
-            // lastRunIds: последний run магазина для ссылки на результаты (общий для всех расписаний)
-            checkRunRepository.findFirstByShopIdOrderByStartedAtDesc(shop.getId())
-                    .ifPresent(run -> list.forEach(s -> lastRunIds.put(s.getId(), run.getId())));
-            // lastRunFormatted: время последнего запуска конкретного расписания (из sched.lastRunAt)
-            for (ZoomosShopSchedule s : list) {
-                if (s.getLastRunAt() != null) {
-                    lastRunFormatted.put(s.getId(),
-                            s.getLastRunAt().withZoneSameInstant(java.time.ZoneId.systemDefault()).format(fmt));
-                }
-            }
-        }
-        model.addAttribute("shops", shops);
-        model.addAttribute("schedules", schedules);
-        model.addAttribute("lastRunFormatted", lastRunFormatted);
-        model.addAttribute("lastRunIds", lastRunIds);
+        // ARCH-001 + PERF-001: batch-загрузка вынесена в ZoomosViewService
+        Map<String, Object> scheduleModel = zoomosViewService.buildScheduleModel();
+        scheduleModel.forEach(model::addAttribute);
         return "zoomos/schedule";
     }
 

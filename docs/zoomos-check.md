@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-04 (V54: has_config_issue + config_issue_note в zoomos_city_ids — флаг конфигурационной проблемы для пары клиент→сайт; endpoint POST /zoomos/city-ids/{id}/config-issue; отображение в check-results, index, sites; master_city_id fallback с уровня ZoomosKnownSite в ZoomosCityId)
+> Последнее обновление: 2026-04 (V54: has_config_issue + config_issue_note в zoomos_city_ids; рефакторинг: бизнес-логика deleteCheckRuns/deleteKnownSite/buildScheduleModel вынесена в ZoomosViewService с @Transactional; N+1 на /zoomos/schedule заменён batch-запросом findLastRunsForShops)
 
 ## Назначение
 

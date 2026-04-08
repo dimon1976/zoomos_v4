@@ -2,8 +2,9 @@ package com.java.controller;
 
 import com.java.dto.*;
 import com.java.model.entity.DataCleanupHistory;
+import com.java.service.ClientService;
 import com.java.service.maintenance.DataCleanupService;
-import com.java.repository.ClientRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -28,7 +29,7 @@ import java.util.stream.Collectors;
 public class DataCleanupController {
 
     private final DataCleanupService cleanupService;
-    private final ClientRepository clientRepository;
+    private final ClientService clientService;
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
 
@@ -48,7 +49,7 @@ public class DataCleanupController {
         model.addAttribute("history", history);
 
         // Загружаем список клиентов для исключений
-        model.addAttribute("clients", clientRepository.findAll());
+        model.addAttribute("clients", clientService.findAll());
 
         // Дата по умолчанию - 30 дней назад
         LocalDateTime defaultDate = LocalDateTime.now().minusDays(30);
@@ -70,7 +71,8 @@ public class DataCleanupController {
             @RequestParam("cutoffDate") String cutoffDateStr,
             @RequestParam(value = "entityTypes", required = false) Set<String> entityTypes,
             @RequestParam(value = "excludedClientIds", required = false) Set<Long> excludedClientIds,
-            @RequestParam(value = "batchSize", defaultValue = "10000") int batchSize) {
+            @RequestParam(value = "batchSize", defaultValue = "10000") int batchSize,
+            HttpServletRequest httpRequest) {
 
         log.info("Запрос на предпросмотр очистки: дата={}, типы={}, исключения={}",
                 cutoffDateStr, entityTypes, excludedClientIds);
@@ -84,7 +86,7 @@ public class DataCleanupController {
                     .excludedClientIds(excludedClientIds)
                     .batchSize(batchSize)
                     .dryRun(true)
-                    .initiatedBy("user")
+                    .initiatedBy(httpRequest.getRemoteAddr())
                     .build();
 
             DataCleanupPreviewDto preview = cleanupService.previewCleanup(request);
@@ -114,7 +116,8 @@ public class DataCleanupController {
             @RequestParam(value = "entityTypes", required = false) Set<String> entityTypes,
             @RequestParam(value = "excludedClientIds", required = false) Set<Long> excludedClientIds,
             @RequestParam(value = "batchSize", defaultValue = "10000") int batchSize,
-            @RequestParam(value = "confirmation", required = true) String confirmation) {
+            @RequestParam(value = "confirmation", required = true) String confirmation,
+            HttpServletRequest httpRequest) {
 
         log.info("Запрос на выполнение ASYNC очистки: дата={}, типы={}, исключения={}",
                 cutoffDateStr, entityTypes, excludedClientIds);
@@ -140,7 +143,7 @@ public class DataCleanupController {
                     .excludedClientIds(excludedClientIds)
                     .batchSize(batchSize)
                     .dryRun(false)
-                    .initiatedBy("user")
+                    .initiatedBy(httpRequest.getRemoteAddr())
                     .operationId(operationId)
                     .build();
 

@@ -7,6 +7,8 @@ import com.java.service.maintenance.ConfigImportService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 
 /**
@@ -46,7 +49,9 @@ public class ConfigImportExportController {
             ConfigExportDto dto = exportService.exportConfig(options);
             String filename = "zoomos-config-" + LocalDate.now() + ".json";
             response.setContentType("application/json; charset=UTF-8");
-            response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+            String disposition = ContentDisposition.attachment()
+                    .filename(filename, StandardCharsets.UTF_8).build().toString();
+            response.setHeader(HttpHeaders.CONTENT_DISPOSITION, disposition);
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(response.getOutputStream(), dto);
         } catch (Exception e) {
             log.error("Ошибка при экспорте конфигурации", e);
