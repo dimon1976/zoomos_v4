@@ -18,6 +18,7 @@ import com.java.service.ZoomosCheckService;
 import com.java.service.ZoomosParserService;
 import com.java.service.ZoomosSchedulerService;
 import com.java.service.ZoomosSettingsService;
+import com.java.dto.zoomos.SchedulePageDto;
 import com.java.service.ZoomosViewService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -2041,8 +2042,12 @@ public class ZoomosAnalysisController {
     @GetMapping("/schedule")
     public String schedulePage(Model model) {
         // ARCH-001 + PERF-001: batch-загрузка вынесена в ZoomosViewService
-        Map<String, Object> scheduleModel = zoomosViewService.buildScheduleModel();
-        scheduleModel.forEach(model::addAttribute);
+        // ARCH-002: типизированный DTO
+        SchedulePageDto dto = zoomosViewService.buildScheduleModel();
+        model.addAttribute("shops", dto.shops());
+        model.addAttribute("schedules", dto.schedules());
+        model.addAttribute("lastRunFormatted", dto.lastRunFormatted());
+        model.addAttribute("lastRunIds", dto.lastRunIds());
         return "zoomos/schedule";
     }
 

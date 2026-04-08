@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-04 (V54: has_config_issue + config_issue_note в zoomos_city_ids; рефакторинг: бизнес-логика deleteCheckRuns/deleteKnownSite/buildScheduleModel вынесена в ZoomosViewService с @Transactional; N+1 на /zoomos/schedule заменён batch-запросом findLastRunsForShops)
+> Последнее обновление: 2026-04 (code review fixes: TOCTOU в FileDownloadController, Open Redirect — проверка порта в GlobalExceptionHandler, SecurityHeadersInterceptor заменён на SecurityHeadersFilter, SchedulePageDto вместо Map, findLastRunsForShops → JPQL+JOIN FETCH)
 
 ## Назначение
 

@@ -138,8 +138,11 @@ public class GlobalExceptionHandler {
             try {
                 java.net.URI refererUri = new java.net.URI(referer);
                 // Разрешаем только relative URL или тот же origin
-                if (refererUri.getHost() == null ||
-                        refererUri.getHost().equals(request.getServerName())) {
+                boolean sameHost = refererUri.getHost() == null ||
+                        refererUri.getHost().equals(request.getServerName());
+                boolean samePort = refererUri.getPort() == -1 ||
+                        refererUri.getPort() == request.getServerPort();
+                if (sameHost && samePort) {
                     redirectUrl = refererUri.getPath();
                 }
             } catch (java.net.URISyntaxException ignored) {

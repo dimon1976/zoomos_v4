@@ -41,11 +41,11 @@ public interface ZoomosCheckRunRepository extends JpaRepository<ZoomosCheckRun, 
 
     /**
      * PERF-001: batch-загрузка последнего run для каждого магазина из списка.
+     * JOIN FETCH r.shop — избегает N+1 lazy-load при обращении к r.getShop().getId().
      * Заменяет N вызовов findFirstByShopIdOrderByStartedAtDesc.
      */
-    @Query(value = "SELECT DISTINCT ON (shop_id) * FROM zoomos_check_runs " +
-                   "WHERE shop_id = ANY(:shopIds) " +
-                   "ORDER BY shop_id, started_at DESC",
-           nativeQuery = true)
-    List<ZoomosCheckRun> findLastRunsForShops(@Param("shopIds") Long[] shopIds);
+    @Query("SELECT r FROM ZoomosCheckRun r JOIN FETCH r.shop s " +
+           "WHERE s.id IN :shopIds " +
+           "AND r.startedAt = (SELECT MAX(r2.startedAt) FROM ZoomosCheckRun r2 WHERE r2.shop.id = s.id)")
+    List<ZoomosCheckRun> findLastRunsForShops(@Param("shopIds") List<Long> shopIds);
 }

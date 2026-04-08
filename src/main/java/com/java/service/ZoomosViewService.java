@@ -1,5 +1,6 @@
 package com.java.service;
 
+import com.java.dto.zoomos.SchedulePageDto;
 import com.java.model.entity.ZoomosCityId;
 import com.java.model.entity.ZoomosCheckRun;
 import com.java.model.entity.ZoomosKnownSite;
@@ -20,6 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+// ARCH-002: возвращаем типизированный SchedulePageDto вместо Map<String,Object>
 
 /**
  * Сервис для агрегации данных, отображаемых на страницах Zoomos.
@@ -42,9 +45,10 @@ public class ZoomosViewService {
     /**
      * PERF-001: batch-загрузка данных для страницы расписаний (/zoomos/schedule).
      * Заменяет N+1 (по одному запросу на каждый магазин) двумя батч-запросами.
+     * ARCH-002: возвращает типизированный SchedulePageDto.
      */
     @Transactional(readOnly = true)
-    public Map<String, Object> buildScheduleModel() {
+    public SchedulePageDto buildScheduleModel() {
         List<ZoomosShop> shops = parserService.getAllShops();
         List<Long> shopIds = shops.stream().map(ZoomosShop::getId).toList();
 
@@ -56,9 +60,9 @@ public class ZoomosViewService {
         // Гарантируем наличие всех магазинов в Map (иначе schedules[shop.id] = null в шаблоне → NPE в SpEL)
         shops.forEach(s -> schedules.putIfAbsent(s.getId(), List.of()));
 
-        // Batch: последние запуски — 1 запрос вместо N
+        // Batch: последние запуски — 1 запрос вместо N, JOIN FETCH исключает lazy N+1
         Map<Long, ZoomosCheckRun> lastRuns = checkRunRepository
-                .findLastRunsForShops(shopIds.toArray(new Long[0]))
+                .findLastRunsForShops(shopIds)
                 .stream()
                 .collect(Collectors.toMap(r -> r.getShop().getId(), r -> r));
 
@@ -79,12 +83,7 @@ public class ZoomosViewService {
             }
         }
 
-        Map<String, Object> model = new LinkedHashMap<>();
-        model.put("shops", shops);
-        model.put("schedules", schedules);
-        model.put("lastRunFormatted", lastRunFormatted);
-        model.put("lastRunIds", lastRunIds);
-        return model;
+        return new SchedulePageDto(shops, schedules, lastRunFormatted, lastRunIds);
     }
 
     /**

@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -39,14 +40,22 @@ public class FileDownloadController {
             // SEC-002: нормализация пути предотвращает path traversal через ../
             Path filePath = baseDir.resolve(filename).normalize();
 
-            // Проверяем существование файла
+            // Проверяем существование файла до toRealPath() — избегаем NoSuchFileException (TOCTOU)
             if (!Files.exists(filePath)) {
-                log.error("Файл не найден: {}", filePath);
+                log.warn("Файл не найден: {}", filePath);
+                return ResponseEntity.notFound().build();
+            }
+
+            // toRealPath() вызываем только после проверки существования
+            final Path realFilePath;
+            try {
+                realFilePath = filePath.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            } catch (IOException e) {
+                log.warn("Файл исчез или недоступен: {}", filename);
                 return ResponseEntity.notFound().build();
             }
 
             // Проверяем, что файл находится в директории экспорта (после нормализации)
-            Path realFilePath = filePath.toRealPath(LinkOption.NOFOLLOW_LINKS);
             if (!realFilePath.startsWith(baseDir)) {
                 log.error("Попытка path traversal: {}", filename);
                 return ResponseEntity.status(403).build();
