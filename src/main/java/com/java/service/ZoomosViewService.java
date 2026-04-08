@@ -53,6 +53,8 @@ public class ZoomosViewService {
                 .findAllByShopIdIn(shopIds)
                 .stream()
                 .collect(Collectors.groupingBy(ZoomosShopSchedule::getShopId, LinkedHashMap::new, Collectors.toList()));
+        // Гарантируем наличие всех магазинов в Map (иначе schedules[shop.id] = null в шаблоне → NPE в SpEL)
+        shops.forEach(s -> schedules.putIfAbsent(s.getId(), List.of()));
 
         // Batch: последние запуски — 1 запрос вместо N
         Map<Long, ZoomosCheckRun> lastRuns = checkRunRepository
