@@ -3,13 +3,14 @@ package com.java.util;
 import com.java.model.FileOperation;
 import org.springframework.stereotype.Component;
 
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 @Component
 public class ControllerUtils {
 
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = 
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
 
     public String getOperationTypeDisplay(FileOperation.OperationType type) {
@@ -39,6 +40,8 @@ public class ControllerUtils {
     }
 
     public String formatDateTime(ZonedDateTime dateTime) {
-        return dateTime != null ? dateTime.format(DATE_TIME_FORMATTER) : null;
+        return dateTime != null
+                ? dateTime.withZoneSameInstant(ZoneId.systemDefault()).format(DATE_TIME_FORMATTER)
+                : null;
     }
 }

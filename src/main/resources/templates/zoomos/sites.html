@@ -132,11 +132,11 @@
                         </td>
                         <td class="text-center equal-prices-cell" th:data-id="${site.id}"
                             th:data-equal="${site.citiesEqualPrices}"
-                            th:data-checked="${site.citiesEqualPricesCheckedAt != null} ? ${#temporals.format(site.citiesEqualPricesCheckedAt, 'dd.MM.yyyy HH:mm')} : ''">
+                            th:data-checked="${site.citiesEqualPricesCheckedAt != null} ? ${@dateTimeHelper.format(site.citiesEqualPricesCheckedAt, 'dd.MM.yyyy HH:mm')} : ''">
                             <th:block th:if="${site.citiesEqualPrices != null}">
                                 <span th:class="${site.citiesEqualPrices} ? 'badge bg-success' : 'badge bg-secondary'"
                                       th:text="${site.citiesEqualPrices} ? '= цены' : 'разные'"
-                                      th:title="${'Проверено: ' + (#temporals.format(site.citiesEqualPricesCheckedAt, 'dd.MM.yyyy HH:mm'))}"></span>
+                                      th:title="${'Проверено: ' + @dateTimeHelper.format(site.citiesEqualPricesCheckedAt, 'dd.MM.yyyy HH:mm')}"></span>
                             </th:block>
                             <button type="button"
                                     class="btn btn-sm btn-outline-secondary py-0 px-1 fetch-equal-prices-btn"

@@ -397,7 +397,7 @@
                 <strong th:text="${shop.shopName}">shop.ru</strong>
                 <span th:if="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
                     <i class="fas fa-sync-alt me-1"></i>Обновлено:
-                    <span class="fw-semibold text-body" th:text="${#temporals.format(shop.lastSyncedAt, 'dd.MM.yyyy HH:mm')}"></span>
+                    <span class="fw-semibold text-body" th:text="${@dateTimeHelper.format(shop.lastSyncedAt, 'dd.MM.yyyy HH:mm')}"></span>
                 </span>
                 <span th:unless="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
                     <i class="fas fa-clock me-1"></i>Не синхронизировано

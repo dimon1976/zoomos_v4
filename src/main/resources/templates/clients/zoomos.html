@@ -219,7 +219,7 @@
                     </thead>
                     <tbody>
                         <tr th:each="run : ${checkRuns}">
-                            <td th:text="${run.startedAt != null ? #temporals.format(run.startedAt, 'dd.MM.yyyy HH:mm') : '—'}">01.01.2025</td>
+                            <td th:text="${run.startedAt != null ? @dateTimeHelper.format(run.startedAt, 'dd.MM.yyyy HH:mm') : '—'}">01.01.2025</td>
                             <td th:text="${#temporals.format(run.dateFrom,'dd.MM') + ' — ' + #temporals.format(run.dateTo,'dd.MM')}">период</td>
                             <td>
                                 <span th:if="${run.status == 'COMPLETED'}" class="badge bg-success">Завершено</span>

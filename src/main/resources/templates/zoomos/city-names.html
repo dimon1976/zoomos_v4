@@ -101,7 +101,7 @@
                             </button>
                         </td>
                         <td class="text-center small text-muted"
-                            th:text="${cn.updatedAt != null} ? ${#temporals.format(cn.updatedAt, 'dd.MM.yyyy HH:mm')} : '—'"></td>
+                            th:text="${cn.updatedAt != null} ? ${@dateTimeHelper.format(cn.updatedAt, 'dd.MM.yyyy HH:mm')} : '—'"></td>
                         <td class="text-center">
                             <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 delete-city-btn"
                                     th:data-city-id="${cn.cityId}"

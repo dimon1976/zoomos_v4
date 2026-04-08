@@ -93,7 +93,7 @@
                             <td class="text-truncate" style="max-width: 200px;"
                                 th:text="${op.fileName}"
                                 th:title="${op.fileName}">file.csv</td>
-                            <td th:text="${#temporals.format(op.startedAt, 'dd.MM.yyyy HH:mm')}">
+                            <td th:text="${@dateTimeHelper.format(op.startedAt, 'dd.MM.yyyy HH:mm')}">
                                 01.01.2025
                             </td>
                             <td th:text="${op.recordCount ?: '-'}">100</td>
@@ -281,7 +281,7 @@
                             <p class="mb-0">
                                 <small class="text-muted">
                                     <span th:text="${export.templateName}">Шаблон</span> •
-                                    <span th:text="${#temporals.format(export.startedAt, 'dd.MM.yyyy HH:mm')}">
+                                    <span th:text="${@dateTimeHelper.format(export.startedAt, 'dd.MM.yyyy HH:mm')}">
                                         01.01.2025
                                     </span> •
                                     <span th:text="${export.exportedRows + ' записей'}">100 записей</span>

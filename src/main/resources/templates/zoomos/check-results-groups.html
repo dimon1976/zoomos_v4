@@ -180,9 +180,9 @@
                                 </tr>
                                 <tr th:classappend="${stat.isBaseline ? 'baseline-row' : (si.first ? (ag['status'] == 'ERROR' ? 'table-danger' : (ag['status'] == 'WARNING' ? 'table-warning' : 'table-active')) + ' fw-semibold' : '')}">
                                     <td class="text-center small"
-                                        th:text="${stat.startTime != null} ? ${#temporals.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
+                                        th:text="${stat.startTime != null} ? ${@dateTimeHelper.format(stat.startTime, 'dd.MM HH:mm')} : '—'"></td>
                                     <td class="text-center small"
-                                        th:text="${stat.finishTime != null} ? ${#temporals.format(stat.finishTime, 'dd.MM HH:mm')} : '—'"></td>
+                                        th:text="${stat.finishTime != null} ? ${@dateTimeHelper.format(stat.finishTime, 'dd.MM HH:mm')} : '—'"></td>
                                     <td class="text-center small d-none d-md-table-cell" th:text="${stat.serverName}"></td>
                                     <td class="text-center small d-none d-md-table-cell" th:text="${stat.clientName != null} ? ${stat.clientName} : '—'"></td>
                                     <td class="parser-col small"
