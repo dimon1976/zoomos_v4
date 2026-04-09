@@ -65,14 +65,10 @@
 
     /* ── Блок ERROR ──────────────────── */
     .block-errors { border-color: #dc3545 !important; }
-    .block-errors .block-header { background: rgba(220,53,69,0.06); border-bottom: 1px solid rgba(220,53,69,0.15); }
-    .block-errors .block-header strong { color: #842029; }
-    .site-row.err-row { border-left: 3px solid #dc3545; background: rgba(220,53,69,0.02); }
-    .err-subgroup-label { color: #842029; }
+    .site-row.err-row { border-left: 3px solid #dc3545; }
 
     /* ── Блок WARNING ────────────────── */
     .block-warnings { border-color: #ffc107 !important; }
-    .block-warnings .block-header { background: rgba(255,193,7,0.1); border-bottom: 1px solid rgba(255,193,7,0.25); }
     .warn-subgroup { border-left: 3px solid #ffc107; margin: 0 0 0.25rem; }
     .warn-subgroup > summary { font-size: 0.85rem; padding: 0.4rem 0.75rem; }
     .in-progress-subgroup { border-left: 3px solid #6c757d !important; }
@@ -174,9 +170,9 @@
     <!-- ═══ БЛОК 1: ERROR (не сворачивается) ═══ -->
     <th:block th:if="${not #lists.isEmpty(errorsStockDrop100) or not #lists.isEmpty(errorsStockDrop) or not #lists.isEmpty(errorsNotFound)}">
     <div class="card mb-3 block-errors" id="block-errors">
-        <div class="block-header d-flex align-items-center gap-2 px-3 py-2">
-            <i class="fas fa-times-circle err-subgroup-label"></i>
-            <strong class="err-subgroup-label">Критичные проблемы</strong>
+        <div class="card-header bg-danger bg-opacity-10 d-flex align-items-center gap-2 py-2">
+            <i class="fas fa-times-circle text-danger"></i>
+            <strong>Критичные проблемы</strong>
             <span class="badge bg-danger ms-1"
                   th:text="${#lists.size(errorsStockDrop100) + #lists.size(errorsStockDrop) + #lists.size(errorsNotFound)}">0</span>
         </div>
@@ -397,9 +393,9 @@
     <!-- ═══ БЛОК 2: WARNING ═══ -->
     <th:block th:if="${not #lists.isEmpty(noProducts) or not #lists.isEmpty(alwaysZero) or not #lists.isEmpty(errorGrowth) or not #lists.isEmpty(slowParsing) or not #lists.isEmpty(inProgress)}">
     <div class="card mb-3 block-warnings">
-        <div class="block-header d-flex align-items-center gap-2 px-3 py-2">
+        <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center gap-2 py-2">
             <i class="fas fa-exclamation-triangle text-warning"></i>
-            <strong class="text-warning">Обратите внимание</strong>
+            <strong>Обратите внимание</strong>
             <span class="badge bg-warning text-dark ms-1"
                   th:text="${#lists.size(noProducts) + #lists.size(alwaysZero) + #lists.size(errorGrowth) + #lists.size(slowParsing) + #lists.size(inProgress)}">0</span>
             <span class="text-muted small ms-2">(клик на подгруппу — развернуть)</span>
