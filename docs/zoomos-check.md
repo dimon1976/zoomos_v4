@@ -176,6 +176,58 @@ public record MedianStats(Integer inStock, Integer totalProducts, Integer durati
 - `TREND_WARNING` issues отображаются в отдельном **свёрнутом** блоке "Тренды" (Блок 2.5)
 - Не влияют на `canDeliver`, не попадают в блок "На что обратить внимание"
 - Требует `baselineDays > 0` и не менее 3 исторических записей
+- `evaluateTrend()` возвращает `List<Map<String, String>>` с полями `"message"` и `"warningType"`
+
+### Типы warningType (тренды)
+
+| warningType | Описание |
+|---|---|
+| `TREND_STOCK` | Доля «В наличии» снизилась относительно baseline |
+| `TREND_ERRORS` | Рост ошибок парсинга относительно baseline |
+| `TREND_SPEED` | Замедление выкачки (мин/1000 товаров) |
+
+---
+
+## warningType — классификация проблем
+
+Каждый issue содержит поле `warningType` для группировки в интерфейсе.
+
+| warningType | type | Описание |
+|---|---|---|
+| `STOCK_DROP_100` | ERROR | В наличии: упало до 0 (-100%) |
+| `STOCK_DROP` | ERROR | Падение "В наличии" или товаров свыше порога |
+| `NOT_FOUND` | ERROR | Нет данных о парсинге (noData=true) |
+| `NO_PRODUCTS` | WARNING | 100% выкачка, нет товаров совсем |
+| `ALWAYS_ZERO_STOCK` | WARNING | В наличии: всегда 0 |
+| `SLOW_PARSING` | WARNING | Медленная выкачка |
+| `IN_PROGRESS` | WARNING | Выкачка в процессе (noData=true) |
+| `ERROR_GROWTH` | WARNING | Рост ошибок парсинга |
+
+---
+
+## /check/results-v2/{runId} — новый вид результатов (бета)
+
+Endpoint `GET /check/results-v2/{runId}` реализован в `ZoomosAnalysisController.checkResultsV2()`.
+
+- Вызывает `checkResults()` для заполнения базовых атрибутов
+- Добавляет предгруппированные списки по `warningType`
+- Шаблон: `zoomos/check-results-v2.html`
+
+Атрибуты модели, добавляемые в v2:
+
+| Атрибут | warningType | Блок |
+|---|---|---|
+| `errorsStockDrop100` | STOCK_DROP_100 | ERROR |
+| `errorsStockDrop` | STOCK_DROP | ERROR |
+| `errorsNotFound` | NOT_FOUND | ERROR |
+| `noProducts` | NO_PRODUCTS | WARNING |
+| `alwaysZero` | ALWAYS_ZERO_STOCK | WARNING |
+| `slowParsing` | SLOW_PARSING | WARNING |
+| `inProgress` | IN_PROGRESS | WARNING |
+| `errorGrowth` | ERROR_GROWTH | WARNING |
+| `trendStock` | TREND_STOCK | TREND |
+| `trendSpeed` | TREND_SPEED | TREND |
+| `trendErrors` | TREND_ERRORS | TREND |
 
 ---
 

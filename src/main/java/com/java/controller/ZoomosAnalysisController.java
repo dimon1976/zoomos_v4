@@ -1063,13 +1063,13 @@ public class ZoomosAnalysisController {
                 if (historical.size() < 3) continue; // недостаточно данных
 
                 Map<String, Double> baseline = checkService.computeMedianBaseline(historical);
-                List<String> trendWarnings = checkService.evaluateTrend(
+                List<Map<String, String>> trendWarnings = checkService.evaluateTrend(
                         current, baseline,
                         run.getTrendDropThreshold() != null ? run.getTrendDropThreshold() : 30,
                         run.getTrendErrorThreshold() != null ? run.getTrendErrorThreshold() : 100,
                         baselineFrom, baselineTo);
 
-                for (String msg : trendWarnings) {
+                for (Map<String, String> tw : trendWarnings) {
                     Map<String, Object> issue = new LinkedHashMap<>();
                     issue.put("site", siteName);
                     issue.put("city", cityName);
@@ -1078,7 +1078,8 @@ public class ZoomosAnalysisController {
                     issue.put("checkType", current.getCheckType());
                     issue.put("shopName", run.getShop().getShopName());
                     issue.put("type", "TREND_WARNING");
-                    issue.put("message", msg);
+                    issue.put("message", tw.get("message"));
+                    issue.put("warningType", tw.get("warningType"));
                     issues.add(issue);
                 }
             }
@@ -1225,6 +1226,47 @@ public class ZoomosAnalysisController {
         }
 
         return "zoomos/check-results";
+    }
+
+    /**
+     * Новый вид результатов (бета): иерархическая группировка по типам проблем.
+     * Использует ту же логику, что checkResults(), и добавляет предгруппированные списки.
+     */
+    @SuppressWarnings("unchecked")
+    @GetMapping("/check/results-v2/{runId}")
+    public String checkResultsV2(@PathVariable Long runId, Model model) {
+        checkResults(runId, model);
+
+        Map<String, Object> attrs = model.asMap();
+        List<Map<String, Object>> mainIssues  = (List<Map<String, Object>>) attrs.getOrDefault("issues", List.of());
+        List<Map<String, Object>> trendIssues = (List<Map<String, Object>>) attrs.getOrDefault("trendIssues", List.of());
+
+        Map<String, List<Map<String, Object>>> grouped = mainIssues.stream()
+                .collect(Collectors.groupingBy(i -> (String) i.getOrDefault("warningType", "OTHER")));
+        Map<String, List<Map<String, Object>>> trendGrouped = trendIssues.stream()
+                .collect(Collectors.groupingBy(i -> (String) i.getOrDefault("warningType", "OTHER")));
+
+        // Блок 1 — ERROR
+        model.addAttribute("errorsStockDrop100", grouped.getOrDefault("STOCK_DROP_100", List.of()));
+        model.addAttribute("errorsStockDrop",    grouped.getOrDefault("STOCK_DROP", List.of()));
+        model.addAttribute("errorsNotFound",     grouped.getOrDefault("NOT_FOUND", List.of()));
+
+        // Блок 2 — WARNING подгруппы
+        model.addAttribute("noProducts",  grouped.getOrDefault("NO_PRODUCTS", List.of()));
+        model.addAttribute("alwaysZero",  grouped.getOrDefault("ALWAYS_ZERO_STOCK", List.of()));
+        model.addAttribute("slowParsing", grouped.getOrDefault("SLOW_PARSING", List.of()));
+        model.addAttribute("inProgress",  grouped.getOrDefault("IN_PROGRESS", List.of()));
+        model.addAttribute("errorGrowth", grouped.getOrDefault("ERROR_GROWTH", List.of()));
+
+        // Блок 3 — TREND подгруппы
+        model.addAttribute("trendStock",  trendGrouped.getOrDefault("TREND_STOCK", List.of()));
+        model.addAttribute("trendSpeed",  trendGrouped.getOrDefault("TREND_SPEED", List.of()));
+        model.addAttribute("trendErrors", trendGrouped.getOrDefault("TREND_ERRORS", List.of()));
+
+        // Алиас для удобства в шаблоне
+        model.addAttribute("okCount", attrs.getOrDefault("liveOkCount", 0L));
+
+        return "zoomos/check-results-v2";
     }
 
     /**
@@ -1572,6 +1614,7 @@ public class ZoomosAnalysisController {
         issue.put("noData", true); // маркер: нет данных (бывший NOT_FOUND/IN_PROGRESS)
         if (ip == null) {
             issue.put("type", "ERROR");
+            issue.put("warningType", "NOT_FOUND");
             String aid = (String) issue.get("addressId");
             String cityId = (String) issue.get("cityId");
             if (aid != null && !aid.isBlank()) {
@@ -1588,6 +1631,7 @@ public class ZoomosAnalysisController {
             boolean frozen = ip.getUpdatedTime() != null &&
                     ip.getUpdatedTime().isBefore(ZonedDateTime.now().minusHours(2));
             issue.put("type", "WARNING"); // IN_PROGRESS и frozen → WARNING (не блокирует canDeliver)
+            issue.put("warningType", "IN_PROGRESS");
             issue.put("inProgress", ip);
             String pct = ip.getCompletionTotal() != null ? ip.getCompletionTotal() : "?";
             String startStr = ip.getStartTime() != null
