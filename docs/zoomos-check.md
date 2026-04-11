@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-04 (code review fixes: TOCTOU в FileDownloadController, Open Redirect — проверка порта в GlobalExceptionHandler, SecurityHeadersInterceptor заменён на SecurityHeadersFilter, SchedulePageDto вместо Map, findLastRunsForShops → JPQL+JOIN FETCH)
+> Последнее обновление: 2026-04 (resolveCityDisplay — единый метод нормализации city-строк; кнопка "=цены" для CITIES_EQUAL_PRICES на check-results-v2; code review fixes: TOCTOU, Open Redirect, SecurityHeadersFilter, SchedulePageDto, JOIN FETCH)
 
 ## Назначение
 
@@ -365,6 +365,7 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | `AddressFilterContext` | private record внутри `ZoomosCheckService` — контекст фильтрации city/address |
 | `ZoomosCityId.masterCityId` | Мастер-город: если задан, проверяется только этот город; остальные из `city_ids` и `address_ids` игнорируются |
 | `ZoomosCityId.hasConfigIssue` / `configIssueNote` | Флаг конфигурационной проблемы (V54): помечает пару клиент→сайт как проблемную; note — произвольный текст; endpoint `POST /zoomos/city-ids/{id}/config-issue` |
+| `ZoomosCheckService.resolveCityDisplay(cityStr, map)` | Статический метод нормализации: `"1913"` → `"1913 - Алматы"`. Если строка уже содержит `" - "` — возвращает как есть. Использовать во всех местах отображения города. |
 
 **Запуск проверки** через `checkService.runCheck(ZoomosCheckParams.builder()...build())` — из контроллера и планировщика.
 
@@ -384,4 +385,5 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | `RedmineService.java` | Вся бизнес-логика Redmine |
 | `ZoomosRedmineController.java` | REST endpoints `/zoomos/redmine/*` |
 | `check-results.html` | Страница результатов (4 блока + тренды) |
+| `check-results-v2.html` | Новый вид страницы результатов с кнопкой `=цены` (CITIES_EQUAL_PRICES) для каждого сайта и кнопкой "= цены (все)" для массовой проверки |
 | `layout/main.html` | Глобальный priority-alerts баннер |

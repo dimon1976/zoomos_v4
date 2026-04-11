@@ -97,6 +97,15 @@
        class="btn btn-sm btn-outline-secondary">
         <i class="fas fa-list me-1"></i>Старый вид
     </a>
+    <button id="btnFetchAllEqPrices" type="button"
+            class="btn btn-sm btn-outline-info"
+            title="Проверить CITIES_EQUAL_PRICES для всех сайтов"
+            onclick="event.stopPropagation(); fetchAllEqPrices()">
+        <i class="fas fa-sync-alt me-1"></i>= цены (все)
+    </button>
+    <span id="eqPricesProgress" class="small text-muted d-none">
+        <i class="fas fa-spinner fa-spin me-1"></i><span id="eqPricesProgressText">0/0</span>
+    </span>
 </div>
 
 <!-- ══════════════ Контент ══════════════ -->
@@ -243,6 +252,17 @@
                         <a th:unless="${issue['checkType'] == 'API'}"
                            th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + issue['shopName'] + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}"
                            target="_blank" class="btn btn-xs btn-outline-secondary" title="История (ITEM)"><i class="fas fa-history"></i></a>
+                        <!-- Eq-prices -->
+                        <button type="button"
+                                th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                th:data-site="${issue['site']}"
+                                th:data-site-id="${siteIdByName[issue['site']]}"
+                                th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                            <i class="fas fa-sync-alt me-1"></i>=цены
+                        </button>
                         <!-- Redmine -->
                         <th:block th:if="${redmineEnabled}">
                             <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}"
@@ -324,6 +344,16 @@
                         </button>
                         <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}" target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                         <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}" target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                        <button type="button"
+                                th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                th:data-site="${issue['site']}"
+                                th:data-site-id="${siteIdByName[issue['site']]}"
+                                th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                            <i class="fas fa-sync-alt me-1"></i>=цены
+                        </button>
                         <th:block th:if="${redmineEnabled}">
                             <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                 <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -389,6 +419,16 @@
                         <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}"
                            target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                         <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}" target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                        <button type="button"
+                                th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                th:data-site="${issue['site']}"
+                                th:data-site-id="${siteIdByName[issue['site']]}"
+                                th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                            <i class="fas fa-sync-alt me-1"></i>=цены
+                        </button>
                         <th:block th:if="${redmineEnabled}">
                             <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                 <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -461,6 +501,16 @@
                             <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}" target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                             <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}"
                                target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                            <button type="button"
+                                    th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                    th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                    th:data-site="${issue['site']}"
+                                    th:data-site-id="${siteIdByName[issue['site']]}"
+                                    th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                    th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                    onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                                <i class="fas fa-sync-alt me-1"></i>=цены
+                            </button>
                             <th:block th:if="${redmineEnabled}">
                                 <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                     <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -518,6 +568,16 @@
                             <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}" target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                             <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}"
                                target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                            <button type="button"
+                                    th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                    th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                    th:data-site="${issue['site']}"
+                                    th:data-site-id="${siteIdByName[issue['site']]}"
+                                    th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                    th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                    onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                                <i class="fas fa-sync-alt me-1"></i>=цены
+                            </button>
                             <th:block th:if="${redmineEnabled}">
                                 <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                     <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -575,6 +635,16 @@
                             <a th:href="${baseUrl + '/shop/' + issue['shopName'] + '/sites-items-mapping?site=' + issue['site'] + '&onlyAssociated=1'}" target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                             <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}"
                                target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                            <button type="button"
+                                    th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                    th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                    th:data-site="${issue['site']}"
+                                    th:data-site-id="${siteIdByName[issue['site']]}"
+                                    th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                    th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                    onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                                <i class="fas fa-sync-alt me-1"></i>=цены
+                            </button>
                             <th:block th:if="${redmineEnabled}">
                                 <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                     <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -637,6 +707,16 @@
                                target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                             <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}"
                                target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                            <button type="button"
+                                    th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                    th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                    th:data-site="${issue['site']}"
+                                    th:data-site-id="${siteIdByName[issue['site']]}"
+                                    th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                    th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                    onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                                <i class="fas fa-sync-alt me-1"></i>=цены
+                            </button>
                             <th:block th:if="${redmineEnabled}">
                                 <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                     <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -714,6 +794,16 @@
                                target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                             <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}"
                                target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                            <button type="button"
+                                    th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                    th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                    th:data-site="${issue['site']}"
+                                    th:data-site-id="${siteIdByName[issue['site']]}"
+                                    th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                    th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                    onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                                <i class="fas fa-sync-alt me-1"></i>=цены
+                            </button>
                             <th:block th:if="${redmineEnabled}">
                                 <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                     <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -794,6 +884,16 @@
                                target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                             <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}"
                                target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                            <button type="button"
+                                    th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                    th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                    th:data-site="${issue['site']}"
+                                    th:data-site-id="${siteIdByName[issue['site']]}"
+                                    th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                    th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                    onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                                <i class="fas fa-sync-alt me-1"></i>=цены
+                            </button>
                             <th:block th:if="${redmineEnabled}">
                                 <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                     <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -856,6 +956,16 @@
                                target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                             <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}"
                                target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                            <button type="button"
+                                    th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                    th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                    th:data-site="${issue['site']}"
+                                    th:data-site-id="${siteIdByName[issue['site']]}"
+                                    th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                    th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                    onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                                <i class="fas fa-sync-alt me-1"></i>=цены
+                            </button>
                             <th:block th:if="${redmineEnabled}">
                                 <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                     <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -918,6 +1028,16 @@
                                target="_blank" class="btn btn-xs btn-outline-primary" title="Матчинг"><i class="fas fa-link"></i></a>
                             <a th:href="${baseUrl + '/shops-parser/' + issue['site'] + '/parsing-history?dateFrom=' + #temporals.format(run.dateFrom, 'dd.MM.yyyy') + '&dateTo=' + #temporals.format(run.dateTo, 'dd.MM.yyyy') + '&shop=' + (issue['checkType'] == 'API' ? '-' : issue['shopName']) + '&cityId=' + (issue['cityId'] != null ? issue['cityId'] : '') + '&addressId=' + (issue['addressId'] != null ? issue['addressId'] : '')}"
                                target="_blank" class="btn btn-xs btn-outline-secondary" title="История парсинга"><i class="fas fa-history"></i></a>
+                            <button type="button"
+                                    th:if="${siteIdByName != null and siteIdByName[issue['site']] != null}"
+                                    th:class="'btn btn-xs btn-fetch-eq-prices ' + (${equalPricesBySite != null and equalPricesBySite[issue['site']] == true} ? 'btn-outline-success' : (${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null} ? 'btn-outline-info' : 'btn-outline-secondary'))"
+                                    th:data-site="${issue['site']}"
+                                    th:data-site-id="${siteIdByName[issue['site']]}"
+                                    th:data-checked-at="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? equalPricesCheckedAtBySite[issue['site']] : ''}"
+                                    th:title="${equalPricesCheckedAtBySite != null and equalPricesCheckedAtBySite[issue['site']] != null ? ('= цены: ' + (equalPricesBySite[issue['site']] == true ? 'ДА' : 'НЕТ') + ', проверка ' + equalPricesCheckedAtBySite[issue['site']]) : 'Проверить CITIES_EQUAL_PRICES'}"
+                                    onclick="event.stopPropagation(); fetchEqPricesForSite(this)">
+                                <i class="fas fa-sync-alt me-1"></i>=цены
+                            </button>
                             <th:block th:if="${redmineEnabled}">
                                 <div class="btn-group btn-group-sm" th:if="${redmineIssues[issue['site']] != null}" th:data-rm-site="${issue['site']}">
                                     <a th:href="${redmineIssues[issue['site']].issueUrl}" target="_blank" th:class="'btn btn-xs px-2 ' + (${redmineIssues[issue['site']].closed} ? 'btn-success' : 'btn-danger')" th:text="'#' + ${redmineIssues[issue['site']].issueId}"></a>
@@ -1051,6 +1171,42 @@
                 <button id="ciSaveBtn" class="btn btn-sm btn-warning">
                     <i class="fas fa-save me-1"></i>Сохранить
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════���════════════════════════
+     Modal: CITIES_EQUAL_PRICES — выбор мастер-города
+═══════════════════════��═══════════════════════ -->
+<div id="eqPricesModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="fas fa-city me-2 text-success"></i>
+                    Цены копируются — <span id="eqSiteName" class="fw-bold"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-1">Выберите из выкачанных городов:</p>
+                <div id="eqCitiesList" class="list-group list-group-flush mb-2" style="max-height:200px;overflow-y:auto"></div>
+                <hr class="my-2">
+                <p class="small text-muted mb-1">Или введите ID города вручную:</p>
+                <div class="input-group input-group-sm">
+                    <input type="text" id="eqManualCityId" class="form-control" placeholder="напр. 4400 - Москва">
+                    <button class="btn btn-outline-primary" type="button" id="eqManualSetBtn">Установить</button>
+                </div>
+                <button class="btn btn-sm btn-outline-danger w-100 mt-2" type="button" id="eqClearBtn">
+                    <i class="fas fa-times me-1"></i>Снять мастер-город
+                </button>
+                <div id="eqMasterMsg" class="alert alert-success py-1 small mt-2 d-none">
+                    <i class="fas fa-check me-1"></i>Сохранено
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
             </div>
         </div>
     </div>
@@ -1691,6 +1847,156 @@
         });
         if (!lines.length) return;
         navigator.clipboard.writeText(lines.join('\n')).then(() => animateCopyBtn(btn, 'Скопировано ' + lines.length));
+    }
+
+    // ── CITIES_EQUAL_PRICES ───────────────────────────────────────────
+    let _eqSiteId = null, _eqSiteName = null;
+
+    function fetchEqPricesForSite(btn) {
+        const siteId = btn.dataset.siteId, siteName = btn.dataset.site;
+        const hasMasterCity = !!document.querySelector(
+            '.site-row[data-site="' + CSS.escape(siteName) + '"] .badge[title="Выкачка только по мастер-городу"]');
+        if (btn.classList.contains('btn-outline-success') || hasMasterCity) {
+            fetch('/zoomos/sites/' + siteId + '/historical-cities')
+                .then(r => r.json())
+                .then(cities => showEqModal(siteName, siteId, cities))
+                .catch(() => showEqModal(siteName, siteId, []));
+            return;
+        }
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Проверка\u2026';
+        fetch('/zoomos/sites/' + siteId + '/fetch-equal-prices', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                const now = new Date().toLocaleString('ru-RU',
+                    {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+                btn.dataset.checkedAt = now;
+                updateEqBadge(siteName, data.citiesEqualPrices, now);
+                if (data.success && data.citiesEqualPrices === true && data.historicalCities?.length)
+                    showEqModal(siteName, siteId, data.historicalCities);
+            })
+            .catch(() => { btn.disabled = false; btn.innerHTML = origHtml; });
+    }
+
+    function updateEqBadge(siteName, val, checkedAt) {
+        document.querySelectorAll('.site-row[data-site="' + CSS.escape(siteName) + '"] .btn-fetch-eq-prices')
+            .forEach(syncBtn => {
+                syncBtn.classList.remove('btn-outline-info', 'btn-outline-success', 'btn-outline-secondary');
+                if (val === true)       syncBtn.classList.add('btn-outline-success');
+                else if (val === false) syncBtn.classList.add('btn-outline-info');
+                else                   syncBtn.classList.add('btn-outline-secondary');
+                const when = checkedAt || syncBtn.dataset.checkedAt || '';
+                syncBtn.title = when
+                    ? ('= цены: ' + (val === true ? 'ДА' : 'НЕТ') + ', проверка ' + when)
+                    : 'Проверить CITIES_EQUAL_PRICES';
+                syncBtn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>=цены';
+            });
+    }
+
+    function applyMasterCity(city) {
+        if (!_eqSiteId) return;
+        const trimmedCity = (city || '').trim();
+        const msgEl = document.getElementById('eqMasterMsg');
+        msgEl.classList.add('d-none');
+        fetch('/zoomos/sites/' + _eqSiteId + '/master-city', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'masterCityId=' + encodeURIComponent(trimmedCity)
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                msgEl.textContent = trimmedCity ? '\u2713 Мастер-город: ' + trimmedCity : '\u2713 Мастер-город снят';
+                msgEl.classList.remove('d-none');
+                document.querySelectorAll('.site-row[data-site="' + CSS.escape(_eqSiteName) + '"]')
+                    .forEach(row => {
+                        let badge = row.querySelector('.badge[title="Выкачка только по мастер-городу"]');
+                        if (trimmedCity) {
+                            if (!badge) {
+                                badge = document.createElement('span');
+                                badge.className = 'badge bg-info bg-opacity-75 text-dark';
+                                badge.style.fontSize = '0.65rem';
+                                badge.title = 'Выкачка только по мастер-городу';
+                                row.querySelector('.site-name')?.insertAdjacentElement('afterend', badge);
+                            }
+                            badge.textContent = '\u2197 ' + trimmedCity;
+                        } else if (badge) { badge.remove(); }
+                    });
+            }
+        }).catch(() => {});
+    }
+
+    function showEqModal(siteName, siteId, cities) {
+        _eqSiteName = siteName;
+        _eqSiteId = siteId;
+        document.getElementById('eqSiteName').textContent = siteName;
+        document.getElementById('eqMasterMsg').classList.add('d-none');
+        document.getElementById('eqManualCityId').value = '';
+        const list = document.getElementById('eqCitiesList');
+        list.innerHTML = '';
+        if (!cities.length) {
+            list.innerHTML = '<div class="text-muted small py-1">Нет данных</div>';
+        } else {
+            cities.forEach(city => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'list-group-item list-group-item-action py-1 small';
+                btn.textContent = city;
+                btn.onclick = function() {
+                    list.querySelectorAll('.list-group-item').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    document.getElementById('eqManualCityId').value = city;
+                    applyMasterCity(city);
+                };
+                list.appendChild(btn);
+            });
+        }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('eqPricesModal')).show();
+    }
+
+    document.getElementById('eqManualSetBtn')?.addEventListener('click', function() {
+        applyMasterCity(document.getElementById('eqManualCityId').value);
+    });
+    document.getElementById('eqClearBtn')?.addEventListener('click', function() {
+        applyMasterCity('');
+    });
+
+    async function fetchAllEqPrices() {
+        const seenSites = new Set();
+        const btns = [...document.querySelectorAll('.btn-fetch-eq-prices')]
+            .filter(btn => {
+                if (seenSites.has(btn.dataset.site)) return false;
+                seenSites.add(btn.dataset.site);
+                return true;
+            });
+        if (!btns.length) return;
+        const globalBtn = document.getElementById('btnFetchAllEqPrices');
+        const progressEl = document.getElementById('eqPricesProgress');
+        const progressText = document.getElementById('eqPricesProgressText');
+        if (globalBtn) globalBtn.disabled = true;
+        if (progressEl) progressEl.classList.remove('d-none');
+        let done = 0;
+        if (progressText) progressText.textContent = '0/' + btns.length;
+        for (const btn of btns) {
+            const origHtml = btn.innerHTML;
+            document.querySelectorAll('.site-row[data-site="' + CSS.escape(btn.dataset.site) + '"] .btn-fetch-eq-prices')
+                .forEach(b => { b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Проверка\u2026'; });
+            try {
+                const data = await fetch('/zoomos/sites/' + btn.dataset.siteId + '/fetch-equal-prices',
+                    { method: 'POST' }).then(r => r.json());
+                const now = new Date().toLocaleString('ru-RU',
+                    {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+                updateEqBadge(btn.dataset.site, data.citiesEqualPrices, now);
+            } catch(e) {
+                document.querySelectorAll('.site-row[data-site="' + CSS.escape(btn.dataset.site) + '"] .btn-fetch-eq-prices')
+                    .forEach(b => { b.disabled = false; b.innerHTML = origHtml; });
+            }
+            document.querySelectorAll('.site-row[data-site="' + CSS.escape(btn.dataset.site) + '"] .btn-fetch-eq-prices')
+                .forEach(b => b.disabled = false);
+            if (progressText) progressText.textContent = (++done) + '/' + btns.length;
+        }
+        if (globalBtn) globalBtn.disabled = false;
+        if (progressEl) progressEl.classList.add('d-none');
     }
 
     // ── Инициализация ─────────────────────────────────────────────────

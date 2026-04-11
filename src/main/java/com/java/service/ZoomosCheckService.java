@@ -857,6 +857,18 @@ public class ZoomosCheckService {
         return null;
     }
 
+    /**
+     * Нормализует city-строку для отображения: "1913" → "1913 - Алматы" (если имя есть в map).
+     * Если cityStr уже содержит " - " — возвращает как есть.
+     * Единый метод для всех страниц и контроллеров.
+     */
+    public static String resolveCityDisplay(String cityStr, Map<String, String> cityNamesMap) {
+        if (cityStr == null || cityStr.isBlank()) return cityStr;
+        if (cityStr.contains(" - ")) return cityStr;
+        String name = cityNamesMap != null ? cityNamesMap.get(cityStr) : null;
+        return name != null ? cityStr + " - " + name : cityStr;
+    }
+
     private void upsertCityAddresses(List<ZoomosParsingStats> stats) {
         int saved = 0, skipped = 0;
         for (ZoomosParsingStats s : stats) {

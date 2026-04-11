@@ -637,6 +637,10 @@ public class ZoomosAnalysisController {
         List<ZoomosParsingStats> allStatsList = parsingStatsRepository
                 .findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(runId);
 
+        // Карта cityId→cityName для нормализации city-строк в issues (один запрос на весь метод)
+        Map<String, String> cityNamesMap = cityNameRepository.findAll().stream()
+                .collect(Collectors.toMap(ZoomosCityName::getCityId, ZoomosCityName::getCityName, (a, b) -> a));
+
         // Разделяем на завершённые и in-progress
         List<ZoomosParsingStats> stats = allStatsList.stream()
                 .filter(s -> !Boolean.FALSE.equals(s.getIsFinished()))
@@ -944,7 +948,7 @@ public class ZoomosAnalysisController {
                 String addrCity = addrToCityResolved.get(aid);
                 Map<String, Object> issue = new LinkedHashMap<>();
                 issue.put("site", site);
-                issue.put("city", addrCity != null ? addrCity : "");
+                issue.put("city", ZoomosCheckService.resolveCityDisplay(addrCity, cityNamesMap));
                 issue.put("cityId", addrCity != null ? addrCity : "");
                 issue.put("addressId", aid);
                 issue.put("checkType", cid.getCheckType());
