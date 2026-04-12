@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-04 (resolveCityDisplay — единый метод нормализации city-строк; кнопка "=цены" для CITIES_EQUAL_PRICES на check-results-v2; code review fixes: TOCTOU, Open Redirect, SecurityHeadersFilter, SchedulePageDto, JOIN FETCH)
+> Последнее обновление: 2026-04 (domain grouping в check-results-v2: `groupByDomain()` группирует issues по домену `LinkedHashMap<String, List>`; `evaluateTrend()` возвращает `List<Map<String, Object>>` с полями `shortMessage` и `numDeltaAbs`; `enrichIssue()` добавляет shortMessage/numDeltaAbs к issue; stat-pills стали якорями-ссылками; resolveCityDisplay — единый метод нормализации city-строк)
 
 ## Назначение
 
@@ -176,7 +176,7 @@ public record MedianStats(Integer inStock, Integer totalProducts, Integer durati
 - `TREND_WARNING` issues отображаются в отдельном **свёрнутом** блоке "Тренды" (Блок 2.5)
 - Не влияют на `canDeliver`, не попадают в блок "На что обратить внимание"
 - Требует `baselineDays > 0` и не менее 3 исторических записей
-- `evaluateTrend()` возвращает `List<Map<String, String>>` с полями `"message"` и `"warningType"`
+- `evaluateTrend()` возвращает `List<Map<String, Object>>` с полями `"message"`, `"warningType"`, `"shortMessage"` (числовая часть без префикса) и `"numDeltaAbs"` (0–100, для мини-бара)
 
 ### Типы warningType (тренды)
 
@@ -215,19 +215,29 @@ Endpoint `GET /check/results-v2/{runId}` реализован в `ZoomosAnalysis
 
 Атрибуты модели, добавляемые в v2:
 
-| Атрибут | warningType | Блок |
-|---|---|---|
-| `errorsStockDrop100` | STOCK_DROP_100 | ERROR |
-| `errorsStockDrop` | STOCK_DROP | ERROR |
-| `errorsNotFound` | NOT_FOUND | ERROR |
-| `noProducts` | NO_PRODUCTS | WARNING |
-| `alwaysZero` | ALWAYS_ZERO_STOCK | WARNING |
-| `slowParsing` | SLOW_PARSING | WARNING |
-| `inProgress` | IN_PROGRESS | WARNING |
-| `errorGrowth` | ERROR_GROWTH | WARNING |
-| `trendStock` | TREND_STOCK | TREND |
-| `trendSpeed` | TREND_SPEED | TREND |
-| `trendErrors` | TREND_ERRORS | TREND |
+| Атрибут | Тип | warningType | Блок |
+|---|---|---|---|
+| `errorsStockDrop100` | `LinkedHashMap<String, List>` (по домену) | STOCK_DROP_100 | ERROR |
+| `errorsStockDrop` | `LinkedHashMap<String, List>` (по домену) | STOCK_DROP | ERROR |
+| `errorsNotFound` | `LinkedHashMap<String, List>` (по домену) | NOT_FOUND | ERROR |
+| `errorsStockDrop100Count` | int | — | ERROR |
+| `errorsStockDropCount` | int | — | ERROR |
+| `errorsNotFoundCount` | int | — | ERROR |
+| `noProducts` | `LinkedHashMap<String, List>` (по домену) | NO_PRODUCTS | WARNING |
+| `alwaysZero` | `LinkedHashMap<String, List>` (по домену) | ALWAYS_ZERO_STOCK | WARNING |
+| `slowParsing` | `LinkedHashMap<String, List>` (по домену) | SLOW_PARSING | WARNING |
+| `inProgress` | `LinkedHashMap<String, List>` (по домену) | IN_PROGRESS | WARNING |
+| `errorGrowth` | `LinkedHashMap<String, List>` (по домену) | ERROR_GROWTH | WARNING |
+| `noProductsCount`, `alwaysZeroCount`, ... | int | — | WARNING |
+| `trendStock` | `LinkedHashMap<String, List>` (по домену) | TREND_STOCK | TREND |
+| `trendSpeed` | `LinkedHashMap<String, List>` (по домену) | TREND_SPEED | TREND |
+| `trendErrors` | `LinkedHashMap<String, List>` (по домену) | TREND_ERRORS | TREND |
+| `trendStockCount`, `trendSpeedCount`, `trendErrorsCount` | int | — | TREND |
+
+Все списки сгруппированы через `groupByDomain(List<Map<String, Object>>)` — приватный метод контроллера, возвращает `LinkedHashMap<String, List<Map<String, Object>>>` (ключ = поле `site`, порядок сохранён).
+
+Поле `shortMessage` в issue — числовая часть сообщения без текстового префикса (для компактного отображения в строке).
+Поле `numDeltaAbs` — величина отклонения 0–100 (для мини delta-bar в шаблоне).
 
 ---
 

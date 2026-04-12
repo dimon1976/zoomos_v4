@@ -1067,13 +1067,13 @@ public class ZoomosAnalysisController {
                 if (historical.size() < 3) continue; // недостаточно данных
 
                 Map<String, Double> baseline = checkService.computeMedianBaseline(historical);
-                List<Map<String, String>> trendWarnings = checkService.evaluateTrend(
+                List<Map<String, Object>> trendWarnings = checkService.evaluateTrend(
                         current, baseline,
                         run.getTrendDropThreshold() != null ? run.getTrendDropThreshold() : 30,
                         run.getTrendErrorThreshold() != null ? run.getTrendErrorThreshold() : 100,
                         baselineFrom, baselineTo);
 
-                for (Map<String, String> tw : trendWarnings) {
+                for (Map<String, Object> tw : trendWarnings) {
                     Map<String, Object> issue = new LinkedHashMap<>();
                     issue.put("site", siteName);
                     issue.put("city", cityName);
@@ -1084,6 +1084,8 @@ public class ZoomosAnalysisController {
                     issue.put("type", "TREND_WARNING");
                     issue.put("message", tw.get("message"));
                     issue.put("warningType", tw.get("warningType"));
+                    if (tw.get("shortMessage") != null) issue.put("shortMessage", tw.get("shortMessage"));
+                    if (tw.get("numDeltaAbs") != null)  issue.put("numDeltaAbs", tw.get("numDeltaAbs"));
                     issues.add(issue);
                 }
             }
@@ -1250,27 +1252,60 @@ public class ZoomosAnalysisController {
         Map<String, List<Map<String, Object>>> trendGrouped = trendIssues.stream()
                 .collect(Collectors.groupingBy(i -> (String) i.getOrDefault("warningType", "OTHER")));
 
-        // Блок 1 — ERROR
-        model.addAttribute("errorsStockDrop100", grouped.getOrDefault("STOCK_DROP_100", List.of()));
-        model.addAttribute("errorsStockDrop",    grouped.getOrDefault("STOCK_DROP", List.of()));
-        model.addAttribute("errorsNotFound",     grouped.getOrDefault("NOT_FOUND", List.of()));
+        // Блок 1 — ERROR (domain-grouped)
+        List<Map<String, Object>> sd100List = grouped.getOrDefault("STOCK_DROP_100", List.of());
+        List<Map<String, Object>> sdList    = grouped.getOrDefault("STOCK_DROP", List.of());
+        List<Map<String, Object>> nfList    = grouped.getOrDefault("NOT_FOUND", List.of());
+        model.addAttribute("errorsStockDrop100", groupByDomain(sd100List));
+        model.addAttribute("errorsStockDrop",    groupByDomain(sdList));
+        model.addAttribute("errorsNotFound",     groupByDomain(nfList));
+        model.addAttribute("errorsStockDrop100Count", sd100List.size());
+        model.addAttribute("errorsStockDropCount",    sdList.size());
+        model.addAttribute("errorsNotFoundCount",     nfList.size());
 
-        // Блок 2 — WARNING подгруппы
-        model.addAttribute("noProducts",  grouped.getOrDefault("NO_PRODUCTS", List.of()));
-        model.addAttribute("alwaysZero",  grouped.getOrDefault("ALWAYS_ZERO_STOCK", List.of()));
-        model.addAttribute("slowParsing", grouped.getOrDefault("SLOW_PARSING", List.of()));
-        model.addAttribute("inProgress",  grouped.getOrDefault("IN_PROGRESS", List.of()));
-        model.addAttribute("errorGrowth", grouped.getOrDefault("ERROR_GROWTH", List.of()));
+        // Блок 2 — WARNING подгруппы (domain-grouped)
+        List<Map<String, Object>> npList  = grouped.getOrDefault("NO_PRODUCTS", List.of());
+        List<Map<String, Object>> azList  = grouped.getOrDefault("ALWAYS_ZERO_STOCK", List.of());
+        List<Map<String, Object>> spList  = grouped.getOrDefault("SLOW_PARSING", List.of());
+        List<Map<String, Object>> ipList  = grouped.getOrDefault("IN_PROGRESS", List.of());
+        List<Map<String, Object>> egList  = grouped.getOrDefault("ERROR_GROWTH", List.of());
+        model.addAttribute("noProducts",  groupByDomain(npList));
+        model.addAttribute("alwaysZero",  groupByDomain(azList));
+        model.addAttribute("slowParsing", groupByDomain(spList));
+        model.addAttribute("inProgress",  groupByDomain(ipList));
+        model.addAttribute("errorGrowth", groupByDomain(egList));
+        model.addAttribute("noProductsCount",  npList.size());
+        model.addAttribute("alwaysZeroCount",  azList.size());
+        model.addAttribute("slowParsingCount", spList.size());
+        model.addAttribute("inProgressCount",  ipList.size());
+        model.addAttribute("errorGrowthCount", egList.size());
 
-        // Блок 3 — TREND подгруппы
-        model.addAttribute("trendStock",  trendGrouped.getOrDefault("TREND_STOCK", List.of()));
-        model.addAttribute("trendSpeed",  trendGrouped.getOrDefault("TREND_SPEED", List.of()));
-        model.addAttribute("trendErrors", trendGrouped.getOrDefault("TREND_ERRORS", List.of()));
+        // Блок 3 — TREND подгруппы (domain-grouped)
+        List<Map<String, Object>> tsList = trendGrouped.getOrDefault("TREND_STOCK", List.of());
+        List<Map<String, Object>> tspList = trendGrouped.getOrDefault("TREND_SPEED", List.of());
+        List<Map<String, Object>> teList  = trendGrouped.getOrDefault("TREND_ERRORS", List.of());
+        model.addAttribute("trendStock",  groupByDomain(tsList));
+        model.addAttribute("trendSpeed",  groupByDomain(tspList));
+        model.addAttribute("trendErrors", groupByDomain(teList));
+        model.addAttribute("trendStockCount",  tsList.size());
+        model.addAttribute("trendSpeedCount",  tspList.size());
+        model.addAttribute("trendErrorsCount", teList.size());
 
         // Алиас для удобства в шаблоне
         model.addAttribute("okCount", attrs.getOrDefault("liveOkCount", 0L));
 
         return "zoomos/check-results-v2";
+    }
+
+    /** Группирует flat список issues по полю "site" (домен) в LinkedHashMap, сохраняя порядок. */
+    @SuppressWarnings("unchecked")
+    private LinkedHashMap<String, List<Map<String, Object>>> groupByDomain(
+            List<Map<String, Object>> issues) {
+        return issues.stream()
+                .collect(Collectors.groupingBy(
+                        i -> (String) i.getOrDefault("site", ""),
+                        LinkedHashMap::new,
+                        Collectors.toList()));
     }
 
     /**

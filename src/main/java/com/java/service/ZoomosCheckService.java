@@ -1140,13 +1140,14 @@ public class ZoomosCheckService {
      */
     /**
      * Сравнивает последнюю выкачку с baseline-медианой.
-     * Возвращает список TREND_WARNING: каждый элемент — Map с "message" и "warningType".
+     * Возвращает список TREND_WARNING: каждый элемент — Map с "message", "warningType",
+     * "shortMessage" (числовая часть без префикса) и "numDeltaAbs" (для мини-бара).
      */
-    public List<Map<String, String>> evaluateTrend(ZoomosParsingStats current,
+    public List<Map<String, Object>> evaluateTrend(ZoomosParsingStats current,
                                                     Map<String, Double> baseline,
                                                     int dropThreshold, int errorGrowthThreshold,
                                                     LocalDate baselineFrom, LocalDate baselineTo) {
-        List<Map<String, String>> warnings = new ArrayList<>();
+        List<Map<String, Object>> warnings = new ArrayList<>();
         String period = baselineFrom.format(DD_MM) + "–" + baselineTo.format(DD_MM);
         double dropFrac  = dropThreshold / 100.0;
         double errFrac   = errorGrowthThreshold / 100.0;
@@ -1158,11 +1159,15 @@ public class ZoomosCheckService {
             double cur  = (double) current.getInStock() / current.getTotalProducts();
             double base = baseline.get("stockRatio");
             if (base > 0 && (base - cur) / base > dropFrac) {
-                warnings.add(Map.of(
-                        "message", String.format(
-                                "Доля «В наличии» снизилась: было %.1f%% → стало %.1f%% (−%.0f%%) [норма %s]",
-                                base * 100, cur * 100, (base - cur) / base * 100, period),
-                        "warningType", "TREND_STOCK"));
+                double deltaPct = (base - cur) / base * 100;
+                Map<String, Object> tw = new LinkedHashMap<>();
+                tw.put("warningType", "TREND_STOCK");
+                tw.put("message", String.format(
+                        "Доля «В наличии» снизилась: было %.1f%% → стало %.1f%% (−%.0f%%) [норма %s]",
+                        base * 100, cur * 100, deltaPct, period));
+                tw.put("shortMessage", String.format("%.1f%% → %.1f%% (−%.0f%%)", base * 100, cur * 100, deltaPct));
+                tw.put("numDeltaAbs", (int) Math.min(deltaPct, 100));
+                warnings.add(tw);
             }
         }
 
@@ -1173,18 +1178,25 @@ public class ZoomosCheckService {
             double baseRate = baseline.get("errorRate");
             double deltaRate = curRate - baseRate;
             if (baseRate > 0 && deltaRate / baseRate > errFrac && deltaRate > 0.5) {
-                warnings.add(Map.of(
-                        "message", String.format(
-                                "Рост ошибок: было %.2f%% → стало %.2f%% от товаров (+%.0f%%) [норма %s]",
-                                baseRate, curRate, deltaRate / baseRate * 100, period),
-                        "warningType", "TREND_ERRORS"));
+                double growthPct = deltaRate / baseRate * 100;
+                Map<String, Object> tw = new LinkedHashMap<>();
+                tw.put("warningType", "TREND_ERRORS");
+                tw.put("message", String.format(
+                        "Рост ошибок: было %.2f%% → стало %.2f%% от товаров (+%.0f%%) [норма %s]",
+                        baseRate, curRate, growthPct, period));
+                tw.put("shortMessage", String.format("%.2f%% → %.2f%% (+%.0f%%)", baseRate, curRate, growthPct));
+                tw.put("numDeltaAbs", (int) Math.min(growthPct, 100));
+                warnings.add(tw);
             } else if (baseRate == 0) {
                 double appearedThreshold = Math.max(1.0, errFrac * 10);
                 if (curRate > appearedThreshold) {
-                    warnings.add(Map.of(
-                            "message", String.format(
-                                    "Появились ошибки: %.2f%% товаров [норма %s]", curRate, period),
-                            "warningType", "TREND_ERRORS"));
+                    Map<String, Object> tw = new LinkedHashMap<>();
+                    tw.put("warningType", "TREND_ERRORS");
+                    tw.put("message", String.format(
+                            "Появились ошибки: %.2f%% товаров [норма %s]", curRate, period));
+                    tw.put("shortMessage", String.format("0%% → %.2f%%", curRate));
+                    tw.put("numDeltaAbs", (int) Math.min(curRate, 100));
+                    warnings.add(tw);
                 }
             }
         }
@@ -1197,11 +1209,14 @@ public class ZoomosCheckService {
             if (baseRate > 0 && curRate > baseRate) {
                 double pct = (curRate - baseRate) / baseRate;
                 if (pct > dropFrac && (curRate - baseRate) > 0.1) {
-                    warnings.add(Map.of(
-                            "message", String.format(
-                                    "Скорость выкачки снизилась: было %.2f → стало %.2f мин/1000 тов. (+%.0f%%) [норма %s]",
-                                    baseRate, curRate, pct * 100, period),
-                            "warningType", "TREND_SPEED"));
+                    Map<String, Object> tw = new LinkedHashMap<>();
+                    tw.put("warningType", "TREND_SPEED");
+                    tw.put("message", String.format(
+                            "Скорость выкачки снизилась: было %.2f → стало %.2f мин/1000 тов. (+%.0f%%) [норма %s]",
+                            baseRate, curRate, pct * 100, period));
+                    tw.put("shortMessage", String.format("%.2f → %.2f мин/1000 тов. (+%.0f%%)", baseRate, curRate, pct * 100));
+                    tw.put("numDeltaAbs", (int) Math.min(pct * 100, 100));
+                    warnings.add(tw);
                 }
             }
         }
@@ -1429,6 +1444,7 @@ public class ZoomosCheckService {
         if (alwaysZeroProducts && allFullyComplete) {
             issues.add(makeIssueMap(siteName, cityName, cityId, addressId, addressName, checkType, shopName,
                     "WARNING", "100% выкачка, нет товаров — нужна проверка", "NO_PRODUCTS"));
+            enrichIssue(issues, null, 0);
             hasWarning = true;
         }
 
@@ -1442,6 +1458,7 @@ public class ZoomosCheckService {
                     && newest.getTotalProducts() != null && newest.getTotalProducts() > 0) {
                 issues.add(makeIssueMap(siteName, cityName, cityId, addressId, addressName, checkType, shopName,
                         "WARNING", "В наличии: 0 из " + newest.getTotalProducts() + " товаров (первая запись)", "ALWAYS_ZERO_STOCK"));
+                enrichIssue(issues, "всегда 0", 0);
                 hasWarning = true;
             }
             return new GroupEvalResult(hasWarning ? "WARNING" : "OK", issues);
@@ -1477,6 +1494,7 @@ public class ZoomosCheckService {
                     String prefix = usingBaseline ? String.format("[медиана: %d]", refInStock) : String.valueOf(lastNonZero);
                     issues.add(makeIssueMap(siteName, cityName, cityId, addressId, addressName, checkType, shopName,
                             "ERROR", String.format("В наличии: %s → 0 (−100%%)", prefix), "STOCK_DROP_100"));
+                    enrichIssue(issues, String.format("%s → 0 (−100%%)", prefix), 100);
                     hasError = true;
                 } else {
                     double drop = (double)(refInStock - newStock) / refInStock;
@@ -1484,6 +1502,7 @@ public class ZoomosCheckService {
                         String refLabel = usingBaseline ? String.format("[медиана: %d]", refInStock) : String.valueOf(refInStock);
                         issues.add(makeIssueMap(siteName, cityName, cityId, addressId, addressName, checkType, shopName,
                                 "ERROR", String.format("Падение 'В наличии': %s → %d (−%.0f%%)", refLabel, newStock, drop * 100), "STOCK_DROP"));
+                        enrichIssue(issues, String.format("%s → %d (−%.0f%%)", refLabel, newStock, drop * 100), (int)(drop * 100));
                         hasError = true;
                     }
                 }
@@ -1503,6 +1522,7 @@ public class ZoomosCheckService {
                     String refLabel = usingBaseline ? String.format("[медиана: %d]", refTotal) : String.valueOf(refTotal);
                     issues.add(makeIssueMap(siteName, cityName, cityId, addressId, addressName, checkType, shopName,
                             "ERROR", String.format("Падение товаров: %s → %d (−%.0f%%)", refLabel, newTotal, drop * 100), "STOCK_DROP"));
+                    enrichIssue(issues, String.format("%s → %d (−%.0f%%)", refLabel, newTotal, drop * 100), (int)(drop * 100));
                     hasError = true;
                 }
             }
@@ -1516,11 +1536,13 @@ public class ZoomosCheckService {
                     if (growth > errGrowthFraction) {
                         issues.add(makeIssueMap(siteName, cityName, cityId, addressId, addressName, checkType, shopName,
                                 "WARNING", String.format("Рост ошибок: %d → %d (+%.0f%%)", prevErrors, newErrors, growth * 100), "ERROR_GROWTH"));
+                        enrichIssue(issues, String.format("%d → %d (+%.0f%%)", prevErrors, newErrors, growth * 100), (int)(growth * 100));
                         hasWarning = true;
                     }
                 } else if (prevErrors == 0) {
                     issues.add(makeIssueMap(siteName, cityName, cityId, addressId, addressName, checkType, shopName,
                             "WARNING", String.format("Ошибки парсинга: 0 → %d", newErrors), "ERROR_GROWTH"));
+                    enrichIssue(issues, String.format("0 → %d", newErrors), 0);
                     hasWarning = true;
                 }
             }
@@ -1532,6 +1554,7 @@ public class ZoomosCheckService {
                 if (hasAnyProducts) {
                     issues.add(makeIssueMap(siteName, cityName, cityId, addressId, addressName, checkType, shopName,
                             "WARNING", "В наличии: всегда 0 — нужна проверка", "ALWAYS_ZERO_STOCK"));
+                    enrichIssue(issues, "всегда 0", 0);
                     hasWarning = true;
                 }
             }
@@ -1546,6 +1569,8 @@ public class ZoomosCheckService {
             if (refDur > 0 && (double) curDur > refDur * 1.5) {
                 issues.add(makeIssueMap(siteName, cityName, cityId, addressId, addressName, checkType, shopName,
                         "WARNING", String.format("Медленная выкачка: %d мин (базовый: %d мин)", curDur, refDur), "SLOW_PARSING"));
+                int slowPct = refDur > 0 ? (int) Math.min((double)(curDur - refDur) / refDur * 100, 100) : 0;
+                enrichIssue(issues, String.format("%d мин → %d мин базовый", curDur, refDur), slowPct);
                 hasWarning = true;
             }
         }
@@ -1566,6 +1591,15 @@ public class ZoomosCheckService {
     public static String buildBaselineKey(String siteName, String cityName, String addressId) {
         return siteName + "|" + (cityName != null ? cityName : "")
                 + "|" + (addressId != null ? addressId : "");
+    }
+
+    /** Добавляет shortMessage и numDeltaAbs к последнему issue в списке. */
+    private void enrichIssue(List<Map<String, Object>> issues, String shortMessage, int numDeltaAbs) {
+        if (!issues.isEmpty()) {
+            Map<String, Object> last = issues.get(issues.size() - 1);
+            if (shortMessage != null) last.put("shortMessage", shortMessage);
+            last.put("numDeltaAbs", Math.min(numDeltaAbs, 100));
+        }
     }
 
     private Map<String, Object> makeIssueMap(String siteName, String cityName, String cityId,
