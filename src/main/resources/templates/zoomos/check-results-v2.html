@@ -67,6 +67,31 @@
     .block-errors { border-color: #dc3545 !important; }
     .site-row.err-row { border-left: 3px solid #dc3545; }
 
+    /* ── Collapse-кнопки на заголовках блоков ─ */
+    .block-header-toggle { cursor: pointer; user-select: none; }
+    .block-toggle-icon { font-size: 0.75rem; color: #6c757d; transition: transform 0.2s; flex-shrink: 0; margin-left: auto; }
+    /* Bootstrap collapse: collapsed class on toggle button */
+    .block-header-toggle.collapsed .block-toggle-icon { transform: rotate(-90deg); }
+    /* Native <details>: chevron on summary inside closed details */
+    details:not([open]) > summary .block-toggle-icon { transform: rotate(-90deg); }
+
+    /* ── ERROR sub-groups (collapsible, start open) ─ */
+    .err-subgroup { margin: 0; }
+    .err-subgroup > summary {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.45rem 0.75rem; cursor: pointer; list-style: none;
+        font-size: 0.85rem; font-weight: 600;
+    }
+    .err-subgroup > summary::marker, .err-subgroup > summary::-webkit-details-marker { display: none; }
+    .err-subgroup > summary::before { content: '▶'; font-size: 0.55rem; transition: transform 0.15s; flex-shrink: 0; }
+    .err-subgroup[open] > summary::before { transform: rotate(90deg); }
+    .err-subgroup-red > summary { background-color: #dc3545; color: white; border-bottom: 1px solid #c82333; }
+    .err-subgroup-red > summary:hover { background-color: #c82333; }
+    .err-subgroup-red > summary::before { color: rgba(255,255,255,0.7); }
+    .err-subgroup-gray > summary { background: rgba(108,117,125,0.1); color: #6c757d; border-bottom: 1px solid #dee2e6; }
+    .err-subgroup-gray > summary:hover { background: rgba(108,117,125,0.15); }
+    .err-subgroup-gray > summary::before { color: #adb5bd; }
+
     /* ── Блок WARNING ────────────────── */
     .block-warnings { border-color: #ffc107 !important; }
     .warn-subgroup { border-left: 3px solid #ffc107; margin: 0 0 0.25rem; }
@@ -213,22 +238,23 @@
     <!-- ═══ БЛОК 1: ERROR (не сворачивается) ═══ -->
     <th:block th:if="${not #maps.isEmpty(errorsStockDrop100) or not #maps.isEmpty(errorsStockDrop) or not #maps.isEmpty(errorsNotFound)}">
     <div class="card mb-3 block-errors" id="block-errors">
-        <div class="card-header bg-danger bg-opacity-10 d-flex align-items-center gap-2 py-2">
+        <div class="card-header bg-danger bg-opacity-10 d-flex align-items-center gap-2 py-2 block-header-toggle"
+             data-bs-toggle="collapse" data-bs-target="#errors-body" aria-expanded="true" aria-controls="errors-body">
             <i class="fas fa-times-circle text-danger"></i>
             <strong>Критичные проблемы</strong>
             <span class="badge bg-danger ms-1"
                   th:text="${errorsStockDrop100Count + errorsStockDropCount + errorsNotFoundCount}">0</span>
+            <i class="fas fa-chevron-down block-toggle-icon"></i>
         </div>
-        <div class="card-body p-0">
+        <div class="card-body p-0 collapse show" id="errors-body">
 
             <!-- Подгруппа: В наличии упало до нуля -->
-            <th:block th:if="${not #maps.isEmpty(errorsStockDrop100)}">
-                <div class="px-3 py-2 bg-danger border-bottom d-flex align-items-center gap-2">
-                    <small class="fw-semibold text-white">
-                        <i class="fas fa-ban me-1"></i>В наличии упало до нуля
-                        <span class="badge bg-white text-danger ms-1" th:text="${errorsStockDrop100Count}">0</span>
-                    </small>
-                </div>
+            <details class="err-subgroup err-subgroup-red" open th:if="${not #maps.isEmpty(errorsStockDrop100)}">
+                <summary>
+                    <i class="fas fa-ban me-1"></i>В наличии упало до нуля
+                    <span class="badge bg-white text-danger ms-1" th:text="${errorsStockDrop100Count}">0</span>
+                </summary>
+                <div class="details-body">
                 <th:block th:each="de : ${errorsStockDrop100}">
                     <!-- Несколько городов: collapsible domain group -->
                     <details th:if="${#lists.size(de.value) > 1}" class="domain-group">
@@ -293,17 +319,16 @@
                             </div>
                         </div>
                     </th:block>
-                </th:block>
-            </th:block>
+                </div>
+                </details>
 
             <!-- Подгруппа: Падение > порога -->
-            <th:block th:if="${not #maps.isEmpty(errorsStockDrop)}">
-                <div class="px-3 py-2 bg-danger border-bottom d-flex align-items-center gap-2">
-                    <small class="fw-semibold text-white">
-                        <i class="fas fa-arrow-down me-1"></i>Падение «В наличии» выше порога
-                        <span class="badge bg-white text-danger ms-1" th:text="${errorsStockDropCount}">0</span>
-                    </small>
-                </div>
+            <details class="err-subgroup err-subgroup-red" open th:if="${not #maps.isEmpty(errorsStockDrop)}">
+                <summary>
+                    <i class="fas fa-arrow-down me-1"></i>Падение «В наличии» выше порога
+                    <span class="badge bg-white text-danger ms-1" th:text="${errorsStockDropCount}">0</span>
+                </summary>
+                <div class="details-body">
                 <th:block th:each="de : ${errorsStockDrop}">
                     <details th:if="${#lists.size(de.value) > 1}" class="domain-group">
                         <summary class="d-flex align-items-center gap-2">
@@ -366,17 +391,16 @@
                             </div>
                         </div>
                     </th:block>
-                </th:block>
-            </th:block>
+                </div>
+                </details>
 
             <!-- Подгруппа: Нет данных (серый, не красный — отсутствие запуска, а не ошибка) -->
-            <th:block th:if="${not #maps.isEmpty(errorsNotFound)}">
-                <div class="px-3 py-2 bg-secondary bg-opacity-10 border-bottom d-flex align-items-center gap-2">
-                    <small class="fw-semibold text-secondary">
-                        <i class="fas fa-database me-1"></i>Нет данных за период
-                        <span class="badge bg-secondary ms-1" th:text="${errorsNotFoundCount}">0</span>
-                    </small>
-                </div>
+            <details class="err-subgroup err-subgroup-gray" open th:if="${not #maps.isEmpty(errorsNotFound)}">
+                <summary>
+                    <i class="fas fa-database me-1"></i>Нет данных за период
+                    <span class="badge bg-secondary ms-1" th:text="${errorsNotFoundCount}">0</span>
+                </summary>
+                <div class="details-body">
                 <th:block th:each="de : ${errorsNotFound}">
                     <details th:if="${#lists.size(de.value) > 1}" class="domain-group">
                         <summary class="d-flex align-items-center gap-2">
@@ -441,8 +465,8 @@
                             </div>
                         </div>
                     </th:block>
-                </th:block>
-            </th:block>
+                </div>
+                </details>
 
         </div>
     </div>
@@ -451,14 +475,16 @@
     <!-- ═══ БЛОК 2: WARNING ═══ -->
     <th:block th:if="${not #maps.isEmpty(noProducts) or not #maps.isEmpty(alwaysZero) or not #maps.isEmpty(errorGrowth) or not #maps.isEmpty(slowParsing) or not #maps.isEmpty(inProgress)}">
     <div class="card mb-3 block-warnings" id="block-warnings">
-        <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center gap-2 py-2">
+        <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center gap-2 py-2 block-header-toggle"
+             data-bs-toggle="collapse" data-bs-target="#warnings-body" aria-expanded="true" aria-controls="warnings-body">
             <i class="fas fa-exclamation-triangle text-warning"></i>
             <strong>Обратите внимание</strong>
             <span class="badge bg-warning text-dark ms-1"
                   th:text="${noProductsCount + alwaysZeroCount + errorGrowthCount + slowParsingCount + inProgressCount}">0</span>
-            <span class="text-muted small ms-2">(клик на подгруппу — развернуть)</span>
+            <span class="text-muted small ms-2">(клик на подгруппу — развернуть/свернуть)</span>
+            <i class="fas fa-chevron-down block-toggle-icon"></i>
         </div>
-        <div class="card-body p-2">
+        <div class="card-body p-2 collapse show" id="warnings-body">
 
             <!-- Нет товаров -->
             <details class="warn-subgroup" th:if="${not #maps.isEmpty(noProducts)}">
@@ -828,7 +854,7 @@
     <!-- ═══ БЛОК 3: ТРЕНДЫ ═══ -->
     <th:block th:if="${not #maps.isEmpty(trendStock) or not #maps.isEmpty(trendSpeed) or not #maps.isEmpty(trendErrors)}">
     <details class="card mb-3 block-trends" id="block-trends">
-        <summary class="d-flex align-items-center gap-2 px-3 py-2" style="background:rgba(13,202,240,0.08)">
+        <summary class="d-flex align-items-center gap-2 px-3 py-2 block-header-toggle" style="background:rgba(13,202,240,0.08); list-style:none">
             <i class="fas fa-chart-line text-info"></i>
             <strong class="text-info">Тренды</strong>
             <span class="badge bg-info text-dark ms-1"
@@ -836,6 +862,7 @@
             <span th:if="${baselineDays != null}" class="text-muted small">
                 (норма за <span th:text="${baselineDays}"></span> дней)
             </span>
+            <i class="fas fa-chevron-down block-toggle-icon"></i>
         </summary>
         <div class="card-body p-2">
 
