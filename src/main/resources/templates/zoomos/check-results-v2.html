@@ -99,6 +99,7 @@
     .domain-group[open] > summary { background: rgba(0,0,0,0.045); }
     .domain-group > summary::before { content: '▶'; font-size: 0.6rem; color: #adb5bd; transition: transform 0.15s; flex-shrink: 0; margin-right: 0.25rem; }
     .domain-group[open] > summary::before { transform: rotate(90deg); }
+    .domain-group > summary:hover .site-actions { opacity: 1; }
     .city-row { padding-left: 2.25rem !important; background: rgba(0,0,0,0.008); }
 
     /* ── Блок "Нет данных" (secondary, не красный) ── */
@@ -1997,6 +1998,12 @@
     document.addEventListener('DOMContentLoaded', function() {
         applyHidden();
         setTimeout(runBatchCheck, 100);
+        // Кнопки/ссылки внутри <summary> не должны схлопывать группу
+        document.querySelectorAll('.domain-group > summary').forEach(function(s) {
+            s.addEventListener('click', function(e) {
+                if (e.target.closest('.btn, a')) e.preventDefault();
+            });
+        });
     });
 </script>
 </th:block>
