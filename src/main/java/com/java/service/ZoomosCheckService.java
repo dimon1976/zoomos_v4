@@ -1417,13 +1417,22 @@ public class ZoomosCheckService {
                                                    int dropThreshold, int errorGrowthThreshold,
                                                    int minAbsoluteErrors, boolean ignoreStock,
                                                    MedianStats baseline, String shopName) {
+        return evaluateAndBuildIssues(sortedGroup, dropThreshold, errorGrowthThreshold,
+                minAbsoluteErrors, ignoreStock, baseline, shopName, null);
+    }
+
+    public GroupEvalResult evaluateAndBuildIssues(List<ZoomosParsingStats> sortedGroup,
+                                                   int dropThreshold, int errorGrowthThreshold,
+                                                   int minAbsoluteErrors, boolean ignoreStock,
+                                                   MedianStats baseline, String shopName,
+                                                   Map<String, String> cityNamesMap) {
         if (sortedGroup == null || sortedGroup.isEmpty()) return GroupEvalResult.ok();
 
         ZoomosParsingStats newest = sortedGroup.get(sortedGroup.size() - 1);
         ZoomosParsingStats prev   = sortedGroup.size() >= 2 ? sortedGroup.get(sortedGroup.size() - 2) : null;
 
         String siteName    = newest.getSiteName();
-        String cityName    = newest.getCityName();
+        String cityName    = resolveCityDisplay(newest.getCityName(), cityNamesMap);
         String checkType   = newest.getCheckType() != null ? newest.getCheckType().name() : "ITEM";
         String addressId   = newest.getAddressId();
         String addressName = newest.getAddressName();

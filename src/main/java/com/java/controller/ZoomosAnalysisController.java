@@ -780,7 +780,7 @@ public class ZoomosAnalysisController {
                     for (Map<String, Object> info : incomplete) {
                         Map<String, Object> iss = new LinkedHashMap<>();
                         iss.put("site", siteName);
-                        iss.put("city", cityPart);
+                        iss.put("city", ZoomosCheckService.resolveCityDisplay(cityPart, cityNamesMap));
                         iss.put("cityId", cityId != null ? cityId : cityPart);
                         iss.put("checkType", cidConfig.getCheckType());
                         iss.put("shopName", run.getShop().getShopName());
@@ -830,7 +830,7 @@ public class ZoomosAnalysisController {
                 }
                 GroupEvalResult evalResult = checkService.evaluateAndBuildIssues(group, dropThreshold,
                         errorGrowthThreshold, minAbsoluteErrors, ignoreStock, groupBaseline,
-                        run.getShop().getShopName());
+                        run.getShop().getShopName(), cityNamesMap);
                 status = evalResult.status();
                 issues.addAll(evalResult.issues());
             }
@@ -982,7 +982,7 @@ public class ZoomosAnalysisController {
 
                 Map<String, Object> issue = new LinkedHashMap<>();
                 issue.put("site", site);
-                issue.put("city", rawCityId);   // отображение: "4400 - Москва"
+                issue.put("city", ZoomosCheckService.resolveCityDisplay(rawCityId, cityNamesMap));
                 issue.put("cityId", cityId);     // URL: только "4400"
                 issue.put("checkType", cid.getCheckType());
                 issue.put("shopName", run.getShop().getShopName());
@@ -1056,7 +1056,7 @@ public class ZoomosAnalysisController {
                 if (current.getCompletionPercent() == null || current.getCompletionPercent() < 100) continue;
 
                 String siteName = current.getSiteName();
-                String cityName = current.getCityName();
+                String cityName = ZoomosCheckService.resolveCityDisplay(current.getCityName(), cityNamesMap);
 
                 // Используем предзагруженные baseline-записи текущего run
                 // Ключ должен совпадать с форматом baselineByKey: siteName|cityName|addressId
@@ -1320,6 +1320,9 @@ public class ZoomosAnalysisController {
         List<ZoomosParsingStats> allStatsList = parsingStatsRepository
                 .findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(runId);
 
+        Map<String, String> cityNamesMap = cityNameRepository.findAll().stream()
+                .collect(Collectors.toMap(ZoomosCityName::getCityId, ZoomosCityName::getCityName, (a, b) -> a));
+
         List<ZoomosParsingStats> stats = allStatsList.stream()
                 .filter(s -> !Boolean.FALSE.equals(s.getIsFinished()))
                 .collect(Collectors.toCollection(ArrayList::new));
@@ -1430,7 +1433,7 @@ public class ZoomosAnalysisController {
                 }
                 GroupEvalResult evalResult = checkService.evaluateAndBuildIssues(group, dropThreshold,
                         errorGrowthThreshold, minAbsoluteErrors, ignoreStock, groupBaseline,
-                        run.getShop().getShopName());
+                        run.getShop().getShopName(), cityNamesMap);
                 status = evalResult.status();
                 issues.addAll(evalResult.issues());
             }
@@ -1531,7 +1534,7 @@ public class ZoomosAnalysisController {
                 if (foundAddressKeys.contains(site + "|" + aid)) continue;
                 String addrCity = addrToCityResolved.get(aid);
                 Map<String, Object> issue = new LinkedHashMap<>();
-                issue.put("site", site); issue.put("city", addrCity != null ? addrCity : "");
+                issue.put("site", site); issue.put("city", ZoomosCheckService.resolveCityDisplay(addrCity, cityNamesMap));
                 issue.put("cityId", addrCity != null ? addrCity : "");
                 issue.put("addressId", aid);
                 issue.put("checkType", cid.getCheckType()); issue.put("shopName", run.getShop().getShopName());
@@ -1553,7 +1556,7 @@ public class ZoomosAnalysisController {
                 if (addressCoveredCities.contains(rawCityId)) continue;
                 if (foundCityKeys.contains(site + "|" + cityId)) continue;
                 Map<String, Object> issue = new LinkedHashMap<>();
-                issue.put("site", site); issue.put("city", rawCityId); issue.put("cityId", cityId);
+                issue.put("site", site); issue.put("city", ZoomosCheckService.resolveCityDisplay(rawCityId, cityNamesMap)); issue.put("cityId", cityId);
                 issue.put("checkType", cid.getCheckType()); issue.put("shopName", run.getShop().getShopName());
                 ZoomosParsingStats ip = inProgressByCityKey.get(site + "|" + cityId);
                 ZoomosParsingStats lastKnownCity = ip == null ? lastFinishedByCityBatchKey.get(site + "|" + cityId) : null;
@@ -1580,7 +1583,7 @@ public class ZoomosAnalysisController {
                 if (foundCityKeys.contains(site + "|" + city)) continue;       // есть реальные данные
                 Map<String, Object> issue = new LinkedHashMap<>();
                 issue.put("site", site);
-                issue.put("city", city);
+                issue.put("city", ZoomosCheckService.resolveCityDisplay(city, cityNamesMap));
                 issue.put("cityId", city);
                 issue.put("checkType", cid.getCheckType() != null ? cid.getCheckType() : "API");
                 issue.put("noData", true);
