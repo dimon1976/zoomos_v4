@@ -750,16 +750,11 @@
                                             </button>
                                         </td>
                                         <td class="text-center">
-                                            <button type="button"
-                                                    th:classappend="${entry.hasConfigIssue} ? 'bg-warning border-warning' : ''"
-                                                    class="btn btn-sm btn-outline-secondary btn-config-issue me-1"
-                                                    th:data-id="${entry.id}"
-                                                    th:data-site="${entry.siteName}"
-                                                    th:data-has-issue="${entry.hasConfigIssue}"
-                                                    th:data-note="${entry.configIssueNote}"
-                                                    th:title="${entry.hasConfigIssue ? 'Конфиг. проблема: ' + entry.configIssueNote : 'Отметить конфигурационную проблему'}">
+                                            <span th:if="${entry.hasConfigIssue}"
+                                                  class="badge bg-warning text-dark me-1"
+                                                  th:title="${'⚠ ' + entry.configIssueNote}">
                                                 <i class="fas fa-wrench"></i>
-                                            </button>
+                                            </span>
                                             <button type="button"
                                                     class="btn btn-sm btn-outline-danger btn-delete-cityid"
                                                     th:data-id="${entry.id}"
@@ -772,6 +767,19 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+                <!-- Добавить сайт вручную -->
+                <div class="border-top px-3 py-2 bg-light">
+                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                        <input type="text" class="form-control form-control-sm add-site-name"
+                               placeholder="Название сайта (напр. site.by)" style="max-width:220px">
+                        <input type="text" class="form-control form-control-sm add-city-ids"
+                               placeholder="ID городов (необяз.)" style="max-width:160px">
+                        <button type="button" class="btn btn-sm btn-outline-success btn-add-cityid"
+                                th:data-shop-id="${shop.id}">
+                            <i class="fas fa-plus me-1"></i>Добавить сайт
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2368,6 +2376,38 @@
                     }
                 })
                 .catch(err => alert('Ошибка сети: ' + err.message));
+        });
+    });
+
+    // ==================================================================
+    // Добавление сайта вручную
+    // ==================================================================
+    document.querySelectorAll('.btn-add-cityid').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const container = this.closest('.border-top');
+            const siteInput = container.querySelector('.add-site-name');
+            const cityInput = container.querySelector('.add-city-ids');
+
+            const siteName = siteInput.value.trim();
+            if (!siteName) { siteInput.focus(); return; }
+
+            const fd = new FormData();
+            fd.append('siteName', siteName);
+            if (cityInput.value.trim()) fd.append('cityIds', cityInput.value.trim());
+
+            this.disabled = true;
+            fetch('/zoomos/shops/' + shopId + '/city-ids/add', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                        this.disabled = false;
+                    }
+                })
+                .catch(err => { alert('Ошибка сети: ' + err.message); this.disabled = false; });
         });
     });
 

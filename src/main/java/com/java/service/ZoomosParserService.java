@@ -150,6 +150,43 @@ public class ZoomosParserService {
     }
 
     /**
+     * Ручное добавление сайта-конкурента в магазин.
+     * Если сайт ещё не в справочнике ZoomosKnownSite — добавляет его туда.
+     */
+    @Transactional
+    public ZoomosCityId addCityIdManually(Long shopId, String siteName, String cityIds) {
+        ZoomosShop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> new IllegalArgumentException("Магазин не найден: " + shopId));
+
+        String normalizedSite = siteName.trim().toLowerCase();
+        if (normalizedSite.isEmpty()) {
+            throw new IllegalArgumentException("Имя сайта не может быть пустым");
+        }
+
+        if (cityIdRepository.findByShopIdAndSiteName(shopId, normalizedSite).isPresent()) {
+            throw new IllegalArgumentException("Сайт «" + normalizedSite + "» уже добавлен для этого магазина");
+        }
+
+        Optional<ZoomosKnownSite> known = knownSiteRepository.findBySiteName(normalizedSite);
+        String checkType = known.map(ZoomosKnownSite::getCheckType).orElse("ITEM");
+
+        ZoomosCityId entry = ZoomosCityId.builder()
+                .shop(shop)
+                .siteName(normalizedSite)
+                .checkType(checkType)
+                .cityIds(cityIds != null && !cityIds.isBlank() ? cityIds.trim() : null)
+                .build();
+        ZoomosCityId saved = cityIdRepository.save(entry);
+
+        if (known.isEmpty()) {
+            knownSiteRepository.save(ZoomosKnownSite.builder()
+                    .siteName(normalizedSite).checkType(checkType).build());
+        }
+
+        return saved;
+    }
+
+    /**
      * Удалить отдельную запись ZoomosCityId
      */
     @Transactional
@@ -778,42 +815,39 @@ public class ZoomosParserService {
     }
 
     /**
-     * Парсит страницу настроек сайта и проверяет настроен ли ITEM_PRICE.
-     * ITEM_PRICE настроен если: select > 0 ИЛИ text-input не пустой.
-     * Возвращает null если строка ITEM_PRICE не найдена на странице.
+     * Парсит страницу настроек сайта и проверяет настроен ли хотя бы один из ценовых параметров:
+     * ITEM_PRICE, ITEM_AJAX_JSON_PRICE, ITEM_MODIFICATION_ROW_PRICE.
+     * Параметр считается настроенным если: select.value != '0' ИЛИ input.value не пустой.
+     * Возвращает true если хотя бы один настроен, false если ни один не настроен, null если ни один не найден.
      */
     private Boolean parseItemPriceFromPage(Page page, String siteName) {
-        List<ElementHandle> rows = page.querySelectorAll("tr");
-        for (ElementHandle row : rows) {
-            try {
-                ElementHandle bold = row.querySelector("b");
-                if (bold == null) continue;
-                if (!"ITEM_PRICE".equals(bold.innerText().trim())) continue;
-
-                // Найдена строка ITEM_PRICE
-                ElementHandle select = row.querySelector("select");
-                ElementHandle input = row.querySelector("input[type='text']");
-
-                String selectVal = "0";
-                if (select != null) {
-                    Object val = select.evaluate("el => el.value");
-                    if (val != null) selectVal = val.toString();
-                }
-
-                String inputVal = "";
-                if (input != null) {
-                    String attr = input.getAttribute("value");
-                    if (attr != null) inputVal = attr.trim();
-                }
-
-                boolean configured = !"0".equals(selectVal) || !inputVal.isEmpty();
-                return configured;
-
-            } catch (Exception e) {
-                log.debug("Ошибка парсинга строки для {}: {}", siteName, e.getMessage());
-            }
+        String js =
+            "() => {" +
+            "  const params = new Set(['ITEM_PRICE','ITEM_AJAX_JSON_PRICE','ITEM_MODIFICATION_ROW_PRICE']);" +
+            "  const rows = Array.from(document.querySelectorAll('tr'));" +
+            "  let found = 0;" +
+            "  for (const row of rows) {" +
+            "    const cells = row.querySelectorAll('td');" +
+            "    if (cells.length < 2) continue;" +
+            "    const b = cells[1].querySelector('b');" +
+            "    if (!b) continue;" +
+            "    if (!params.has(b.textContent.trim())) continue;" +
+            "    found++;" +
+            "    const sel = row.querySelector('select');" +
+            "    const inp = row.querySelector('input');" +
+            "    const selVal = sel ? sel.value : '0';" +
+            "    const inpVal = inp ? inp.value.trim() : '';" +
+            "    if (selVal !== '0' || inpVal !== '') return true;" +
+            "  }" +
+            "  return found === 0 ? null : false;" +
+            "}";
+        Object result = page.evaluate(js);
+        if (result == null) {
+            log.warn("Ни один из ценовых параметров не найден на странице для {}", siteName);
+            return null;
         }
-        log.warn("Строка ITEM_PRICE не найдена на странице для {}", siteName);
-        return null;
+        Boolean configured = (Boolean) result;
+        log.debug("parseItemPriceFromPage {}: {}", siteName, configured);
+        return configured;
     }
 }

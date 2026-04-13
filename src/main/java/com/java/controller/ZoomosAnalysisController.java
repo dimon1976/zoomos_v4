@@ -425,6 +425,20 @@ public class ZoomosAnalysisController {
         }).orElse(ResponseEntity.badRequest().body(Map.of("success", false, "error", "Запись не найдена")));
     }
 
+    @PostMapping("/shops/{shopId}/city-ids/add")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> addCityId(@PathVariable Long shopId,
+                                                          @RequestParam String siteName,
+                                                          @RequestParam(required = false) String cityIds) {
+        try {
+            parserService.addCityIdManually(shopId, siteName, cityIds);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (Exception e) {
+            log.error("Ошибка добавления city-id для shop {}: {}", shopId, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/shops/{shopId}/city-ids/delete-all")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> deleteAllCityIds(@PathVariable Long shopId) {
