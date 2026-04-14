@@ -1266,10 +1266,19 @@ public class ZoomosAnalysisController {
         Map<String, List<Map<String, Object>>> trendGrouped = trendIssues.stream()
                 .collect(Collectors.groupingBy(i -> (String) i.getOrDefault("warningType", "OTHER")));
 
+        // Добавляем deltaLevel к каждому issue для CSS-классов дельта-баров
+        java.util.stream.Stream.concat(mainIssues.stream(), trendIssues.stream()).forEach(iss -> {
+            int d = iss.get("numDeltaAbs") instanceof Integer ? (Integer) iss.get("numDeltaAbs") : 0;
+            iss.put("deltaLevel", d > 50 ? "high" : d > 30 ? "med" : "low");
+        });
+
         // Блок 1 — ERROR (domain-grouped)
-        List<Map<String, Object>> sd100List = grouped.getOrDefault("STOCK_DROP_100", List.of());
-        List<Map<String, Object>> sdList    = grouped.getOrDefault("STOCK_DROP", List.of());
+        List<Map<String, Object>> sd100List = new ArrayList<>(grouped.getOrDefault("STOCK_DROP_100", List.of()));
+        List<Map<String, Object>> sdList    = new ArrayList<>(grouped.getOrDefault("STOCK_DROP", List.of()));
         List<Map<String, Object>> nfList    = grouped.getOrDefault("NOT_FOUND", List.of());
+        // Сортируем ERROR по убыванию дельты (самые проблемные сверху)
+        sd100List.sort(Comparator.comparingInt(i -> -((Integer) i.getOrDefault("numDeltaAbs", 0))));
+        sdList.sort(Comparator.comparingInt(i -> -((Integer) i.getOrDefault("numDeltaAbs", 0))));
         model.addAttribute("errorsStockDrop100", groupByDomain(sd100List));
         model.addAttribute("errorsStockDrop",    groupByDomain(sdList));
         model.addAttribute("errorsNotFound",     groupByDomain(nfList));
@@ -1280,9 +1289,11 @@ public class ZoomosAnalysisController {
         // Блок 2 — WARNING подгруппы (domain-grouped)
         List<Map<String, Object>> npList  = grouped.getOrDefault("NO_PRODUCTS", List.of());
         List<Map<String, Object>> azList  = grouped.getOrDefault("ALWAYS_ZERO_STOCK", List.of());
-        List<Map<String, Object>> spList  = grouped.getOrDefault("SLOW_PARSING", List.of());
+        List<Map<String, Object>> spList  = new ArrayList<>(grouped.getOrDefault("SLOW_PARSING", List.of()));
         List<Map<String, Object>> ipList  = grouped.getOrDefault("IN_PROGRESS", List.of());
         List<Map<String, Object>> egList  = grouped.getOrDefault("ERROR_GROWTH", List.of());
+        // Сортируем SLOW_PARSING по убыванию дельты
+        spList.sort(Comparator.comparingInt(i -> -((Integer) i.getOrDefault("numDeltaAbs", 0))));
         model.addAttribute("noProducts",  groupByDomain(npList));
         model.addAttribute("alwaysZero",  groupByDomain(azList));
         model.addAttribute("slowParsing", groupByDomain(spList));
