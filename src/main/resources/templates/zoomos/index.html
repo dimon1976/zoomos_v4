@@ -413,6 +413,7 @@
                     <i class="fas fa-history"></i> история
                 </a>
                 <!-- Статус-точка и результаты только в список-режиме -->
+                <span class="compact-instock-wrap d-none me-1 small" th:id="'compact-instock-' + ${shop.id}"></span>
                 <span class="compact-status-dot" th:id="'status-dot-' + ${shop.id}"></span>
                 <span class="compact-result ms-1">
                     <span class="badge bg-success text-white fw-semibold d-none" th:id="'compact-ok-' + ${shop.id}"></span>
@@ -439,25 +440,7 @@
                         th:data-shop-id="${shop.id}" title="Проверить" style="display:none">
                     <i class="fas fa-play"></i>
                 </button>
-                <!-- Кнопки переупорядочивания -->
-                <div class="d-flex gap-1 align-items-center border-end pe-2 shop-order-btns">
-                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
-                            th:data-shop-id="${shop.id}" data-direction="top" title="В начало">
-                        <i class="fas fa-angle-double-up"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
-                            th:data-shop-id="${shop.id}" data-direction="up" title="Вверх">
-                        <i class="fas fa-angle-up"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
-                            th:data-shop-id="${shop.id}" data-direction="down" title="Вниз">
-                        <i class="fas fa-angle-down"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
-                            th:data-shop-id="${shop.id}" data-direction="bottom" title="В конец">
-                        <i class="fas fa-angle-double-down"></i>
-                    </button>
-                </div>
+
                 <!-- Чекбокс расписания -->
                 <div th:with="sched=${schedulesMap != null ? schedulesMap[shop.id] : null}"
                      class="d-flex align-items-center gap-1 border-end pe-2">
@@ -2135,6 +2118,33 @@
         return d + '.' + m;
     }
 
+    function fmtInStock(n) {
+        if (!n && n !== 0) return '';
+        return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    }
+
+    function fetchLastInStock(shopId) {
+        fetch('/zoomos/shops/' + shopId + '/last-instock')
+            .then(r => r.json())
+            .then(data => {
+                if (!data || data.inStock === null || data.inStock === undefined) return;
+                const el = document.getElementById('compact-instock-' + shopId);
+                if (!el) return;
+                const change = data.change;
+                let html = '';
+                if (change !== null && change !== undefined) {
+                    if (change > 0) html = '<span class="text-success fw-semibold">↑ ' + fmtInStock(data.inStock) + '</span>';
+                    else if (change < 0) html = '<span class="text-danger fw-semibold">↓ ' + fmtInStock(data.inStock) + '</span>';
+                    else html = '<span class="text-muted">' + fmtInStock(data.inStock) + '</span>';
+                } else {
+                    html = '<span class="text-muted">' + fmtInStock(data.inStock) + '</span>';
+                }
+                el.innerHTML = html;
+                el.classList.remove('d-none');
+            })
+            .catch(() => {});
+    }
+
     function showCheckResult(shopId, data) {
         function showBadge(id, count, label) {
             const el = document.getElementById(id);
@@ -2147,12 +2157,14 @@
         showBadge('result-err-'      + shopId, data.errorCount    || 0, 'Error');
         showBadge('result-notfound-' + shopId, data.notFoundCount || 0, 'НЕТ/ИДЁТ');
         // Compact-mode badges
-        showBadge('compact-ok-'   + shopId, data.okCount      || 0, 'OK');
+        if (!(data.errorCount || 0) && !(data.warningCount || 0) && !(data.notFoundCount || 0)) {
+            showBadge('compact-ok-' + shopId, data.okCount || 0, 'OK');
+        }
         showBadge('compact-warn-' + shopId, data.warningCount || 0, 'Warn');
         showBadge('compact-err-'  + shopId, data.errorCount   || 0, 'Error');
         // Compact result link
         const compactLink = document.getElementById('compact-link-' + shopId);
-        if (compactLink) { compactLink.href = '/zoomos/check/results/' + data.runId; compactLink.classList.remove('d-none'); }
+        if (compactLink) { compactLink.href = '/zoomos/check/results-new/' + data.runId; compactLink.classList.remove('d-none'); }
         // Status dot
         const dot = document.getElementById('status-dot-' + shopId);
         if (dot) {
@@ -2171,7 +2183,7 @@
             startedEl.textContent = data.startedAt;
             startedEl.style.display = '';
         }
-        document.getElementById('result-link-' + shopId).href = '/zoomos/check/results/' + data.runId;
+        document.getElementById('result-link-' + shopId).href = '/zoomos/check/results-new/' + data.runId;
         document.getElementById('check-result-' + shopId).style.display = 'block';
         // Обновить метку "Обновлено:" в header карточки
         const serverTime = data.completedAt || data.startedAt;
@@ -2670,6 +2682,7 @@
                 }
             })
             .catch(() => {});
+        fetchLastInStock(shopId);
     });
 
     // ==================================================================

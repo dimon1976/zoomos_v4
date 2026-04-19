@@ -52,4 +52,20 @@ public class ZoomosPlaywrightHelper {
         }
         return false;
     }
+
+    /**
+     * Извлекает имя аккаунта из строки вида "[ID] название@аккаунта" или просто "название@аккаунта".
+     * Возвращает null если строка пустая или null.
+     */
+    public String parseAccountName(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        raw = raw.trim();
+        if (raw.startsWith("[")) {
+            int closeBracket = raw.indexOf(']');
+            if (closeBracket != -1 && closeBracket + 1 < raw.length()) {
+                return raw.substring(closeBracket + 1).trim();
+            }
+        }
+        return raw;
+    }
 }

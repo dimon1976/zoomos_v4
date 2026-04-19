@@ -1,6 +1,6 @@
 # Zoomos Check — Проверка выкачки
 
-> Последнее обновление: 2026-04 (domain grouping в check-results-v2: `groupByDomain()` группирует issues по домену `LinkedHashMap<String, List>`; `evaluateTrend()` возвращает `List<Map<String, Object>>` с полями `shortMessage` и `numDeltaAbs`; `enrichIssue()` добавляет shortMessage/numDeltaAbs к issue; stat-pills стали якорями-ссылками; resolveCityDisplay — единый метод нормализации city-строк)
+> Последнее обновление: 2026-04 (рефакторинг check-results-v2 → check-results-new; вынесен `ZoomosAnalysisService`; добавлены профили проверки V57/V58; новые DTO `ZoomosSiteResult`, `CityResult`, `StatusReason`, `SiteIssue`, `SparklinePoint`, `ZoomosResultLevel`; новые API: `/check/analyze/{runId}`, `/check/run/{runId}/info`, `/shops/{shopId}/last-instock`)
 
 ## Назначение
 
@@ -22,7 +22,7 @@
 
 ---
 
-## Структура БД (Flyway V23–V51)
+## Структура БД (Flyway V23–V58)
 
 ```sql
 zoomos_check_runs
@@ -61,6 +61,21 @@ zoomos_redmine_issues
 -- V42: привязка магазина к клиенту
 zoomos_shops
   ...client_id BIGINT FK → clients(id) ON DELETE SET NULL
+
+-- V57: профили проверки выкачки
+zoomos_check_profiles
+  id, shop_id FK → zoomos_shops, label, days_of_week ("1,2,3"), time_from/time_to ("HH:mm")
+  cron_expression, drop_threshold, error_growth_threshold, baseline_days
+  min_absolute_errors, trend_drop_threshold, trend_error_threshold, stall_minutes
+  is_enabled, created_at, updated_at
+
+zoomos_profile_sites
+  id, profile_id FK → zoomos_check_profiles, site_name
+  city_ids, account_filter, parser_include, parser_include_mode ("OR"/"AND"), parser_exclude, is_active
+
+-- V58: аккаунт, под которым выполнялась выкачка
+zoomos_parsing_stats
+  ...account_name VARCHAR(255)  -- "[ID] название@аккаунта"
 
 -- V43: глобальные настройки Zoomos Check
 zoomos_settings
@@ -205,8 +220,30 @@ public record MedianStats(Integer inStock, Integer totalProducts, Integer durati
 
 ---
 
-## /check/results-v2/{runId} — новый вид результатов (бета)
+## /check/results-new/{runId} — новый вид результатов
 
+Endpoint `GET /check/results-new/{runId}` реализован в `ZoomosAnalysisController.checkResultsNew()`.
+Шаблон: `zoomos/check-results-new.html`. Основная логика перенесена в `ZoomosAnalysisService.analyze(runId, profileId, deadline, stallMinutes)`.
+
+Вместо `GroupEvalResult` используются новые DTO:
+- `ZoomosSiteResult` — главный DTO для сайта: статус, список городов, list<SiteIssue>, спарклайн
+- `CityResult` — данные по городу: статус, `StatusReason`, последние stats
+- `StatusReason` — причина статуса (тип, сообщение, числовые дельты)
+- `SiteIssue` — конкретная проблема (siteName, cityName, level, message)
+- `SparklinePoint` — точка спарклайн-графика (timestamp, value)
+- `ZoomosResultLevel` — enum OK/WARNING/ERROR
+
+API `/check/analyze/{runId}?profileId=&deadline=&stallMinutes=` → `List<ZoomosSiteResult>` (JSON).
+
+Доп. эндпоинты:
+- `GET /zoomos/check/run/{runId}/info` — метаданные запуска (shop, dates, thresholds)
+- `GET /zoomos/shops/{shopId}/last-instock` — последнее значение inStock и delta (для компактного вида в index.html)
+
+---
+
+## /check/results-v2/{runId} — устаревший вид (удалён)
+
+Шаблон `check-results-v2.html` и `check-results.html` удалены. `check-results-groups.html` удалён.
 Endpoint `GET /check/results-v2/{runId}` реализован в `ZoomosAnalysisController.checkResultsV2()`.
 
 - Вызывает `checkResults()` для заполнения базовых атрибутов
@@ -386,14 +423,16 @@ Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `fi
 | Файл | Назначение |
 |------|-----------|
 | `ZoomosCheckService.java` | Playwright-парсинг, `evaluateAndBuildIssues()`, `computeBaselineMedian()`, `filterByTime()`, WebSocket |
+| `ZoomosAnalysisService.java` | Новый сервис анализа: `analyze(runId, profileId, deadline, stallMinutes)` → `List<ZoomosSiteResult>`; логика оценки по профилям, спарклайны |
 | `ZoomosPlaywrightHelper.java` | Вспомогательный компонент: `navigateWithRetry(page, url)` — навигация с retry при timeout; `isTimeoutException(e)` — определение таймаута |
-| `ZoomosAnalysisController.java` | `/zoomos/*` роуты, `checkResults()`, schedule CRUD, priority API |
+| `ZoomosAnalysisController.java` | `/zoomos/*` роуты, `checkResults()`, `checkResultsNew()`, `analyzeRun()`, `lastInStock()`, schedule CRUD, priority API |
 | `ZoomosParserService.java` | Магазины и city_ids |
 | `ZoomosSchedulerService.java` | Cron-расписания |
 | `ZoomosKnownSite.java` | `@Table zoomos_sites`, поля `isPriority`, `ignoreStock` |
+| `ZoomosCheckProfile.java` | Профиль проверки (`zoomos_check_profiles`): пороги, расписание, список сайтов |
+| `ZoomosProfileSite.java` | Сайт внутри профиля (`zoomos_profile_sites`): cityIds, фильтры по аккаунту/парсеру |
 | `ZoomosSettingsService.java` | Глобальные настройки (таблица `zoomos_settings`, key-value) |
 | `RedmineService.java` | Вся бизнес-логика Redmine |
 | `ZoomosRedmineController.java` | REST endpoints `/zoomos/redmine/*` |
-| `check-results.html` | Страница результатов (4 блока + тренды) |
-| `check-results-v2.html` | Новый вид страницы результатов с кнопкой `=цены` (CITIES_EQUAL_PRICES) для каждого сайта и кнопкой "= цены (все)" для массовой проверки |
+| `check-results-new.html` | Новая страница результатов (заменяет check-results-v2.html) |
 | `layout/main.html` | Глобальный priority-alerts баннер |
