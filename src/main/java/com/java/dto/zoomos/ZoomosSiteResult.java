@@ -29,9 +29,14 @@ public class ZoomosSiteResult {
     private Double baselineErrorRate;
     private Double baselineSpeedMinsPer1000;
 
+    private String shopParam;
+    private String historyBaseUrl;
+
     private ZonedDateTime estimatedFinish;
     private Boolean estimatedFinishReliable;
     private Boolean isStalled;
     private List<SparklinePoint> inStockHistory;
+    private List<SparklinePoint> errorHistory;
+    private List<SparklinePoint> speedHistory;
     private List<CityResult> cityResults;
 }

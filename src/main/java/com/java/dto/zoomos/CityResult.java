@@ -13,5 +13,8 @@ public record CityResult(
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     ZonedDateTime estimatedFinish,
     Boolean estimatedFinishReliable,
-    boolean isStalled
+    boolean isStalled,
+    Double baselineInStock,
+    Integer inStockDelta,
+    Integer inStockDeltaPercent
 ) {}

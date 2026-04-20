@@ -1,8 +1,11 @@
 (function () {
 'use strict';
 
-const RUN_ID   = document.getElementById('run-id').value;
-const BASE_URL = document.getElementById('base-url').value;
+const RUN_ID    = document.getElementById('run-id').value;
+const BASE_URL  = document.getElementById('base-url').value;
+const SHOP_NAME = document.getElementById('shop-name')?.value || '';
+const DATE_FROM = document.getElementById('date-from')?.value || '';
+const DATE_TO   = document.getElementById('date-to')?.value   || '';
 
 const STATUS_ORDER = ['CRITICAL','WARNING','TREND','IN_PROGRESS','OK'];
 const STATUS_LABEL = { CRITICAL:'КРИТИЧНО', WARNING:'ПРЕДУПРЕЖДЕНИЕ', TREND:'ТРЕНД', IN_PROGRESS:'В процессе', OK:'OK' };
@@ -33,6 +36,9 @@ let allResults  = [];
 let activeFilters = new Set(['CRITICAL','WARNING']);
 let activeType  = 'ALL';
 let searchText  = '';
+function getShowOkCities(siteName) {
+    return localStorage.getItem('zoomos.showOkCities.' + siteName) === 'true';
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 function statusPriority(s) { return STATUS_ORDER.indexOf(s); }
@@ -45,6 +51,12 @@ function fmtDate(iso) {
         const mm = String(d.getMonth()+1).padStart(2,'0');
         return dd+'.'+mm+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
     } catch { return iso; }
+}
+
+function toExportDate(isoDate) {
+    if (!isoDate) return '';
+    const p = isoDate.split('-');
+    return p.length === 3 ? p[2]+'.'+p[1]+'.'+p[0] : isoDate;
 }
 
 function fmtDateShort(iso) {
@@ -81,6 +93,23 @@ function sparklineColor(r) {
     return REASON_SPARKLINE_COLOR[first.reason]||'#6c757d';
 }
 
+function getHeaderLabel(r) {
+    const all = [...(r.statusReasons||[]), ...(r.cityResults||[]).flatMap(cr=>cr.issues||[])];
+    const seen = new Set();
+    const critLabels = all
+        .filter(i => i.level === 'CRITICAL')
+        .map(i => i.shortLabel || i.message)
+        .filter(lbl => { if (seen.has(lbl)) return false; seen.add(lbl); return true; });
+    if (critLabels.length === 1) return critLabels[0];
+    if (critLabels.length === 2) return critLabels[0] + ', ' + critLabels[1];
+    if (critLabels.length >= 3)  return critLabels[0] + ' и ещё ' + (critLabels.length - 1);
+    // Fallback: первая не-TREND причина из уже собранного массива
+    all.sort((a,b)=>(statusPriority(a.level)-statusPriority(b.level))||((REASON_SORT_ORDER[a.reason]||99)-(REASON_SORT_ORDER[b.reason]||99)));
+    const hasCritOrWarn = all.some(i => i.level==='CRITICAL' || i.level==='WARNING');
+    const first = all.find(i => hasCritOrWarn ? (i.level==='CRITICAL'||i.level==='WARNING') : true) || null;
+    return first ? (first.shortLabel || first.message) : null;
+}
+
 function sortByReasonPriority(a, b) {
     const sp = statusPriority(a.status) - statusPriority(b.status);
     if (sp !== 0) return sp;
@@ -99,12 +128,12 @@ function renderSiteResult(r) {
     const cityTag    = multi ? cities.length+' городов' : (r.cityName || cities[0]?.cityName || '');
     const accountTag = (!multi && r.accountName)
         ? '<span class="account-tag" title="'+esc(r.accountName)+'">'+esc(r.accountName)+'</span>' : '';
-    const firstR  = getFirstReason(r);
+    const headerLabel = getHeaderLabel(r);
     const typeTag = '<span class="badge bg-light text-secondary border" style="font-size:.68rem">'+(r.checkType||'')+'</span>';
 
     let bodyHtml = '';
     if (multi) {
-        bodyHtml += renderCitiesTable(cities);
+        bodyHtml += renderCitiesTable(r, cities);
         if (r.statusReasons && r.statusReasons.length) {
             bodyHtml += renderIssueRows(r.statusReasons);
         }
@@ -114,13 +143,11 @@ function renderSiteResult(r) {
         bodyHtml += renderMetrics(r, status);
     }
 
-    const historyHref = '/zoomos/check/history?shop='+esc(r.siteName);
-    const historyUrl  = BASE_URL ? BASE_URL+'/shops-parser/'+esc(r.siteName)+'/parsing-history' : '#';
+    const matchingBase = BASE_URL ? BASE_URL.replace(/\/$/, '')+'/shop/'+encodeURIComponent(SHOP_NAME)+'/sites-items-mapping' : '';
+    const matchingUrl  = matchingBase ? matchingBase+'?site='+encodeURIComponent(r.siteName)+'&onlyAssociated=1' : '#';
     bodyHtml += '<div class="d-flex gap-2 mt-3">'
-        +'<a href="'+historyHref+'" class="btn btn-xs btn-outline-secondary" style="font-size:.78rem;padding:2px 10px">'
-        +'<i class="fas fa-history me-1"></i>История</a>'
-        +(BASE_URL?'<a href="'+historyUrl+'" target="_blank" class="btn btn-xs btn-outline-secondary" style="font-size:.78rem;padding:2px 10px">'
-        +'<i class="fas fa-external-link-alt me-1"></i>Ссылка</a>':'')
+        +(matchingBase?'<a href="'+matchingUrl+'" target="_blank" class="btn btn-xs btn-outline-secondary" style="font-size:.78rem;padding:2px 10px">'
+        +'<i class="fas fa-handshake me-1"></i>Матчинг</a>':'')
         +'</div>';
 
     return '<div class="site-group border-'+status+'" data-status="'+status
@@ -131,7 +158,7 @@ function renderSiteResult(r) {
         +'<span class="site-name">'+esc(r.siteName)+'</span>'
         +(cityTag?'<span class="city-tag">'+esc(cityTag)+'</span>':'')
         +accountTag+typeTag
-        +(firstR?'<span class="first-reason">'+esc(firstR.shortLabel||firstR.message)+'</span>':'')
+        +(headerLabel?'<span class="first-reason">'+esc(headerLabel)+'</span>':'')
         +'<button class="expand-btn ms-auto" tabindex="-1" aria-hidden="true"><i class="fas fa-chevron-down"></i></button>'
         +'</div>'
         +'<div class="group-body">'+bodyHtml+'</div>'
@@ -207,32 +234,85 @@ function renderMetrics(r, status) {
         +renderSparkline(r, status);
 }
 
-function renderCitiesTable(cities) {
+function renderCitiesTable(r, cities) {
     const rows = cities.map(cr => {
         const lbl = STATUS_LABEL[cr.status]||cr.status;
-        const fi  = cr.issues && cr.issues.length ? esc(cr.issues[0].message) : '';
-        return '<tr><td>'+esc(cr.cityName||cr.cityId||'—')+'</td>'
+        const fi  = cr.issues && cr.issues.length ? esc(cr.issues[0].shortLabel || cr.issues[0].message) : '';
+        const cityDisplay = cr.cityId && cr.cityName
+            ? esc(cr.cityId) + ' — ' + esc(cr.cityName)
+            : esc(cr.cityName || cr.cityId || '—');
+        let stockHtml = fmt(cr.inStock);
+        if (cr.baselineInStock != null && cr.baselineInStock > 0) {
+            stockHtml += ' <small class="text-muted">(база:&nbsp;'+Math.round(cr.baselineInStock)+')</small>';
+        }
+        if (cr.inStockDeltaPercent != null) {
+            const cls = cr.inStockDeltaPercent >= 0 ? 'text-success' : 'text-danger';
+            const sign = cr.inStockDeltaPercent >= 0 ? '+' : '';
+            stockHtml += ' <span class="'+cls+'">'+sign+cr.inStockDeltaPercent+'%</span>';
+        }
+        let extLink = '';
+        if (r.historyBaseUrl && cr.cityId) {
+            const url = r.historyBaseUrl
+                + '?dateFrom=' + encodeURIComponent(toExportDate(DATE_FROM))
+                + '&dateTo='   + encodeURIComponent(toExportDate(DATE_TO))
+                + '&cityId='   + encodeURIComponent(cr.cityId);
+            extLink = ' <a href="'+url+'" target="_blank" title="История на export.zoomos.by" style="color:#adb5bd">'
+                +'<i class="fas fa-external-link-alt" style="font-size:.7rem"></i></a>';
+        }
+        return '<tr data-city-status="'+cr.status+'"><td>'+cityDisplay+extLink+'</td>'
             +'<td><span class="status-badge badge-'+cr.status+'" style="font-size:.68rem">'+lbl+'</span></td>'
-            +'<td class="text-end">'+fmt(cr.inStock)+'</td>'
+            +'<td class="text-end">'+stockHtml+'</td>'
             +'<td class="text-muted" style="font-size:.78rem">'+fi+'</td></tr>';
     }).join('');
-    return '<table class="table table-sm cities-table mb-2"><thead><tr>'
+    const showOk = getShowOkCities(r.siteName);
+    const chk = showOk ? 'checked' : '';
+    const hideClass = showOk ? '' : ' hide-ok-cities';
+    const toggle = '<div class="mb-1 text-end" style="font-size:.78rem;color:#6c757d">'
+        +'<label style="cursor:pointer"><input type="checkbox" '+chk
+        +' data-site="'+esc(r.siteName)+'" onchange="toggleOkCities(this)" style="margin-right:4px">Показывать OK города</label>'
+        +'</div>';
+    return toggle+'<table class="table table-sm cities-table mb-2'+hideClass+'"><thead><tr>'
         +'<th>Город</th><th>Статус</th><th class="text-end">В наличии</th><th>Причина</th>'
         +'</tr></thead><tbody>'+rows+'</tbody></table>';
 }
+
+window.toggleOkCities = function(chk) {
+    const siteName = chk.dataset.site;
+    const show = chk.checked;
+    localStorage.setItem('zoomos.showOkCities.' + siteName, show);
+    const table = chk.closest('.group-body')?.querySelector('.cities-table');
+    if (table) table.classList.toggle('hide-ok-cities', !show);
+};
 
 // ── Sparkline ─────────────────────────────────────────────────────────────
 const sparkCharts = new Map();
 
 function renderSparkline(r, status) {
-    if (!r.inStockHistory || r.inStockHistory.length < 2) return '';
+    const mainReason = r.statusReasons && r.statusReasons.length ? r.statusReasons[0].reason : null;
+    let history, labelPrefix, bl;
+    if ((mainReason === 'SPEED_SPIKE' || mainReason === 'SPEED_TREND') && r.speedHistory && r.speedHistory.length >= 2) {
+        history = r.speedHistory;
+        labelPrefix = 'Время (мин) за';
+        bl = r.baselineSpeedMinsPer1000 != null ? String(Math.round(r.baselineSpeedMinsPer1000)) : '';
+    } else if (mainReason === 'ERROR_GROWTH' && r.errorHistory && r.errorHistory.length >= 2) {
+        history = r.errorHistory;
+        labelPrefix = 'Ошибок за';
+        bl = '';
+    } else {
+        history = r.inStockHistory || [];
+        labelPrefix = 'inStock за';
+        bl = (r.baselineInStock != null) ? String(Math.round(r.baselineInStock)) : '';
+    }
+    console.log('sparkline data', r.siteName, history);
+    if (!history || history.length < 2) {
+        return '<div class="mt-2 p-2 rounded text-muted" style="font-size:0.75rem;border:1px solid #dee2e6;display:inline-block;">Нет данных для графика</div>';
+    }
     const color  = sparklineColor(r);
     const safeId = 'spark-'+(r.siteName+'-'+(r.cityId||'')).replace(/[^a-zA-Z0-9]/g,'_');
-    const data   = JSON.stringify(r.inStockHistory).replace(/'/g,"&#39;");
-    const bl     = (r.baselineInStock!==null && r.baselineInStock!==undefined) ? String(Math.round(r.baselineInStock)) : '';
-    const first  = r.inStockHistory[0]?.date||'';
-    const last   = r.inStockHistory[r.inStockHistory.length-1]?.date||'';
-    const label  = (first&&last) ? 'inStock за '+fmtDateShort(first)+' — '+fmtDateShort(last) : 'inStock';
+    const data   = JSON.stringify(history).replace(/'/g,"&#39;");
+    const first  = history[0]?.date||'';
+    const last   = history[history.length-1]?.date||'';
+    const label  = (first&&last) ? labelPrefix+' '+fmtDateShort(first)+' — '+fmtDateShort(last) : labelPrefix;
     return '<div class="mt-2 p-2 rounded" style="border:1px solid #dee2e6;display:inline-block;">'
         +'<div class="metric-label mb-1">'+esc(label)+'</div>'
         +'<canvas id="'+safeId+'" width="280" height="100"'

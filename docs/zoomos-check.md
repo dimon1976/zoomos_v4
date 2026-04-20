@@ -226,8 +226,8 @@ Endpoint `GET /check/results-new/{runId}` реализован в `ZoomosAnalysi
 Шаблон: `zoomos/check-results-new.html`. Основная логика перенесена в `ZoomosAnalysisService.analyze(runId, profileId, deadline, stallMinutes)`.
 
 Вместо `GroupEvalResult` используются новые DTO:
-- `ZoomosSiteResult` — главный DTO для сайта: статус, список городов, list<SiteIssue>, спарклайн
-- `CityResult` — данные по городу: статус, `StatusReason`, последние stats
+- `ZoomosSiteResult` — главный DTO для сайта: статус, список городов, list<SiteIssue>, спарклайны (inStockHistory, errorHistory, speedHistory), shopParam, historyBaseUrl
+- `CityResult` — данные по городу: статус, `StatusReason`, последние stats, baselineInStock, inStockDelta, inStockDeltaPercent
 - `StatusReason` — причина статуса (тип, сообщение, числовые дельты)
 - `SiteIssue` — конкретная проблема (siteName, cityName, level, message)
 - `SparklinePoint` — точка спарклайн-графика (timestamp, value)

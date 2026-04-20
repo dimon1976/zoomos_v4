@@ -12,8 +12,8 @@ public enum StatusReason {
     CATEGORY_MISSING   (ZoomosResultLevel.CRITICAL,    "Нужная категория не найдена в парсере",  "Категория не найдена"),
     STOCK_TREND_DOWN   (ZoomosResultLevel.WARNING,     "inStock снижается {N} дней подряд",      "inStock снижается"),
     ERROR_GROWTH       (ZoomosResultLevel.WARNING,     "Ошибок парсинга больше baseline на {N}%","Ошибок парсинга больше нормы"),
-    SPEED_TREND        (ZoomosResultLevel.TREND,       "Выкачка замедляется: {было} → {стало} мин/1000 тов.", "Выкачка замедляется"),
-    SPEED_SPIKE        (ZoomosResultLevel.TREND,       "Разовое замедление: {N} мин (baseline {B} мин)", "Разовое замедление"),
+    SPEED_TREND        (ZoomosResultLevel.TREND,       "Выкачка замедляется: {from} → {to} мин/1000 тов",                                   "Выкачка замедляется"),
+    SPEED_SPIKE        (ZoomosResultLevel.TREND,       "Разовое замедление: {current} мин/1000 тов (baseline {baseline} мин/1000 тов)",  "Разовое замедление скорости"),
     IN_PROGRESS_OK     (ZoomosResultLevel.IN_PROGRESS, "Идёт, ожидаемое завершение {time}",      "В процессе"),
     IN_PROGRESS_RISK   (ZoomosResultLevel.CRITICAL,    "Идёт, не успеет к дедлайну {deadline}",  "Не успеет к дедлайну");
 

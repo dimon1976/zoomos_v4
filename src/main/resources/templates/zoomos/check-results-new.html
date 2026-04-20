@@ -199,6 +199,7 @@
 /* ── Cities sub-table ── */
 .cities-table { font-size: .82rem; margin-top: 8px; }
 .cities-table th { font-size: .72rem; font-weight: 600; text-transform: uppercase; color: #6c757d; }
+table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 
 /* ── OK table ── */
 .ok-collapse-header {
@@ -314,7 +315,7 @@
 </th:block>
 
 <th:block th:fragment="scripts">
-<script th:src="@{/js/zoomos-check-results.js(v=3)}"></script>
+<script th:src="@{/js/zoomos-check-results.js(v=5)}"></script>
 </th:block>
 
 </html>

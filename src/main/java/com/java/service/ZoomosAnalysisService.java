@@ -1,6 +1,8 @@
 package com.java.service;
 
+import com.java.config.ZoomosConfig;
 import com.java.dto.zoomos.*;
+import com.java.dto.zoomos.SparklinePoint;
 import com.java.model.entity.*;
 import com.java.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +14,7 @@ import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +27,7 @@ public class ZoomosAnalysisService {
     private final ZoomosCityIdRepository cityIdRepository;
     private final ZoomosCheckProfileRepository profileRepository;
     private final ZoomosCityNameRepository cityNameRepository;
+    private final ZoomosConfig zoomosConfig;
 
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
     private static final ZonedDateTime EPOCH = ZonedDateTime.parse("1970-01-01T00:00:00Z");
@@ -42,6 +46,13 @@ public class ZoomosAnalysisService {
                 .findByCheckRunIdAndIsBaselineFalseOrderBySiteNameAscCityNameAsc(checkRunId);
         List<ZoomosParsingStats> baselineStats = parsingStatsRepository
                 .findByCheckRunIdAndIsBaselineTrueOrderByStartTimeDesc(checkRunId);
+
+        log.info("Total stats loaded for run {}: {} records (baseline: {})",
+                checkRunId, allStats.size(), baselineStats.size());
+        if (log.isDebugEnabled()) {
+            allStats.stream().map(ZoomosParsingStats::getSiteName).distinct().sorted()
+                    .forEach(s -> log.debug("  loaded site: {}", s));
+        }
 
         int dropThreshold        = run.getDropThreshold()          != null ? run.getDropThreshold()          : 10;
         int errorGrowthThreshold = run.getErrorGrowthThreshold()   != null ? run.getErrorGrowthThreshold()   : 30;
@@ -67,7 +78,7 @@ public class ZoomosAnalysisService {
             List<ZoomosParsingStats> siteBaseline  = findStatsBySiteName(baselineStats, siteName);
 
             results.add(buildSiteResult(siteName, siteStats, siteBaseline, config, deadline, stallMinutes,
-                    dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap));
+                    dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap, run));
             processedSites.add(siteName);
         }
 
@@ -80,7 +91,7 @@ public class ZoomosAnalysisService {
             List<ZoomosParsingStats> siteBaseline = findStatsBySiteName(baselineStats, siteName);
             SiteConfig defaultConfig = new SiteConfig(siteName, null, null, null, "OR", null);
             results.add(buildSiteResult(siteName, entry.getValue(), siteBaseline, defaultConfig, deadline,
-                    stallMinutes, dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap));
+                    stallMinutes, dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap, run));
         }
 
         results.sort(Comparator.comparingInt(r -> r.getStatus().priority));
@@ -102,7 +113,8 @@ public class ZoomosAnalysisService {
             int errorGrowthThreshold,
             int trendDropThreshold,
             int minAbsoluteErrors,
-            Map<String, String> cityNamesMap) {
+            Map<String, String> cityNamesMap,
+            ZoomosCheckRun run) {
 
         Set<String> expectedCities = parseExpectedCities(config.cityIds());
         List<SiteIssue> siteIssues = new ArrayList<>();
@@ -130,10 +142,22 @@ public class ZoomosAnalysisService {
             for (String cId : expectedCities) {
                 String cName = cityNamesMap.getOrDefault(cId, cId);
                 List<ZoomosParsingStats> cStats = findStatsByCityId(siteStats, siteName, cId);
-                List<ZoomosParsingStats> cBl    = findStatsByCityId(siteBaseline, siteName, cId);
+                log.info("stats for {} city {}: {} records", siteName, cId, cStats.size());
+                if (cStats.isEmpty() && log.isDebugEnabled()) {
+                    siteStats.forEach(s -> log.debug(
+                            "  raw stat: cityName={}, isFinished={}, completionPercent={}, parsingDate={}",
+                            s.getCityName(), s.getIsFinished(), s.getCompletionPercent(), s.getParsingDate()));
+                }
+                List<ZoomosParsingStats> cBl = findStatsByCityId(siteBaseline, siteName, cId);
+                List<ZoomosParsingStats> cBlInPeriod = cBl.stream()
+                        .filter(s -> s.getParsingDate() != null
+                                && !s.getParsingDate().isBefore(run.getDateFrom())
+                                && !s.getParsingDate().isAfter(run.getDateTo()))
+                        .collect(Collectors.toList());
                 List<ZoomosParsingStats> cFiltered = applyParserFilter(cStats, config);
-                cityResults.add(analyzeCityGroup(cId, cName,
-                        cFiltered.isEmpty() ? cStats : cFiltered, cBl,
+                List<ZoomosParsingStats> effectiveStats = new ArrayList<>(cFiltered.isEmpty() ? cStats : cFiltered);
+                effectiveStats.addAll(cBlInPeriod);
+                cityResults.add(analyzeCityGroup(cId, cName, effectiveStats, cBl,
                         deadline, stallMinutes, dropThreshold, minAbsoluteErrors));
             }
             // CITIES_MISSING — считаем количество "Нет данных" городов
@@ -183,17 +207,6 @@ public class ZoomosAnalysisService {
                 }
             }
         }
-        if (latestStat != null && baselineSpeed != null) {
-            Integer dur = latestStat.getParsingDurationMinutes();
-            Integer tot = latestStat.getTotalProducts();
-            if (dur != null && tot != null && tot > 100) {
-                double curSpeed = (double) dur / tot * 1000;
-                if (curSpeed > baselineSpeed * (1 + trendDropThreshold / 100.0)) {
-                    siteIssues.add(new SiteIssue(StatusReason.SPEED_SPIKE,
-                            String.format("Разовое замедление: %.0f мин (baseline %.0f мин)", curSpeed, baselineSpeed)));
-                }
-            }
-        }
         List<ZoomosParsingStats> trendData = new ArrayList<>(siteBaseline);
         if (latestStat != null) trendData.add(latestStat);
         trendData.sort(Comparator.comparing(s -> s.getParsingDate() != null ? s.getParsingDate() : java.time.LocalDate.MIN));
@@ -202,15 +215,29 @@ public class ZoomosAnalysisService {
         if (consDrop >= 3) {
             siteIssues.add(new SiteIssue(StatusReason.STOCK_TREND_DOWN, "inStock снижается " + consDrop + " дней подряд"));
         }
+        // SPEED_TREND проверяется первым — если найден, SPEED_SPIKE не добавляется
         List<Double> speedByDay = trendData.stream()
                 .filter(s -> s.getParsingDurationMinutes() != null && s.getTotalProducts() != null && s.getTotalProducts() > 100)
                 .map(s -> (double) s.getParsingDurationMinutes() / s.getTotalProducts() * 1000)
                 .collect(Collectors.toList());
+        boolean speedTrendFound = false;
         if (speedByDay.size() >= 3 && isConsecutivelyIncreasing(speedByDay)) {
             double first = speedByDay.get(speedByDay.size() - 3);
             double last  = speedByDay.get(speedByDay.size() - 1);
             siteIssues.add(new SiteIssue(StatusReason.SPEED_TREND,
-                    String.format("Выкачка замедляется: %.0f → %.0f мин/1000 тов.", first, last)));
+                    String.format("Выкачка замедляется: %.0f → %.0f мин/1000 тов", first, last)));
+            speedTrendFound = true;
+        }
+        if (!speedTrendFound && latestStat != null && baselineSpeed != null) {
+            Integer dur = latestStat.getParsingDurationMinutes();
+            Integer tot = latestStat.getTotalProducts();
+            if (dur != null && tot != null && tot > 100) {
+                double curSpeed = (double) dur / tot * 1000;
+                if (curSpeed > baselineSpeed * (1 + trendDropThreshold / 100.0)) {
+                    siteIssues.add(new SiteIssue(StatusReason.SPEED_SPIKE,
+                            String.format("Разовое замедление: %.0f мин/1000 тов (baseline %.0f мин/1000 тов)", curSpeed, baselineSpeed)));
+                }
+            }
         }
 
         // ── Шаг D: поднятие CRITICAL/WARNING из городов на уровень сайта ────
@@ -250,6 +277,16 @@ public class ZoomosAnalysisService {
         String accountName = siteStats.stream().filter(s -> s.getAccountName() != null).findFirst()
                 .map(ZoomosParsingStats::getAccountName).orElse(null);
 
+        String shopParam = "API".equals(checkType) ? "-" : run.getShop().getShopName();
+        String baseUrlNorm = zoomosConfig.getBaseUrlNormalized();
+        String historyBaseUrl = baseUrlNorm.isBlank() ? null
+                : baseUrlNorm + "/shops-parser/" + siteName + "/parsing-history";
+
+        List<ZoomosParsingStats> allForHistory = new ArrayList<>(siteBaseline);
+        allForHistory.addAll(siteStats);
+
+        List<SparklinePoint> errorHistory = computeErrorHistory(allForHistory);
+        log.debug("errorHistory for {}: {} points", siteName, errorHistory.size());
         return ZoomosSiteResult.builder()
                 .siteName(siteName)
                 .cityId(resultCityId)
@@ -266,7 +303,11 @@ public class ZoomosAnalysisService {
                 .estimatedFinishReliable(estReliable)
                 .isStalled(stalled)
                 .cityResults(cityResults)
-                .inStockHistory(computeInStockHistory(siteBaseline))
+                .inStockHistory(computeInStockHistory(allForHistory))
+                .errorHistory(errorHistory)
+                .speedHistory(computeSpeedHistory(allForHistory))
+                .shopParam(shopParam)
+                .historyBaseUrl(historyBaseUrl)
                 .build();
     }
 
@@ -287,7 +328,7 @@ public class ZoomosAnalysisService {
 
         if (stats.isEmpty()) {
             issues.add(new SiteIssue(StatusReason.NOT_FOUND, StatusReason.NOT_FOUND.messageTemplate));
-            return new CityResult(cityId, cityName, ZoomosResultLevel.CRITICAL, null, sortedIssues(issues), null, null, false);
+            return new CityResult(cityId, cityName, ZoomosResultLevel.CRITICAL, null, sortedIssues(issues), null, null, false, null, null, null);
         }
 
         ZonedDateTime now = ZonedDateTime.now();
@@ -295,69 +336,87 @@ public class ZoomosAnalysisService {
         ZonedDateTime estFinish = null;
         Boolean estReliable     = null;
 
+        List<ZoomosParsingStats> finished = stats.stream()
+                .filter(s -> Boolean.TRUE.equals(s.getIsFinished())
+                        || (s.getCompletionPercent() != null && s.getCompletionPercent() >= 100))
+                .sorted(Comparator.comparing((ZoomosParsingStats s) ->
+                        s.getFinishTime() != null ? s.getFinishTime() : EPOCH, Comparator.reverseOrder()))
+                .collect(Collectors.toList());
         List<ZoomosParsingStats> inProgress = stats.stream()
-                .filter(s -> Boolean.FALSE.equals(s.getIsFinished()))
+                .filter(s -> !Boolean.TRUE.equals(s.getIsFinished())
+                        && (s.getCompletionPercent() == null || s.getCompletionPercent() < 100))
                 .collect(Collectors.toList());
 
-        for (ZoomosParsingStats ip : inProgress) {
-            // БАГ-ФИС: STALLED — break, не добавлять прогноз
-            if (ip.getUpdatedTime() != null
-                    && Duration.between(ip.getUpdatedTime(), now).toMinutes() >= stallMinutes) {
-                stalledFound = true;
-                issues.add(new SiteIssue(StatusReason.STALLED,
-                        "Выкачка зависла (нет обновлений " + stallMinutes + " мин)"));
-                break; // не считаем прогноз для зависшей записи
-            }
-            if (deadline != null && deadline.isBefore(now)) {
-                issues.add(new SiteIssue(StatusReason.DEADLINE_MISSED, StatusReason.DEADLINE_MISSED.messageTemplate));
-            } else if (ip.getStartTime() != null && ip.getUpdatedTime() != null
-                    && ip.getCompletionPercent() != null && ip.getCompletionPercent() > 0) {
-                long elapsed = Duration.between(ip.getStartTime(), ip.getUpdatedTime()).toMinutes();
-                if (elapsed > 0) {
-                    long total = (long) (elapsed / (ip.getCompletionPercent() / 100.0));
-                    ZonedDateTime est = ip.getStartTime().plusMinutes(total);
-                    boolean reliable = ip.getCompletionPercent() >= 10;
-                    estFinish  = est;
-                    estReliable = reliable;
-                    if (deadline != null && est.isAfter(deadline)) {
-                        issues.add(new SiteIssue(StatusReason.IN_PROGRESS_RISK,
-                                "Идёт, не успеет к дедлайну " + deadline.format(TIME_FMT)));
-                    } else {
-                        String note = reliable ? "" : " (прогноз неточный, " + ip.getCompletionPercent() + "%)";
-                        issues.add(new SiteIssue(StatusReason.IN_PROGRESS_OK,
-                                "Идёт, ожидаемое завершение " + est.format(TIME_FMT) + note));
-                    }
-                } else {
-                    issues.add(new SiteIssue(StatusReason.IN_PROGRESS_OK, "Идёт, прогноз недоступен"));
-                }
-            } else {
-                issues.add(new SiteIssue(StatusReason.IN_PROGRESS_OK, "Идёт, прогноз недоступен"));
-            }
-        }
+        ZoomosParsingStats latest;
+        Integer latestInStock;
+        Double baselineInStock = null;
+        Integer inStockDelta = null;
+        Integer inStockDeltaPercent = null;
 
-        ZoomosParsingStats latest = stats.stream()
-                .filter(s -> Boolean.TRUE.equals(s.getIsFinished()))
-                .max(Comparator.comparing(s -> s.getStartTime() != null ? s.getStartTime() : EPOCH))
-                .orElse(null);
-
-        Integer latestInStock = latest != null ? latest.getInStock() : null;
-
-        if (latest != null && !stalledFound) {
+        if (!finished.isEmpty()) {
+            // Предпочитаем запись с данными (totalProducts > 0) вместо 0-минутных пустых
+            Comparator<ZoomosParsingStats> byFinishTime = Comparator.comparing(
+                    (ZoomosParsingStats s) -> s.getFinishTime() != null ? s.getFinishTime() : EPOCH);
+            latest = finished.stream()
+                    .filter(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0)
+                    .max(byFinishTime)
+                    .orElseGet(() -> finished.stream().max(byFinishTime).orElse(null));
+            latestInStock = latest != null ? latest.getInStock() : null;
             if (latestInStock != null && latestInStock == 0) {
                 issues.add(new SiteIssue(StatusReason.STOCK_ZERO, StatusReason.STOCK_ZERO.messageTemplate));
             } else if (latestInStock != null) {
-                Double blInStock = computeMedian(baselineStats, s -> s.getInStock() != null ? (double) s.getInStock() : null);
-                if (blInStock != null && blInStock > 0) {
-                    double drop = (blInStock - latestInStock) / blInStock * 100;
+                baselineInStock = computeMedian(baselineStats, s -> s.getInStock() != null ? (double) s.getInStock() : null);
+                if (baselineInStock != null && baselineInStock > 0) {
+                    double drop = (baselineInStock - latestInStock) / baselineInStock * 100;
+                    inStockDelta = latestInStock - (int) Math.round(baselineInStock);
+                    inStockDeltaPercent = (int) Math.round((latestInStock - baselineInStock) / baselineInStock * 100);
                     if (drop >= dropThreshold) {
                         issues.add(new SiteIssue(StatusReason.STOCK_DROP,
                                 String.format("В наличии упало на %.0f%% (порог %d%%)", drop, dropThreshold)));
                     }
                 }
             }
+        } else {
+            // Завершённых нет — анализируем inProgress (STALLED возможен)
+            latest = null;
+            latestInStock = null;
+            for (ZoomosParsingStats ip : inProgress) {
+                if (ip.getUpdatedTime() != null
+                        && Duration.between(ip.getUpdatedTime(), now).toMinutes() >= stallMinutes) {
+                    stalledFound = true;
+                    issues.add(new SiteIssue(StatusReason.STALLED,
+                            "Выкачка зависла (нет обновлений " + stallMinutes + " мин)"));
+                    break;
+                }
+                if (deadline != null && deadline.isBefore(now)) {
+                    issues.add(new SiteIssue(StatusReason.DEADLINE_MISSED, StatusReason.DEADLINE_MISSED.messageTemplate));
+                } else if (ip.getStartTime() != null && ip.getUpdatedTime() != null
+                        && ip.getCompletionPercent() != null && ip.getCompletionPercent() > 0) {
+                    long elapsed = Duration.between(ip.getStartTime(), ip.getUpdatedTime()).toMinutes();
+                    if (elapsed > 0) {
+                        long total = (long) (elapsed / (ip.getCompletionPercent() / 100.0));
+                        ZonedDateTime est = ip.getStartTime().plusMinutes(total);
+                        boolean reliable = ip.getCompletionPercent() >= 10;
+                        estFinish  = est;
+                        estReliable = reliable;
+                        if (deadline != null && est.isAfter(deadline)) {
+                            issues.add(new SiteIssue(StatusReason.IN_PROGRESS_RISK,
+                                    "Идёт, не успеет к дедлайну " + deadline.format(TIME_FMT)));
+                        } else {
+                            String note = reliable ? "" : " (прогноз неточный, " + ip.getCompletionPercent() + "%)";
+                            issues.add(new SiteIssue(StatusReason.IN_PROGRESS_OK,
+                                    "Идёт, ожидаемое завершение " + est.format(TIME_FMT) + note));
+                        }
+                    } else {
+                        issues.add(new SiteIssue(StatusReason.IN_PROGRESS_OK, "Идёт, прогноз недоступен"));
+                    }
+                } else {
+                    issues.add(new SiteIssue(StatusReason.IN_PROGRESS_OK, "Идёт, прогноз недоступен"));
+                }
+            }
         }
 
-        boolean anyFinished    = latest != null;
+        boolean anyFinished       = !finished.isEmpty();
         boolean anyInProgressLeft = !inProgress.isEmpty() && !stalledFound;
         ZoomosResultLevel status = issues.stream()
                 .map(i -> i.reason().level)
@@ -365,7 +424,7 @@ public class ZoomosAnalysisService {
                 .orElse(anyFinished ? ZoomosResultLevel.OK
                         : (anyInProgressLeft ? ZoomosResultLevel.IN_PROGRESS : ZoomosResultLevel.OK));
 
-        return new CityResult(cityId, cityName, status, latestInStock, sortedIssues(issues), estFinish, estReliable, stalledFound);
+        return new CityResult(cityId, cityName, status, latestInStock, sortedIssues(issues), estFinish, estReliable, stalledFound, baselineInStock, inStockDelta, inStockDeltaPercent);
     }
 
     // =========================================================================
@@ -441,24 +500,38 @@ public class ZoomosAnalysisService {
                 .collect(Collectors.toList());
     }
 
-    private List<com.java.dto.zoomos.SparklinePoint> computeInStockHistory(List<ZoomosParsingStats> baselineStats) {
+    private List<SparklinePoint> computeHistory(List<ZoomosParsingStats> baselineStats,
+                                                 Function<ZoomosParsingStats, Integer> extractor) {
         if (baselineStats.isEmpty()) return List.of();
         java.util.TreeMap<java.time.LocalDate, List<Integer>> byDate = new java.util.TreeMap<>();
         for (ZoomosParsingStats s : baselineStats) {
-            if (s.getParsingDate() != null && s.getInStock() != null) {
-                byDate.computeIfAbsent(s.getParsingDate(), k -> new ArrayList<>()).add(s.getInStock());
+            Integer val = extractor.apply(s);
+            if (s.getParsingDate() != null && val != null) {
+                byDate.computeIfAbsent(s.getParsingDate(), k -> new ArrayList<>()).add(val);
             }
         }
-        List<com.java.dto.zoomos.SparklinePoint> all = byDate.entrySet().stream()
+        List<SparklinePoint> all = byDate.entrySet().stream()
                 .map(e -> {
                     List<Integer> vals = e.getValue().stream().sorted().collect(Collectors.toList());
                     int n = vals.size();
                     int med = n % 2 == 0 ? (vals.get(n / 2 - 1) + vals.get(n / 2)) / 2 : vals.get(n / 2);
-                    return new com.java.dto.zoomos.SparklinePoint(e.getKey(), med);
+                    return new SparklinePoint(e.getKey(), med);
                 })
                 .collect(Collectors.toList());
         int start = Math.max(0, all.size() - 7);
         return all.subList(start, all.size());
+    }
+
+    private List<SparklinePoint> computeInStockHistory(List<ZoomosParsingStats> baselineStats) {
+        return computeHistory(baselineStats, ZoomosParsingStats::getInStock);
+    }
+
+    private List<SparklinePoint> computeErrorHistory(List<ZoomosParsingStats> baselineStats) {
+        return computeHistory(baselineStats, ZoomosParsingStats::getErrorCount);
+    }
+
+    private List<SparklinePoint> computeSpeedHistory(List<ZoomosParsingStats> baselineStats) {
+        return computeHistory(baselineStats, ZoomosParsingStats::getParsingDurationMinutes);
     }
 
     private Map<String, SiteConfig> buildProfileConfigs(Long profileId) {

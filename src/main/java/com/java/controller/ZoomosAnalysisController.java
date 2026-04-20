@@ -660,6 +660,8 @@ public class ZoomosAnalysisController {
                 : "";
         model.addAttribute("runId", runId);
         model.addAttribute("shopName",    run.getShop().getShopName());
+        model.addAttribute("dateFrom",    run.getDateFrom() != null ? run.getDateFrom().toString() : "");
+        model.addAttribute("dateTo",      run.getDateTo()   != null ? run.getDateTo().toString()   : "");
         model.addAttribute("dateFromFmt", dateFromFmt);
         model.addAttribute("dateToFmt",   dateToFmt);
         model.addAttribute("startedAt",   startedAt);
