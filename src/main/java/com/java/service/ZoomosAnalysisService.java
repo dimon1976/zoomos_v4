@@ -67,8 +67,8 @@ public class ZoomosAnalysisService {
         Map<String, String> cityNamesMap = cityNameRepository.findAll().stream()
                 .collect(Collectors.toMap(ZoomosCityName::getCityId, ZoomosCityName::getCityName, (a, b) -> a));
 
-        Map<String, Boolean> ignoreStockMap = knownSiteRepository.findAll().stream()
-                .collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::isIgnoreStock, (a, b) -> a));
+        Map<String, ZoomosKnownSite> knownSiteMap = knownSiteRepository.findAll().stream()
+                .collect(Collectors.toMap(ZoomosKnownSite::getSiteName, s -> s, (a, b) -> a));
 
         Map<String, ZoomosCityId> cityIdMap = cityIdRepository.findByShopIdOrderBySiteName(run.getShop().getId())
                 .stream().collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
@@ -86,7 +86,7 @@ public class ZoomosAnalysisService {
 
             results.add(buildSiteResult(siteName, siteStats, siteBaseline, config, deadline, stallMinutes,
                     dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap, run,
-                    ignoreStockMap.getOrDefault(siteName, false), cityIdMap));
+                    knownSiteMap.get(siteName), cityIdMap));
             processedSites.add(siteName);
         }
 
@@ -100,7 +100,7 @@ public class ZoomosAnalysisService {
             SiteConfig defaultConfig = new SiteConfig(siteName, null, null, null, "OR", null, null);
             results.add(buildSiteResult(siteName, entry.getValue(), siteBaseline, defaultConfig, deadline,
                     stallMinutes, dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap, run,
-                    ignoreStockMap.getOrDefault(siteName, false), cityIdMap));
+                    knownSiteMap.get(siteName), cityIdMap));
         }
 
         results.sort(Comparator.comparingInt(r -> r.getStatus().priority));
@@ -124,8 +124,10 @@ public class ZoomosAnalysisService {
             int minAbsoluteErrors,
             Map<String, String> cityNamesMap,
             ZoomosCheckRun run,
-            boolean ignoreStock,
+            ZoomosKnownSite knownSite,
             Map<String, ZoomosCityId> cityIdMap) {
+
+        boolean ignoreStock = knownSite != null && knownSite.isIgnoreStock();
 
         Set<String> expectedCities = (config.masterCityId() != null && !config.masterCityId().isBlank())
                 ? Set.of(config.masterCityId())
@@ -340,6 +342,9 @@ public class ZoomosAnalysisService {
                 .hasConfigIssue(hasConfigIssue)
                 .configIssueType(configIssueType)
                 .configIssueNote(configIssueNote)
+                .siteId(knownSite != null ? knownSite.getId() : null)
+                .isPriority(knownSite != null && knownSite.isPriority())
+                .itemPriceConfigured(knownSite != null ? knownSite.getItemPriceConfigured() : null)
                 .build();
     }
 

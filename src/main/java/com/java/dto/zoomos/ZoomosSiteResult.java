@@ -46,4 +46,8 @@ public class ZoomosSiteResult {
     private Boolean hasConfigIssue;
     private String configIssueType;
     private String configIssueNote;
+
+    private Long siteId;
+    private Boolean isPriority;
+    private Boolean itemPriceConfigured;
 }

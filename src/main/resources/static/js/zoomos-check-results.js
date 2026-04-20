@@ -158,6 +158,21 @@ function renderSiteResult(r) {
     const ignoreTag  = r.ignoreStock  ? '<span class="city-tag" style="color:#adb5bd;font-style:italic">(без наличия)</span>' : '';
     const masterTag  = r.masterCityId ? '<span class="city-tag" style="color:#adb5bd">(мастер: '+esc(r.masterCityId)+')</span>' : '';
 
+    // ── Дополнительные бейджи: приоритет, ненастроен, Redmine ──────────────
+    const priorityStar   = r.isPriority ? '<i class="fas fa-star priority-star" title="Приоритетный сайт"></i>' : '';
+    const notConfigured  = r.itemPriceConfigured === false
+        ? '<span class="not-configured-badge" data-nc-site="'+esc(r.siteName)+'">⚠ не настроен</span>' : '';
+    const rmCached       = redmineCache.get(r.siteName);
+    const rmBadgeInner   = rmCached
+        ? '<a href="'+esc(rmCached.url||'#')+'" target="_blank" onclick="event.stopPropagation()"'
+          +' class="btn btn-xs '+(rmCached.isClosed?'btn-success':'btn-danger')+' py-0 px-1" style="font-size:.65rem"'
+          +' title="Redmine #'+rmCached.id+' — '+esc(rmCached.statusName||'')+'">#'+rmCached.id+'</a>'
+          +'<button class="btn btn-xs btn-outline-secondary py-0 px-1 btn-rm-edit" style="font-size:.65rem"'
+          +' data-rm-site="'+esc(r.siteName)+'" data-issue-id="'+rmCached.id+'" data-issue-url="'+esc(rmCached.url||'')+'"'
+          +' title="Редактировать в Redmine"><i class="fas fa-pencil-alt"></i></button>'
+        : '';
+    const rmBadgeTag = '<span class="rm-badge-container" data-rm-site="'+esc(r.siteName)+'">'+rmBadgeInner+'</span>';
+
     let histIcon = '';
     if (r.historyBaseUrl) {
         const histUrl = r.historyBaseUrl
@@ -201,10 +216,16 @@ function renderSiteResult(r) {
         +' onclick="markSiteChecked(\''+siteEsc+'\')">'
         +'✓ Проверено</button>';
 
-    bodyHtml += '<div class="d-flex gap-2 mt-3 flex-wrap">'
+    const rmCreateBtn = '<button class="btn btn-xs btn-outline-danger btn-rm-create"'
+        +' data-rm-site="'+esc(r.siteName)+'" style="font-size:.78rem;padding:2px 10px"'
+        +' style="'+(rmCached?'display:none':'')+'">'
+        +'<i class="fas fa-bug me-1"></i>Redmine</button>';
+
+    bodyHtml += '<div class="d-flex gap-2 mt-3 flex-wrap align-items-center">'
         +(matchingBase?'<a href="'+matchingUrl+'" target="_blank" class="btn btn-xs btn-outline-secondary" style="font-size:.78rem;padding:2px 10px">'
         +'<i class="fas fa-handshake me-1"></i>Матчинг</a>':'')
         +configBtn
+        +rmCreateBtn
         +'<div class="ms-auto">'+checkBtn+'</div>'
         +'</div>';
 
@@ -217,8 +238,11 @@ function renderSiteResult(r) {
         +'<div class="group-header" onclick="toggleGroup(this)">'
         +'<span class="status-pill pill-'+status+'"></span>'
         +'<span class="status-badge badge-'+status+'">'+STATUS_LABEL[status]+'</span>'
+        +priorityStar
         +'<span class="site-name" onclick="copySiteName(event,this,\''+r.siteName.replace(/'/g,"\\'")+'\')" title="Нажмите чтобы скопировать">'+esc(r.siteName)+'</span>'
+        +notConfigured
         +configBadge
+        +rmBadgeTag
         +histIcon
         +(cityTag?'<span class="city-tag">'+esc(cityTag)+'</span>':'')
         +ignoreTag+masterTag+accountTag+typeTag
@@ -550,6 +574,13 @@ window.unmarkSiteChecked = function(siteName) {
     renderCheckedSection();
 };
 
+window.unmarkCityChecked = function(siteName, cityId) {
+    setCityChecked(siteName, cityId, false);
+    setChecked(siteName, false);
+    render();
+    renderCheckedSection();
+};
+
 window.toggleCityChecked = function(siteName, cityId) {
     const nowChecked = !isCityChecked(siteName, cityId);
     setCityChecked(siteName, cityId, nowChecked);
@@ -566,29 +597,51 @@ window.toggleCityChecked = function(siteName, cityId) {
 };
 
 function renderCheckedSection() {
-    const checked = allResults.filter(r => r.status !== 'OK' && isChecked(r.siteName));
-    const section  = document.getElementById('checked-section');
-    const list     = document.getElementById('checked-list');
-    const countEl  = document.getElementById('checked-count');
+    const section = document.getElementById('checked-section');
+    const list    = document.getElementById('checked-list');
+    const countEl = document.getElementById('checked-count');
     if (!section) return;
-    if (!checked.length) { section.classList.add('d-none'); return; }
-    section.classList.remove('d-none');
-    if (countEl) countEl.textContent = checked.length;
-    list.innerHTML = checked.map(r => {
+
+    const items = [];
+
+    // 1. Сайты целиком в "Проверено"
+    allResults.filter(r => r.status !== 'OK' && isChecked(r.siteName)).forEach(r => {
         const cities = r.cityResults || [];
         const multi  = cities.length > 1;
         const cityLabel = multi
             ? cities.length + ' городов'
             : (r.cityId && r.cityName ? r.cityId + ' — ' + r.cityName : (r.cityName || ''));
         const sn = r.siteName.replace(/'/g, "\\'");
-        return '<div class="d-flex align-items-center gap-2 py-1 border-bottom">'
+        items.push('<div class="d-flex align-items-center gap-2 py-1 border-bottom">'
             +'<span class="status-badge badge-'+r.status+'" style="font-size:.65rem">'+STATUS_LABEL[r.status]+'</span>'
             +'<span class="small flex-grow-1 text-truncate">'+esc(r.siteName)
             +(cityLabel?' <span class="text-muted">'+esc(cityLabel)+'</span>':'')+'</span>'
             +'<button class="btn btn-xs btn-outline-secondary py-0 px-1" style="font-size:.75rem;flex-shrink:0"'
             +' onclick="unmarkSiteChecked(\''+sn+'\')">↩ Вернуть</button>'
-            +'</div>';
-    }).join('');
+            +'</div>');
+    });
+
+    // 2. Отдельные города для сайтов, которые ещё не перемещены целиком
+    allResults.filter(r => r.status !== 'OK' && !isChecked(r.siteName)).forEach(r => {
+        const problemCities = (r.cityResults || []).filter(cr => cr.status !== 'OK' && cr.cityId);
+        problemCities.filter(cr => isCityChecked(r.siteName, cr.cityId)).forEach(cr => {
+            const cityLabel = (cr.cityId || '') + (cr.cityName ? ' — ' + cr.cityName : '');
+            const sn  = r.siteName.replace(/'/g, "\\'");
+            const cId = (cr.cityId || '').replace(/'/g, "\\'");
+            items.push('<div class="d-flex align-items-center gap-2 py-1 border-bottom">'
+                +'<span class="status-badge badge-'+cr.status+'" style="font-size:.65rem">'+STATUS_LABEL[cr.status]+'</span>'
+                +'<span class="small flex-grow-1 text-truncate">'+esc(r.siteName)
+                +' <span class="text-muted">'+esc(cityLabel)+'</span></span>'
+                +'<button class="btn btn-xs btn-outline-secondary py-0 px-1" style="font-size:.75rem;flex-shrink:0"'
+                +' onclick="unmarkCityChecked(\''+sn+'\',\''+cId+'\')">↩ Вернуть</button>'
+                +'</div>');
+        });
+    });
+
+    if (!items.length) { section.classList.add('d-none'); return; }
+    section.classList.remove('d-none');
+    if (countEl) countEl.textContent = items.length;
+    list.innerHTML = items.join('');
 }
 
 window.toggleCheckedSection = function(btn) {
@@ -602,6 +655,14 @@ window.toggleCheckedSection = function(btn) {
 let _ciCityIdsId = null;
 let _ciBtn = null;
 
+// Bootstrap может быть в window.bootstrap (стандарт) или window.tabler.Modal (Tabler UMD)
+function bsModal(el) {
+    const BSModal = (typeof bootstrap !== 'undefined' && bootstrap.Modal)
+        || (typeof tabler !== 'undefined' && tabler.Modal);
+    if (!BSModal) { console.error('Bootstrap Modal не найден'); return null; }
+    return BSModal.getOrCreateInstance(el);
+}
+
 function openConfigIssueModal(btn) {
     _ciBtn = btn;
     _ciCityIdsId = btn.dataset.cityIdsId;
@@ -613,7 +674,8 @@ function openConfigIssueModal(btn) {
     const clearRow = document.getElementById('ciClearRow');
     if (clearRow) clearRow.classList.toggle('d-none', !hasIssue);
     document.getElementById('ciError').classList.add('d-none');
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('configIssueModal')).show();
+    const modal = bsModal(document.getElementById('configIssueModal'));
+    if (modal) modal.show();
 }
 
 document.getElementById('results-list').addEventListener('click', e => {
@@ -646,7 +708,8 @@ document.getElementById('ciSaveBtn').addEventListener('click', function() {
                 errEl.classList.remove('d-none');
                 return;
             }
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('configIssueModal')).hide();
+            const m = bsModal(document.getElementById('configIssueModal'));
+            if (m) m.hide();
             const hasNow = data.hasConfigIssue;
             if (_ciBtn) {
                 _ciBtn.dataset.hasIssue     = hasNow ? 'true' : 'false';
@@ -723,6 +786,224 @@ window.copyConfigIssues = function() {
     navigator.clipboard.writeText(lines.join('\n')).then(() => showCopyToast('Скопировано ' + lines.length + ' строк'));
 };
 
+// ── Redmine ────────────────────────────────────────────────────────────────
+const redmineCache = new Map(); // siteName → issue | null
+let rmOptions = null; // кэш опций
+
+function runBatchRedmineCheck(results) {
+    const sites = [...new Set(results.filter(r => r.status !== 'OK').map(r => r.siteName))];
+    if (!sites.length) return;
+    const params = sites.map(s => 'sites=' + encodeURIComponent(s)).join('&');
+    fetch('/zoomos/redmine/check-batch?' + params)
+        .then(r => r.json())
+        .then(data => {
+            if (data.enabled === false) return;
+            Object.entries(data).forEach(([site, issue]) => {
+                redmineCache.set(site, issue || null);
+                updateRedmineBadge(site, issue || null);
+            });
+        })
+        .catch(() => {});
+}
+
+function updateRedmineBadge(site, issue) {
+    document.querySelectorAll('.rm-badge-container[data-rm-site="' + CSS.escape(site) + '"]').forEach(c => {
+        c.innerHTML = '';
+        if (!issue) return;
+        const cls = issue.isClosed ? 'btn-success' : 'btn-danger';
+        c.innerHTML = '<a href="' + esc(issue.url || '#') + '" target="_blank" onclick="event.stopPropagation()"'
+            + ' class="btn btn-xs ' + cls + ' py-0 px-1" style="font-size:.65rem"'
+            + ' title="Redmine #' + issue.id + ' — ' + esc(issue.statusName || '') + '">#' + issue.id + '</a>'
+            + '<button class="btn btn-xs btn-outline-secondary py-0 px-1 btn-rm-edit" style="font-size:.65rem"'
+            + ' data-rm-site="' + esc(site) + '" data-issue-id="' + issue.id + '"'
+            + ' data-issue-url="' + esc(issue.url || '') + '"'
+            + ' title="Редактировать в Redmine"><i class="fas fa-pencil-alt"></i></button>';
+    });
+    document.querySelectorAll('.btn-rm-create[data-rm-site="' + CSS.escape(site) + '"]').forEach(btn => {
+        btn.style.display = issue ? 'none' : '';
+    });
+}
+
+// ── Redmine modal helpers ─────────────────────────────────────────────────
+let _rmSiteName = null, _rmMode = 'create', _rmIssueId = null, _rmResult = null;
+
+function rmFillSelect(selId, items, defaultId) {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.innerHTML = items.map(it =>
+        '<option value="' + it.id + '"' + (String(it.id) === String(defaultId) ? ' selected' : '') + '>'
+        + esc(it.name) + '</option>'
+    ).join('');
+}
+
+function rmResetModal() {
+    ['rmCreateBlock','rmSuccessBlock','rmNotesBlock'].forEach(id => document.getElementById(id)?.classList.add('d-none'));
+    ['rmCreateBtn','rmUpdateBtn'].forEach(id => { const el = document.getElementById(id); if (el) { el.classList.add('d-none'); el.disabled = false; } });
+    document.getElementById('rmErrorMsg')?.classList.add('d-none');
+    document.getElementById('rmLoading')?.classList.remove('d-none');
+    document.getElementById('rmDescription').value = '';
+    document.getElementById('rmShortMessage').value = '';
+    document.getElementById('rmNotes').value = '';
+}
+
+function rmShowSuccess(msg, site, issueUrl, shortMsg) {
+    document.getElementById('rmCreateBlock')?.classList.add('d-none');
+    document.getElementById('rmSuccessMsg').textContent = msg;
+    document.getElementById('rmCopyText').textContent = (shortMsg && shortMsg !== site ? site + ' — ' + shortMsg : site) + '\n' + issueUrl;
+    document.getElementById('rmSuccessBlock')?.classList.remove('d-none');
+    document.getElementById('rmCreateBtn')?.classList.add('d-none');
+    document.getElementById('rmUpdateBtn')?.classList.add('d-none');
+}
+
+function rmOpenModal(siteName, mode, issueId, issueUrl) {
+    _rmSiteName = siteName;
+    _rmMode = mode;
+    _rmIssueId = issueId || null;
+
+    rmResetModal();
+    const nameEl = document.getElementById('rmSiteName');
+    if (mode === 'edit' && issueId && issueUrl) {
+        nameEl.innerHTML = '<a href="' + esc(issueUrl) + '" target="_blank" class="text-dark text-decoration-none">#' + issueId + '</a> — ' + esc(siteName);
+    } else {
+        nameEl.textContent = siteName;
+    }
+    bsModal(document.getElementById('redmineModal'))?.show();
+
+    const r = allResults.find(x => x.siteName === siteName);
+    const firstIssue = r ? [...(r.statusReasons || []), ...(r.cityResults || []).flatMap(cr => cr.issues || [])][0] : null;
+    const defaultDesc = firstIssue ? firstIssue.message : '';
+    const defaultShort = firstIssue ? (firstIssue.shortLabel || firstIssue.message) : '';
+
+    Promise.all([
+        rmOptions ? Promise.resolve(rmOptions) : fetch('/zoomos/redmine/options').then(rr => rr.json()),
+        mode === 'edit' && issueId
+            ? fetch('/zoomos/redmine/issue/' + issueId).then(rr => rr.json())
+            : Promise.resolve(null)
+    ]).then(([opts, issueData]) => {
+        rmOptions = opts;
+        document.getElementById('rmLoading')?.classList.add('d-none');
+        if (!opts || opts.enabled === false) {
+            document.getElementById('rmErrorMsg').textContent = 'Redmine не настроен';
+            document.getElementById('rmErrorMsg')?.classList.remove('d-none');
+            return;
+        }
+        const defs = opts.defaults || {};
+        if (issueData && !issueData.error) {
+            rmFillSelect('rmSelectTracker',  opts.trackers   || [], issueData.trackerId    || defs.trackerId   || 0);
+            rmFillSelect('rmSelectStatus',   opts.statuses   || [], issueData.statusId     || defs.statusId    || 0);
+            rmFillSelect('rmSelectPriority', opts.priorities || [], issueData.priorityId   || defs.priorityId  || 0);
+            rmFillSelect('rmSelectAssignee', opts.users      || [], issueData.assignedToId || defs.assignedToId|| 0);
+            document.getElementById('rmDescription').value  = issueData.description || defaultDesc;
+            document.getElementById('rmShortMessage').value = defaultShort;
+            document.getElementById('rmNotesBlock')?.classList.remove('d-none');
+            document.getElementById('rmUpdateBtn')?.classList.remove('d-none');
+        } else {
+            rmFillSelect('rmSelectTracker',  opts.trackers   || [], defs.trackerId   || 0);
+            rmFillSelect('rmSelectStatus',   opts.statuses   || [], defs.statusId    || 0);
+            rmFillSelect('rmSelectPriority', opts.priorities || [], defs.priorityId  || 0);
+            rmFillSelect('rmSelectAssignee', opts.users      || [], defs.assignedToId|| 0);
+            document.getElementById('rmDescription').value  = defaultDesc;
+            document.getElementById('rmShortMessage').value = defaultShort;
+            document.getElementById('rmCreateBtn')?.classList.remove('d-none');
+        }
+        document.getElementById('rmCreateBlock')?.classList.remove('d-none');
+    }).catch(err => {
+        document.getElementById('rmLoading')?.classList.add('d-none');
+        document.getElementById('rmErrorMsg').textContent = 'Ошибка: ' + err.message;
+        document.getElementById('rmErrorMsg')?.classList.remove('d-none');
+    });
+}
+
+// ── Redmine event delegation ──────────────────────────────────────────────
+document.getElementById('results-list').addEventListener('click', e => {
+    const createBtn = e.target.closest('.btn-rm-create');
+    if (createBtn) { e.stopPropagation(); rmOpenModal(createBtn.dataset.rmSite, 'create'); return; }
+    const editBtn = e.target.closest('.btn-rm-edit');
+    if (editBtn) { e.stopPropagation(); rmOpenModal(editBtn.dataset.rmSite, 'edit', parseInt(editBtn.dataset.issueId), editBtn.dataset.issueUrl); }
+});
+
+document.getElementById('rmCreateBtn')?.addEventListener('click', function() {
+    if (!_rmSiteName || !rmOptions) return;
+    const btn = this; btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Создаётся...';
+    document.getElementById('rmErrorMsg')?.classList.add('d-none');
+    const body = {
+        site:         _rmSiteName,
+        description:  document.getElementById('rmDescription').value,
+        shortMessage: document.getElementById('rmShortMessage').value,
+        trackerId:    parseInt(document.getElementById('rmSelectTracker').value)  || 0,
+        statusId:     parseInt(document.getElementById('rmSelectStatus').value)   || 0,
+        priorityId:   parseInt(document.getElementById('rmSelectPriority').value) || 0,
+        assignedToId: parseInt(document.getElementById('rmSelectAssignee').value) || 0,
+    };
+    fetch('/zoomos/redmine/create', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.issue) {
+                const iss = data.issue;
+                redmineCache.set(_rmSiteName, { id: iss.id, url: iss.url, statusName: iss.status, isClosed: false });
+                updateRedmineBadge(_rmSiteName, redmineCache.get(_rmSiteName));
+                rmShowSuccess('Задача создана!', _rmSiteName, iss.url, iss.shortMessage);
+            } else {
+                document.getElementById('rmErrorMsg').textContent = data.error || 'Ошибка';
+                document.getElementById('rmErrorMsg')?.classList.remove('d-none');
+                btn.disabled = false; btn.innerHTML = '<i class="fas fa-bug me-1"></i>Создать задачу';
+            }
+        })
+        .catch(err => {
+            document.getElementById('rmErrorMsg').textContent = 'Ошибка сети: ' + err.message;
+            document.getElementById('rmErrorMsg')?.classList.remove('d-none');
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-bug me-1"></i>Создать задачу';
+        });
+});
+
+document.getElementById('rmUpdateBtn')?.addEventListener('click', function() {
+    if (!_rmIssueId || !rmOptions) return;
+    const btn = this; btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Сохраняется...';
+    document.getElementById('rmErrorMsg')?.classList.add('d-none');
+    const body = {
+        site:         _rmSiteName,
+        description:  document.getElementById('rmDescription').value,
+        shortMessage: document.getElementById('rmShortMessage').value,
+        notes:        document.getElementById('rmNotes').value,
+        trackerId:    parseInt(document.getElementById('rmSelectTracker').value)  || 0,
+        statusId:     parseInt(document.getElementById('rmSelectStatus').value)   || 0,
+        priorityId:   parseInt(document.getElementById('rmSelectPriority').value) || 0,
+        assignedToId: parseInt(document.getElementById('rmSelectAssignee').value) || 0,
+    };
+    fetch('/zoomos/redmine/update/' + _rmIssueId, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const iss = data.issue || {};
+                const cached = redmineCache.get(_rmSiteName) || {};
+                cached.isClosed = iss.isClosed || false;
+                if (iss.statusName) cached.statusName = iss.statusName;
+                redmineCache.set(_rmSiteName, cached);
+                updateRedmineBadge(_rmSiteName, cached);
+                rmShowSuccess('Задача обновлена!', _rmSiteName, iss.url || cached.url || '', body.shortMessage);
+            } else {
+                document.getElementById('rmErrorMsg').textContent = data.error || 'Ошибка';
+                document.getElementById('rmErrorMsg')?.classList.remove('d-none');
+                btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Обновить задачу';
+            }
+        })
+        .catch(err => {
+            document.getElementById('rmErrorMsg').textContent = 'Ошибка сети: ' + err.message;
+            document.getElementById('rmErrorMsg')?.classList.remove('d-none');
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Обновить задачу';
+        });
+});
+
+document.getElementById('rmCopyBtn')?.addEventListener('click', function() {
+    const text = document.getElementById('rmCopyText').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        this.innerHTML = '<i class="fas fa-check me-1"></i>Скопировано';
+        setTimeout(() => { this.innerHTML = '<i class="fas fa-copy me-1"></i>Скопировать'; }, 2000);
+    });
+});
+
 // ── Fetch ─────────────────────────────────────────────────────────────────
 fetch('/zoomos/check/analyze/' + RUN_ID)
     .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
@@ -734,6 +1015,7 @@ fetch('/zoomos/check/analyze/' + RUN_ID)
         updateFilterButtons();
         render();
         renderCheckedSection();
+        setTimeout(() => runBatchRedmineCheck(results), 0);
     })
     .catch(err => {
         console.error('analyze fetch failed:', err);

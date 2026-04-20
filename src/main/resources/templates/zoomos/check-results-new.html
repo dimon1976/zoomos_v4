@@ -268,6 +268,13 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
     pointer-events: none;
 }
 #copy-toast.show { opacity: 1; }
+
+/* ── Priority star ── */
+.priority-star { color: #ffc107; font-size: .75rem; flex-shrink: 0; }
+/* ── Not configured badge ── */
+.not-configured-badge { font-size: .62rem; background: #6c757d; color: #fff; padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+/* ── Redmine badge container ── */
+.rm-badge-container { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
 </style>
 </th:block>
 
@@ -418,10 +425,84 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 <!-- ── Toast ── -->
 <div id="copy-toast"></div>
 
+<!-- ── Redmine Modal ── -->
+<div id="redmineModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="fas fa-bug me-2 text-danger"></i>Redmine — <span id="rmSiteName" class="fw-bold"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div id="rmLoading" class="text-center py-3">
+                    <i class="fas fa-spinner fa-spin me-2"></i>Загрузка...
+                </div>
+                <div id="rmCreateBlock" class="d-none">
+                    <div class="row g-1 mb-2">
+                        <div class="col">
+                            <div class="small text-muted mb-1">Трекер</div>
+                            <select id="rmSelectTracker" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Статус</div>
+                            <select id="rmSelectStatus" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Приоритет</div>
+                            <select id="rmSelectPriority" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Исполнитель</div>
+                            <select id="rmSelectAssignee" class="form-select form-select-sm"></select>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="small text-muted mb-1">Краткое описание проблемы</div>
+                        <input type="text" id="rmShortMessage" class="form-control form-control-sm"
+                               placeholder="Что случилось">
+                    </div>
+                    <div class="mb-2">
+                        <div class="small text-muted mb-1">Описание</div>
+                        <textarea id="rmDescription" class="form-control form-control-sm" rows="5"
+                                  style="font-size:.8rem;font-family:monospace;resize:vertical"></textarea>
+                    </div>
+                    <div id="rmNotesBlock" class="d-none mb-2">
+                        <div class="small text-muted mb-1">Добавить комментарий</div>
+                        <textarea id="rmNotes" class="form-control form-control-sm" rows="2"
+                                  placeholder="Текст комментария" style="font-size:.8rem;resize:vertical"></textarea>
+                    </div>
+                </div>
+                <div id="rmSuccessBlock" class="d-none">
+                    <div class="alert alert-success py-2 mb-2">
+                        <i class="fas fa-check-circle me-1"></i><span id="rmSuccessMsg">Готово!</span>
+                    </div>
+                    <pre id="rmCopyText" class="border rounded p-2 mb-1"
+                         style="font-size:.82rem;white-space:pre-wrap;margin:0;color:#212529;background:#f8f9fa"></pre>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="rmCopyBtn">
+                        <i class="fas fa-copy me-1"></i>Скопировать
+                    </button>
+                </div>
+                <div id="rmErrorMsg" class="d-none text-danger small mt-2"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button id="rmCreateBtn" class="btn btn-sm btn-danger d-none">
+                    <i class="fas fa-bug me-1"></i>Создать задачу
+                </button>
+                <button id="rmUpdateBtn" class="btn btn-sm btn-primary d-none">
+                    <i class="fas fa-save me-1"></i>Обновить задачу
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 </th:block>
 
 <th:block th:fragment="scripts">
-<script th:src="@{/js/zoomos-check-results.js(v=6)}"></script>
+<script th:src="@{/js/zoomos-check-results.js(v=9)}"></script>
 </th:block>
 
 </html>
