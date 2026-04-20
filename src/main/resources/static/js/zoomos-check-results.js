@@ -13,6 +13,7 @@ const STATUS_LABEL = { CRITICAL:'КРИТИЧНО', WARNING:'ПРЕДУПРЕЖ�
 const REASON_ICON = {
     NOT_FOUND:'fa-times-circle', DEADLINE_MISSED:'fa-times-circle', STALLED:'fa-pause-circle',
     STOCK_ZERO:'fa-arrow-down', STOCK_DROP:'fa-arrow-down', STOCK_TREND_DOWN:'fa-arrow-down',
+    NO_PRODUCTS:'fa-box-open',
     CITIES_MISSING:'fa-exclamation-circle', ACCOUNT_MISSING:'fa-exclamation-circle', CATEGORY_MISSING:'fa-exclamation-circle',
     ERROR_GROWTH:'fa-exclamation-triangle', SPEED_TREND:'fa-tachometer-alt', SPEED_SPIKE:'fa-tachometer-alt',
     IN_PROGRESS_OK:'fa-hourglass-half', IN_PROGRESS_RISK:'fa-exclamation-circle',
@@ -31,11 +32,24 @@ const REASON_SPARKLINE_COLOR = {
 
 const MONTHS_RU = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
 
+const CONFIG_ISSUE_LABELS = {
+    MATCHING_ERRORS: 'Некорректные ссылки',
+    KNOWN_ISSUE:     'Известная проблема',
+    NOT_RELEVANT:    'Данные не актуальны',
+    OTHER:           'Другое',
+};
+
 // ── State ────────────────────────────────────────────────────────────────
 let allResults  = [];
 let activeFilters = new Set(['CRITICAL','WARNING']);
 let activeType  = 'ALL';
 let searchText  = '';
+
+const CHECKED_PREFIX = 'zoomos.checked.' + RUN_ID + '.';
+function isChecked(siteName)          { return localStorage.getItem(CHECKED_PREFIX + siteName) === '1'; }
+function isCityChecked(sn, cId)       { return localStorage.getItem(CHECKED_PREFIX + sn + '.' + cId) === '1'; }
+function setChecked(sn, v)            { if (v) localStorage.setItem(CHECKED_PREFIX + sn, '1'); else localStorage.removeItem(CHECKED_PREFIX + sn); }
+function setCityChecked(sn, cId, v)   { if (v) localStorage.setItem(CHECKED_PREFIX + sn + '.' + cId, '1'); else localStorage.removeItem(CHECKED_PREFIX + sn + '.' + cId); }
 function getShowOkCities(siteName) {
     return localStorage.getItem('zoomos.showOkCities.' + siteName) === 'true';
 }
@@ -110,6 +124,16 @@ function getHeaderLabel(r) {
     return first ? (first.shortLabel || first.message) : null;
 }
 
+window.copySiteName = function(e, el, siteName) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(siteName).then(() => {
+        const orig = el.textContent;
+        el.textContent = 'Скопировано!';
+        el.style.color = '#198754';
+        setTimeout(() => { el.textContent = orig; el.style.color = ''; }, 1500);
+    });
+};
+
 function sortByReasonPriority(a, b) {
     const sp = statusPriority(a.status) - statusPriority(b.status);
     if (sp !== 0) return sp;
@@ -125,11 +149,26 @@ function renderSiteResult(r) {
     const cities = r.cityResults || [];
     const multi  = cities.length > 1;
 
-    const cityTag    = multi ? cities.length+' городов' : (r.cityName || cities[0]?.cityName || '');
+    const cityLabel = r.cityId && r.cityName ? r.cityId + ' — ' + r.cityName : (r.cityName || cities[0]?.cityName || '');
+    const cityTag   = multi ? cities.length+' городов' : cityLabel;
     const accountTag = (!multi && r.accountName)
         ? '<span class="account-tag" title="'+esc(r.accountName)+'">'+esc(r.accountName)+'</span>' : '';
     const headerLabel = getHeaderLabel(r);
     const typeTag = '<span class="badge bg-light text-secondary border" style="font-size:.68rem">'+(r.checkType||'')+'</span>';
+    const ignoreTag  = r.ignoreStock  ? '<span class="city-tag" style="color:#adb5bd;font-style:italic">(без наличия)</span>' : '';
+    const masterTag  = r.masterCityId ? '<span class="city-tag" style="color:#adb5bd">(мастер: '+esc(r.masterCityId)+')</span>' : '';
+
+    let histIcon = '';
+    if (r.historyBaseUrl) {
+        const histUrl = r.historyBaseUrl
+            + '?dateFrom=' + encodeURIComponent(toExportDate(DATE_FROM))
+            + '&dateTo='   + encodeURIComponent(toExportDate(DATE_TO))
+            + '&shop='     + encodeURIComponent(r.shopParam || '-')
+            + (!multi && r.cityId ? '&cityId=' + encodeURIComponent(r.cityId) : '');
+        histIcon = '<a href="'+histUrl+'" target="_blank" onclick="event.stopPropagation()" title="История выкачки"'
+            +' style="color:#adb5bd;font-size:.75rem;text-decoration:none;flex-shrink:0">'
+            +'<i class="fas fa-external-link-alt"></i></a>';
+    }
 
     let bodyHtml = '';
     if (multi) {
@@ -145,19 +184,44 @@ function renderSiteResult(r) {
 
     const matchingBase = BASE_URL ? BASE_URL.replace(/\/$/, '')+'/shop/'+encodeURIComponent(SHOP_NAME)+'/sites-items-mapping' : '';
     const matchingUrl  = matchingBase ? matchingBase+'?site='+encodeURIComponent(r.siteName)+'&onlyAssociated=1' : '#';
-    bodyHtml += '<div class="d-flex gap-2 mt-3">'
+
+    const siteEsc = r.siteName.replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+    const configBtn = r.cityIdsId
+        ? '<button class="btn btn-xs btn-outline-secondary btn-config-issue"'
+            +' data-city-ids-id="'+r.cityIdsId+'"'
+            +' data-site="'+esc(r.siteName)+'"'
+            +' data-has-issue="'+(r.hasConfigIssue?'true':'false')+'"'
+            +' data-current-type="'+esc(r.configIssueType||'')+'"'
+            +' data-current-note="'+esc(r.configIssueNote||'')+'"'
+            +' style="font-size:.78rem;padding:2px 10px">'
+            +'<i class="fas fa-cog me-1"></i>Не выкачка</button>'
+        : '';
+    const checkBtn = '<button class="btn btn-xs btn-outline-success"'
+        +' style="font-size:.78rem;padding:2px 10px"'
+        +' onclick="markSiteChecked(\''+siteEsc+'\')">'
+        +'✓ Проверено</button>';
+
+    bodyHtml += '<div class="d-flex gap-2 mt-3 flex-wrap">'
         +(matchingBase?'<a href="'+matchingUrl+'" target="_blank" class="btn btn-xs btn-outline-secondary" style="font-size:.78rem;padding:2px 10px">'
         +'<i class="fas fa-handshake me-1"></i>Матчинг</a>':'')
+        +configBtn
+        +'<div class="ms-auto">'+checkBtn+'</div>'
         +'</div>';
+
+    const configBadge = (r.hasConfigIssue && r.configIssueType)
+        ? '<span class="config-issue-badge" data-config-site="'+esc(r.siteName)+'" title="'+esc(CONFIG_ISSUE_LABELS[r.configIssueType]||r.configIssueType)+(r.configIssueNote?': '+esc(r.configIssueNote):'')+'">⚙ '+esc(CONFIG_ISSUE_LABELS[r.configIssueType]||r.configIssueType)+'</span>'
+        : '<span class="config-issue-badge d-none" data-config-site="'+esc(r.siteName)+'">⚙</span>';
 
     return '<div class="site-group border-'+status+'" data-status="'+status
         +'" data-type="'+(r.checkType||'')+'" data-site="'+esc(r.siteName).toLowerCase()+'">'
         +'<div class="group-header" onclick="toggleGroup(this)">'
         +'<span class="status-pill pill-'+status+'"></span>'
         +'<span class="status-badge badge-'+status+'">'+STATUS_LABEL[status]+'</span>'
-        +'<span class="site-name">'+esc(r.siteName)+'</span>'
+        +'<span class="site-name" onclick="copySiteName(event,this,\''+r.siteName.replace(/'/g,"\\'")+'\')" title="Нажмите чтобы скопировать">'+esc(r.siteName)+'</span>'
+        +configBadge
+        +histIcon
         +(cityTag?'<span class="city-tag">'+esc(cityTag)+'</span>':'')
-        +accountTag+typeTag
+        +ignoreTag+masterTag+accountTag+typeTag
         +(headerLabel?'<span class="first-reason">'+esc(headerLabel)+'</span>':'')
         +'<button class="expand-btn ms-auto" tabindex="-1" aria-hidden="true"><i class="fas fa-chevron-down"></i></button>'
         +'</div>'
@@ -255,14 +319,25 @@ function renderCitiesTable(r, cities) {
             const url = r.historyBaseUrl
                 + '?dateFrom=' + encodeURIComponent(toExportDate(DATE_FROM))
                 + '&dateTo='   + encodeURIComponent(toExportDate(DATE_TO))
+                + '&shop='     + encodeURIComponent(r.shopParam || '-')
                 + '&cityId='   + encodeURIComponent(cr.cityId);
             extLink = ' <a href="'+url+'" target="_blank" title="История на export.zoomos.by" style="color:#adb5bd">'
                 +'<i class="fas fa-external-link-alt" style="font-size:.7rem"></i></a>';
         }
-        return '<tr data-city-status="'+cr.status+'"><td>'+cityDisplay+extLink+'</td>'
+        const cityChecked = cr.status !== 'OK' && isCityChecked(r.siteName, cr.cityId);
+        const cityEsc = (cr.cityId || '').replace(/'/g, "\\'");
+        const siteEscCity = r.siteName.replace(/'/g, "\\'");
+        const checkCityBtn = cr.status !== 'OK'
+            ? '<button class="btn btn-xs '+(cityChecked?'btn-success':'btn-outline-success')+' py-0 px-1"'
+              +' style="font-size:.7rem" onclick="event.stopPropagation();toggleCityChecked(\''+siteEscCity+'\',\''+cityEsc+'\')">'
+              +(cityChecked?'↩':'✓')+'</button>'
+            : '';
+        const hiddenStyle = cityChecked ? ' style="display:none"' : '';
+        return '<tr data-city-status="'+cr.status+'"'+hiddenStyle+'><td>'+cityDisplay+extLink+'</td>'
             +'<td><span class="status-badge badge-'+cr.status+'" style="font-size:.68rem">'+lbl+'</span></td>'
             +'<td class="text-end">'+stockHtml+'</td>'
-            +'<td class="text-muted" style="font-size:.78rem">'+fi+'</td></tr>';
+            +'<td class="text-muted" style="font-size:.78rem">'+fi+'</td>'
+            +'<td>'+checkCityBtn+'</td></tr>';
     }).join('');
     const showOk = getShowOkCities(r.siteName);
     const chk = showOk ? 'checked' : '';
@@ -272,7 +347,7 @@ function renderCitiesTable(r, cities) {
         +' data-site="'+esc(r.siteName)+'" onchange="toggleOkCities(this)" style="margin-right:4px">Показывать OK города</label>'
         +'</div>';
     return toggle+'<table class="table table-sm cities-table mb-2'+hideClass+'"><thead><tr>'
-        +'<th>Город</th><th>Статус</th><th class="text-end">В наличии</th><th>Причина</th>'
+        +'<th>Город</th><th>Статус</th><th class="text-end">В наличии</th><th>Причина</th><th></th>'
         +'</tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
@@ -378,16 +453,21 @@ function updateCounters(results) {
 }
 
 // ── Main render ───────────────────────────────────────────────────────────
-function render() {
-    const list   = document.getElementById('results-list');
+function getVisibleResults() {
     const search = searchText.toLowerCase();
-    const visible = allResults.filter(r => {
+    return allResults.filter(r => {
         if (r.status === 'OK') return false;
+        if (isChecked(r.siteName)) return false;
         if (activeFilters.size && !activeFilters.has(r.status)) return false;
         if (activeType !== 'ALL' && r.checkType !== activeType) return false;
         if (search && !r.siteName.toLowerCase().includes(search)) return false;
         return true;
     });
+}
+
+function render() {
+    const list   = document.getElementById('results-list');
+    const visible = getVisibleResults();
     visible.sort(sortByReasonPriority);
     if (!visible.length) {
         list.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle fa-2x text-success mb-3 d-block"></i>'
@@ -455,6 +535,194 @@ document.getElementById('site-search').addEventListener('input', e => {
     render();
 });
 
+// ── "Проверено" ───────────────────────────────────────────────────────────
+window.markSiteChecked = function(siteName) {
+    setChecked(siteName, true);
+    render();
+    renderCheckedSection();
+};
+
+window.unmarkSiteChecked = function(siteName) {
+    setChecked(siteName, false);
+    const r = allResults.find(x => x.siteName === siteName);
+    if (r) (r.cityResults || []).forEach(cr => { if (cr.cityId) setCityChecked(siteName, cr.cityId, false); });
+    render();
+    renderCheckedSection();
+};
+
+window.toggleCityChecked = function(siteName, cityId) {
+    const nowChecked = !isCityChecked(siteName, cityId);
+    setCityChecked(siteName, cityId, nowChecked);
+    const r = allResults.find(x => x.siteName === siteName);
+    if (nowChecked && r) {
+        const problemCities = (r.cityResults || []).filter(cr => cr.status !== 'OK' && cr.cityId);
+        const allDone = problemCities.length > 0 && problemCities.every(cr => isCityChecked(siteName, cr.cityId));
+        if (allDone) setChecked(siteName, true);
+    } else {
+        setChecked(siteName, false);
+    }
+    render();
+    renderCheckedSection();
+};
+
+function renderCheckedSection() {
+    const checked = allResults.filter(r => r.status !== 'OK' && isChecked(r.siteName));
+    const section  = document.getElementById('checked-section');
+    const list     = document.getElementById('checked-list');
+    const countEl  = document.getElementById('checked-count');
+    if (!section) return;
+    if (!checked.length) { section.classList.add('d-none'); return; }
+    section.classList.remove('d-none');
+    if (countEl) countEl.textContent = checked.length;
+    list.innerHTML = checked.map(r => {
+        const cities = r.cityResults || [];
+        const multi  = cities.length > 1;
+        const cityLabel = multi
+            ? cities.length + ' городов'
+            : (r.cityId && r.cityName ? r.cityId + ' — ' + r.cityName : (r.cityName || ''));
+        const sn = r.siteName.replace(/'/g, "\\'");
+        return '<div class="d-flex align-items-center gap-2 py-1 border-bottom">'
+            +'<span class="status-badge badge-'+r.status+'" style="font-size:.65rem">'+STATUS_LABEL[r.status]+'</span>'
+            +'<span class="small flex-grow-1 text-truncate">'+esc(r.siteName)
+            +(cityLabel?' <span class="text-muted">'+esc(cityLabel)+'</span>':'')+'</span>'
+            +'<button class="btn btn-xs btn-outline-secondary py-0 px-1" style="font-size:.75rem;flex-shrink:0"'
+            +' onclick="unmarkSiteChecked(\''+sn+'\')">↩ Вернуть</button>'
+            +'</div>';
+    }).join('');
+}
+
+window.toggleCheckedSection = function(btn) {
+    const list = document.getElementById('checked-list');
+    list.classList.toggle('d-none');
+    const arrow = btn.textContent.match(/[▾▴]/);
+    if (arrow) btn.textContent = btn.textContent.replace(/[▾▴]/, list.classList.contains('d-none') ? '▾' : '▴');
+};
+
+// ── "Не выкачка" / config-issue ───────────────────────────────────────────
+let _ciCityIdsId = null;
+let _ciBtn = null;
+
+function openConfigIssueModal(btn) {
+    _ciBtn = btn;
+    _ciCityIdsId = btn.dataset.cityIdsId;
+    const hasIssue = btn.dataset.hasIssue === 'true';
+    document.getElementById('ciSiteName').textContent = btn.dataset.site || '';
+    document.getElementById('ciType').value = btn.dataset.currentType || '';
+    document.getElementById('ciNote').value = btn.dataset.currentNote || '';
+    document.getElementById('ciClearFlag').checked = false;
+    const clearRow = document.getElementById('ciClearRow');
+    if (clearRow) clearRow.classList.toggle('d-none', !hasIssue);
+    document.getElementById('ciError').classList.add('d-none');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('configIssueModal')).show();
+}
+
+document.getElementById('results-list').addEventListener('click', e => {
+    const btn = e.target.closest('.btn-config-issue');
+    if (btn) { e.stopPropagation(); openConfigIssueModal(btn); }
+});
+
+document.getElementById('ciSaveBtn').addEventListener('click', function() {
+    if (!_ciCityIdsId) return;
+    const clearFlag = document.getElementById('ciClearFlag').checked;
+    const type = clearFlag ? '' : document.getElementById('ciType').value.trim();
+    const note = clearFlag ? '' : document.getElementById('ciNote').value.trim();
+    const errEl = document.getElementById('ciError');
+    if (!clearFlag && !type) {
+        errEl.textContent = 'Выберите тип проблемы';
+        errEl.classList.remove('d-none');
+        return;
+    }
+    errEl.classList.add('d-none');
+    this.disabled = true;
+    const self = this;
+    const fd = new FormData();
+    if (!clearFlag) { fd.append('type', type); if (note) fd.append('note', note); }
+    fetch('/zoomos/city-ids/' + _ciCityIdsId + '/config-issue', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            self.disabled = false;
+            if (!data.success) {
+                errEl.textContent = data.error || 'Ошибка';
+                errEl.classList.remove('d-none');
+                return;
+            }
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('configIssueModal')).hide();
+            const hasNow = data.hasConfigIssue;
+            if (_ciBtn) {
+                _ciBtn.dataset.hasIssue     = hasNow ? 'true' : 'false';
+                _ciBtn.dataset.currentType  = data.configIssueType || '';
+                _ciBtn.dataset.currentNote  = data.configIssueNote || '';
+            }
+            const siteName = _ciBtn ? _ciBtn.dataset.site : '';
+            document.querySelectorAll('.config-issue-badge[data-config-site="' + CSS.escape(siteName) + '"]')
+                .forEach(badge => {
+                    if (hasNow && data.configIssueType) {
+                        const lbl = CONFIG_ISSUE_LABELS[data.configIssueType] || data.configIssueType;
+                        badge.textContent = '⚙ ' + lbl;
+                        badge.title = lbl + (data.configIssueNote ? ': ' + data.configIssueNote : '');
+                        badge.classList.remove('d-none');
+                    } else {
+                        badge.classList.add('d-none');
+                    }
+                });
+            // Обновить allResults для корректной работы copy
+            const r = allResults.find(x => x.siteName === siteName);
+            if (r) {
+                r.hasConfigIssue   = hasNow;
+                r.configIssueType  = data.configIssueType || null;
+                r.configIssueNote  = data.configIssueNote || null;
+            }
+        })
+        .catch(() => { self.disabled = false; errEl.textContent = 'Ошибка сети'; errEl.classList.remove('d-none'); });
+});
+
+// ── Копировать ────────────────────────────────────────────────────────────
+function showCopyToast(msg) {
+    const t = document.getElementById('copy-toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+window.copyDomains = function() {
+    const visible = getVisibleResults();
+    const domains = [...new Set(visible.map(r => r.siteName))];
+    if (!domains.length) { showCopyToast('Нет данных'); return; }
+    navigator.clipboard.writeText(domains.join('\n')).then(() => showCopyToast('Скопировано ' + domains.length + ' доменов'));
+};
+
+window.copyProblems = function() {
+    const visible = getVisibleResults().filter(r => r.status === 'CRITICAL' || r.status === 'WARNING');
+    const lines = [];
+    visible.forEach(r => {
+        const cities = r.cityResults || [];
+        if (cities.length <= 1) {
+            const cityPart = r.cityId ? r.cityId + (r.cityName ? ' ' + r.cityName : '') : '';
+            const label = getHeaderLabel(r) || STATUS_LABEL[r.status] || r.status;
+            lines.push(r.siteName + (cityPart ? ' — ' + cityPart : '') + ': ' + label);
+        } else {
+            cities.filter(cr => cr.status === 'CRITICAL' || cr.status === 'WARNING').forEach(cr => {
+                const cityPart = (cr.cityId || '') + (cr.cityName ? ' ' + cr.cityName : '');
+                const label = cr.issues && cr.issues.length ? (cr.issues[0].shortLabel || cr.issues[0].message) : STATUS_LABEL[cr.status];
+                lines.push(r.siteName + ' — ' + cityPart + ': ' + label);
+            });
+        }
+    });
+    if (!lines.length) { showCopyToast('Нет данных'); return; }
+    navigator.clipboard.writeText(lines.join('\n')).then(() => showCopyToast('Скопировано ' + lines.length + ' строк'));
+};
+
+window.copyConfigIssues = function() {
+    const withIssue = getVisibleResults().filter(r => r.hasConfigIssue && r.configIssueType);
+    const lines = withIssue.map(r => {
+        const lbl = CONFIG_ISSUE_LABELS[r.configIssueType] || r.configIssueType;
+        return r.siteName + ': ' + lbl + (r.configIssueNote ? ' — ' + r.configIssueNote : '');
+    });
+    if (!lines.length) { showCopyToast('Нет данных'); return; }
+    navigator.clipboard.writeText(lines.join('\n')).then(() => showCopyToast('Скопировано ' + lines.length + ' строк'));
+};
+
 // ── Fetch ─────────────────────────────────────────────────────────────────
 fetch('/zoomos/check/analyze/' + RUN_ID)
     .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
@@ -465,6 +733,7 @@ fetch('/zoomos/check/analyze/' + RUN_ID)
         renderOkSection(results);
         updateFilterButtons();
         render();
+        renderCheckedSection();
     })
     .catch(err => {
         console.error('analyze fetch failed:', err);

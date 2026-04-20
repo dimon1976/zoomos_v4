@@ -28,6 +28,7 @@ public class ZoomosAnalysisService {
     private final ZoomosCheckProfileRepository profileRepository;
     private final ZoomosCityNameRepository cityNameRepository;
     private final ZoomosConfig zoomosConfig;
+    private final ZoomosKnownSiteRepository knownSiteRepository;
 
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
     private static final ZonedDateTime EPOCH = ZonedDateTime.parse("1970-01-01T00:00:00Z");
@@ -66,6 +67,12 @@ public class ZoomosAnalysisService {
         Map<String, String> cityNamesMap = cityNameRepository.findAll().stream()
                 .collect(Collectors.toMap(ZoomosCityName::getCityId, ZoomosCityName::getCityName, (a, b) -> a));
 
+        Map<String, Boolean> ignoreStockMap = knownSiteRepository.findAll().stream()
+                .collect(Collectors.toMap(ZoomosKnownSite::getSiteName, ZoomosKnownSite::isIgnoreStock, (a, b) -> a));
+
+        Map<String, ZoomosCityId> cityIdMap = cityIdRepository.findByShopIdOrderBySiteName(run.getShop().getId())
+                .stream().collect(Collectors.toMap(ZoomosCityId::getSiteName, c -> c, (a, b) -> a));
+
         List<ZoomosSiteResult> results = new ArrayList<>();
         Set<String> processedSites = new HashSet<>();
 
@@ -78,7 +85,8 @@ public class ZoomosAnalysisService {
             List<ZoomosParsingStats> siteBaseline  = findStatsBySiteName(baselineStats, siteName);
 
             results.add(buildSiteResult(siteName, siteStats, siteBaseline, config, deadline, stallMinutes,
-                    dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap, run));
+                    dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap, run,
+                    ignoreStockMap.getOrDefault(siteName, false), cityIdMap));
             processedSites.add(siteName);
         }
 
@@ -89,9 +97,10 @@ public class ZoomosAnalysisService {
             String siteName = entry.getKey();
             if (processedSites.contains(siteName)) continue;
             List<ZoomosParsingStats> siteBaseline = findStatsBySiteName(baselineStats, siteName);
-            SiteConfig defaultConfig = new SiteConfig(siteName, null, null, null, "OR", null);
+            SiteConfig defaultConfig = new SiteConfig(siteName, null, null, null, "OR", null, null);
             results.add(buildSiteResult(siteName, entry.getValue(), siteBaseline, defaultConfig, deadline,
-                    stallMinutes, dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap, run));
+                    stallMinutes, dropThreshold, errorGrowthThreshold, trendDropThreshold, minAbsoluteErrors, cityNamesMap, run,
+                    ignoreStockMap.getOrDefault(siteName, false), cityIdMap));
         }
 
         results.sort(Comparator.comparingInt(r -> r.getStatus().priority));
@@ -114,9 +123,13 @@ public class ZoomosAnalysisService {
             int trendDropThreshold,
             int minAbsoluteErrors,
             Map<String, String> cityNamesMap,
-            ZoomosCheckRun run) {
+            ZoomosCheckRun run,
+            boolean ignoreStock,
+            Map<String, ZoomosCityId> cityIdMap) {
 
-        Set<String> expectedCities = parseExpectedCities(config.cityIds());
+        Set<String> expectedCities = (config.masterCityId() != null && !config.masterCityId().isBlank())
+                ? Set.of(config.masterCityId())
+                : parseExpectedCities(config.cityIds());
         List<SiteIssue> siteIssues = new ArrayList<>();
         List<CityResult> cityResults = new ArrayList<>();
 
@@ -128,7 +141,7 @@ public class ZoomosAnalysisService {
             }
             cityResults.add(analyzeCityGroup(null, null,
                     filtered.isEmpty() ? siteStats : filtered, siteBaseline,
-                    deadline, stallMinutes, dropThreshold, minAbsoluteErrors));
+                    deadline, stallMinutes, dropThreshold, minAbsoluteErrors, ignoreStock));
         } else {
             // Применяем фильтр категорий
             boolean needsParserFilter = config.parserInclude() != null && !config.parserInclude().isBlank();
@@ -158,7 +171,7 @@ public class ZoomosAnalysisService {
                 List<ZoomosParsingStats> effectiveStats = new ArrayList<>(cFiltered.isEmpty() ? cStats : cFiltered);
                 effectiveStats.addAll(cBlInPeriod);
                 cityResults.add(analyzeCityGroup(cId, cName, effectiveStats, cBl,
-                        deadline, stallMinutes, dropThreshold, minAbsoluteErrors));
+                        deadline, stallMinutes, dropThreshold, minAbsoluteErrors, ignoreStock));
             }
             // CITIES_MISSING — считаем количество "Нет данных" городов
             long missingCount = cityResults.stream()
@@ -212,7 +225,7 @@ public class ZoomosAnalysisService {
         trendData.sort(Comparator.comparing(s -> s.getParsingDate() != null ? s.getParsingDate() : java.time.LocalDate.MIN));
         int consDrop = countConsecutiveDrop(trendData.stream()
                 .filter(s -> s.getInStock() != null).map(ZoomosParsingStats::getInStock).collect(Collectors.toList()));
-        if (consDrop >= 3) {
+        if (!ignoreStock && consDrop >= 3) {
             siteIssues.add(new SiteIssue(StatusReason.STOCK_TREND_DOWN, "inStock снижается " + consDrop + " дней подряд"));
         }
         // SPEED_TREND проверяется первым — если найден, SPEED_SPIKE не добавляется
@@ -282,6 +295,19 @@ public class ZoomosAnalysisService {
         String historyBaseUrl = baseUrlNorm.isBlank() ? null
                 : baseUrlNorm + "/shops-parser/" + siteName + "/parsing-history";
 
+        ZoomosCityId cityIdEntity = cityIdMap.get(siteName);
+        Long cityIdsId           = cityIdEntity != null ? cityIdEntity.getId()              : null;
+        boolean hasConfigIssue   = cityIdEntity != null && cityIdEntity.isHasConfigIssue();
+        String configIssueType   = cityIdEntity != null ? cityIdEntity.getConfigIssueType() : null;
+        String configIssueNote   = cityIdEntity != null ? cityIdEntity.getConfigIssueNote() : null;
+
+        List<CityResult> cityResultsWithConfig = cityResults.stream()
+                .map(cr -> new CityResult(cr.cityId(), cr.cityName(), cr.status(), cr.inStock(),
+                        cr.issues(), cr.estimatedFinish(), cr.estimatedFinishReliable(), cr.isStalled(),
+                        cr.baselineInStock(), cr.inStockDelta(), cr.inStockDeltaPercent(),
+                        cityIdsId, hasConfigIssue, configIssueType, configIssueNote))
+                .collect(Collectors.toList());
+
         List<ZoomosParsingStats> allForHistory = new ArrayList<>(siteBaseline);
         allForHistory.addAll(siteStats);
 
@@ -302,12 +328,18 @@ public class ZoomosAnalysisService {
                 .estimatedFinish(estFinish)
                 .estimatedFinishReliable(estReliable)
                 .isStalled(stalled)
-                .cityResults(cityResults)
+                .cityResults(cityResultsWithConfig)
                 .inStockHistory(computeInStockHistory(allForHistory))
                 .errorHistory(errorHistory)
                 .speedHistory(computeSpeedHistory(allForHistory))
                 .shopParam(shopParam)
                 .historyBaseUrl(historyBaseUrl)
+                .ignoreStock(ignoreStock)
+                .masterCityId(config.masterCityId())
+                .cityIdsId(cityIdsId)
+                .hasConfigIssue(hasConfigIssue)
+                .configIssueType(configIssueType)
+                .configIssueNote(configIssueNote)
                 .build();
     }
 
@@ -322,13 +354,14 @@ public class ZoomosAnalysisService {
             ZonedDateTime deadline,
             int stallMinutes,
             int dropThreshold,
-            int minAbsoluteErrors) {
+            int minAbsoluteErrors,
+            boolean ignoreStock) {
 
         List<SiteIssue> issues = new ArrayList<>();
 
         if (stats.isEmpty()) {
             issues.add(new SiteIssue(StatusReason.NOT_FOUND, StatusReason.NOT_FOUND.messageTemplate));
-            return new CityResult(cityId, cityName, ZoomosResultLevel.CRITICAL, null, sortedIssues(issues), null, null, false, null, null, null);
+            return new CityResult(cityId, cityName, ZoomosResultLevel.CRITICAL, null, sortedIssues(issues), null, null, false, null, null, null, null, null, null, null);
         }
 
         ZonedDateTime now = ZonedDateTime.now();
@@ -362,17 +395,24 @@ public class ZoomosAnalysisService {
                     .max(byFinishTime)
                     .orElseGet(() -> finished.stream().max(byFinishTime).orElse(null));
             latestInStock = latest != null ? latest.getInStock() : null;
-            if (latestInStock != null && latestInStock == 0) {
-                issues.add(new SiteIssue(StatusReason.STOCK_ZERO, StatusReason.STOCK_ZERO.messageTemplate));
-            } else if (latestInStock != null) {
-                baselineInStock = computeMedian(baselineStats, s -> s.getInStock() != null ? (double) s.getInStock() : null);
-                if (baselineInStock != null && baselineInStock > 0) {
-                    double drop = (baselineInStock - latestInStock) / baselineInStock * 100;
-                    inStockDelta = latestInStock - (int) Math.round(baselineInStock);
-                    inStockDeltaPercent = (int) Math.round((latestInStock - baselineInStock) / baselineInStock * 100);
-                    if (drop >= dropThreshold) {
-                        issues.add(new SiteIssue(StatusReason.STOCK_DROP,
-                                String.format("В наличии упало на %.0f%% (порог %d%%)", drop, dropThreshold)));
+            if (ignoreStock) {
+                Integer total = latest != null ? latest.getTotalProducts() : null;
+                if (total == null || total == 0) {
+                    issues.add(new SiteIssue(StatusReason.NO_PRODUCTS, StatusReason.NO_PRODUCTS.messageTemplate));
+                }
+            } else {
+                if (latestInStock != null && latestInStock == 0) {
+                    issues.add(new SiteIssue(StatusReason.STOCK_ZERO, StatusReason.STOCK_ZERO.messageTemplate));
+                } else if (latestInStock != null) {
+                    baselineInStock = computeMedian(baselineStats, s -> s.getInStock() != null ? (double) s.getInStock() : null);
+                    if (baselineInStock != null && baselineInStock > 0) {
+                        double drop = (baselineInStock - latestInStock) / baselineInStock * 100;
+                        inStockDelta = latestInStock - (int) Math.round(baselineInStock);
+                        inStockDeltaPercent = (int) Math.round((latestInStock - baselineInStock) / baselineInStock * 100);
+                        if (drop >= dropThreshold) {
+                            issues.add(new SiteIssue(StatusReason.STOCK_DROP,
+                                    String.format("В наличии упало на %.0f%% (порог %d%%)", drop, dropThreshold)));
+                        }
                     }
                 }
             }
@@ -424,7 +464,7 @@ public class ZoomosAnalysisService {
                 .orElse(anyFinished ? ZoomosResultLevel.OK
                         : (anyInProgressLeft ? ZoomosResultLevel.IN_PROGRESS : ZoomosResultLevel.OK));
 
-        return new CityResult(cityId, cityName, status, latestInStock, sortedIssues(issues), estFinish, estReliable, stalledFound, baselineInStock, inStockDelta, inStockDeltaPercent);
+        return new CityResult(cityId, cityName, status, latestInStock, sortedIssues(issues), estFinish, estReliable, stalledFound, baselineInStock, inStockDelta, inStockDeltaPercent, null, null, null, null);
     }
 
     // =========================================================================
@@ -542,7 +582,7 @@ public class ZoomosAnalysisService {
                 .collect(Collectors.toMap(
                         ZoomosProfileSite::getSiteName,
                         s -> new SiteConfig(s.getSiteName(), s.getCityIds(), s.getAccountFilter(),
-                                s.getParserInclude(), s.getParserIncludeMode(), s.getParserExclude()),
+                                s.getParserInclude(), s.getParserIncludeMode(), s.getParserExclude(), null),
                         (a, b) -> a));
     }
 
@@ -552,7 +592,8 @@ public class ZoomosAnalysisService {
                 .collect(Collectors.toMap(
                         ZoomosCityId::getSiteName,
                         c -> new SiteConfig(c.getSiteName(), c.getCityIds(), null,
-                                c.getParserInclude(), c.getParserIncludeMode(), c.getParserExclude()),
+                                c.getParserInclude(), c.getParserIncludeMode(), c.getParserExclude(),
+                                c.getMasterCityId()),
                         (a, b) -> a));
     }
 
@@ -565,6 +606,7 @@ public class ZoomosAnalysisService {
         REASON_ORDER.put(StatusReason.DEADLINE_MISSED,  3);
         REASON_ORDER.put(StatusReason.IN_PROGRESS_RISK, 3);
         REASON_ORDER.put(StatusReason.STOCK_ZERO,       4);
+        REASON_ORDER.put(StatusReason.NO_PRODUCTS,      4);
         REASON_ORDER.put(StatusReason.STOCK_DROP,       5);
         REASON_ORDER.put(StatusReason.CITIES_MISSING,   6);
         REASON_ORDER.put(StatusReason.ACCOUNT_MISSING,  7);
@@ -593,6 +635,7 @@ public class ZoomosAnalysisService {
             String accountFilter,
             String parserInclude,
             String parserIncludeMode,
-            String parserExclude
+            String parserExclude,
+            String masterCityId
     ) {}
 }

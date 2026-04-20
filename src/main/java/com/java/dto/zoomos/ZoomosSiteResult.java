@@ -31,6 +31,8 @@ public class ZoomosSiteResult {
 
     private String shopParam;
     private String historyBaseUrl;
+    private boolean ignoreStock;
+    private String masterCityId;
 
     private ZonedDateTime estimatedFinish;
     private Boolean estimatedFinishReliable;
@@ -39,4 +41,9 @@ public class ZoomosSiteResult {
     private List<SparklinePoint> errorHistory;
     private List<SparklinePoint> speedHistory;
     private List<CityResult> cityResults;
+
+    private Long cityIdsId;
+    private Boolean hasConfigIssue;
+    private String configIssueType;
+    private String configIssueNote;
 }

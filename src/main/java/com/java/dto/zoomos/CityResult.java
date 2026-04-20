@@ -16,5 +16,9 @@ public record CityResult(
     boolean isStalled,
     Double baselineInStock,
     Integer inStockDelta,
-    Integer inStockDeltaPercent
+    Integer inStockDeltaPercent,
+    Long cityIdsId,
+    Boolean hasConfigIssue,
+    String configIssueType,
+    String configIssueNote
 ) {}

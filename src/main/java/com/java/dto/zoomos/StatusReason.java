@@ -10,6 +10,7 @@ public enum StatusReason {
     CITIES_MISSING     (ZoomosResultLevel.CRITICAL,    "Не все города выкачались: ожидалось {expected}, получено {actual}", "Не все города выкачались"),
     ACCOUNT_MISSING    (ZoomosResultLevel.CRITICAL,    "Нет выкачки с нужным аккаунтом ({account})", "Нет выкачки с нужным аккаунтом"),
     CATEGORY_MISSING   (ZoomosResultLevel.CRITICAL,    "Нужная категория не найдена в парсере",  "Категория не найдена"),
+    NO_PRODUCTS        (ZoomosResultLevel.CRITICAL,    "Количество товаров = 0",                  "Нет товаров"),
     STOCK_TREND_DOWN   (ZoomosResultLevel.WARNING,     "inStock снижается {N} дней подряд",      "inStock снижается"),
     ERROR_GROWTH       (ZoomosResultLevel.WARNING,     "Ошибок парсинга больше baseline на {N}%","Ошибок парсинга больше нормы"),
     SPEED_TREND        (ZoomosResultLevel.TREND,       "Выкачка замедляется: {from} → {to} мин/1000 тов",                                   "Выкачка замедляется"),
