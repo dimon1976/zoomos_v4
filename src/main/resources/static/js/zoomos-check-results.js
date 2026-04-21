@@ -22,6 +22,7 @@ const REASON_ICON = {
 const REASON_SORT_ORDER = {
     NOT_FOUND:1, STALLED:2, DEADLINE_MISSED:3, IN_PROGRESS_RISK:3,
     STOCK_ZERO:4, STOCK_DROP:5, CITIES_MISSING:6, ACCOUNT_MISSING:7, CATEGORY_MISSING:8,
+    EMPTY_RESULT:2,
     ERROR_GROWTH:1, STOCK_TREND_DOWN:2, SPEED_SPIKE:1, SPEED_TREND:2,
 };
 
@@ -156,18 +157,18 @@ function renderSiteResult(r) {
     const headerLabel = getHeaderLabel(r);
     const typeTag = '<span class="badge bg-light text-secondary border" style="font-size:.68rem">'+(r.checkType||'')+'</span>';
     const ignoreTag  = r.ignoreStock  ? '<span class="city-tag" style="color:#adb5bd;font-style:italic">(без наличия)</span>' : '';
-    const masterTag  = r.masterCityId ? '<span class="city-tag" style="color:#adb5bd">(мастер: '+esc(r.masterCityId)+')</span>' : '';
+    const masterTag  = '<span class="city-tag master-city-tag"'+(r.masterCityId?'':' style="display:none"')+'>'+(r.masterCityId?'(мастер: '+esc(r.masterCityId)+')':'')+'</span>';
 
     // ── Дополнительные бейджи: приоритет, ненастроен, Redmine ──────────────
     const priorityStar   = r.isPriority ? '<i class="fas fa-star priority-star" title="Приоритетный сайт"></i>' : '';
     const notConfigured  = r.itemPriceConfigured === false
-        ? '<span class="not-configured-badge" data-nc-site="'+esc(r.siteName)+'">⚠ не настроен</span>' : '';
+        ? '<span class="not-configured-badge" data-nc-site="'+esc(r.siteName)+'" title="Сайт не настроен — нажмите =цены для проверки">⚠ не настроен</span>' : '';
     const rmCached       = redmineCache.get(r.siteName);
     const rmBadgeInner   = rmCached
         ? '<a href="'+esc(rmCached.url||'#')+'" target="_blank" onclick="event.stopPropagation()"'
-          +' class="btn btn-xs '+(rmCached.isClosed?'btn-success':'btn-danger')+' py-0 px-1" style="font-size:.65rem"'
+          +' class="btn btn-sm rm-issue-link '+(rmCached.isClosed?'btn-success':'btn-danger')+'"'
           +' title="Redmine #'+rmCached.id+' — '+esc(rmCached.statusName||'')+'">#'+rmCached.id+'</a>'
-          +'<button class="btn btn-xs btn-outline-secondary py-0 px-1 btn-rm-edit" style="font-size:.65rem"'
+          +'<button class="btn btn-sm btn-outline-secondary btn-rm-edit"'
           +' data-rm-site="'+esc(r.siteName)+'" data-issue-id="'+rmCached.id+'" data-issue-url="'+esc(rmCached.url||'')+'"'
           +' title="Редактировать в Redmine"><i class="fas fa-pencil-alt"></i></button>'
         : '';
@@ -202,31 +203,47 @@ function renderSiteResult(r) {
 
     const siteEsc = r.siteName.replace(/'/g, "\\'").replace(/\\/g, '\\\\');
     const configBtn = r.cityIdsId
-        ? '<button class="btn btn-xs btn-outline-secondary btn-config-issue"'
+        ? '<button class="btn btn-sm btn-outline-secondary btn-config-issue"'
             +' data-city-ids-id="'+r.cityIdsId+'"'
             +' data-site="'+esc(r.siteName)+'"'
             +' data-has-issue="'+(r.hasConfigIssue?'true':'false')+'"'
             +' data-current-type="'+esc(r.configIssueType||'')+'"'
-            +' data-current-note="'+esc(r.configIssueNote||'')+'"'
-            +' style="font-size:.78rem;padding:2px 10px">'
+            +' data-current-note="'+esc(r.configIssueNote||'')+'">'
             +'<i class="fas fa-cog me-1"></i>Не выкачка</button>'
         : '';
-    const checkBtn = '<button class="btn btn-xs btn-outline-success btn-mark-checked"'
-        +' style="font-size:.78rem;padding:2px 10px"'
+    const checkBtn = '<button class="btn btn-sm btn-outline-success btn-mark-checked"'
         +' data-site="'+esc(r.siteName)+'">'
         +'✓ Проверено</button>';
 
-    const rmCreateBtn = '<button class="btn btn-xs btn-outline-danger btn-rm-create"'
-        +' data-rm-site="'+esc(r.siteName)+'" style="font-size:.78rem;padding:2px 10px"'
-        +' style="'+(rmCached?'display:none':'')+'">'
-        +'<i class="fas fa-bug me-1"></i>Redmine</button>';
+    const rmCreateBtn = !rmCached
+        ? '<button class="btn btn-sm btn-outline-danger btn-rm-create"'
+            +' data-rm-site="'+esc(r.siteName)+'">'
+            +'<i class="fas fa-bug me-1"></i>Redmine</button>'
+        : '';
 
-    bodyHtml += '<div class="d-flex gap-2 mt-3 flex-wrap align-items-center">'
-        +(matchingBase?'<a href="'+matchingUrl+'" target="_blank" class="btn btn-xs btn-outline-secondary" style="font-size:.78rem;padding:2px 10px">'
-        +'<i class="fas fa-handshake me-1"></i>Матчинг</a>':'')
-        +configBtn
-        +rmCreateBtn
-        +'<div class="ms-auto">'+checkBtn+'</div>'
+    const eqIconCls = r.equalPrices === true ? 'text-success'
+                    : r.equalPrices === false ? 'text-info'
+                    : 'text-secondary';
+    const eqTitle = r.equalPricesCheckedAt
+        ? '= цены: ' + (r.equalPrices === true ? 'ДА' : 'НЕТ') + ', проверка ' + r.equalPricesCheckedAt
+        : 'Проверить CITIES_EQUAL_PRICES';
+    const eqBtn = r.siteId
+        ? '<button class="btn btn-sm btn-outline-secondary btn-fetch-eq-prices"'
+            +' data-site="'+esc(r.siteName)+'"'
+            +' data-site-id="'+r.siteId+'"'
+            +' data-checked-at="'+esc(r.equalPricesCheckedAt||'')+'"'
+            +' title="'+esc(eqTitle)+'">'
+            +'<i class="fas fa-sync-alt me-1 '+eqIconCls+'"></i>=цены</button>'
+        : '';
+
+    const matchingBtn = matchingBase
+        ? '<a href="'+matchingUrl+'" target="_blank" class="btn btn-sm btn-outline-secondary">'
+          +'<i class="fas fa-handshake me-1"></i>Матчинг</a>'
+        : '';
+
+    bodyHtml += '<div class="d-flex align-items-center gap-2 mt-2">'
+        +'<div class="btn-group btn-group-sm">'+matchingBtn+eqBtn+configBtn+'</div>'
+        +'<div class="ms-auto d-flex align-items-center gap-1">'+rmCreateBtn+checkBtn+'</div>'
         +'</div>';
 
     const configBadge = (r.hasConfigIssue && r.configIssueType)
@@ -352,9 +369,11 @@ function renderCitiesTable(r, cities) {
         const cityEsc = (cr.cityId || '').replace(/'/g, "\\'");
         const siteEscCity = r.siteName.replace(/'/g, "\\'");
         const checkCityBtn = cr.status !== 'OK'
-            ? '<button class="btn btn-xs '+(cityChecked?'btn-success':'btn-outline-success')+' py-0 px-1"'
-              +' style="font-size:.7rem" onclick="event.stopPropagation();toggleCityChecked(\''+siteEscCity+'\',\''+cityEsc+'\')">'
-              +(cityChecked?'↩':'✓')+'</button>'
+            ? '<input type="checkbox" class="form-check-input city-check"'
+              +' style="cursor:pointer;width:1.1em;height:1.1em;accent-color:#198754"'
+              +' title="Отметить как проверено"'
+              +(cityChecked?' checked':'')
+              +' onclick="event.stopPropagation();toggleCityChecked(\''+siteEscCity+'\',\''+cityEsc+'\')">'
             : '';
         const hiddenStyle = cityChecked ? ' style="display:none"' : '';
         return '<tr data-city-status="'+cr.status+'"'+hiddenStyle+'><td>'+cityDisplay+extLink+'</td>'
@@ -576,7 +595,11 @@ document.getElementById('filter-bar').addEventListener('click', e => {
     if (!btn) return;
     const f = btn.dataset.filter;
     if (f === 'ALL') {
-        activeFilters.clear();
+        if (activeFilters.size === 0) {
+            activeFilters = new Set(['CRITICAL', 'WARNING']);
+        } else {
+            activeFilters.clear();
+        }
     } else if (e.ctrlKey || e.metaKey) {
         if (activeFilters.has(f)) activeFilters.delete(f);
         else activeFilters.add(f);
@@ -654,12 +677,12 @@ function renderCheckedSection() {
             ? cities.length + ' городов'
             : (r.cityId && r.cityName ? r.cityId + ' — ' + r.cityName : (r.cityName || ''));
         const sn = r.siteName.replace(/'/g, "\\'");
-        items.push('<div class="d-flex align-items-center gap-2 py-1 border-bottom">'
+        items.push('<div class="d-flex align-items-center gap-2 checked-row">'
             +'<span class="status-badge badge-'+r.status+'" style="font-size:.65rem">'+STATUS_LABEL[r.status]+'</span>'
             +'<span class="small flex-grow-1 text-truncate">'+esc(r.siteName)
             +(cityLabel?' <span class="text-muted">'+esc(cityLabel)+'</span>':'')
             +histIcon(r, r.cityId)+miniRmIcon(r.siteName)+'</span>'
-            +'<button class="btn btn-xs btn-outline-secondary py-0 px-1" style="font-size:.75rem;flex-shrink:0"'
+            +'<button class="btn btn-sm btn-outline-secondary flex-shrink-0"'
             +' onclick="unmarkSiteChecked(\''+sn+'\')">↩ Вернуть</button>'
             +'</div>');
     });
@@ -671,12 +694,12 @@ function renderCheckedSection() {
             const cityLabel = (cr.cityId || '') + (cr.cityName ? ' — ' + cr.cityName : '');
             const sn  = r.siteName.replace(/'/g, "\\'");
             const cId = (cr.cityId || '').replace(/'/g, "\\'");
-            items.push('<div class="d-flex align-items-center gap-2 py-1 border-bottom">'
+            items.push('<div class="d-flex align-items-center gap-2 checked-row">'
                 +'<span class="status-badge badge-'+cr.status+'" style="font-size:.65rem">'+STATUS_LABEL[cr.status]+'</span>'
                 +'<span class="small flex-grow-1 text-truncate">'+esc(r.siteName)
                 +' <span class="text-muted">'+esc(cityLabel)+'</span>'
                 +histIcon(r, cr.cityId)+miniRmIcon(r.siteName)+'</span>'
-                +'<button class="btn btn-xs btn-outline-secondary py-0 px-1" style="font-size:.75rem;flex-shrink:0"'
+                +'<button class="btn btn-sm btn-outline-secondary flex-shrink-0"'
                 +' onclick="unmarkCityChecked(\''+sn+'\',\''+cId+'\')">↩ Вернуть</button>'
                 +'</div>');
         });
@@ -725,6 +748,8 @@ function openConfigIssueModal(btn) {
 document.getElementById('results-list').addEventListener('click', e => {
     const btn = e.target.closest('.btn-config-issue');
     if (btn) { e.stopPropagation(); openConfigIssueModal(btn); }
+    const eqBtn = e.target.closest('.btn-fetch-eq-prices');
+    if (eqBtn) { e.stopPropagation(); fetchEqPricesForSite(eqBtn); }
 });
 
 document.getElementById('ciSaveBtn').addEventListener('click', function() {
@@ -830,6 +855,170 @@ window.copyConfigIssues = function() {
     navigator.clipboard.writeText(lines.join('\n')).then(() => showCopyToast('Скопировано ' + lines.length + ' строк'));
 };
 
+window.copyNotConfigured = function() {
+    const sites = allResults.filter(r => r.itemPriceConfigured === false).map(r => r.siteName);
+    if (!sites.length) { showCopyToast('Нет ненастроенных сайтов'); return; }
+    navigator.clipboard.writeText(sites.join('\n')).then(() => showCopyToast('Скопировано ' + sites.length + ' сайтов'));
+};
+
+// ── CITIES_EQUAL_PRICES ───────────────────────────────────────────────────
+let _eqSiteId = null, _eqSiteName = null;
+
+function fetchEqPricesForSite(btn) {
+    const siteId = btn.dataset.siteId, siteName = btn.dataset.site;
+    const hasMasterCity = !!document.querySelector(
+        '.site-group[data-site="' + CSS.escape(siteName.toLowerCase()) + '"] .master-city-tag:not([style*="display:none"])');
+    if (btn.classList.contains('btn-outline-success') || hasMasterCity) {
+        fetch('/zoomos/sites/' + siteId + '/historical-cities')
+            .then(r => r.json())
+            .then(cities => showEqModal(siteName, siteId, cities))
+            .catch(() => showEqModal(siteName, siteId, []));
+        return;
+    }
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Проверка\u2026';
+    fetch('/zoomos/sites/' + siteId + '/fetch-equal-prices', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            const now = new Date().toLocaleString('ru-RU',
+                {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+            btn.dataset.checkedAt = now;
+            updateEqBadge(siteName, data.citiesEqualPrices, now);
+            if (data.itemPriceConfigured === true) {
+                document.querySelectorAll('.site-group[data-site="' + CSS.escape(siteName.toLowerCase()) + '"] .not-configured-badge')
+                    .forEach(b => b.remove());
+                const result = allResults.find(r => r.siteName === siteName);
+                if (result) result.itemPriceConfigured = true;
+            }
+            if (data.success && data.citiesEqualPrices === true && data.historicalCities?.length)
+                showEqModal(siteName, siteId, data.historicalCities);
+        })
+        .catch(() => { btn.disabled = false; btn.innerHTML = origHtml; });
+}
+
+function updateEqBadge(siteName, val, checkedAt) {
+    document.querySelectorAll('.btn-fetch-eq-prices[data-site="' + CSS.escape(siteName) + '"]')
+        .forEach(b => {
+            const when = checkedAt || b.dataset.checkedAt || '';
+            b.title = when
+                ? ('= цены: ' + (val === true ? 'ДА' : 'НЕТ') + ', проверка ' + when)
+                : 'Проверить CITIES_EQUAL_PRICES';
+            const iconCls = val === true ? 'text-success' : val === false ? 'text-info' : 'text-secondary';
+            b.innerHTML = '<i class="fas fa-sync-alt me-1 ' + iconCls + '"></i>=цены';
+        });
+    const r = allResults.find(x => x.siteName === siteName);
+    if (r) { r.equalPrices = val; if (checkedAt) r.equalPricesCheckedAt = checkedAt; }
+}
+
+function applyMasterCity(city) {
+    if (!_eqSiteId) return;
+    const trimmedCity = (city || '').trim();
+    const msgEl = document.getElementById('eqMasterMsg');
+    msgEl.classList.add('d-none');
+    fetch('/zoomos/sites/' + _eqSiteId + '/master-city', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'masterCityId=' + encodeURIComponent(trimmedCity)
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            msgEl.textContent = trimmedCity ? '\u2713 Мастер-город: ' + trimmedCity : '\u2713 Мастер-город снят';
+            msgEl.classList.remove('d-none');
+            document.querySelectorAll('.site-group[data-site="' + CSS.escape(_eqSiteName.toLowerCase()) + '"] .master-city-tag')
+                .forEach(tag => {
+                    if (trimmedCity) {
+                        tag.textContent = '(мастер: ' + trimmedCity + ')';
+                        tag.style.display = '';
+                    } else {
+                        tag.style.display = 'none';
+                    }
+                });
+            const r = allResults.find(x => x.siteName === _eqSiteName);
+            if (r) r.masterCityId = trimmedCity || null;
+        }
+    }).catch(() => {});
+}
+
+function showEqModal(siteName, siteId, cities) {
+    _eqSiteName = siteName;
+    _eqSiteId = siteId;
+    document.getElementById('eqSiteName').textContent = siteName;
+    document.getElementById('eqMasterMsg').classList.add('d-none');
+    document.getElementById('eqManualCityId').value = '';
+    const list = document.getElementById('eqCitiesList');
+    list.innerHTML = '';
+    if (!cities.length) {
+        list.innerHTML = '<div class="text-muted small py-1">Нет данных</div>';
+    } else {
+        cities.forEach(city => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'list-group-item list-group-item-action py-1 small';
+            btn.textContent = city;
+            btn.onclick = function() {
+                list.querySelectorAll('.list-group-item').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                document.getElementById('eqManualCityId').value = city;
+                applyMasterCity(city);
+            };
+            list.appendChild(btn);
+        });
+    }
+    bsModal(document.getElementById('eqPricesModal'))?.show();
+}
+
+document.getElementById('eqManualSetBtn')?.addEventListener('click', function() {
+    applyMasterCity(document.getElementById('eqManualCityId').value);
+});
+document.getElementById('eqClearBtn')?.addEventListener('click', function() {
+    applyMasterCity('');
+});
+
+window.fetchAllEqPrices = async function() {
+    const seenSites = new Set();
+    const btns = [...document.querySelectorAll('.btn-fetch-eq-prices')]
+        .filter(btn => {
+            if (seenSites.has(btn.dataset.site)) return false;
+            seenSites.add(btn.dataset.site);
+            return true;
+        });
+    if (!btns.length) return;
+    const globalBtn = document.getElementById('btnFetchAllEqPrices');
+    const progressEl = document.getElementById('eqPricesProgress');
+    const progressText = document.getElementById('eqPricesProgressText');
+    if (globalBtn) globalBtn.disabled = true;
+    if (progressEl) progressEl.classList.remove('d-none');
+    let done = 0;
+    if (progressText) progressText.textContent = '0/' + btns.length;
+    for (const btn of btns) {
+        const origHtml = btn.innerHTML;
+        document.querySelectorAll('.btn-fetch-eq-prices[data-site="' + CSS.escape(btn.dataset.site) + '"]')
+            .forEach(b => { b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Проверка\u2026'; });
+        try {
+            const data = await fetch('/zoomos/sites/' + btn.dataset.siteId + '/fetch-equal-prices',
+                { method: 'POST' }).then(r => r.json());
+            const now = new Date().toLocaleString('ru-RU',
+                {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+            updateEqBadge(btn.dataset.site, data.citiesEqualPrices, now);
+            if (data.itemPriceConfigured === true) {
+                document.querySelectorAll('.site-group[data-site="' + CSS.escape(btn.dataset.site.toLowerCase()) + '"] .not-configured-badge')
+                    .forEach(b => b.remove());
+                const result = allResults.find(r => r.siteName === btn.dataset.site);
+                if (result) result.itemPriceConfigured = true;
+            }
+        } catch (e) {
+            document.querySelectorAll('.btn-fetch-eq-prices[data-site="' + CSS.escape(btn.dataset.site) + '"]')
+                .forEach(b => { b.disabled = false; b.innerHTML = origHtml; });
+        }
+        document.querySelectorAll('.btn-fetch-eq-prices[data-site="' + CSS.escape(btn.dataset.site) + '"]')
+            .forEach(b => b.disabled = false);
+        if (progressText) progressText.textContent = (++done) + '/' + btns.length;
+    }
+    if (globalBtn) globalBtn.disabled = false;
+    if (progressEl) progressEl.classList.add('d-none');
+};
+
 // ── Redmine ────────────────────────────────────────────────────────────────
 const redmineCache = new Map(); // siteName → issue | null
 let rmOptions = null; // кэш опций
@@ -856,9 +1045,9 @@ function updateRedmineBadge(site, issue) {
         if (!issue) return;
         const cls = issue.isClosed ? 'btn-success' : 'btn-danger';
         c.innerHTML = '<a href="' + esc(issue.url || '#') + '" target="_blank" onclick="event.stopPropagation()"'
-            + ' class="btn btn-xs ' + cls + ' py-0 px-1" style="font-size:.65rem"'
+            + ' class="btn btn-sm rm-issue-link ' + cls + '"'
             + ' title="Redmine #' + issue.id + ' — ' + esc(issue.statusName || '') + '">#' + issue.id + '</a>'
-            + '<button class="btn btn-xs btn-outline-secondary py-0 px-1 btn-rm-edit" style="font-size:.65rem"'
+            + '<button class="btn btn-sm btn-outline-secondary btn-rm-edit"'
             + ' data-rm-site="' + esc(site) + '" data-issue-id="' + issue.id + '"'
             + ' data-issue-url="' + esc(issue.url || '') + '"'
             + ' title="Редактировать в Redmine"><i class="fas fa-pencil-alt"></i></button>';
@@ -1140,6 +1329,8 @@ function rmOpenModal(siteName, mode, issueId, issueUrl) {
                     + '</label>';
             }).join('');
             document.getElementById('issueSelectPanel')?.classList.remove('d-none');
+            const toggleBtn = document.getElementById('rmToggleAllBtn');
+            if (toggleBtn) toggleBtn.textContent = 'Снять все'; // все чекбоксы checked по умолчанию
             const nextBtn = document.getElementById('rmNextBtn');
             nextBtn._opts      = opts;
             nextBtn._issueData = issueData;
@@ -1174,6 +1365,14 @@ document.getElementById('rmNextBtn')?.addEventListener('click', function() {
     rmShowForm(opts, selected, issueData);
 });
 
+window.rmToggleAllIssues = function() {
+    const cbs = [...document.querySelectorAll('#issueSelectList input[type=checkbox]')];
+    const allChecked = cbs.every(cb => cb.checked);
+    cbs.forEach(cb => cb.checked = !allChecked);
+    const btn = document.getElementById('rmToggleAllBtn');
+    if (btn) btn.textContent = allChecked ? 'Выбрать все' : 'Снять все';
+};
+
 // ── Общая delegation для Redmine-кнопок (results-list + ok-section + checked-section) ──
 document.addEventListener('click', e => {
     const createBtn = e.target.closest('.btn-rm-create');
@@ -1189,27 +1388,53 @@ document.getElementById('rmCreateBtn')?.addEventListener('click', function() {
     const btn = this; btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Создаётся...';
     document.getElementById('rmErrorMsg')?.classList.add('d-none');
-    const body = rmCollectBody(_rmSiteName, document.getElementById('rmDescription').value);
+    const siteName = _rmSiteName;
+    const body = rmCollectBody(siteName, document.getElementById('rmDescription').value);
+
+    function applyCreated(iss) {
+        redmineCache.set(siteName, { id: iss.id, url: iss.url, statusName: iss.status || iss.statusName, isClosed: iss.closed || false });
+        updateRedmineBadge(siteName, redmineCache.get(siteName));
+        markSiteChecked(siteName);
+        bsModal(document.getElementById('redmineModal'))?.hide();
+    }
+
+    // Workaround: Redmine-сервер возвращает 404 на POST, но задача создаётся.
+    // Если POST вернул 404 или сервер не нашёл задачу сразу — ищем через GET /check.
+    function fetchByCheck() {
+        fetch('/zoomos/redmine/check?site=' + encodeURIComponent(siteName))
+            .then(r => r.json())
+            .then(d => {
+                const iss = d.existing && d.existing[0];
+                if (iss) { applyCreated(iss); }
+                else { showRmError('Задача создана, но id не получен — обновите страницу'); }
+            })
+            .catch(() => showRmError('Задача создана, но id не получен — обновите страницу'));
+    }
+
+    function showRmError(msg) {
+        document.getElementById('rmErrorMsg').textContent = msg;
+        document.getElementById('rmErrorMsg')?.classList.remove('d-none');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-bug me-1"></i>Создать задачу';
+    }
+
     fetch('/zoomos/redmine/create', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
-        .then(r => r.json())
+        .then(r => {
+            if (r.status === 404) { fetchByCheck(); return null; }
+            return r.json();
+        })
         .then(data => {
+            if (!data) return;
             if (data.success && data.issue) {
-                const iss = data.issue;
-                redmineCache.set(_rmSiteName, { id: iss.id, url: iss.url, statusName: iss.status, isClosed: false });
-                updateRedmineBadge(_rmSiteName, redmineCache.get(_rmSiteName));
-                markSiteChecked(_rmSiteName);
-                bsModal(document.getElementById('redmineModal'))?.hide();
+                applyCreated(data.issue);
+            } else if (data.error && data.error.includes('не найдена')) {
+                // findRecentIssueBySubject вернул null (timing) — ищем вручную
+                fetchByCheck();
             } else {
-                document.getElementById('rmErrorMsg').textContent = data.error || 'Ошибка';
-                document.getElementById('rmErrorMsg')?.classList.remove('d-none');
-                btn.disabled = false; btn.innerHTML = '<i class="fas fa-bug me-1"></i>Создать задачу';
+                showRmError(data.error || 'Ошибка');
             }
         })
-        .catch(err => {
-            document.getElementById('rmErrorMsg').textContent = 'Ошибка сети: ' + err.message;
-            document.getElementById('rmErrorMsg')?.classList.remove('d-none');
-            btn.disabled = false; btn.innerHTML = '<i class="fas fa-bug me-1"></i>Создать задачу';
-        });
+        .catch(err => showRmError('Ошибка сети: ' + err.message));
 });
 
 document.getElementById('rmUpdateBtn')?.addEventListener('click', function() {

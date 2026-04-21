@@ -30,8 +30,9 @@ public class ZoomosAnalysisService {
     private final ZoomosConfig zoomosConfig;
     private final ZoomosKnownSiteRepository knownSiteRepository;
 
-    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    private static final DateTimeFormatter TIME_FMT     = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter DATE_FMT     = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    private static final DateTimeFormatter DATETIME_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
     private static final ZonedDateTime EPOCH = ZonedDateTime.parse("1970-01-01T00:00:00Z");
 
     // =========================================================================
@@ -140,7 +141,7 @@ public class ZoomosAnalysisService {
         if (expectedCities.isEmpty()) {
             List<ZoomosParsingStats> filtered = applyParserFilter(siteStats, config);
             if (filtered.isEmpty() && !siteStats.isEmpty() && config.parserInclude() != null && !config.parserInclude().isBlank()) {
-                siteIssues.add(new SiteIssue(StatusReason.CATEGORY_MISSING, StatusReason.CATEGORY_MISSING.messageTemplate));
+                siteIssues.add(new SiteIssue(StatusReason.CATEGORY_MISSING, buildCategoryMissingMsg(config.parserInclude(), siteStats)));
             }
             cityResults.add(analyzeCityGroup(null, null,
                     filtered.isEmpty() ? siteStats : filtered, siteBaseline,
@@ -152,7 +153,7 @@ public class ZoomosAnalysisService {
                 boolean anyMatch = siteStats.stream()
                         .anyMatch(s -> matchesParserInclude(s.getParserDescription(), config.parserInclude(), config.parserIncludeMode()));
                 if (!anyMatch && !siteStats.isEmpty()) {
-                    siteIssues.add(new SiteIssue(StatusReason.CATEGORY_MISSING, StatusReason.CATEGORY_MISSING.messageTemplate));
+                    siteIssues.add(new SiteIssue(StatusReason.CATEGORY_MISSING, buildCategoryMissingMsg(config.parserInclude(), siteStats)));
                 }
             }
             for (String cId : expectedCities) {
@@ -353,6 +354,9 @@ public class ZoomosAnalysisService {
                 .siteId(knownSite != null ? knownSite.getId() : null)
                 .isPriority(knownSite != null && knownSite.isPriority())
                 .itemPriceConfigured(knownSite != null ? knownSite.getItemPriceConfigured() : null)
+                .equalPrices(knownSite != null ? knownSite.getCitiesEqualPrices() : null)
+                .equalPricesCheckedAt(knownSite != null && knownSite.getCitiesEqualPricesCheckedAt() != null
+                        ? knownSite.getCitiesEqualPricesCheckedAt().format(DATETIME_FMT) : null)
                 .dateFrom(run.getDateFrom() != null ? run.getDateFrom().format(DATE_FMT) : null)
                 .dateTo(run.getDateTo()   != null ? run.getDateTo().format(DATE_FMT)   : null)
                 .build();
@@ -411,7 +415,13 @@ public class ZoomosAnalysisService {
                     issues.add(new SiteIssue(StatusReason.NO_PRODUCTS, StatusReason.NO_PRODUCTS.messageTemplate));
                 }
             } else {
-                if (latestInStock != null && latestInStock == 0) {
+                Integer totalProducts = latest != null ? latest.getTotalProducts() : null;
+                if (latest != null
+                        && (totalProducts == null || totalProducts == 0)
+                        && (latestInStock == null || latestInStock == 0)
+                        && latest.getCompletionPercent() != null && latest.getCompletionPercent() >= 100) {
+                    issues.add(new SiteIssue(StatusReason.EMPTY_RESULT, StatusReason.EMPTY_RESULT.messageTemplate));
+                } else if (latestInStock != null && latestInStock == 0) {
                     issues.add(new SiteIssue(StatusReason.STOCK_ZERO, StatusReason.STOCK_ZERO.messageTemplate));
                 } else if (latestInStock != null) {
                     baselineInStock = computeMedian(pickBestPerDayList(baselineStats), s -> s.getInStock() != null ? (double) s.getInStock() : null);
@@ -437,14 +447,22 @@ public class ZoomosAnalysisService {
             // Завершённых нет — анализируем inProgress (STALLED возможен)
             latest = null;
             latestInStock = null;
-            for (ZoomosParsingStats ip : inProgress) {
-                if (ip.getUpdatedTime() != null
-                        && Duration.between(ip.getUpdatedTime(), now).toMinutes() >= stallMinutes) {
-                    stalledFound = true;
-                    issues.add(new SiteIssue(StatusReason.STALLED,
-                            "Выкачка зависла (нет обновлений " + stallMinutes + " мин)"));
-                    break;
-                }
+
+            // Зависание определяем по САМОМУ СВЕЖЕМУ updatedTime среди всех inProgress записей.
+            // Итерация по отдельным записям ошибочна: в списке могут быть старые записи
+            // предыдущего дня (из parseInProgressPage с dateFrom-1), которые ложно дают STALLED.
+            Optional<ZonedDateTime> latestUpdate = inProgress.stream()
+                    .map(ZoomosParsingStats::getUpdatedTime)
+                    .filter(Objects::nonNull)
+                    .max(Comparator.naturalOrder());
+            if (latestUpdate.isPresent()
+                    && Duration.between(latestUpdate.get(), now).toMinutes() >= stallMinutes) {
+                stalledFound = true;
+                issues.add(new SiteIssue(StatusReason.STALLED,
+                        "Выкачка зависла (нет обновлений " + stallMinutes + " мин)"));
+            }
+
+            if (!stalledFound) for (ZoomosParsingStats ip : inProgress) {
                 if (deadline != null && deadline.isBefore(now)) {
                     issues.add(new SiteIssue(StatusReason.DEADLINE_MISSED, StatusReason.DEADLINE_MISSED.messageTemplate));
                 } else if (ip.getStartTime() != null && ip.getUpdatedTime() != null
@@ -493,6 +511,16 @@ public class ZoomosAnalysisService {
                 .map(SiteIssue::level)
                 .min(Comparator.comparingInt(l -> l.priority))
                 .orElse(hasFinished ? ZoomosResultLevel.OK : ZoomosResultLevel.IN_PROGRESS);
+    }
+
+    private String buildCategoryMissingMsg(String parserInclude, List<ZoomosParsingStats> stats) {
+        String found = stats.stream()
+                .map(ZoomosParsingStats::getParserDescription)
+                .filter(Objects::nonNull).map(String::trim).filter(s -> !s.isEmpty())
+                .distinct().limit(3)
+                .collect(Collectors.joining(", "));
+        return "Не найдено: [" + parserInclude + "]"
+                + (found.isBlank() ? "" : ". В парсере: " + found);
     }
 
     private List<ZoomosParsingStats> applyParserFilter(List<ZoomosParsingStats> stats, SiteConfig config) {
@@ -661,6 +689,7 @@ public class ZoomosAnalysisService {
         // WARNING
         REASON_ORDER.put(StatusReason.ERROR_GROWTH,     1);
         REASON_ORDER.put(StatusReason.STOCK_TREND_DOWN, 2);
+        REASON_ORDER.put(StatusReason.EMPTY_RESULT,     3);
         // TREND
         REASON_ORDER.put(StatusReason.SPEED_SPIKE,      1);
         REASON_ORDER.put(StatusReason.SPEED_TREND,      2);

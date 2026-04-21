@@ -13,6 +13,7 @@ public enum StatusReason {
     NO_PRODUCTS        (ZoomosResultLevel.CRITICAL,    "Количество товаров = 0",                  "Нет товаров"),
     STOCK_TREND_DOWN   (ZoomosResultLevel.WARNING,     "inStock снижается {N} дней подряд",      "inStock снижается"),
     ERROR_GROWTH       (ZoomosResultLevel.WARNING,     "Ошибок парсинга больше baseline на {N}%","Ошибок парсинга больше нормы"),
+    EMPTY_RESULT       (ZoomosResultLevel.WARNING,     "Выкачка завершена на 100% но товаров нет","Пустая выкачка"),
     SPEED_TREND        (ZoomosResultLevel.TREND,       "Выкачка замедляется: {from} → {to} мин/1000 тов",                                   "Выкачка замедляется"),
     SPEED_SPIKE        (ZoomosResultLevel.TREND,       "Разовое замедление: {current} мин/1000 тов (baseline {baseline} мин/1000 тов)",  "Разовое замедление скорости"),
     IN_PROGRESS_OK     (ZoomosResultLevel.IN_PROGRESS, "Идёт, ожидаемое завершение {time}",      "В процессе"),

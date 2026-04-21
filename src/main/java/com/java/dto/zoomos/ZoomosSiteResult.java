@@ -50,6 +50,8 @@ public class ZoomosSiteResult {
     private Long siteId;
     private Boolean isPriority;
     private Boolean itemPriceConfigured;
+    private Boolean equalPrices;
+    private String equalPricesCheckedAt;
 
     private String dateFrom;
     private String dateTo;

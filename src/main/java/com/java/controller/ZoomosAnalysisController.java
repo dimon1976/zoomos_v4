@@ -669,6 +669,14 @@ public class ZoomosAnalysisController {
         model.addAttribute("startedAt",   startedAt);
         model.addAttribute("pageTitle",   run.getShop().getShopName() + " · " + dateFromFmt + " — " + dateToFmt);
         model.addAttribute("baseUrl",     zoomosConfig.getBaseUrl());
+        int blDays = run.getBaselineDays() != null ? run.getBaselineDays() : 0;
+        if (blDays > 0 && run.getDateFrom() != null) {
+            model.addAttribute("baselineFromFmt", run.getDateFrom().minusDays(blDays).format(dmFmt));
+            model.addAttribute("baselineToFmt",   run.getDateFrom().minusDays(1).format(dmFmt));
+        } else {
+            model.addAttribute("baselineFromFmt", "");
+            model.addAttribute("baselineToFmt",   "");
+        }
         return "zoomos/check-results-new";
     }
 
