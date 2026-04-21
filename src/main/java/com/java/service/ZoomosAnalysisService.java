@@ -225,10 +225,17 @@ public class ZoomosAnalysisService {
         List<ZoomosParsingStats> trendData = new ArrayList<>(siteBaseline);
         if (latestStat != null) trendData.add(latestStat);
         trendData.sort(Comparator.comparing(s -> s.getParsingDate() != null ? s.getParsingDate() : java.time.LocalDate.MIN));
-        int consDrop = countConsecutiveDrop(trendData.stream()
-                .filter(s -> s.getInStock() != null).map(ZoomosParsingStats::getInStock).collect(Collectors.toList()));
+        List<Integer> inStockValues = trendData.stream()
+                .filter(s -> s.getInStock() != null).map(ZoomosParsingStats::getInStock).collect(Collectors.toList());
+        int consDrop = countConsecutiveDrop(inStockValues);
         if (!ignoreStock && consDrop >= 3) {
-            siteIssues.add(new SiteIssue(StatusReason.STOCK_TREND_DOWN, "inStock снижается " + consDrop + " дней подряд"));
+            int lastIdx = inStockValues.size() - 1;
+            double firstVal = inStockValues.get(lastIdx - consDrop);
+            double lastVal  = inStockValues.get(lastIdx);
+            double totalDrop = firstVal > 0 ? (firstVal - lastVal) / firstVal * 100 : 0;
+            if (totalDrop >= trendDropThreshold / 2.0) {
+                siteIssues.add(new SiteIssue(StatusReason.STOCK_TREND_DOWN, "inStock снижается " + consDrop + " дней подряд"));
+            }
         }
         // SPEED_TREND проверяется первым — если найден, SPEED_SPIKE не добавляется
         List<Double> speedByDay = trendData.stream()
@@ -369,6 +376,7 @@ public class ZoomosAnalysisService {
             return new CityResult(cityId, cityName, ZoomosResultLevel.CRITICAL, null, sortedIssues(issues), null, null, false, null, null, null, null, null, null, null);
         }
 
+        String debugSite = stats.stream().map(ZoomosParsingStats::getSiteName).filter(Objects::nonNull).findFirst().orElse("");
         ZonedDateTime now = ZonedDateTime.now();
         boolean stalledFound  = false;
         ZonedDateTime estFinish = null;
@@ -409,11 +417,18 @@ public class ZoomosAnalysisService {
                 if (latestInStock != null && latestInStock == 0) {
                     issues.add(new SiteIssue(StatusReason.STOCK_ZERO, StatusReason.STOCK_ZERO.messageTemplate));
                 } else if (latestInStock != null) {
-                    baselineInStock = computeMedian(baselineStats, s -> s.getInStock() != null ? (double) s.getInStock() : null);
+                    baselineInStock = computeBaselineMaxMedianByServer(baselineStats);
                     if (baselineInStock != null && baselineInStock > 0) {
                         double drop = (baselineInStock - latestInStock) / baselineInStock * 100;
                         inStockDelta = latestInStock - (int) Math.round(baselineInStock);
                         inStockDeltaPercent = (int) Math.round((latestInStock - baselineInStock) / baselineInStock * 100);
+                        if ("eapteka.ru".equals(debugSite) && "4400".equals(cityId)) {
+                            log.info("eapteka DEBUG: latest.inStock={}, baselineMaxMedian={}, dropPercent={}, threshold={}",
+                                    latestInStock, baselineInStock, String.format("%.1f", drop), dropThreshold);
+                            log.info("eapteka baseline stats count: {}", baselineStats.size());
+                            baselineStats.forEach(s -> log.info("  baseline: server={} inStock={} date={}",
+                                    s.getServerName(), s.getInStock(), s.getParsingDate()));
+                        }
                         if (drop >= dropThreshold) {
                             issues.add(new SiteIssue(StatusReason.STOCK_DROP,
                                     String.format("В наличии упало на %.0f%% (порог %d%%)", drop, dropThreshold)));
@@ -517,6 +532,24 @@ public class ZoomosAnalysisService {
         if (values.isEmpty()) return null;
         int n = values.size();
         return n % 2 == 0 ? (values.get(n / 2 - 1) + values.get(n / 2)) / 2 : values.get(n / 2);
+    }
+
+    private Double computeBaselineMaxMedianByServer(List<ZoomosParsingStats> stats) {
+        Map<String, List<Double>> byServer = new HashMap<>();
+        for (ZoomosParsingStats s : stats) {
+            if (s.getInStock() == null) continue;
+            String key = s.getServerName() != null ? s.getServerName() : "";
+            byServer.computeIfAbsent(key, k -> new ArrayList<>()).add((double) s.getInStock());
+        }
+        if (byServer.isEmpty()) return null;
+        double max = Double.NEGATIVE_INFINITY;
+        for (List<Double> vals : byServer.values()) {
+            List<Double> sorted = vals.stream().sorted().collect(Collectors.toList());
+            int n = sorted.size();
+            double median = n % 2 == 0 ? (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2 : sorted.get(n / 2);
+            if (median > max) max = median;
+        }
+        return max == Double.NEGATIVE_INFINITY ? null : max;
     }
 
     private int countConsecutiveDrop(List<Integer> values) {

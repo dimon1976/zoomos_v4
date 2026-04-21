@@ -140,6 +140,7 @@ public class ZoomosAnalysisController {
         model.addAttribute("defMinAbsErrors",       dt.getOrDefault("default.min_absolute_errors", "5"));
         model.addAttribute("defTrendDrop",          dt.getOrDefault("default.trend_drop_threshold", "30"));
         model.addAttribute("defTrendErr",           dt.getOrDefault("default.trend_error_threshold", "100"));
+        model.addAttribute("defStallMinutes",       dt.getOrDefault("default.stall_minutes", "60"));
         return "zoomos/index";
     }
 
@@ -151,7 +152,8 @@ public class ZoomosAnalysisController {
                 "default.baseline_days",          params.getOrDefault("default.baseline_days", "7"),
                 "default.min_absolute_errors",    params.getOrDefault("default.min_absolute_errors", "5"),
                 "default.trend_drop_threshold",   params.getOrDefault("default.trend_drop_threshold", "30"),
-                "default.trend_error_threshold",  params.getOrDefault("default.trend_error_threshold", "100")
+                "default.trend_error_threshold",  params.getOrDefault("default.trend_error_threshold", "100"),
+                "default.stall_minutes",          params.getOrDefault("default.stall_minutes", "60")
         );
         settingsService.saveAll(allowed);
         ra.addFlashAttribute("success", "Настройки по умолчанию сохранены");
@@ -719,11 +721,12 @@ public class ZoomosAnalysisController {
             @PathVariable Long runId,
             @RequestParam(required = false) Long profileId,
             @RequestParam(required = false) String deadline,
-            @RequestParam(defaultValue = "60") int stallMinutes) {
+            @RequestParam(required = false) Integer stallMinutes) {
         try {
             ZonedDateTime deadlineTime = (deadline != null && !deadline.isBlank())
                     ? ZonedDateTime.parse(deadline) : null;
-            List<ZoomosSiteResult> results = analysisService.analyze(runId, profileId, deadlineTime, stallMinutes);
+            int effectiveStall = stallMinutes != null ? stallMinutes : settingsService.getStallMinutes();
+            List<ZoomosSiteResult> results = analysisService.analyze(runId, profileId, deadlineTime, effectiveStall);
             return ResponseEntity.ok(results);
         } catch (Exception e) {
             log.error("Ошибка анализа run {}: {}", runId, e.getMessage(), e);
@@ -812,6 +815,7 @@ public class ZoomosAnalysisController {
         model.addAttribute("defMinAbsErrors",  dt.getOrDefault("default.min_absolute_errors", "5"));
         model.addAttribute("defTrendDrop",     dt.getOrDefault("default.trend_drop_threshold", "30"));
         model.addAttribute("defTrendErr",      dt.getOrDefault("default.trend_error_threshold", "100"));
+        model.addAttribute("defStallMinutes",  dt.getOrDefault("default.stall_minutes", "60"));
 
         model.addAttribute("shops", shops);
         model.addAttribute("schedulesMap", schedulesMap);
