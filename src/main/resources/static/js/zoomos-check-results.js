@@ -211,9 +211,9 @@ function renderSiteResult(r) {
             +' style="font-size:.78rem;padding:2px 10px">'
             +'<i class="fas fa-cog me-1"></i>Не выкачка</button>'
         : '';
-    const checkBtn = '<button class="btn btn-xs btn-outline-success"'
+    const checkBtn = '<button class="btn btn-xs btn-outline-success btn-mark-checked"'
         +' style="font-size:.78rem;padding:2px 10px"'
-        +' onclick="markSiteChecked(\''+siteEsc+'\')">'
+        +' data-site="'+esc(r.siteName)+'">'
         +'✓ Проверено</button>';
 
     const rmCreateBtn = '<button class="btn btn-xs btn-outline-danger btn-rm-create"'
@@ -454,6 +454,34 @@ function initSparklines(container) {
     });
 }
 
+// ── Мини-иконки для истории и Redmine ────────────────────────────────────
+function histIcon(r, cityId) {
+    if (!r.historyBaseUrl) return '';
+    const url = r.historyBaseUrl
+        + '?dateFrom=' + encodeURIComponent(toExportDate(DATE_FROM))
+        + '&dateTo='   + encodeURIComponent(toExportDate(DATE_TO))
+        + '&shop='     + encodeURIComponent(r.shopParam || '-')
+        + (cityId ? '&cityId=' + encodeURIComponent(cityId) : '');
+    return ' <a href="' + url + '" target="_blank" class="text-muted ms-1" style="font-size:.72rem" title="История выкачки">'
+        + '<i class="fas fa-external-link-alt"></i></a>';
+}
+
+function miniRmIcon(siteName) {
+    const iss = redmineCache.get(siteName);
+    const sn  = esc(siteName);
+    if (iss) {
+        const cls = iss.isClosed ? 'text-success' : 'text-danger';
+        return ' <button class="btn btn-xs btn-rm-edit border-0 bg-transparent p-0 ms-1 ' + cls + '"'
+            + ' data-rm-site="' + sn + '" data-issue-id="' + iss.id + '" data-issue-url="' + esc(iss.url || '') + '"'
+            + ' style="font-size:.72rem;vertical-align:baseline" title="Redmine #' + iss.id + ' — ' + esc(iss.statusName || '') + '">'
+            + '<i class="fas fa-bug"></i></button>';
+    }
+    return ' <button class="btn btn-xs btn-rm-create border-0 bg-transparent p-0 ms-1 text-muted"'
+        + ' data-rm-site="' + sn + '"'
+        + ' style="font-size:.72rem;vertical-align:baseline" title="Создать задачу Redmine">'
+        + '<i class="fas fa-bug"></i></button>';
+}
+
 // ── OK section ────────────────────────────────────────────────────────────
 function renderOkSection(results) {
     const okList = results.filter(r => r.status === 'OK');
@@ -463,7 +491,9 @@ function renderOkSection(results) {
     const tbody = document.getElementById('ok-table-body');
     tbody.innerHTML = okList.map(r => {
         const inStock = r.latestStat ? fmt(r.latestStat.inStock) : '—';
-        return '<tr><td>'+esc(r.siteName)+'</td><td class="text-muted">'+esc(r.cityName||'')+'</td><td class="text-end">'+inStock+'</td></tr>';
+        return '<tr><td>'+esc(r.siteName)+histIcon(r, r.cityId)+miniRmIcon(r.siteName)+'</td>'
+            +'<td class="text-muted">'+esc(r.cityName||'')+'</td>'
+            +'<td class="text-end">'+inStock+'</td></tr>';
     }).join('');
 }
 
@@ -490,7 +520,12 @@ function getVisibleResults() {
 }
 
 function render() {
-    const list   = document.getElementById('results-list');
+    const list = document.getElementById('results-list');
+    // Сохраняем какие карточки были раскрыты (data-site хранит siteName.toLowerCase())
+    const openCards = new Set(
+        [...list.querySelectorAll('.group-body.open')]
+            .map(el => el.closest('.site-group')?.dataset.site).filter(Boolean)
+    );
     const visible = getVisibleResults();
     visible.sort(sortByReasonPriority);
     if (!visible.length) {
@@ -499,6 +534,13 @@ function render() {
         return;
     }
     list.innerHTML = visible.map(renderSiteResult).join('');
+    // Восстанавливаем открытые карточки
+    openCards.forEach(siteKey => {
+        const group = list.querySelector('.site-group[data-site="' + CSS.escape(siteKey) + '"]');
+        if (!group) return;
+        group.querySelector('.group-body')?.classList.add('open');
+        group.querySelector('.expand-btn')?.classList.add('open');
+    });
 }
 
 // ── Toggle handlers ───────────────────────────────────────────────────────
@@ -615,7 +657,8 @@ function renderCheckedSection() {
         items.push('<div class="d-flex align-items-center gap-2 py-1 border-bottom">'
             +'<span class="status-badge badge-'+r.status+'" style="font-size:.65rem">'+STATUS_LABEL[r.status]+'</span>'
             +'<span class="small flex-grow-1 text-truncate">'+esc(r.siteName)
-            +(cityLabel?' <span class="text-muted">'+esc(cityLabel)+'</span>':'')+'</span>'
+            +(cityLabel?' <span class="text-muted">'+esc(cityLabel)+'</span>':'')
+            +histIcon(r, r.cityId)+miniRmIcon(r.siteName)+'</span>'
             +'<button class="btn btn-xs btn-outline-secondary py-0 px-1" style="font-size:.75rem;flex-shrink:0"'
             +' onclick="unmarkSiteChecked(\''+sn+'\')">↩ Вернуть</button>'
             +'</div>');
@@ -631,7 +674,8 @@ function renderCheckedSection() {
             items.push('<div class="d-flex align-items-center gap-2 py-1 border-bottom">'
                 +'<span class="status-badge badge-'+cr.status+'" style="font-size:.65rem">'+STATUS_LABEL[cr.status]+'</span>'
                 +'<span class="small flex-grow-1 text-truncate">'+esc(r.siteName)
-                +' <span class="text-muted">'+esc(cityLabel)+'</span></span>'
+                +' <span class="text-muted">'+esc(cityLabel)+'</span>'
+                +histIcon(r, cr.cityId)+miniRmIcon(r.siteName)+'</span>'
                 +'<button class="btn btn-xs btn-outline-secondary py-0 px-1" style="font-size:.75rem;flex-shrink:0"'
                 +' onclick="unmarkCityChecked(\''+sn+'\',\''+cId+'\')">↩ Вернуть</button>'
                 +'</div>');
@@ -644,11 +688,11 @@ function renderCheckedSection() {
     list.innerHTML = items.join('');
 }
 
-window.toggleCheckedSection = function(btn) {
-    const list = document.getElementById('checked-list');
+window.toggleCheckedSection = function() {
+    const list  = document.getElementById('checked-list');
+    const arrow = document.getElementById('checked-arrow');
     list.classList.toggle('d-none');
-    const arrow = btn.textContent.match(/[▾▴]/);
-    if (arrow) btn.textContent = btn.textContent.replace(/[▾▴]/, list.classList.contains('d-none') ? '▾' : '▴');
+    if (arrow) arrow.textContent = list.classList.contains('d-none') ? '▾' : '▴';
 };
 
 // ── "Не выкачка" / config-issue ───────────────────────────────────────────
@@ -837,13 +881,198 @@ function rmFillSelect(selId, items, defaultId) {
 }
 
 function rmResetModal() {
-    ['rmCreateBlock','rmSuccessBlock','rmNotesBlock'].forEach(id => document.getElementById(id)?.classList.add('d-none'));
-    ['rmCreateBtn','rmUpdateBtn'].forEach(id => { const el = document.getElementById(id); if (el) { el.classList.add('d-none'); el.disabled = false; } });
+    ['rmCreateBlock','rmSuccessBlock','rmNotesBlock','issueSelectPanel'].forEach(id => document.getElementById(id)?.classList.add('d-none'));
+    ['rmCreateBtn','rmUpdateBtn','rmNextBtn'].forEach(id => { const el = document.getElementById(id); if (el) { el.classList.add('d-none'); el.disabled = false; } });
+    ['rmCfErrorRow','rmCfMethodCol','rmCfVariantCol'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
     document.getElementById('rmErrorMsg')?.classList.add('d-none');
     document.getElementById('rmLoading')?.classList.remove('d-none');
     document.getElementById('rmDescription').value = '';
     document.getElementById('rmShortMessage').value = '';
     document.getElementById('rmNotes').value = '';
+}
+
+// Собрать список проблем сайта для Phase 1
+function collectRmIssues(r) {
+    function cityHistUrl(cityId) {
+        if (!r.historyBaseUrl) return '';
+        return r.historyBaseUrl
+            + '?dateFrom=' + encodeURIComponent(toExportDate(DATE_FROM))
+            + '&dateTo='   + encodeURIComponent(toExportDate(DATE_TO))
+            + '&shop='     + encodeURIComponent(r.shopParam || '-')
+            + (cityId ? '&cityId=' + encodeURIComponent(cityId) : '');
+    }
+
+    const cities = r.cityResults || [];
+    const problemCities = cities.filter(cr => cr.status !== 'OK');
+    if (problemCities.length > 0) {
+        return problemCities.map(cr => ({
+            cityId:     cr.cityId || '',
+            cityName:   cr.cityName || '',
+            shortLabel: cr.issues && cr.issues.length ? (cr.issues[0].shortLabel || cr.issues[0].message) : STATUS_LABEL[cr.status] || cr.status,
+            level:      cr.status,
+            historyUrl: cityHistUrl(cr.cityId),
+        }));
+    }
+    // Однородный сайт — используем statusReasons
+    const issues = (r.statusReasons || []).filter(i => i.level === 'CRITICAL' || i.level === 'WARNING');
+    if (!issues.length && r.statusReasons && r.statusReasons.length) {
+        const first = r.statusReasons[0];
+        return [{ cityId: r.cityId || '', cityName: r.cityName || '', shortLabel: first.shortLabel || first.message, level: first.level, historyUrl: cityHistUrl(r.cityId) }];
+    }
+    return issues.map(i => ({
+        cityId:     r.cityId || '',
+        cityName:   r.cityName || '',
+        shortLabel: i.shortLabel || i.message,
+        level:      i.level,
+        historyUrl: cityHistUrl(r.cityId),
+    }));
+}
+
+// Построить описание задачи Redmine из выбранных пунктов
+function buildRedmineDescription(r, items) {
+    if (!items.length) return '';
+
+    // Группировка по shortLabel
+    const byLabel = {};
+    items.forEach(i => {
+        const key = i.shortLabel || '';
+        if (!byLabel[key]) byLabel[key] = [];
+        byLabel[key].push(i);
+    });
+
+    let desc = 'проблемы с выкачкой:\n\n';
+
+    // CRITICAL → WARNING → TREND
+    ['CRITICAL', 'WARNING', 'TREND'].forEach(level => {
+        Object.entries(byLabel)
+            .filter(([, list]) => list[0].level === level)
+            .forEach(([label, list]) => {
+                const badge  = level === 'CRITICAL' ? '[ERROR]' : '[WARN]';
+                const cities = list.map(i => i.cityId + ' - ' + i.cityName).join(', ');
+                desc += badge + ' ' + label + '\nГорода: ' + cities + '\n\n';
+            });
+    });
+    // Уровень не определён (items без level) — добавляем в конце
+    Object.entries(byLabel)
+        .filter(([, list]) => !list[0].level || !['CRITICAL','WARNING','TREND'].includes(list[0].level))
+        .forEach(([label, list]) => {
+            const cities = list.map(i => i.cityId + ' - ' + i.cityName).join(', ');
+            desc += '[ERROR] ' + label + '\nГорода: ' + cities + '\n\n';
+        });
+
+    // Уникальные ссылки на историю (дедупликация по URL)
+    const seenUrls = new Set();
+    const historyLines = [];
+    items.forEach(i => {
+        if (i.historyUrl && !seenUrls.has(i.historyUrl)) {
+            seenUrls.add(i.historyUrl);
+            historyLines.push(i.cityId + ' - ' + i.cityName + ': ' + i.historyUrl);
+        }
+    });
+    if (historyLines.length) {
+        desc += '{{collapse(Ссылки на историю парсинга)\n' + historyLines.join('\n') + '\n}}\n\n';
+    }
+
+    const matchBase = BASE_URL ? BASE_URL.replace(/\/$/, '') + '/shop/' + encodeURIComponent(SHOP_NAME) + '/sites-items-mapping' : '';
+    if (matchBase) {
+        desc += '{{collapse(Ссылка на матчинг)\n' + matchBase + '?site=' + encodeURIComponent(r.siteName) + '&onlyAssociated=1\n}}\n';
+    }
+    return desc;
+}
+
+// Краткое описание = уникальные shortLabel через ", "
+function buildRmShortMessage(items) {
+    return [...new Set(items.map(i => i.shortLabel).filter(Boolean))].join(', ');
+}
+
+let _rmIssueItems = []; // все items сайта для текущей модалки
+
+function fillCfSelects(cfs, cfValues) {
+    if (cfs.cfError) {
+        const sel = document.getElementById('rmSelectCfError');
+        if (!sel) return;
+        sel.innerHTML = '';
+        const rawCur = cfValues ? cfValues[String(cfs.cfError.id)] : null;
+        const curArr = Array.isArray(rawCur) ? rawCur : (rawCur ? [rawCur] : []);
+        (cfs.cfError.possibleValues || []).forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v; opt.textContent = v;
+            if (curArr.includes(v)) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        const row = document.getElementById('rmCfErrorRow');
+        if (row) row.style.display = '';
+    }
+    if (cfs.cfMethod) {
+        const items = (cfs.cfMethod.possibleValues || []).map(v => ({id:v, name:v}));
+        const cur = cfValues ? cfValues[String(cfs.cfMethod.id)] : '';
+        rmFillSelect('rmSelectCfMethod', items, cur || '');
+        const col = document.getElementById('rmCfMethodCol');
+        if (col) col.style.display = '';
+    }
+    if (cfs.cfVariant) {
+        const items = [{id:'', name:'— выбрать —'}].concat((cfs.cfVariant.possibleValues || []).map(v => ({id:v, name:v})));
+        const cur = cfValues ? cfValues[String(cfs.cfVariant.id)] : '';
+        rmFillSelect('rmSelectCfVariant', items, cur || '');
+        const col = document.getElementById('rmCfVariantCol');
+        if (col) col.style.display = '';
+    }
+}
+
+function rmCollectBody(site, description) {
+    const cfs = rmOptions ? (rmOptions.customFields || {}) : {};
+    const customFields = [];
+    const cfErrorSel = document.getElementById('rmSelectCfError');
+    const cfErrorValues = (cfs.cfError && cfErrorSel)
+        ? Array.from(cfErrorSel.selectedOptions).map(o => o.value).filter(v => v)
+        : [];
+    if (cfs.cfError)   customFields.push({ id: cfs.cfError.id,   value: cfErrorValues });
+    if (cfs.cfMethod)  { const v = document.getElementById('rmSelectCfMethod')?.value; if (v != null) customFields.push({ id: cfs.cfMethod.id,  value: v }); }
+    if (cfs.cfVariant) { const v = document.getElementById('rmSelectCfVariant')?.value; if (v != null) customFields.push({ id: cfs.cfVariant.id, value: v }); }
+    const shortMsg = cfErrorValues.length
+        ? cfErrorValues.join(', ')
+        : (document.getElementById('rmShortMessage')?.value || '');
+    return {
+        site, description,
+        shortMessage: shortMsg,
+        notes:        document.getElementById('rmNotes')?.value || '',
+        trackerId:    parseInt(document.getElementById('rmSelectTracker')?.value)  || 0,
+        statusId:     parseInt(document.getElementById('rmSelectStatus')?.value)   || 0,
+        priorityId:   parseInt(document.getElementById('rmSelectPriority')?.value) || 0,
+        assignedToId: parseInt(document.getElementById('rmSelectAssignee')?.value) || 0,
+        customFields,
+    };
+}
+
+function rmShowForm(opts, items, issueData) {
+    const r = allResults.find(x => x.siteName === _rmSiteName);
+    const defs = opts.defaults || {};
+    const cfs  = opts.customFields || {};
+    // Скрываем кастомные поля до заполнения
+    ['rmCfErrorRow','rmCfMethodCol','rmCfVariantCol'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
+    if (issueData && !issueData.error) {
+        rmFillSelect('rmSelectTracker',  opts.trackers   || [], issueData.trackerId    || defs.trackerId   || 0);
+        rmFillSelect('rmSelectStatus',   opts.statuses   || [], issueData.statusId     || defs.statusId    || 0);
+        rmFillSelect('rmSelectPriority', opts.priorities || [], issueData.priorityId   || defs.priorityId  || 0);
+        rmFillSelect('rmSelectAssignee', opts.users      || [], issueData.assignedToId || defs.assignedToId|| 0);
+        fillCfSelects(cfs, issueData.customFieldValues || {});
+        document.getElementById('rmDescription').value  = issueData.description || '';
+        document.getElementById('rmShortMessage').value = buildRmShortMessage(items);
+        document.getElementById('rmNotesBlock')?.classList.remove('d-none');
+        document.getElementById('rmUpdateBtn')?.classList.remove('d-none');
+    } else {
+        rmFillSelect('rmSelectTracker',  opts.trackers   || [], defs.trackerId   || 0);
+        rmFillSelect('rmSelectStatus',   opts.statuses   || [], defs.statusId    || 0);
+        rmFillSelect('rmSelectPriority', opts.priorities || [], defs.priorityId  || 0);
+        rmFillSelect('rmSelectAssignee', opts.users      || [], defs.assignedToId|| 0);
+        fillCfSelects(cfs, null);
+        document.getElementById('rmDescription').value  = r ? buildRedmineDescription(r, items) : '';
+        document.getElementById('rmShortMessage').value = buildRmShortMessage(items);
+        document.getElementById('rmCreateBtn')?.classList.remove('d-none');
+    }
+    document.getElementById('rmCreateBlock')?.classList.remove('d-none');
 }
 
 function rmShowSuccess(msg, site, issueUrl, shortMsg) {
@@ -870,9 +1099,7 @@ function rmOpenModal(siteName, mode, issueId, issueUrl) {
     bsModal(document.getElementById('redmineModal'))?.show();
 
     const r = allResults.find(x => x.siteName === siteName);
-    const firstIssue = r ? [...(r.statusReasons || []), ...(r.cityResults || []).flatMap(cr => cr.issues || [])][0] : null;
-    const defaultDesc = firstIssue ? firstIssue.message : '';
-    const defaultShort = firstIssue ? (firstIssue.shortLabel || firstIssue.message) : '';
+    _rmIssueItems = r ? collectRmIssues(r) : [];
 
     Promise.all([
         rmOptions ? Promise.resolve(rmOptions) : fetch('/zoomos/redmine/options').then(rr => rr.json()),
@@ -887,26 +1114,28 @@ function rmOpenModal(siteName, mode, issueId, issueUrl) {
             document.getElementById('rmErrorMsg')?.classList.remove('d-none');
             return;
         }
-        const defs = opts.defaults || {};
-        if (issueData && !issueData.error) {
-            rmFillSelect('rmSelectTracker',  opts.trackers   || [], issueData.trackerId    || defs.trackerId   || 0);
-            rmFillSelect('rmSelectStatus',   opts.statuses   || [], issueData.statusId     || defs.statusId    || 0);
-            rmFillSelect('rmSelectPriority', opts.priorities || [], issueData.priorityId   || defs.priorityId  || 0);
-            rmFillSelect('rmSelectAssignee', opts.users      || [], issueData.assignedToId || defs.assignedToId|| 0);
-            document.getElementById('rmDescription').value  = issueData.description || defaultDesc;
-            document.getElementById('rmShortMessage').value = defaultShort;
-            document.getElementById('rmNotesBlock')?.classList.remove('d-none');
-            document.getElementById('rmUpdateBtn')?.classList.remove('d-none');
+        if (mode === 'create' && _rmIssueItems.length >= 1) {
+            // Phase 1: показать список проблем с чекбоксами
+            const listEl = document.getElementById('issueSelectList');
+            listEl.innerHTML = _rmIssueItems.map(it => {
+                const cityLabel = [it.cityId, it.cityName].filter(Boolean).join(' — ');
+                const text = cityLabel ? cityLabel + ': ' + it.shortLabel : it.shortLabel;
+                return '<label class="list-group-item list-group-item-action py-1 px-2 d-flex align-items-center gap-2" style="cursor:pointer;font-size:.85rem">'
+                    + '<input type="checkbox" class="form-check-input flex-shrink-0" checked'
+                    + ' data-city-id="'    + esc(it.cityId    || '') + '"'
+                    + ' data-city-name="'  + esc(it.cityName  || '') + '"'
+                    + ' data-short-label="'+ esc(it.shortLabel|| '') + '"'
+                    + ' data-history-url="'+ esc(it.historyUrl|| '') + '">'
+                    + '<span>' + esc(text) + '</span>'
+                    + '</label>';
+            }).join('');
+            document.getElementById('issueSelectPanel')?.classList.remove('d-none');
+            document.getElementById('rmNextBtn')._opts = opts;
+            document.getElementById('rmNextBtn')?.classList.remove('d-none');
         } else {
-            rmFillSelect('rmSelectTracker',  opts.trackers   || [], defs.trackerId   || 0);
-            rmFillSelect('rmSelectStatus',   opts.statuses   || [], defs.statusId    || 0);
-            rmFillSelect('rmSelectPriority', opts.priorities || [], defs.priorityId  || 0);
-            rmFillSelect('rmSelectAssignee', opts.users      || [], defs.assignedToId|| 0);
-            document.getElementById('rmDescription').value  = defaultDesc;
-            document.getElementById('rmShortMessage').value = defaultShort;
-            document.getElementById('rmCreateBtn')?.classList.remove('d-none');
+            // edit-режим: сразу Phase 2
+            rmShowForm(opts, _rmIssueItems, issueData);
         }
-        document.getElementById('rmCreateBlock')?.classList.remove('d-none');
     }).catch(err => {
         document.getElementById('rmLoading')?.classList.add('d-none');
         document.getElementById('rmErrorMsg').textContent = 'Ошибка: ' + err.message;
@@ -914,12 +1143,32 @@ function rmOpenModal(siteName, mode, issueId, issueUrl) {
     });
 }
 
-// ── Redmine event delegation ──────────────────────────────────────────────
-document.getElementById('results-list').addEventListener('click', e => {
+document.getElementById('rmNextBtn')?.addEventListener('click', function() {
+    const opts = this._opts || rmOptions;
+    if (!opts) return;
+    const selected = [];
+    document.querySelectorAll('#issueSelectList input[type=checkbox]:checked').forEach(cb => {
+        selected.push({
+            cityId:     cb.dataset.cityId     || '',
+            cityName:   cb.dataset.cityName   || '',
+            shortLabel: cb.dataset.shortLabel || '',
+            historyUrl: cb.dataset.historyUrl || '',
+        });
+    });
+    if (!selected.length) return;
+    document.getElementById('issueSelectPanel')?.classList.add('d-none');
+    this.classList.add('d-none');
+    rmShowForm(opts, selected, null);
+});
+
+// ── Общая delegation для Redmine-кнопок (results-list + ok-section + checked-section) ──
+document.addEventListener('click', e => {
     const createBtn = e.target.closest('.btn-rm-create');
     if (createBtn) { e.stopPropagation(); rmOpenModal(createBtn.dataset.rmSite, 'create'); return; }
     const editBtn = e.target.closest('.btn-rm-edit');
-    if (editBtn) { e.stopPropagation(); rmOpenModal(editBtn.dataset.rmSite, 'edit', parseInt(editBtn.dataset.issueId), editBtn.dataset.issueUrl); }
+    if (editBtn) { e.stopPropagation(); rmOpenModal(editBtn.dataset.rmSite, 'edit', parseInt(editBtn.dataset.issueId), editBtn.dataset.issueUrl); return; }
+    const markBtn = e.target.closest('.btn-mark-checked');
+    if (markBtn) { e.stopPropagation(); markSiteChecked(markBtn.dataset.site); }
 });
 
 document.getElementById('rmCreateBtn')?.addEventListener('click', function() {
@@ -927,15 +1176,7 @@ document.getElementById('rmCreateBtn')?.addEventListener('click', function() {
     const btn = this; btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Создаётся...';
     document.getElementById('rmErrorMsg')?.classList.add('d-none');
-    const body = {
-        site:         _rmSiteName,
-        description:  document.getElementById('rmDescription').value,
-        shortMessage: document.getElementById('rmShortMessage').value,
-        trackerId:    parseInt(document.getElementById('rmSelectTracker').value)  || 0,
-        statusId:     parseInt(document.getElementById('rmSelectStatus').value)   || 0,
-        priorityId:   parseInt(document.getElementById('rmSelectPriority').value) || 0,
-        assignedToId: parseInt(document.getElementById('rmSelectAssignee').value) || 0,
-    };
+    const body = rmCollectBody(_rmSiteName, document.getElementById('rmDescription').value);
     fetch('/zoomos/redmine/create', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
         .then(r => r.json())
         .then(data => {
@@ -962,16 +1203,7 @@ document.getElementById('rmUpdateBtn')?.addEventListener('click', function() {
     const btn = this; btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Сохраняется...';
     document.getElementById('rmErrorMsg')?.classList.add('d-none');
-    const body = {
-        site:         _rmSiteName,
-        description:  document.getElementById('rmDescription').value,
-        shortMessage: document.getElementById('rmShortMessage').value,
-        notes:        document.getElementById('rmNotes').value,
-        trackerId:    parseInt(document.getElementById('rmSelectTracker').value)  || 0,
-        statusId:     parseInt(document.getElementById('rmSelectStatus').value)   || 0,
-        priorityId:   parseInt(document.getElementById('rmSelectPriority').value) || 0,
-        assignedToId: parseInt(document.getElementById('rmSelectAssignee').value) || 0,
-    };
+    const body = rmCollectBody(_rmSiteName, document.getElementById('rmDescription').value);
     fetch('/zoomos/redmine/update/' + _rmIssueId, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
         .then(r => r.json())
         .then(data => {

@@ -363,8 +363,8 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 
 <!-- ── Проверено section ── -->
 <div id="checked-section" class="d-none mt-3">
-    <button class="checked-collapse-header" onclick="toggleCheckedSection(this)">
-        ✓ Проверено (<span id="checked-count">0</span>) ▾
+    <button class="checked-collapse-header" onclick="toggleCheckedSection()">
+        ✓ Проверено (<span id="checked-count">0</span>) <span id="checked-arrow">▾</span>
     </button>
     <div id="checked-list" class="d-none mt-2 border rounded p-2"></div>
 </div>
@@ -439,6 +439,15 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
                 <div id="rmLoading" class="text-center py-3">
                     <i class="fas fa-spinner fa-spin me-2"></i>Загрузка...
                 </div>
+                <!-- Phase 1: выбор проблем -->
+                <div id="issueSelectPanel" class="d-none">
+                    <div class="small text-muted fw-semibold mb-2">
+                        <i class="fas fa-list-check me-1"></i>Выберите проблемы для задачи:
+                    </div>
+                    <div id="issueSelectList" class="list-group list-group-flush mb-0"
+                         style="max-height:220px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px"></div>
+                </div>
+                <!-- Phase 2: форма -->
                 <div id="rmCreateBlock" class="d-none">
                     <div class="row g-1 mb-2">
                         <div class="col">
@@ -456,6 +465,23 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
                         <div class="col">
                             <div class="small text-muted mb-1">Исполнитель</div>
                             <select id="rmSelectAssignee" class="form-select form-select-sm"></select>
+                        </div>
+                    </div>
+                    <!-- Custom field: В чем ошибка (multi-select, показывается если настроен в Redmine) -->
+                    <div id="rmCfErrorRow" class="mb-2" style="display:none">
+                        <div class="small text-muted mb-1">В чем ошибка
+                            <span class="text-muted" style="font-size:.75em">(Ctrl/Shift для выбора нескольких)</span>
+                        </div>
+                        <select id="rmSelectCfError" class="form-select form-select-sm" multiple size="4"></select>
+                    </div>
+                    <div class="row g-1 mb-2">
+                        <div id="rmCfMethodCol" class="col-6" style="display:none">
+                            <div class="small text-muted mb-1">Способ выкачки</div>
+                            <select id="rmSelectCfMethod" class="form-select form-select-sm"></select>
+                        </div>
+                        <div id="rmCfVariantCol" class="col-6" style="display:none">
+                            <div class="small text-muted mb-1">Вариант настройки</div>
+                            <select id="rmSelectCfVariant" class="form-select form-select-sm"></select>
                         </div>
                     </div>
                     <div class="mb-2">
@@ -488,6 +514,9 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
             </div>
             <div class="modal-footer py-2">
                 <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button id="rmNextBtn" class="btn btn-sm btn-primary d-none">
+                    Далее <i class="fas fa-arrow-right ms-1"></i>
+                </button>
                 <button id="rmCreateBtn" class="btn btn-sm btn-danger d-none">
                     <i class="fas fa-bug me-1"></i>Создать задачу
                 </button>
@@ -502,7 +531,7 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 </th:block>
 
 <th:block th:fragment="scripts">
-<script th:src="@{/js/zoomos-check-results.js(v=9)}"></script>
+<script th:src="@{/js/zoomos-check-results.js(v=13)}"></script>
 </th:block>
 
 </html>
