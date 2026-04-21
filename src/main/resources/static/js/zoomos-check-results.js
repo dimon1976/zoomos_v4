@@ -886,7 +886,9 @@ function rmResetModal() {
     ['rmCfErrorRow','rmCfMethodCol','rmCfVariantCol'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
     document.getElementById('rmErrorMsg')?.classList.add('d-none');
     document.getElementById('rmLoading')?.classList.remove('d-none');
-    document.getElementById('rmDescription').value = '';
+    const descEl = document.getElementById('rmDescription');
+    descEl.value    = '';
+    descEl.disabled = false;
     document.getElementById('rmShortMessage').value = '';
     document.getElementById('rmNotes').value = '';
 }
@@ -940,7 +942,11 @@ function buildRedmineDescription(r, items) {
         byLabel[key].push(i);
     });
 
-    let desc = 'проблемы с выкачкой:\n\n';
+    let desc = 'Сайт: ' + (r.siteName || '') + '\n';
+    if (r.dateFrom || r.dateTo) {
+        desc += 'Период: ' + (r.dateFrom || '?') + ' — ' + (r.dateTo || '?') + '\n';
+    }
+    desc += '\nпроблемы с выкачкой:\n\n';
 
     // CRITICAL → WARNING → TREND
     ['CRITICAL', 'WARNING', 'TREND'].forEach(level => {
@@ -1058,8 +1064,11 @@ function rmShowForm(opts, items, issueData) {
         rmFillSelect('rmSelectPriority', opts.priorities || [], issueData.priorityId   || defs.priorityId  || 0);
         rmFillSelect('rmSelectAssignee', opts.users      || [], issueData.assignedToId || defs.assignedToId|| 0);
         fillCfSelects(cfs, issueData.customFieldValues || {});
-        document.getElementById('rmDescription').value  = issueData.description || '';
-        document.getElementById('rmShortMessage').value = buildRmShortMessage(items);
+        const descEl = document.getElementById('rmDescription');
+        descEl.value    = issueData.description || '';
+        descEl.disabled = true;
+        document.getElementById('rmNotes').value        = r ? buildRedmineDescription(r, items) : '';
+        document.getElementById('rmShortMessage').value = items[0]?.shortLabel || '';
         document.getElementById('rmNotesBlock')?.classList.remove('d-none');
         document.getElementById('rmUpdateBtn')?.classList.remove('d-none');
     } else {
@@ -1069,7 +1078,7 @@ function rmShowForm(opts, items, issueData) {
         rmFillSelect('rmSelectAssignee', opts.users      || [], defs.assignedToId|| 0);
         fillCfSelects(cfs, null);
         document.getElementById('rmDescription').value  = r ? buildRedmineDescription(r, items) : '';
-        document.getElementById('rmShortMessage').value = buildRmShortMessage(items);
+        document.getElementById('rmShortMessage').value = items[0]?.shortLabel || '';
         document.getElementById('rmCreateBtn')?.classList.remove('d-none');
     }
     document.getElementById('rmCreateBlock')?.classList.remove('d-none');
@@ -1114,8 +1123,8 @@ function rmOpenModal(siteName, mode, issueId, issueUrl) {
             document.getElementById('rmErrorMsg')?.classList.remove('d-none');
             return;
         }
-        if (mode === 'create' && _rmIssueItems.length >= 1) {
-            // Phase 1: показать список проблем с чекбоксами
+        if (_rmIssueItems.length >= 1) {
+            // Phase 1: показать список проблем с чекбоксами (и CREATE, и EDIT)
             const listEl = document.getElementById('issueSelectList');
             listEl.innerHTML = _rmIssueItems.map(it => {
                 const cityLabel = [it.cityId, it.cityName].filter(Boolean).join(' — ');
@@ -1125,15 +1134,17 @@ function rmOpenModal(siteName, mode, issueId, issueUrl) {
                     + ' data-city-id="'    + esc(it.cityId    || '') + '"'
                     + ' data-city-name="'  + esc(it.cityName  || '') + '"'
                     + ' data-short-label="'+ esc(it.shortLabel|| '') + '"'
-                    + ' data-history-url="'+ esc(it.historyUrl|| '') + '">'
+                    + ' data-history-url="'+ esc(it.historyUrl|| '') + '"'
+                    + ' data-level="'      + esc(it.level     || '') + '">'
                     + '<span>' + esc(text) + '</span>'
                     + '</label>';
             }).join('');
             document.getElementById('issueSelectPanel')?.classList.remove('d-none');
-            document.getElementById('rmNextBtn')._opts = opts;
-            document.getElementById('rmNextBtn')?.classList.remove('d-none');
+            const nextBtn = document.getElementById('rmNextBtn');
+            nextBtn._opts      = opts;
+            nextBtn._issueData = issueData;
+            nextBtn?.classList.remove('d-none');
         } else {
-            // edit-режим: сразу Phase 2
             rmShowForm(opts, _rmIssueItems, issueData);
         }
     }).catch(err => {
@@ -1144,7 +1155,8 @@ function rmOpenModal(siteName, mode, issueId, issueUrl) {
 }
 
 document.getElementById('rmNextBtn')?.addEventListener('click', function() {
-    const opts = this._opts || rmOptions;
+    const opts      = this._opts      || rmOptions;
+    const issueData = this._issueData || null;
     if (!opts) return;
     const selected = [];
     document.querySelectorAll('#issueSelectList input[type=checkbox]:checked').forEach(cb => {
@@ -1153,12 +1165,13 @@ document.getElementById('rmNextBtn')?.addEventListener('click', function() {
             cityName:   cb.dataset.cityName   || '',
             shortLabel: cb.dataset.shortLabel || '',
             historyUrl: cb.dataset.historyUrl || '',
+            level:      cb.dataset.level      || '',
         });
     });
     if (!selected.length) return;
     document.getElementById('issueSelectPanel')?.classList.add('d-none');
     this.classList.add('d-none');
-    rmShowForm(opts, selected, null);
+    rmShowForm(opts, selected, issueData);
 });
 
 // ── Общая delegation для Redmine-кнопок (results-list + ok-section + checked-section) ──
@@ -1184,7 +1197,8 @@ document.getElementById('rmCreateBtn')?.addEventListener('click', function() {
                 const iss = data.issue;
                 redmineCache.set(_rmSiteName, { id: iss.id, url: iss.url, statusName: iss.status, isClosed: false });
                 updateRedmineBadge(_rmSiteName, redmineCache.get(_rmSiteName));
-                rmShowSuccess('Задача создана!', _rmSiteName, iss.url, iss.shortMessage);
+                markSiteChecked(_rmSiteName);
+                bsModal(document.getElementById('redmineModal'))?.hide();
             } else {
                 document.getElementById('rmErrorMsg').textContent = data.error || 'Ошибка';
                 document.getElementById('rmErrorMsg')?.classList.remove('d-none');
@@ -1214,7 +1228,8 @@ document.getElementById('rmUpdateBtn')?.addEventListener('click', function() {
                 if (iss.statusName) cached.statusName = iss.statusName;
                 redmineCache.set(_rmSiteName, cached);
                 updateRedmineBadge(_rmSiteName, cached);
-                rmShowSuccess('Задача обновлена!', _rmSiteName, iss.url || cached.url || '', body.shortMessage);
+                markSiteChecked(_rmSiteName);
+                bsModal(document.getElementById('redmineModal'))?.hide();
             } else {
                 document.getElementById('rmErrorMsg').textContent = data.error || 'Ошибка';
                 document.getElementById('rmErrorMsg')?.classList.remove('d-none');

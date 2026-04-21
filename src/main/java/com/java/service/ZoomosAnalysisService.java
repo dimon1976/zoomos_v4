@@ -31,6 +31,7 @@ public class ZoomosAnalysisService {
     private final ZoomosKnownSiteRepository knownSiteRepository;
 
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     private static final ZonedDateTime EPOCH = ZonedDateTime.parse("1970-01-01T00:00:00Z");
 
     // =========================================================================
@@ -222,7 +223,7 @@ public class ZoomosAnalysisService {
                 }
             }
         }
-        List<ZoomosParsingStats> trendData = new ArrayList<>(siteBaseline);
+        List<ZoomosParsingStats> trendData = new ArrayList<>(pickBestPerDayList(siteBaseline));
         if (latestStat != null) trendData.add(latestStat);
         trendData.sort(Comparator.comparing(s -> s.getParsingDate() != null ? s.getParsingDate() : java.time.LocalDate.MIN));
         List<Integer> inStockValues = trendData.stream()
@@ -352,6 +353,8 @@ public class ZoomosAnalysisService {
                 .siteId(knownSite != null ? knownSite.getId() : null)
                 .isPriority(knownSite != null && knownSite.isPriority())
                 .itemPriceConfigured(knownSite != null ? knownSite.getItemPriceConfigured() : null)
+                .dateFrom(run.getDateFrom() != null ? run.getDateFrom().format(DATE_FMT) : null)
+                .dateTo(run.getDateTo()   != null ? run.getDateTo().format(DATE_FMT)   : null)
                 .build();
     }
 
@@ -400,13 +403,7 @@ public class ZoomosAnalysisService {
         Integer inStockDeltaPercent = null;
 
         if (!finished.isEmpty()) {
-            // Предпочитаем запись с данными (totalProducts > 0) вместо 0-минутных пустых
-            Comparator<ZoomosParsingStats> byFinishTime = Comparator.comparing(
-                    (ZoomosParsingStats s) -> s.getFinishTime() != null ? s.getFinishTime() : EPOCH);
-            latest = finished.stream()
-                    .filter(s -> s.getTotalProducts() != null && s.getTotalProducts() > 0)
-                    .max(byFinishTime)
-                    .orElseGet(() -> finished.stream().max(byFinishTime).orElse(null));
+            latest = pickBestPerDay(finished);
             latestInStock = latest != null ? latest.getInStock() : null;
             if (ignoreStock) {
                 Integer total = latest != null ? latest.getTotalProducts() : null;
@@ -417,7 +414,7 @@ public class ZoomosAnalysisService {
                 if (latestInStock != null && latestInStock == 0) {
                     issues.add(new SiteIssue(StatusReason.STOCK_ZERO, StatusReason.STOCK_ZERO.messageTemplate));
                 } else if (latestInStock != null) {
-                    baselineInStock = computeBaselineMaxMedianByServer(baselineStats);
+                    baselineInStock = computeMedian(pickBestPerDayList(baselineStats), s -> s.getInStock() != null ? (double) s.getInStock() : null);
                     if (baselineInStock != null && baselineInStock > 0) {
                         double drop = (baselineInStock - latestInStock) / baselineInStock * 100;
                         inStockDelta = latestInStock - (int) Math.round(baselineInStock);
@@ -534,22 +531,33 @@ public class ZoomosAnalysisService {
         return n % 2 == 0 ? (values.get(n / 2 - 1) + values.get(n / 2)) / 2 : values.get(n / 2);
     }
 
-    private Double computeBaselineMaxMedianByServer(List<ZoomosParsingStats> stats) {
-        Map<String, List<Double>> byServer = new HashMap<>();
-        for (ZoomosParsingStats s : stats) {
-            if (s.getInStock() == null) continue;
-            String key = s.getServerName() != null ? s.getServerName() : "";
-            byServer.computeIfAbsent(key, k -> new ArrayList<>()).add((double) s.getInStock());
-        }
-        if (byServer.isEmpty()) return null;
-        double max = Double.NEGATIVE_INFINITY;
-        for (List<Double> vals : byServer.values()) {
-            List<Double> sorted = vals.stream().sorted().collect(Collectors.toList());
-            int n = sorted.size();
-            double median = n % 2 == 0 ? (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2 : sorted.get(n / 2);
-            if (median > max) max = median;
-        }
-        return max == Double.NEGATIVE_INFINITY ? null : max;
+    private ZoomosParsingStats pickBestPerDay(List<ZoomosParsingStats> stats) {
+        return stats.stream()
+                .filter(s -> Boolean.TRUE.equals(s.getIsFinished())
+                        || (s.getCompletionPercent() != null && s.getCompletionPercent() >= 100))
+                .collect(Collectors.groupingBy(
+                        ZoomosParsingStats::getParsingDate,
+                        Collectors.maxBy(Comparator.comparingInt(
+                                s -> s.getTotalProducts() != null ? s.getTotalProducts() : 0))))
+                .values().stream()
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .max(Comparator.comparingInt(s -> s.getTotalProducts() != null ? s.getTotalProducts() : 0))
+                .orElse(null);
+    }
+
+    private List<ZoomosParsingStats> pickBestPerDayList(List<ZoomosParsingStats> stats) {
+        return stats.stream()
+                .filter(s -> Boolean.TRUE.equals(s.getIsFinished())
+                        || (s.getCompletionPercent() != null && s.getCompletionPercent() >= 100))
+                .collect(Collectors.groupingBy(
+                        ZoomosParsingStats::getParsingDate,
+                        Collectors.maxBy(Comparator.comparingInt(
+                                s -> s.getTotalProducts() != null ? s.getTotalProducts() : 0))))
+                .values().stream()
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toList());
     }
 
     private int countConsecutiveDrop(List<Integer> values) {
@@ -580,9 +588,10 @@ public class ZoomosAnalysisService {
 
     private List<SparklinePoint> computeHistory(List<ZoomosParsingStats> baselineStats,
                                                  Function<ZoomosParsingStats, Integer> extractor) {
-        if (baselineStats.isEmpty()) return List.of();
+        List<ZoomosParsingStats> best = pickBestPerDayList(baselineStats);
+        if (best.isEmpty()) return List.of();
         java.util.TreeMap<java.time.LocalDate, List<Integer>> byDate = new java.util.TreeMap<>();
-        for (ZoomosParsingStats s : baselineStats) {
+        for (ZoomosParsingStats s : best) {
             Integer val = extractor.apply(s);
             if (s.getParsingDate() != null && val != null) {
                 byDate.computeIfAbsent(s.getParsingDate(), k -> new ArrayList<>()).add(val);
