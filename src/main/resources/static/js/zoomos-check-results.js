@@ -208,6 +208,8 @@ function renderSiteResult(r) {
     } else {
         const allIssues = [...(cities[0]?.issues||[]), ...(r.statusReasons||[])];
         bodyHtml += renderIssueRows(allIssues);
+        const hint0 = lastKnownHint(cities[0]);
+        if (hint0) bodyHtml += '<div class="text-muted" style="font-size:0.8em;margin-top:4px">' + esc(hint0) + '</div>';
         bodyHtml += renderMetrics(r, status);
     }
 
@@ -352,6 +354,20 @@ function renderMetrics(r, status) {
         +renderSparkline(r, status);
 }
 
+function lastKnownHint(cr) {
+    if (!cr?.lastKnownDate) return '';
+    if (!(cr.status === 'NOT_FOUND' || (cr.issues && cr.issues.some(i => i.reason === 'NOT_FOUND' || i.reason === 'STALLED')))) return '';
+    const ld = cr.lastKnownDate;
+    const d = Array.isArray(ld)
+        ? String(ld[2]).padStart(2,'0') + '.' + String(ld[1]).padStart(2,'0')
+        : String(ld).substring(8,10) + '.' + String(ld).substring(5,7);
+    let hint = 'Последняя: ' + d;
+    if (cr.lastKnownIsStalled) hint += ' зависла' + (cr.lastKnownUpdatedTime ? ' (обн.: ' + cr.lastKnownUpdatedTime + ')' : '');
+    if (cr.lastKnownCompletionPercent != null) hint += ' (' + cr.lastKnownCompletionPercent + '%)';
+    if (cr.lastKnownInStock != null) hint += ', в нал.: ' + cr.lastKnownInStock;
+    return hint;
+}
+
 function renderCitiesTable(r, cities) {
     const rows = cities.map(cr => {
         const lbl = STATUS_LABEL[cr.status]||cr.status;
@@ -389,21 +405,8 @@ function renderCitiesTable(r, cities) {
               +' onclick="event.stopPropagation();toggleCityChecked(\''+siteEscCity+'\',\''+cityEsc+'\')">'
             : '';
         const hiddenStyle = cityChecked ? ' style="display:none"' : '';
-        const needsLastKnown = cr.lastKnownDate != null &&
-            (cr.status === 'NOT_FOUND' ||
-             (cr.issues && cr.issues.some(i => i.reason === 'NOT_FOUND' || i.reason === 'STALLED')));
-        let fiHtml = fi;
-        if (needsLastKnown) {
-            const ld = cr.lastKnownDate;
-            const d = Array.isArray(ld)
-                ? String(ld[2]).padStart(2,'0') + '.' + String(ld[1]).padStart(2,'0')
-                : String(ld).substring(8,10) + '.' + String(ld).substring(5,7);
-            let hint = 'Последняя: ' + d;
-            if (cr.lastKnownIsStalled) hint += ' зависла' + (cr.lastKnownUpdatedTime ? ' (обн.: ' + cr.lastKnownUpdatedTime + ')' : '');
-            if (cr.lastKnownCompletionPercent != null) hint += ' (' + cr.lastKnownCompletionPercent + '%)';
-            if (cr.lastKnownInStock != null) hint += ', в нал.: ' + cr.lastKnownInStock;
-            fiHtml += '<div class="text-muted" style="font-size:0.8em;margin-top:2px">' + esc(hint) + '</div>';
-        }
+        const hint = lastKnownHint(cr);
+        const fiHtml = hint ? fi + '<div class="text-muted" style="font-size:0.8em;margin-top:2px">' + esc(hint) + '</div>' : fi;
         return '<tr data-city-status="'+cr.status+'"'+hiddenStyle+'><td>'+cityDisplay+extLink+'</td>'
             +'<td><span class="status-badge badge-'+cr.status+'" style="font-size:.68rem">'+lbl+'</span></td>'
             +'<td class="text-end">'+stockHtml+'</td>'
