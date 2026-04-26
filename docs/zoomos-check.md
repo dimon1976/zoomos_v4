@@ -226,14 +226,34 @@ Endpoint `GET /check/results-new/{runId}` реализован в `ZoomosAnalysi
 Шаблон: `zoomos/check-results-new.html`. Основная логика перенесена в `ZoomosAnalysisService.analyze(runId, profileId, deadline, stallMinutes)`.
 
 Вместо `GroupEvalResult` используются новые DTO:
-- `ZoomosSiteResult` — главный DTO для сайта: статус, список городов, list<SiteIssue>, спарклайны (inStockHistory, errorHistory, speedHistory), shopParam, historyBaseUrl
-- `CityResult` — данные по городу: статус, `StatusReason`, последние stats, baselineInStock, inStockDelta, inStockDeltaPercent
+- `ZoomosSiteResult` — главный DTO для сайта: статус, список городов (`cityResults`), `inProgressCities` (только города IN_PROGRESS), list<SiteIssue>, спарклайны (inStockHistory, errorHistory, speedHistory), shopParam, historyBaseUrl
+- `CityResult` — данные по городу: статус, `StatusReason`, последние stats, baselineInStock, inStockDelta, inStockDeltaPercent; поля `lastKnownDate/InStock/CompletionPercent/IsStalled/UpdatedTime` — последняя известная запись (для подсказки при NOT_FOUND/STALLED)
 - `StatusReason` — причина статуса (тип, сообщение, числовые дельты)
 - `SiteIssue` — конкретная проблема (siteName, cityName, level, message)
 - `SparklinePoint` — точка спарклайн-графика (timestamp, value)
-- `ZoomosResultLevel` — enum OK/WARNING/ERROR
+- `ZoomosResultLevel` — enum OK/WARNING/ERROR/IN_PROGRESS
 
 API `/check/analyze/{runId}?profileId=&deadline=&stallMinutes=` → `List<ZoomosSiteResult>` (JSON).
+
+Атрибуты модели `/check/results-new/{runId}`:
+- `runStatus` — статус запуска (RUNNING/COMPLETED/FAILED)
+- `runErrorMessage` — сообщение об ошибке запуска
+
+### Однодневная проверка (`isSingleDay = dateFrom.equals(dateTo)`)
+
+При однодневной проверке `analyzeCityGroup` фильтрует `dayStats`:
+- записи за `checkDate` (dateTo)
+- незавершённые записи за `checkDate - 1` (ночные выкачки, `completionPercent < 100`)
+
+Это позволяет корректно определять NOT_FOUND для однодневных проверок, исключая вчерашние завершённые записи.
+
+### Мастер-город (masterCityId)
+
+Если задан `masterCityId` — агрегированные метрики (baseline, тренды, спарклайны) считаются **только по мастер-городу**, а не по всем городам. Источник `masterCityId`: `ZoomosKnownSite.masterCityId` (авторитетный, обновляется через `/sites/{id}/master-city`), при отсутствии — `ZoomosCityId.masterCityId` (устаревший fallback).
+
+### speedHistory — только завершённые записи
+
+`computeSpeedHistory()` теперь фильтрует baseline только по завершённым записям (`isFinished=true || completionPercent>=100`) перед вычислением медианы скорости по дням.
 
 Доп. эндпоинты:
 - `GET /zoomos/check/run/{runId}/info` — метаданные запуска (shop, dates, thresholds)

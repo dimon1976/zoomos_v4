@@ -20,5 +20,12 @@ public record CityResult(
     Long cityIdsId,
     Boolean hasConfigIssue,
     String configIssueType,
-    String configIssueNote
+    String configIssueNote,
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
+    java.time.LocalDate lastKnownDate,
+    Integer lastKnownInStock,
+    Integer lastKnownCompletionPercent,
+    Boolean lastKnownIsStalled,
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yy.MM.dd HH:mm")
+    ZonedDateTime lastKnownUpdatedTime
 ) {}

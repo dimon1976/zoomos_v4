@@ -120,6 +120,14 @@
     color: #6c757d;
     white-space: nowrap;
 }
+@keyframes masterCityFlash {
+    0%   { color: #198754; font-weight: 700; background: #d1e7dd; border-radius: 3px; padding: 0 3px; }
+    70%  { color: #198754; font-weight: 600; }
+    100% { color: #6c757d; font-weight: 400; background: transparent; }
+}
+.master-city-flash {
+    animation: masterCityFlash 1.8s ease-out forwards;
+}
 .group-header .account-tag {
     font-size: .75rem;
     background: #e9ecef;
@@ -340,6 +348,29 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
     <span th:if="${!#strings.isEmpty(baselineFromFmt)}" class="text-muted">
         <i class="fas fa-chart-bar me-1"></i>База: <span th:text="${baselineFromFmt} + ' — ' + ${baselineToFmt}"></span>
     </span>
+    <span th:if="${runStatus == 'FAILED'}" class="badge bg-danger ms-1">
+        <i class="fas fa-times-circle me-1"></i>Ошибка загрузки
+    </span>
+    <span th:if="${runStatus == 'RUNNING'}" class="badge bg-warning text-dark ms-1">
+        <i class="fas fa-spinner fa-spin me-1"></i>Выполняется
+    </span>
+</div>
+
+<!-- ── Run FAILED banner ── -->
+<div th:if="${runStatus == 'FAILED'}"
+     class="alert alert-danger d-flex align-items-start gap-2 mb-3 py-2" role="alert">
+    <i class="fas fa-exclamation-triangle mt-1 flex-shrink-0"></i>
+    <div>
+        <strong>Проверка завершилась с ошибкой.</strong>
+        <span th:if="${runErrorMessage != null}"
+              class="ms-2 text-break"
+              th:text="${#strings.length(runErrorMessage) > 200
+                         ? #strings.substring(runErrorMessage, 0, 200) + '…'
+                         : runErrorMessage}"></span>
+        <div class="text-muted small mt-1">
+            Данные могут быть неполными. Попробуйте запустить проверку повторно.
+        </div>
+    </div>
 </div>
 
 <!-- ── Status filter buttons ── -->
@@ -624,7 +655,7 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 </th:block>
 
 <th:block th:fragment="scripts">
-<script th:src="@{/js/zoomos-check-results.js(v=19)}"></script>
+<script th:src="@{/js/zoomos-check-results.js(v=20)}"></script>
 </th:block>
 
 </html>

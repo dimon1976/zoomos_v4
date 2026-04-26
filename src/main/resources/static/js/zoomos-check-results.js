@@ -147,7 +147,10 @@ function sortByReasonPriority(a, b) {
 // ── Render site ──────────────────────────────────────────────────────────
 function renderSiteResult(r) {
     const status = r.status;
-    const cities = r.cityResults || [];
+    const filteringByInProgress = activeFilters.has('IN_PROGRESS');
+    const cities = (filteringByInProgress && r.inProgressCities?.length > 0)
+        ? r.inProgressCities
+        : (r.cityResults || []);
     const multi  = cities.length > 1;
 
     const cityLabel = r.cityId && r.cityName ? r.cityId + ' — ' + r.cityName : (r.cityName || cities[0]?.cityName || '');
@@ -187,7 +190,17 @@ function renderSiteResult(r) {
     }
 
     let bodyHtml = '';
+    if (r.masterCityId) {
+        bodyHtml += '<div class="small text-muted mb-1"><i class="fas fa-map-marker-alt me-1"></i>Мастер-город: <strong>'
+            + esc(r.masterCityId) + '</strong></div>';
+    }
     if (multi) {
+        const ipCount = r.inProgressCities?.length || 0;
+        if (ipCount > 0 && r.status !== 'IN_PROGRESS' && !filteringByInProgress) {
+            bodyHtml += '<div class="small text-muted mb-1">⏳ ' + ipCount + ' '
+                + (ipCount === 1 ? 'город' : ipCount < 5 ? 'города' : 'городов')
+                + ' в процессе выкачки — <a href="#" onclick="activateFilter(\'IN_PROGRESS\');return false">подробнее</a></div>';
+        }
         bodyHtml += renderCitiesTable(r, cities);
         if (r.statusReasons && r.statusReasons.length) {
             bodyHtml += renderIssueRows(r.statusReasons);
@@ -376,10 +389,25 @@ function renderCitiesTable(r, cities) {
               +' onclick="event.stopPropagation();toggleCityChecked(\''+siteEscCity+'\',\''+cityEsc+'\')">'
             : '';
         const hiddenStyle = cityChecked ? ' style="display:none"' : '';
+        const needsLastKnown = cr.lastKnownDate != null &&
+            (cr.status === 'NOT_FOUND' ||
+             (cr.issues && cr.issues.some(i => i.reason === 'NOT_FOUND' || i.reason === 'STALLED')));
+        let fiHtml = fi;
+        if (needsLastKnown) {
+            const ld = cr.lastKnownDate;
+            const d = Array.isArray(ld)
+                ? String(ld[2]).padStart(2,'0') + '.' + String(ld[1]).padStart(2,'0')
+                : String(ld).substring(8,10) + '.' + String(ld).substring(5,7);
+            let hint = 'Последняя: ' + d;
+            if (cr.lastKnownIsStalled) hint += ' зависла' + (cr.lastKnownUpdatedTime ? ' (обн.: ' + cr.lastKnownUpdatedTime + ')' : '');
+            if (cr.lastKnownCompletionPercent != null) hint += ' (' + cr.lastKnownCompletionPercent + '%)';
+            if (cr.lastKnownInStock != null) hint += ', в нал.: ' + cr.lastKnownInStock;
+            fiHtml += '<div class="text-muted" style="font-size:0.8em;margin-top:2px">' + esc(hint) + '</div>';
+        }
         return '<tr data-city-status="'+cr.status+'"'+hiddenStyle+'><td>'+cityDisplay+extLink+'</td>'
             +'<td><span class="status-badge badge-'+cr.status+'" style="font-size:.68rem">'+lbl+'</span></td>'
             +'<td class="text-end">'+stockHtml+'</td>'
-            +'<td class="text-muted" style="font-size:.78rem">'+fi+'</td>'
+            +'<td class="text-muted" style="font-size:.78rem">'+fiHtml+'</td>'
             +'<td>'+checkCityBtn+'</td></tr>';
     }).join('');
     const showOk = getShowOkCities(r.siteName);
@@ -510,15 +538,20 @@ function renderOkSection(results) {
     const tbody = document.getElementById('ok-table-body');
     tbody.innerHTML = okList.map(r => {
         const inStock = r.latestStat ? fmt(r.latestStat.inStock) : '—';
+        const masterInfo = r.masterCityId
+            ? ' <span class="text-success" style="font-size:.75rem">(мастер: '+esc(r.masterCityId)+')</span>' : '';
         return '<tr><td>'+esc(r.siteName)+histIcon(r, r.cityId)+miniRmIcon(r.siteName)+'</td>'
-            +'<td class="text-muted">'+esc(r.cityName||'')+'</td>'
+            +'<td class="text-muted">'+esc(r.cityName||'')+masterInfo+'</td>'
             +'<td class="text-end">'+inStock+'</td></tr>';
     }).join('');
 }
 
 function updateCounters(results) {
     const counts = { CRITICAL:0, WARNING:0, TREND:0, IN_PROGRESS:0, OK:0 };
-    results.forEach(r => { if (counts[r.status]!==undefined) counts[r.status]++; });
+    results.forEach(r => {
+        if (r.status !== 'IN_PROGRESS' && counts[r.status] !== undefined) counts[r.status]++;
+        counts.IN_PROGRESS += (r.inProgressCities?.length || 0);
+    });
     Object.entries(counts).forEach(([s,n]) => {
         const el = document.getElementById('cnt-'+s);
         if (el) el.textContent = n;
@@ -528,10 +561,15 @@ function updateCounters(results) {
 // ── Main render ───────────────────────────────────────────────────────────
 function getVisibleResults() {
     const search = searchText.toLowerCase();
+    const filteringByInProgress = activeFilters.has('IN_PROGRESS');
     return allResults.filter(r => {
         if (r.status === 'OK') return false;
         if (isChecked(r.siteName)) return false;
-        if (activeFilters.size && !activeFilters.has(r.status)) return false;
+        if (activeFilters.size) {
+            if (!(filteringByInProgress && r.inProgressCities?.length > 0) && !activeFilters.has(r.status)) {
+                return false;
+            }
+        }
         if (activeType !== 'ALL' && r.checkType !== activeType) return false;
         if (search && !r.siteName.toLowerCase().includes(search)) return false;
         return true;
@@ -579,6 +617,13 @@ window.toggleOk = function(btn) {
 };
 
 // ── Filters (Task 3: режим одиночного выбора) ─────────────────────────────
+window.activateFilter = function(f) {
+    activeFilters.clear();
+    activeFilters.add(f);
+    updateFilterButtons();
+    render();
+};
+
 function updateFilterButtons() {
     document.querySelectorAll('#filter-bar .filter-btn').forEach(btn => {
         const f = btn.dataset.filter;
@@ -921,32 +966,36 @@ function updateEqBadge(siteName, val, checkedAt) {
 
 function applyMasterCity(city) {
     if (!_eqSiteId) return;
-    const trimmedCity = (city || '').trim();
+    const raw = (city || '').trim();
+    const match = raw.match(/^(\d+)/);
+    const cityId = match ? match[1] : raw;
     const msgEl = document.getElementById('eqMasterMsg');
     msgEl.classList.add('d-none');
     fetch('/zoomos/sites/' + _eqSiteId + '/master-city', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'masterCityId=' + encodeURIComponent(trimmedCity)
+        body: 'masterCityId=' + encodeURIComponent(cityId)
     }).then(r => r.json()).then(data => {
         if (data.success) {
-            msgEl.textContent = trimmedCity ? '\u2713 Мастер-город: ' + trimmedCity : '\u2713 Мастер-город снят';
+            msgEl.textContent = cityId ? '✓ ' + cityId + ' — установлен' : '✓ Мастер-город снят';
             msgEl.classList.remove('d-none');
             document.querySelectorAll('.site-group[data-site="' + CSS.escape(_eqSiteName.toLowerCase()) + '"] .master-city-tag')
                 .forEach(tag => {
-                    if (trimmedCity) {
-                        tag.textContent = '(мастер: ' + trimmedCity + ')';
+                    if (cityId) {
+                        tag.textContent = '(мастер: ' + cityId + ')';
                         tag.style.display = '';
+                        tag.classList.remove('master-city-flash');
+                        void tag.offsetWidth;
+                        tag.classList.add('master-city-flash');
                     } else {
                         tag.style.display = 'none';
                     }
                 });
             const r = allResults.find(x => x.siteName === _eqSiteName);
-            if (r) r.masterCityId = trimmedCity || null;
+            if (r) r.masterCityId = cityId || null;
         }
     }).catch(() => {});
 }
-
 function showEqModal(siteName, siteId, cities) {
     _eqSiteName = siteName;
     _eqSiteId = siteId;

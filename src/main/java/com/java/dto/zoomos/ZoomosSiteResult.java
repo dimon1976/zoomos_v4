@@ -41,6 +41,7 @@ public class ZoomosSiteResult {
     private List<SparklinePoint> errorHistory;
     private List<SparklinePoint> speedHistory;
     private List<CityResult> cityResults;
+    private List<CityResult> inProgressCities;
 
     private Long cityIdsId;
     private Boolean hasConfigIssue;
