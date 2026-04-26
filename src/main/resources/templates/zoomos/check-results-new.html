@@ -475,6 +475,15 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 <!-- ── Toast ── -->
 <div id="copy-toast"></div>
 
+<!-- ── Redmine Success Toast ── -->
+<div id="rm-success-toast" class="toast align-items-center text-bg-success border-0"
+     style="position:fixed;bottom:24px;right:24px;z-index:1090" role="alert" aria-live="assertive">
+    <div class="d-flex">
+        <div class="toast-body" id="rm-success-text"></div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+</div>
+
 <!-- ── Equal Prices Modal ── -->
 <div id="eqPricesModal" class="modal fade" tabindex="-1">
     <div class="modal-dialog">
@@ -615,7 +624,7 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 </th:block>
 
 <th:block th:fragment="scripts">
-<script th:src="@{/js/zoomos-check-results.js(v=15)}"></script>
+<script th:src="@{/js/zoomos-check-results.js(v=19)}"></script>
 </th:block>
 
 </html>

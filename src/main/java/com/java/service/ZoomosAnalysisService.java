@@ -131,8 +131,10 @@ public class ZoomosAnalysisService {
 
         boolean ignoreStock = knownSite != null && knownSite.isIgnoreStock();
 
-        Set<String> expectedCities = (config.masterCityId() != null && !config.masterCityId().isBlank())
-                ? Set.of(config.masterCityId())
+        String masterRaw = config.masterCityId();
+        String masterId = masterRaw != null ? masterRaw.trim().split("[\\s\\-]+")[0].trim() : null;
+        Set<String> expectedCities = (masterId != null && !masterId.isBlank())
+                ? Set.of(masterId)
                 : parseExpectedCities(config.cityIds());
         List<SiteIssue> siteIssues = new ArrayList<>();
         List<CityResult> cityResults = new ArrayList<>();
@@ -240,10 +242,8 @@ public class ZoomosAnalysisService {
             }
         }
         // SPEED_TREND проверяется первым — если найден, SPEED_SPIKE не добавляется
-        List<Double> speedByDay = trendData.stream()
-                .filter(s -> s.getParsingDurationMinutes() != null && s.getTotalProducts() != null && s.getTotalProducts() > 100)
-                .map(s -> (double) s.getParsingDurationMinutes() / s.getTotalProducts() * 1000)
-                .collect(Collectors.toList());
+        List<Double> speedByDay = medianSpeedPerDay(siteBaseline).values().stream()
+                .filter(Objects::nonNull).collect(Collectors.toList());
         boolean speedTrendFound = false;
         if (speedByDay.size() >= 3 && isConsecutivelyIncreasing(speedByDay)) {
             double first = speedByDay.get(speedByDay.size() - 3);
@@ -252,15 +252,15 @@ public class ZoomosAnalysisService {
                     String.format("Выкачка замедляется: %.0f → %.0f мин/1000 тов", first, last)));
             speedTrendFound = true;
         }
-        if (!speedTrendFound && latestStat != null && baselineSpeed != null) {
-            Integer dur = latestStat.getParsingDurationMinutes();
-            Integer tot = latestStat.getTotalProducts();
-            if (dur != null && tot != null && tot > 100) {
-                double curSpeed = (double) dur / tot * 1000;
-                if (curSpeed > baselineSpeed * (1 + trendDropThreshold / 100.0)) {
-                    siteIssues.add(new SiteIssue(StatusReason.SPEED_SPIKE,
-                            String.format("Разовое замедление: %.0f мин/1000 тов (baseline %.0f мин/1000 тов)", curSpeed, baselineSpeed)));
-                }
+        if (!speedTrendFound && baselineSpeed != null) {
+            List<ZoomosParsingStats> finishedToday = siteStats.stream()
+                    .filter(s -> Boolean.TRUE.equals(s.getIsFinished())).collect(Collectors.toList());
+            Double curSpeed = computeMedian(finishedToday, s ->
+                    (s.getTotalProducts() != null && s.getTotalProducts() > 100 && s.getParsingDurationMinutes() != null)
+                            ? s.getParsingDurationMinutes().doubleValue() / s.getTotalProducts() * 1000 : null);
+            if (curSpeed != null && curSpeed > baselineSpeed * (1 + trendDropThreshold / 100.0)) {
+                siteIssues.add(new SiteIssue(StatusReason.SPEED_SPIKE,
+                        String.format("Разовое замедление: %.0f мин/1000 тов (baseline %.0f мин/1000 тов)", curSpeed, baselineSpeed)));
             }
         }
 
@@ -645,8 +645,25 @@ public class ZoomosAnalysisService {
         return computeHistory(baselineStats, ZoomosParsingStats::getErrorCount);
     }
 
+    private TreeMap<java.time.LocalDate, Double> medianSpeedPerDay(List<ZoomosParsingStats> stats) {
+        return stats.stream()
+                .filter(s -> s.getParsingDate() != null)
+                .collect(Collectors.groupingBy(
+                    ZoomosParsingStats::getParsingDate,
+                    TreeMap::new,
+                    Collectors.collectingAndThen(Collectors.toList(), list -> computeMedian(list, s ->
+                        (s.getTotalProducts() != null && s.getTotalProducts() > 100 && s.getParsingDurationMinutes() != null)
+                                ? s.getParsingDurationMinutes().doubleValue() / s.getTotalProducts() * 1000 : null))
+                ));
+    }
+
     private List<SparklinePoint> computeSpeedHistory(List<ZoomosParsingStats> baselineStats) {
-        return computeHistory(baselineStats, ZoomosParsingStats::getParsingDurationMinutes);
+        List<SparklinePoint> all = medianSpeedPerDay(baselineStats).entrySet().stream()
+                .filter(e -> e.getValue() != null)
+                .map(e -> new SparklinePoint(e.getKey(), (int) Math.round(e.getValue())))
+                .collect(Collectors.toList());
+        int start = Math.max(0, all.size() - 7);
+        return all.subList(start, all.size());
     }
 
     private Map<String, SiteConfig> buildProfileConfigs(Long profileId) {

@@ -722,12 +722,19 @@ window.toggleCheckedSection = function() {
 let _ciCityIdsId = null;
 let _ciBtn = null;
 
-// Bootstrap может быть в window.bootstrap (стандарт) или window.tabler.Modal (Tabler UMD)
+// Bootstrap может быть в window.bootstrap (стандарт) или window.tabler.* (Tabler UMD)
 function bsModal(el) {
     const BSModal = (typeof bootstrap !== 'undefined' && bootstrap.Modal)
         || (typeof tabler !== 'undefined' && tabler.Modal);
     if (!BSModal) { console.error('Bootstrap Modal не найден'); return null; }
     return BSModal.getOrCreateInstance(el);
+}
+
+function bsToast(el, opts) {
+    const BSToast = (typeof bootstrap !== 'undefined' && bootstrap.Toast)
+        || (typeof tabler !== 'undefined' && tabler.Toast);
+    if (!BSToast) { console.error('Bootstrap Toast не найден'); return null; }
+    return new BSToast(el, opts);
 }
 
 function openConfigIssueModal(btn) {
@@ -1071,7 +1078,14 @@ function rmFillSelect(selId, items, defaultId) {
 
 function rmResetModal() {
     ['rmCreateBlock','rmSuccessBlock','rmNotesBlock','issueSelectPanel'].forEach(id => document.getElementById(id)?.classList.add('d-none'));
-    ['rmCreateBtn','rmUpdateBtn','rmNextBtn'].forEach(id => { const el = document.getElementById(id); if (el) { el.classList.add('d-none'); el.disabled = false; } });
+    [
+        ['rmCreateBtn', '<i class="fas fa-bug me-1"></i>Создать задачу'],
+        ['rmUpdateBtn', '<i class="fas fa-save me-1"></i>Обновить задачу'],
+        ['rmNextBtn',   'Далее <i class="fas fa-arrow-right ms-1"></i>']
+    ].forEach(([id, html]) => {
+        const el = document.getElementById(id);
+        if (el) { el.classList.add('d-none'); el.disabled = false; el.innerHTML = html; }
+    });
     ['rmCfErrorRow','rmCfMethodCol','rmCfVariantCol'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
     document.getElementById('rmErrorMsg')?.classList.add('d-none');
     document.getElementById('rmLoading')?.classList.remove('d-none');
@@ -1280,6 +1294,12 @@ function rmShowSuccess(msg, site, issueUrl, shortMsg) {
     document.getElementById('rmSuccessBlock')?.classList.remove('d-none');
     document.getElementById('rmCreateBtn')?.classList.add('d-none');
     document.getElementById('rmUpdateBtn')?.classList.add('d-none');
+    const toastEl = document.getElementById('rm-success-toast');
+    if (toastEl) {
+        const textEl = document.getElementById('rm-success-text');
+        textEl.innerHTML = msg + (issueUrl ? ' — <a href="' + esc(issueUrl) + '" target="_blank" class="text-white fw-bold">открыть</a>' : '');
+        bsToast(toastEl, { delay: 6000 })?.show();
+    }
 }
 
 function rmOpenModal(siteName, mode, issueId, issueUrl) {
@@ -1395,7 +1415,7 @@ document.getElementById('rmCreateBtn')?.addEventListener('click', function() {
         redmineCache.set(siteName, { id: iss.id, url: iss.url, statusName: iss.status || iss.statusName, isClosed: iss.closed || false });
         updateRedmineBadge(siteName, redmineCache.get(siteName));
         markSiteChecked(siteName);
-        bsModal(document.getElementById('redmineModal'))?.hide();
+        rmShowSuccess('Задача #' + iss.id + ' создана', siteName, iss.url, iss.shortMessage || '');
     }
 
     // Workaround: Redmine-сервер возвращает 404 на POST, но задача создаётся.
@@ -1454,7 +1474,7 @@ document.getElementById('rmUpdateBtn')?.addEventListener('click', function() {
                 redmineCache.set(_rmSiteName, cached);
                 updateRedmineBadge(_rmSiteName, cached);
                 markSiteChecked(_rmSiteName);
-                bsModal(document.getElementById('redmineModal'))?.hide();
+                rmShowSuccess('Задача обновлена', _rmSiteName, iss.url || cached.url || '', iss.shortMessage || '');
             } else {
                 document.getElementById('rmErrorMsg').textContent = data.error || 'Ошибка';
                 document.getElementById('rmErrorMsg')?.classList.remove('d-none');
