@@ -166,16 +166,9 @@ public class ZoomosCheckService {
 
             Page page = context.newPage();
 
-            // Проверяем сессию
+            // Проверяем сессию (с retry при таймауте)
             String testUrl = config.getBaseUrl() + "/shop/" + shop.getShopName() + "/settings";
-            page.navigate(testUrl);
-            page.waitForLoadState(LoadState.NETWORKIDLE);
-            if (page.url().contains("/login")) {
-                login(context);
-                page.navigate(testUrl);
-                page.waitForLoadState(LoadState.NETWORKIDLE);
-            }
-            saveSession(context);
+            navigateWithSessionRetry(page, context, testUrl, shop.getShopName());
 
             int processed = 0;
             int total = allCityIds.size();
@@ -346,6 +339,37 @@ public class ZoomosCheckService {
 
         sendProgress(shopId, operationId, run.getTotalSites(), run.getTotalSites(), "Проверка завершена");
         return run;
+    }
+
+    private void navigateWithSessionRetry(Page page, BrowserContext context, String testUrl, String shopName) {
+        int maxAttempts = config.getRetryAttempts();
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                page.navigate(testUrl);
+                page.waitForLoadState(LoadState.NETWORKIDLE);
+                if (page.url().contains("/login")) {
+                    login(context);
+                    page.navigate(testUrl);
+                    page.waitForLoadState(LoadState.NETWORKIDLE);
+                }
+                saveSession(context);
+                return;
+            } catch (Exception e) {
+                if (!playwrightHelper.isTimeoutException(e)) throw e;
+                if (attempt == maxAttempts) {
+                    throw new RuntimeException("Таймаут при проверке сессии для " + shopName
+                            + " после " + maxAttempts + " попыток", e);
+                }
+                log.warn("Timeout при проверке сессии для {} (попытка {}/{}), повтор через {}с...",
+                        shopName, attempt, maxAttempts, config.getRetryDelaySeconds());
+                try {
+                    Thread.sleep(config.getRetryDelaySeconds() * 1000L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(ie);
+                }
+            }
+        }
     }
 
     /**
