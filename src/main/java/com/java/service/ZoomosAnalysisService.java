@@ -412,7 +412,8 @@ public class ZoomosAnalysisService {
         Integer lastKnownCompletionPercent = lastKnownStat != null ? lastKnownStat.getCompletionPercent() : null;
         ZonedDateTime lastKnownUpdatedTime = lastKnownStat != null ? lastKnownStat.getUpdatedTime() : null;
         Boolean lastKnownIsStalled = (lastKnownUpdatedTime != null
-                && !Boolean.TRUE.equals(lastKnownStat.getIsFinished()))
+                && !Boolean.TRUE.equals(lastKnownStat.getIsFinished())
+                && (lastKnownStat.getCompletionPercent() == null || lastKnownStat.getCompletionPercent() < 100))
                 ? Duration.between(lastKnownUpdatedTime, now).toMinutes() >= stallMinutes
                 : null;
 

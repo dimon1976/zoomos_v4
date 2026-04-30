@@ -387,7 +387,7 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
     <button class="filter-btn filter-btn-TREND" data-filter="TREND">
         📈 <span class="cnt" id="cnt-TREND">—</span> трендов
     </button>
-    <button class="filter-btn filter-btn-IN_PROGRESS" data-filter="IN_PROGRESS">
+    <button class="filter-btn filter-btn-IN_PROGRESS active" data-filter="IN_PROGRESS">
         ⏳ <span class="cnt" id="cnt-IN_PROGRESS">—</span> в процессе
     </button>
     <button class="filter-btn filter-btn-OK" data-filter="OK">
@@ -655,7 +655,7 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 </th:block>
 
 <th:block th:fragment="scripts">
-<script th:src="@{/js/zoomos-check-results.js(v=21)}"></script>
+<script th:src="@{/js/zoomos-check-results.js(v=22)}"></script>
 </th:block>
 
 </html>

@@ -42,7 +42,7 @@ const CONFIG_ISSUE_LABELS = {
 
 // ── State ────────────────────────────────────────────────────────────────
 let allResults  = [];
-let activeFilters = new Set(['CRITICAL','WARNING']);
+let activeFilters = new Set(['CRITICAL','WARNING','IN_PROGRESS']);
 let activeType  = 'ALL';
 let searchText  = '';
 
