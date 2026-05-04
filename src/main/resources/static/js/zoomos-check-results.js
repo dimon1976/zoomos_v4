@@ -148,7 +148,9 @@ function sortByReasonPriority(a, b) {
 function renderSiteResult(r) {
     const status = r.status;
     const filteringByInProgress = activeFilters.has('IN_PROGRESS');
-    const cities = (filteringByInProgress && r.inProgressCities?.length > 0)
+    // inProgressCities используется только когда сам сайт имеет статус IN_PROGRESS —
+    // чтобы не скрывать города с другими статусами у multi-city сайтов (напр. kuper.ru)
+    const cities = (filteringByInProgress && status === 'IN_PROGRESS' && r.inProgressCities?.length > 0)
         ? r.inProgressCities
         : (r.cityResults || []);
     const multi  = cities.length > 1;
@@ -196,10 +198,10 @@ function renderSiteResult(r) {
     }
     if (multi) {
         const ipCount = r.inProgressCities?.length || 0;
-        if (ipCount > 0 && r.status !== 'IN_PROGRESS' && !filteringByInProgress) {
+        if (ipCount > 0 && status !== 'IN_PROGRESS') {
             bodyHtml += '<div class="small text-muted mb-1">⏳ ' + ipCount + ' '
                 + (ipCount === 1 ? 'город' : ipCount < 5 ? 'города' : 'городов')
-                + ' в процессе выкачки — <a href="#" onclick="activateFilter(\'IN_PROGRESS\');return false">подробнее</a></div>';
+                + ' в процессе выкачки</div>';
         }
         bodyHtml += renderCitiesTable(r, cities);
         if (r.statusReasons && r.statusReasons.length) {
