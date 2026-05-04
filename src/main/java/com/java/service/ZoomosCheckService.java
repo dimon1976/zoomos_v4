@@ -22,12 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -459,8 +456,10 @@ public class ZoomosCheckService {
         for (ZoomosCityId entry : entries) {
             // Site-level master override; если нет — legacy per-client значение
             String effectiveMasterCityId = siteMasterOverride.getOrDefault(entry.getSiteName(), entry.getMasterCityId());
-            String effectiveCityIds = (effectiveMasterCityId != null && !effectiveMasterCityId.isBlank())
-                    ? effectiveMasterCityId   // только мастер-город
+            // masterCityId хранится как "4400 - Москва" → нужен только числовой ID для фильтра
+            String normalizedMasterId = effectiveMasterCityId != null ? extractCityId(effectiveMasterCityId) : null;
+            String effectiveCityIds = (normalizedMasterId != null && !normalizedMasterId.isBlank())
+                    ? normalizedMasterId      // только мастер-город (ID)
                     : entry.getCityIds();     // все города как прежде
             if (effectiveCityIds != null && !effectiveCityIds.isBlank()) {
                 for (String cid : effectiveCityIds.split(",")) {

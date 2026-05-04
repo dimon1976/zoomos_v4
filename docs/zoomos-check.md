@@ -1,458 +1,533 @@
-# Zoomos Check — Проверка выкачки
+# Zoomos Check — UI и функциональность
 
-> Последнее обновление: 2026-04 (рефакторинг check-results-v2 → check-results-new; вынесен `ZoomosAnalysisService`; добавлены профили проверки V57/V58; новые DTO `ZoomosSiteResult`, `CityResult`, `StatusReason`, `SiteIssue`, `SparklinePoint`, `ZoomosResultLevel`; новые API: `/check/analyze/{runId}`, `/check/run/{runId}/info`, `/shops/{shopId}/last-instock`)
+## One-liner
 
-## Назначение
-
-Модуль проверяет полноту и качество выкачки данных с `export.zoomos.by` за заданный период. Парсинг выполняется через Playwright (headless Chrome). Результаты хранятся в БД и отображаются на странице `/zoomos/check/results/{runId}`.
+**Функционал Zoomos Check** — это система мониторинга парсинга данных о товарах с сайтов, где можно запускать проверки, просматривать результаты анализа (критичные ошибки, падения запасов, тренды), управлять расписаниями проверок и связывать магазины с клиентами для отслеживания качества выкачки.
 
 ---
 
-## URL-маршруты
+## Аналогия
 
-| URL | Описание |
-|-----|----------|
-| `/zoomos` | Список магазинов, запуск проверки |
-| `/zoomos/clients` | Проверки по клиентам (магазины, привязанные к кабинетам) |
-| `/zoomos/check/results/{runId}` | Страница результатов (вердикт, issues, тренды, детали) |
-| `/zoomos/check/history` | История всех запусков |
-| `/zoomos/sites` | Справочник сайтов (checkType, ignoreStock, isPriority) |
-| `/zoomos/schedule` | CRUD cron-расписаний per-магазин |
-| `/zoomos/api/priority-alerts` | JSON проблем приоритетных сайтов (для баннера) |
+Представь себе **автомастерскую с диагностической системой**:
+- **Главная страница `/zoomos`** — это **приёмка**: видишь все магазины (машины), знаешь их статус, включена ли автодиагностика (расписание)
+- **Запуск проверки** — это **запуск диагностики**: ты вводишь период (дни работы), система прошивает тесты (проверяет выкачку) и показывает прогресс
+- **Результаты `/zoomos/check/results/{runId}`** — это **отчёт диагностики**: здесь каждый сайт (система в машине) имеет статус (OK/WARNING/CRITICAL), описание проблем (STOCK_DROP, ERROR_GROWTH)
+- **Расписание `/zoomos/schedule`** — это **план ТО**: когда и как часто вызывать диагностику
+- **Справочник городов/сайтов** — это **реестр запасных частей**: какие города и сайты есть в системе, какие данные актуальны
 
 ---
 
-## Структура БД (Flyway V23–V58)
+## Структура страниц
 
-```sql
-zoomos_check_runs
-  id, shop_id, date_from, date_to, time_from, time_to  -- "HH:mm" или null
-  status (RUNNING/COMPLETED/FAILED)
-  ok_count, warning_count, error_count, not_found_count
-  drop_threshold (default 10%), error_growth_threshold (default 30%)
-  min_absolute_errors (default 5)
-  baseline_days, trend_drop_threshold, trend_error_threshold
-  started_at, completed_at
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                   http://localhost:8081/zoomos                      │
+│                      (Главная страница)                            │
+│  [Список магазинов] [Приоритет ⭐] [Вкл/выкл 🔄] [История 📊]    │
+└─────────────────────────────────────────────────────────────────────┘
+         │
+         ├─ Синхронизация (парсинг конфига)
+         │  ├─ /zoomos/shops/{name}/sync         ← загружает настройки с Zoomos
+         │  └─ /zoomos/shops/{name}/sync-from-matching ← синхронизирует из матчинга
+         │
+         ├─ Управление сайтами
+         │  ├─ /zoomos/sites                   ← справочник всех сайтов
+         │  ├─ /zoomos/city-names              ← справочник городов (ID↔Имя)
+         │  └─ /zoomos/city-addresses          ← адреса в городах
+         │
+         ├─ Запуск проверки
+         │  │
+         │  ├─ POST /zoomos/check/run
+         │  │    ↓ (в фоне через WebSocket)
+         │  │  ┌──────────────────────────────────────┐
+         │  │  │ ZoomosCheckService.runCheck()        │
+         │  │  │ • Парсит данные с export.zoomos.by  │
+         │  │  │ • Вычисляет метрики (inStock, API) │
+         │  │  │ • Сравнивает с baseline            │
+         │  │  │ • Публикует прогресс 0%→100%        │
+         │  │  └──────────────────────────────────────┘
+         │  │
+         │  └─ GET /zoomos/check/results/{runId}
+         │       ↓ (страница с результатами)
+         │      /zoomos/check/results-new.html
+         │       ├─ Фильтры по статусу  [CRITICAL] [WARNING] [TREND] [OK]
+         │       ├─ Таблица сайтов
+         │       │  └─ Каждый сайт показывает:
+         │       │     • Статус (красный/жёлтый/синий/зелёный)
+         │       │     • Список проблем (NOT_FOUND, STOCK_DROP, ERROR_GROWTH)
+         │       │     • Метрики (inStock, ошибки, скорость)
+         │       │     • Города с проблемами
+         │       └─ Экспорт результатов
+         │
+         └─ Расписания
+            ├─ GET /zoomos/schedule              ← управление расписаниями
+            │   ├─ Таблица расписаний по магазинам
+            │   ├─ Cron-выражения (0 0 8 * * * = 8:00 каждый день)
+            │   └─ Смещение дат (проверить вчера? предпредыдущий день?)
+            │
+            └─ POST /zoomos/schedule/item/{id}   ← сохранить расписание
 
-zoomos_parsing_stats
-  id, check_run_id, site_name, city_name, server_name, client_name
-  start_time, finish_time, total_products, in_stock, error_count
-  completion_total, parsing_duration, check_type (API/ITEM), is_finished
-  parsing_id, category_count, completion_percent, parsing_duration_minutes
-  is_baseline (V29), address_id, address_name
-
--- ВАЖНО: entity ZoomosKnownSite → таблица zoomos_sites (не zoomos_known_sites!)
-zoomos_sites
-  id, site_name (UNIQUE), check_type (API/ITEM)
-  is_priority BOOLEAN DEFAULT FALSE
-  ignore_stock BOOLEAN DEFAULT FALSE  -- сайты без данных inStock
-  master_city_id VARCHAR(50) NULL     -- V53: перенесено из zoomos_city_ids (мастер-город для точечной фильтрации)
-
-zoomos_shop_schedules
-  id, shop_id (UNIQUE FK → zoomos_shops), cron_expression, is_enabled
-  time_from, time_to, drop_threshold, error_growth_threshold, baseline_days
-  date_offset_from (default -1), date_offset_to (default 0)
-  last_run_at, created_at, updated_at
-
-zoomos_redmine_issues
-  id, site_name (UNIQUE), issue_id, issue_status, is_closed, issue_url
-  created_at, updated_at
-
--- V42: привязка магазина к клиенту
-zoomos_shops
-  ...client_id BIGINT FK → clients(id) ON DELETE SET NULL
-
--- V57: профили проверки выкачки
-zoomos_check_profiles
-  id, shop_id FK → zoomos_shops, label, days_of_week ("1,2,3"), time_from/time_to ("HH:mm")
-  cron_expression, drop_threshold, error_growth_threshold, baseline_days
-  min_absolute_errors, trend_drop_threshold, trend_error_threshold, stall_minutes
-  is_enabled, created_at, updated_at
-
-zoomos_profile_sites
-  id, profile_id FK → zoomos_check_profiles, site_name
-  city_ids, account_filter, parser_include, parser_include_mode ("OR"/"AND"), parser_exclude, is_active
-
--- V58: аккаунт, под которым выполнялась выкачка
-zoomos_parsing_stats
-  ...account_name VARCHAR(255)  -- "[ID] название@аккаунта"
-
--- V43: глобальные настройки Zoomos Check
-zoomos_settings
-  key VARCHAR(100) PRIMARY KEY, value VARCHAR(255), description VARCHAR(500)
-  -- Ключи: default.drop_threshold, default.error_growth_threshold,
-  --         default.baseline_days, default.min_absolute_errors,
-  --         default.trend_drop_threshold, default.trend_error_threshold
-
--- V43: клиенты — признак активности и порядок сортировки
-clients
-  ...is_active BOOLEAN NOT NULL DEFAULT TRUE
-  ...sort_order INTEGER NOT NULL DEFAULT 0
-
--- V49: конвертация created_at/updated_at в TIMESTAMPTZ для zoomos_redmine_issues
--- V50: индексы производительности
---   idx_check_runs_status                 ON zoomos_check_runs(status)
---   idx_shop_schedules_shop_id            ON zoomos_shop_schedules(shop_id)
---   idx_shop_schedules_is_enabled         ON zoomos_shop_schedules(is_enabled) WHERE is_enabled=TRUE
---   idx_parsing_stats_baseline_lookup     ON zoomos_parsing_stats(site_name, is_baseline, start_time DESC)
---   idx_parsing_stats_site_addr_completion ON zoomos_parsing_stats(site_name, address_id, completion_percent, start_time DESC)
--- V51: колонка master_city_id в zoomos_city_ids
---   Мастер-город: если задан — проверяется только он; остальные города из city_ids и address_ids игнорируются
+┌─────────────────────────────────────────────────────────────────────┐
+│              Интеграция с клиентами: /clients/{id}/zoomos           │
+│  [Привязать магазин] [Запустить проверку] [История] [Расписание]   │
+└─────────────────────────────────────────────────────────────────────┘
+         ↑
+         └─ Один магазин Zoomos → один клиент (связь 1:1)
+            Запуск и результаты видны в личном кабинете клиента
 ```
 
 ---
 
-## Логика оценки (`ZoomosCheckService.evaluateAndBuildIssues`)
+## Главная страница `/zoomos` — полное описание UI
 
-Единственная точка оценки группы выкачек — метод `evaluateAndBuildIssues(...)`. Возвращает `GroupEvalResult(status, issues)` — статус и готовые issue-сообщения за один проход. Заменяет ранее раздельные `evaluateGroup()` + `buildGroupIssues()`.
+### Кнопки навигации (верхняя панель страницы)
 
-### Статусы
-
-Только **OK** / **WARNING** / **ERROR**. NOT_FOUND упразднён — "нет данных" = ERROR.
-
-### Ключевые концепции
-
-- **baseline** (`MedianStats`) — медиана `inStock`, `totalProducts`, `parsingDurationMinutes` за `baselineDays` дней до начала проверки. Если `baselineDays = 0` или данных < 1 записи → `baseline = null`.
-- **Важно**: baseline загружается только из записей **текущего** `check_run_id` (поле `is_baseline=true`), предзагружается одним запросом в начале `checkResults()`. Это исключает кросс-run загрязнение медианы.
-- **Сравнение**: с `baseline.inStock` если доступен, иначе с `prev.inStock` (предыдущая запись).
-- **ignoreStock** — флаг из `zoomos_sites.ignore_stock`: inStock-метрика пропускается, используется `totalProducts`.
-
-### Алгоритм evaluateAndBuildIssues (sortedAsc, baseline)
-
-```
-1. Пусто → OK
-
-2. newest = последняя запись, prev = предпоследняя (или null)
-   Одиночная запись без baseline:
-   - completionPercent < 100 → WARNING
-   - totalProducts == 0 && completionPercent >= 100 → WARNING ("нет товаров")
-   - !ignoreStock && inStock == 0 && totalProducts > 0 → WARNING (первая запись, не ERROR)
-   - иначе → OK
-
-3. completionPercent < 100 → hasWarning = true ("выкачка не завершена")
-
-4. 100% выкачка и всегда нет товаров → hasWarning = true
-
-5. alwaysZeroInStock = все записи имеют inStock == 0 или null
-
-6. Если !ignoreStock && !alwaysZeroInStock: [PRIMARY — inStock]
-   refInStock = baseline.inStock ?? prev.inStock
-   - newStock == 0 && refInStock > 0 → hasError = true
-   - drop = (refInStock - newStock) / refInStock > dropThreshold% → hasError = true
-
-   Если ignoreStock || alwaysZeroInStock: [FALLBACK — totalProducts]
-   refTotal = baseline.totalProducts ?? prev.totalProducts
-   - drop > dropThreshold% → hasError = true
-   - Ошибки парсинга (prevErrors vs newErrors):
-     * prevErrors == 0 && newErrors >= minAbsoluteErrors → hasWarning
-     * рост > errorGrowthThreshold% && newErrors >= minAbsoluteErrors → hasWarning
-   - alwaysZeroInStock && !ignoreStock && есть товары → hasWarning
-
-7. Скорость (только если !hasError && !hasWarning && baseline.durationMinutes доступен):
-   curDuration > baseline.durationMinutes * 1.5 → hasWarning
-
-8. hasError → ERROR | hasWarning → WARNING | иначе → OK
-```
-
-### `MedianStats` record
-
-```java
-public record MedianStats(Integer inStock, Integer totalProducts, Integer durationMinutes) {}
-```
-
-Вычисляется методом `computeBaselineMedian(List<ZoomosParsingStats>)`. Медиана по каждой метрике независимо (null-записи фильтруются).
+| Кнопка | Куда ведёт |
+|--------|-----------|
+| Расписание | `/zoomos/schedule` |
+| Справочник сайтов | `/zoomos/sites` |
+| Справочник городов | `/zoomos/city-names` |
+| История проверок | `/zoomos/check/history` |
+| По клиентам | `/zoomos/clients` |
 
 ---
 
-## Сообщения в issues (формируются внутри evaluateAndBuildIssues)
+### Блок «Управление магазинами»
 
-При наличии baseline — показывается `[медиана: X]` вместо значения prev:
+**Форма добавления** → `POST /zoomos/shops/add`
+- Поле `shopName` — название магазина (напр. `vitaexpress.ru`)
+- Кнопка **Добавить**
 
-| Ситуация | Тип | Сообщение |
-|----------|-----|-----------|
-| inStock упал до 0 | ERROR | `"В наличии: [медиана: 850] → 0 (−100%)"` |
-| inStock упал > threshold | ERROR | `"Падение 'В наличии': [медиана: 850] → 120 (−86%)"` |
-| totalProducts упал (ignoreStock) | ERROR | `"Падение товаров: [медиана: 5000] → 100 (−98%)"` |
-| Рост ошибок | WARNING | `"Рост ошибок: 10 → 150 (+1400%)"` |
-| Новые ошибки | WARNING | `"Ошибки парсинга: 0 → 25"` |
-| 100% выкачка, нет товаров | WARNING | `"100% выкачка, нет товаров — нужна проверка"` |
-| inStock всегда 0, есть товары | WARNING | `"В наличии: всегда 0 — нужна проверка"` |
-| Медленная выкачка (только если нет других проблем) | WARNING | `"Медленная выкачка: N мин (базовый: M мин)"` |
+**Кнопка «Настройки по умолчанию»** → открывает модал `#defaultsModal`
 
-**Ошибки парсинга** генерируются только когда `ignoreStock || alwaysZeroInStock` (если inStock доступен — только в тренды, не в основные issues).
+#### Модал «Настройки по умолчанию» → `POST /zoomos/settings`
 
----
+Значения применяются при ручном запуске и создании нового расписания.
 
-## Тренд-анализ (TREND_WARNING)
-
-Отдельный механизм — `evaluateTrend()` / `computeMedianBaseline()`.
-
-- Метрики нормализованы по числу товаров: `stockRatio`, `errorRate`, `durationRate`
-- `TREND_WARNING` issues отображаются в отдельном **свёрнутом** блоке "Тренды" (Блок 2.5)
-- Не влияют на `canDeliver`, не попадают в блок "На что обратить внимание"
-- Требует `baselineDays > 0` и не менее 3 исторических записей
-- `evaluateTrend()` возвращает `List<Map<String, Object>>` с полями `"message"`, `"warningType"`, `"shortMessage"` (числовая часть без префикса) и `"numDeltaAbs"` (0–100, для мини-бара)
-
-### Типы warningType (тренды)
-
-| warningType | Описание |
-|---|---|
-| `TREND_STOCK` | Доля «В наличии» снизилась относительно baseline |
-| `TREND_ERRORS` | Рост ошибок парсинга относительно baseline |
-| `TREND_SPEED` | Замедление выкачки (мин/1000 товаров) |
+| Поле | Параметр | Диапазон | Смысл |
+|------|----------|----------|-------|
+| Падение inStock, % | `default.drop_threshold` | 1–100 | При каком % падении количества «В наличии» давать WARNING |
+| Рост ошибок, % | `default.error_growth_threshold` | 1–1000 | При каком % росте ошибок парсинга давать WARNING |
+| Дней для baseline | `default.baseline_days` | 0–90 | С данными за сколько дней назад сравнивать (0 = без сравнения) |
+| Мин. ошибок для WARNING | `default.min_absolute_errors` | 0+ | Минимальное абсолютное число ошибок, ниже которого WARNING не срабатывает |
+| Тренд: падение, % | `default.trend_drop_threshold` | 1–100 | Порог долгосрочного тренда падения inStock/скорости |
+| Тренд: рост ошибок, % | `default.trend_error_threshold` | 1–1000 | Порог долгосрочного тренда роста errorRate |
+| Порог зависания, мин | `default.stall_minutes` | 1–1440 | Через сколько минут считать проверку зависшей |
 
 ---
 
-## warningType — классификация проблем
+### Строка поиска и управления списком
 
-Каждый issue содержит поле `warningType` для группировки в интерфейсе.
-
-| warningType | type | Описание |
-|---|---|---|
-| `STOCK_DROP_100` | ERROR | В наличии: упало до 0 (-100%) |
-| `STOCK_DROP` | ERROR | Падение "В наличии" или товаров свыше порога |
-| `NOT_FOUND` | ERROR | Нет данных о парсинге (noData=true) |
-| `NO_PRODUCTS` | WARNING | 100% выкачка, нет товаров совсем |
-| `ALWAYS_ZERO_STOCK` | WARNING | В наличии: всегда 0 |
-| `SLOW_PARSING` | WARNING | Медленная выкачка |
-| `IN_PROGRESS` | WARNING | Выкачка в процессе (noData=true) |
-| `ERROR_GROWTH` | WARNING | Рост ошибок парсинга |
+| Элемент | Назначение |
+|---------|-----------|
+| Поле «Поиск магазина...» (`shopSearch`) | Фильтрует карточки магазинов на лету |
+| Кнопка × (`clearSearch`) | Сбрасывает поиск |
+| Select «Магазинов на странице» (`shopsPageSize`) | 10 / 25 / 50 / Все — пагинация списка |
+| Кнопка ☰ (`viewToggleBtn`) | Переключение между стандартным и компактным (список) режимом |
 
 ---
 
-## /check/results-new/{runId} — новый вид результатов
+### Батч-панель (появляется при выборе нескольких магазинов)
 
-Endpoint `GET /check/results-new/{runId}` реализован в `ZoomosAnalysisController.checkResultsNew()`.
-Шаблон: `zoomos/check-results-new.html`. Основная логика перенесена в `ZoomosAnalysisService.analyze(runId, profileId, deadline, stallMinutes)`.
+Панель `#batchPanel` — липкая, появляется при установке хотя бы одного чекбокса в заголовке карточки.
 
-Вместо `GroupEvalResult` используются новые DTO:
-- `ZoomosSiteResult` — главный DTO для сайта: статус, список городов (`cityResults`), `inProgressCities` (только города IN_PROGRESS), list<SiteIssue>, спарклайны (inStockHistory, errorHistory, speedHistory), shopParam, historyBaseUrl
-- `CityResult` — данные по городу: статус, `StatusReason`, последние stats, baselineInStock, inStockDelta, inStockDeltaPercent; поля `lastKnownDate/InStock/CompletionPercent/IsStalled/UpdatedTime` — последняя известная запись (для подсказки при NOT_FOUND/STALLED)
-- `StatusReason` — причина статуса (тип, сообщение, числовые дельты)
-- `SiteIssue` — конкретная проблема (siteName, cityName, level, message)
-- `SparklinePoint` — точка спарклайн-графика (timestamp, value)
-- `ZoomosResultLevel` — enum OK/WARNING/ERROR/IN_PROGRESS
-
-API `/check/analyze/{runId}?profileId=&deadline=&stallMinutes=` → `List<ZoomosSiteResult>` (JSON).
-
-Атрибуты модели `/check/results-new/{runId}`:
-- `runStatus` — статус запуска (RUNNING/COMPLETED/FAILED)
-- `runErrorMessage` — сообщение об ошибке запуска
-
-### Однодневная проверка (`isSingleDay = dateFrom.equals(dateTo)`)
-
-При однодневной проверке `analyzeCityGroup` фильтрует `dayStats`:
-- записи за `checkDate` (dateTo)
-- незавершённые записи за `checkDate - 1` (ночные выкачки, `completionPercent < 100`)
-
-Это позволяет корректно определять NOT_FOUND для однодневных проверок, исключая вчерашние завершённые записи.
-
-### Мастер-город (masterCityId)
-
-Если задан `masterCityId` — агрегированные метрики (baseline, тренды, спарклайны) считаются **только по мастер-городу**, а не по всем городам. Источник `masterCityId`: `ZoomosKnownSite.masterCityId` (авторитетный, обновляется через `/sites/{id}/master-city`), при отсутствии — `ZoomosCityId.masterCityId` (устаревший fallback).
-
-### speedHistory — только завершённые записи
-
-`computeSpeedHistory()` теперь фильтрует baseline только по завершённым записям (`isFinished=true || completionPercent>=100`) перед вычислением медианы скорости по дням.
-
-Доп. эндпоинты:
-- `GET /zoomos/check/run/{runId}/info` — метаданные запуска (shop, dates, thresholds)
-- `GET /zoomos/shops/{shopId}/last-instock` — последнее значение inStock и delta (для компактного вида в index.html)
+| Кнопка | Действие |
+|--------|---------|
+| «Выбрать все» (`batchSelectAll`) | Устанавливает все чекбоксы магазинов |
+| «Снять выделение» (`batchDeselect`) | Снимает все чекбоксы |
+| **«Проверить выбранные»** (`batchRunBtn`) | Запускает проверку для всех отмеченных магазинов |
 
 ---
 
-## /check/results-v2/{runId} — устаревший вид (удалён)
+### Глобальная дата-панель (только в компактном режиме)
 
-Шаблон `check-results-v2.html` и `check-results.html` удалены. `check-results-groups.html` удалён.
-Endpoint `GET /check/results-v2/{runId}` реализован в `ZoomosAnalysisController.checkResultsV2()`.
+Панель `#globalDateBar` — липкая, видна только при включённом compact-режиме. Позволяет задать одинаковый период для всех магазинов сразу.
 
-- Вызывает `checkResults()` для заполнения базовых атрибутов
-- Добавляет предгруппированные списки по `warningType`
-- Шаблон: `zoomos/check-results-v2.html`
-
-Атрибуты модели, добавляемые в v2:
-
-| Атрибут | Тип | warningType | Блок |
-|---|---|---|---|
-| `errorsStockDrop100` | `LinkedHashMap<String, List>` (по домену) | STOCK_DROP_100 | ERROR |
-| `errorsStockDrop` | `LinkedHashMap<String, List>` (по домену) | STOCK_DROP | ERROR |
-| `errorsNotFound` | `LinkedHashMap<String, List>` (по домену) | NOT_FOUND | ERROR |
-| `errorsStockDrop100Count` | int | — | ERROR |
-| `errorsStockDropCount` | int | — | ERROR |
-| `errorsNotFoundCount` | int | — | ERROR |
-| `noProducts` | `LinkedHashMap<String, List>` (по домену) | NO_PRODUCTS | WARNING |
-| `alwaysZero` | `LinkedHashMap<String, List>` (по домену) | ALWAYS_ZERO_STOCK | WARNING |
-| `slowParsing` | `LinkedHashMap<String, List>` (по домену) | SLOW_PARSING | WARNING |
-| `inProgress` | `LinkedHashMap<String, List>` (по домену) | IN_PROGRESS | WARNING |
-| `errorGrowth` | `LinkedHashMap<String, List>` (по домену) | ERROR_GROWTH | WARNING |
-| `noProductsCount`, `alwaysZeroCount`, ... | int | — | WARNING |
-| `trendStock` | `LinkedHashMap<String, List>` (по домену) | TREND_STOCK | TREND |
-| `trendSpeed` | `LinkedHashMap<String, List>` (по домену) | TREND_SPEED | TREND |
-| `trendErrors` | `LinkedHashMap<String, List>` (по домену) | TREND_ERRORS | TREND |
-| `trendStockCount`, `trendSpeedCount`, `trendErrorsCount` | int | — | TREND |
-
-Все списки сгруппированы через `groupByDomain(List<Map<String, Object>>)` — приватный метод контроллера, возвращает `LinkedHashMap<String, List<Map<String, Object>>>` (ключ = поле `site`, порядок сохранён).
-
-Поле `shortMessage` в issue — числовая часть сообщения без текстового префикса (для компактного отображения в строке).
-Поле `numDeltaAbs` — величина отклонения 0–100 (для мини delta-bar в шаблоне).
+- Поля: **Дата начала**, **Время начала** (необяз.), **Дата конца**, **Время конца** (необяз.)
 
 ---
 
-## canDeliver
+### Карточка магазина
 
-```java
-boolean canDeliver = issues.stream()
-    .noneMatch(i -> "ERROR".equals(i.get("type")));
-```
+#### Заголовок карточки
 
-- **ERROR** блокирует (`canDeliver = false`)
-- **WARNING** — не блокирует (в т.ч. IN_PROGRESS / "нет данных в процессе")
-- **TREND_WARNING** — вынесены в `trendIssues`, не проверяются
+| Элемент | Действие |
+|---------|---------|
+| ⠿ (drag handle) | Перетащить для изменения порядка (drag-and-drop) |
+| Чекбокс (`.shop-batch-cb`) | Добавить магазин в батч-выбор |
+| ⭐/☆ (`.btn-shop-priority`) | Пометить магазин приоритетным (показывается вверху) |
+| Название магазина (bold) | — |
+| «Обновлено: дата» | Время последней синхронизации city_ids |
+| «настройки» (внешняя ссылка) | `https://export.zoomos.by/shop/{name}/settings` |
+| «история» | `/zoomos/check/history?shop={name}` |
+| Чекбокс **🕐 авто** (`.schedule-enabled-cb`) | Включить/выключить авторасписание → открывает модал подтверждения |
+| Dropdown **⋮** | Дополнительные действия (см. ниже) |
 
----
+**Dropdown ⋮ (меню магазина):**
 
-## noData-issues (города/адреса без данных)
-
-Вместо статуса `NOT_FOUND` — тип `ERROR` + флаг `noData=true`.
-Вместо статуса `IN_PROGRESS` — тип `WARNING` + флаг `noData=true` (включая "frozen").
-
-`noData=true` используется для:
-- Отображения иконки спиннера / ban в issues-списке (Блок 2)
-- CSV-группировки в блок "НЕТ ДАННЫХ"
-- Добавления заглушки в Блок 3 вместо таблицы данных
-- Счётчика `liveNotFoundCount` (тайл "Нет/Идёт")
-
----
-
-## Парсинг URL и авторизация
-
-```
-{baseUrl}/shops-parser/{site}/parsing-history
-  ?upd={ts}&dateFrom=...&dateTo=...&shop={shopParam}&onlyFinished=1
-```
-
-- **API-тип**: `shop=-`, фильтр по пустому полю "Клиент"
-- **ITEM-тип**: `shop={shopName}`
-- Куки (`ZoomosSession`), автообновление при редиректе на `/login`
-- `cityId` из строки `"3509 - Вологда"` → `"3509"` для прямых ссылок
-
-### Фильтрация по времени
-
-- Нижняя граница: `startTime >= rangeStart`
-- Верхняя граница: `finishTime <= rangeEnd` (null finishTime → `startTime`)
-- Реализация: `ZoomosCheckService.filterByTime()`
-
----
-
-## Страница результатов (check-results.html)
-
-4 блока:
-
-| Блок | ID | Описание |
-|------|----|----------|
-| 1 | — | Вердикт (`canDeliver`), счётчики OK/Warn/Error/Нет-Идёт |
-| 2 | `issuesCollapse` | "На что обратить внимание" — ERROR + WARNING (без TREND), авто-раскрыт если ≤ 2 сайта |
-| 2.5 | `trendsCollapse` | Тренды — TREND_WARNING (свёрнут по умолчанию) |
-| 3 | `groups-section` | Детали по сайтам — **lazy-loaded** через `GET /check/results/{runId}/groups` → фрагмент `check-results-groups.html :: groupsBlock` |
-
-Данные модели (`checkResults()`):
-- `issues` — mainIssues (без TREND_WARNING)
-- `trendIssues` — только TREND_WARNING
-- `canDeliver`, `liveOkCount`, `liveWarnCount`, `liveErrCount`, `liveNotFoundCount`
-- `groups` НЕ передаётся в основной странице — только в `checkResultsGroups()`
-
-**Lazy loading БЛОКА 3**:
-
-- При клике "Показать детали" → `loadGroups()` делает `fetch('/check/results/{runId}/groups')`
-- Кнопка ↓ в БЛОКЕ 2 → `scrollToGroup(siteName)` сначала вызывает `loadGroups()`, затем скроллит
-- После загрузки: `initGroupsJs()` инициализирует chevron, expandAll/collapseAll, Redmine batch-check
-
-**N+1 SQL оптимизация** (NOT_FOUND detection):
-
-- `findLatestFinishedBySiteAndAddressIds()` — batch PostgreSQL `DISTINCT ON` по всем адресам
-- `findLatestFinishedBySites()` — batch по всем сайтам/городам
-- Результат: N+1 → 2 SQL запроса
-
----
-
-## Приоритетные сайты
-
-- Toggle: `POST /zoomos/sites/{id}/priority`
-- Глобальный баннер: fetch `/zoomos/api/priority-alerts` при загрузке любой страницы
-- В issues: `isPriority=true` → звёздочка, всплывает первым в сортировке
-
----
-
-## Расписание (ZoomosSchedulerService)
-
-- `ThreadPoolTaskScheduler` — bean `zoomosSchedulerTaskScheduler`, 3 потока
-- Cron: Unix 5 полей → Spring 6 полей (добавляется `"0 "` в начало)
-- `dateOffsetFrom` default −1 (вчера), `dateOffsetTo` default 0 (сегодня)
-- Хранится в `zoomos_shop_schedules`
-
----
-
-## Redmine интеграция
-
-Создание/обновление задач в `tt.zoomos.by` со страницы результатов. Одна задача на домен.
-
-**Особенность сервера**: HTTP 404 при POST/PUT, но операции выполняются успешно.
-Workaround: `postIgnoring404()` / `putIgnoring404()` + поиск через `findRecentIssueBySubject()`.
-
-Эндпоинты: `/zoomos/redmine/check-batch`, `/zoomos/redmine/check`, `/zoomos/redmine/create`, `/zoomos/redmine/update/{id}`, `DELETE /zoomos/redmine/local-delete/{site}`
-
-**Auto-save**: `findIssuesBySite()` автоматически сохраняет первую найденную задачу в `zoomos_redmine_issues` — последующие загрузки страницы сразу показывают кнопку "Изменить" без async API-запроса.
-
-**UI (Block 2 — check-results.html)**:
-- Коллапс по сайту: `issuesBySite` (LinkedHashMap), `errorCountBySite`/`warnCountBySite` передаются в модель
-- Кнопка Redmine одна на сайт (`btn-redmine-site` / `btn-redmine-site-edit`). Коллапс сайта управляется через `data-collapse-target` + ручной JS-toggle в `site-issues-header.addEventListener('click')`, который игнорирует клики в `.ms-auto` и `.btn-mark-site-done`
-- Phase 1 выбор проблем: `#rmIssueSelect` → чекбоксы → `buildSiteDescription()` с collapse-тегами. Показывается и при редактировании (>1 issues): выбранные проблемы попадают в `rmNotes` (комментарий), а не в описание
-- Кнопка «Проверено» (`btn-mark-site-done`) в заголовке сайта — скрывает все проблемы сайта разом; JS `e.stopPropagation()` не даёт сворачиваться коллапсу
-- Verified-badge: localStorage `verified-sites-{runId}`, отображается иконка ✓ в заголовке сайта
-- Блок «Проверено мной» (`#verifiedSitesBlock`): verified-сайты физически перемещаются в отдельный collapsible-блок через `moveSiteToVerified()` (работает при первой загрузке и при нажатии кнопки). Блок скрыт пока нет verified-сайтов. Восстановление из localStorage происходит ДО авто-раскрытия, чтобы verified-сайты не раскрывались в основном списке
-- Фикс: `btnClass` для Redmine-кнопки — `isClosed ? 'btn-success' : 'btn-danger'` (был инвертирован)
-- Фикс: `currentSelectedIssues` из Phase 1 скрываются через `hideIssue()` после успешного создания задачи
-- Фикс: `showCopyBlock` при update передаёт `body.shortMessage` вместо литерала 'обновлена'
-- Кнопка "Статусы Redmine": `#btnRefreshRedmine` → `runBatchCheck()` (отложен через `setTimeout` для быстрого рендера страницы)
-- Удалённая задача в Redmine: batch-check вызывает `DELETE /local-delete/{site}` + откатывает кнопку
-- `data-historyurl` и `data-matchingurl` убраны из DOM (раньше замедляли страницу); URL вычисляются в JS функциями `computeHistoryUrl()` / `computeMatchingUrl()` через глобальные переменные `BASE_URL`, `DATE_FROM`, `DATE_TO`, `SHOP_NAME`
-- Городское название (`cityDisplay`): в `buildGroupIssues` хранится только читаемая часть после " - " (null если ID без имени)
-
-Конфиг: `redmine.base-url`, `redmine.api-key`, `redmine.project-id`, и т.д. в `application.properties`.
-
----
-
-## Ключевые типы и DTO
-
-| Класс | Описание |
+| Пункт | Действие |
 |-------|---------|
-| `CheckRunStatus` | enum RUNNING / COMPLETED / FAILED — хранится как STRING в `zoomos_check_runs.status` |
-| `ZoomosCheckType` | enum API / ITEM — хранится как STRING в `zoomos_parsing_stats.check_type` |
-| `ZoomosCheckParams` | @Value @Builder DTO — заменяет 12-параметровую сигнатуру `runCheck()` |
-| `AddressFilterContext` | private record внутри `ZoomosCheckService` — контекст фильтрации city/address |
-| `ZoomosCityId.masterCityId` | Мастер-город: если задан, проверяется только этот город; остальные из `city_ids` и `address_ids` игнорируются |
-| `ZoomosCityId.hasConfigIssue` / `configIssueNote` | Флаг конфигурационной проблемы (V54): помечает пару клиент→сайт как проблемную; note — произвольный текст; endpoint `POST /zoomos/city-ids/{id}/config-issue` |
-| `ZoomosCheckService.resolveCityDisplay(cityStr, map)` | Статический метод нормализации: `"1913"` → `"1913 - Алматы"`. Если строка уже содержит `" - "` — возвращает как есть. Использовать во всех местах отображения города. |
+| «Синхронизировать» | Обновить city_ids существующих сайтов из настроек Zoomos → `POST /zoomos/shops/{name}/sync` |
+| «Из матчинга» | Полная синхронизация списка сайтов со страницы матчинга → `POST /zoomos/shops/{name}/sync-from-matching` |
+| «Выключить» | Скрыть магазин из основного списка (переместить в «Выключенные») |
+| «Удалить» | `POST /zoomos/shops/{id}/delete` (с confirm-диалогом) |
 
-**Запуск проверки** через `checkService.runCheck(ZoomosCheckParams.builder()...build())` — из контроллера и планировщика.
+**Компактный режим — дополнительные элементы в заголовке:**
+
+| Элемент | Назначение |
+|---------|-----------|
+| Цветная точка (`.compact-status-dot`) | Статус последней проверки: зелёная/жёлтая/красная/синяя пульсирующая |
+| Бейджи OK/WARN/ERR | Счётчики из последней проверки |
+| Ссылка ↗ (`.compact-result-link`) | Открыть результаты последней проверки |
+| Кнопка ⌄ (`.compact-expand-btn`) | Развернуть/свернуть список сайтов в карточке |
+| Кнопка ⚙ (`.compact-settings-btn`) | Открыть настройки периода и порогов для магазина |
+| Кнопка ▶ (`.compact-run-btn`) | Быстро запустить проверку |
 
 ---
 
-## Ключевые файлы
+#### Панель проверки (под заголовком карточки)
 
-| Файл | Назначение |
-|------|-----------|
-| `ZoomosCheckService.java` | Playwright-парсинг, `evaluateAndBuildIssues()`, `computeBaselineMedian()`, `filterByTime()`, WebSocket |
-| `ZoomosAnalysisService.java` | Новый сервис анализа: `analyze(runId, profileId, deadline, stallMinutes)` → `List<ZoomosSiteResult>`; логика оценки по профилям, спарклайны |
-| `ZoomosPlaywrightHelper.java` | Вспомогательный компонент: `navigateWithRetry(page, url)` — навигация с retry при timeout; `isTimeoutException(e)` — определение таймаута |
-| `ZoomosAnalysisController.java` | `/zoomos/*` роуты, `checkResults()`, `checkResultsNew()`, `analyzeRun()`, `lastInStock()`, schedule CRUD, priority API |
-| `ZoomosParserService.java` | Магазины и city_ids |
-| `ZoomosSchedulerService.java` | Cron-расписания |
-| `ZoomosKnownSite.java` | `@Table zoomos_sites`, поля `isPriority`, `ignoreStock` |
-| `ZoomosCheckProfile.java` | Профиль проверки (`zoomos_check_profiles`): пороги, расписание, список сайтов |
-| `ZoomosProfileSite.java` | Сайт внутри профиля (`zoomos_profile_sites`): cityIds, фильтры по аккаунту/парсеру |
-| `ZoomosSettingsService.java` | Глобальные настройки (таблица `zoomos_settings`, key-value) |
-| `RedmineService.java` | Вся бизнес-логика Redmine |
-| `ZoomosRedmineController.java` | REST endpoints `/zoomos/redmine/*` |
-| `check-results-new.html` | Новая страница результатов (заменяет check-results-v2.html) |
-| `layout/main.html` | Глобальный priority-alerts баннер |
+```
+Проверка: [дата от] [время от] — [дата до] [время до]  [⚙]  [Проверить]
+```
+
+| Элемент | Назначение |
+|---------|-----------|
+| `check-date-from` | Дата начала периода (обязательно) |
+| `check-time-from` | Время начала (необязательно, по умолч. 00:00) |
+| `check-date-to` | Дата конца периода (обязательно) |
+| `check-time-to` | Время конца (необязательно, по умолч. 23:59) |
+| Кнопка **⚙** (`btn-thresholds`) | Показать/скрыть панель порогов |
+| Кнопка **«Проверить»** (`btn-run-check`) | Запустить проверку → `POST /zoomos/check/run` |
+
+Даты сохраняются в `localStorage` с ключами `checkDateFrom-{shopId}` / `checkDateTo-{shopId}` и восстанавливаются при следующем открытии.
+
+#### Панель порогов (скрытая, открывается через ⚙)
+
+**Ряд 1 — основные пороги:**
+
+| Поле | Класс | Диапазон | Смысл |
+|------|-------|----------|-------|
+| Падение inStock, % | `check-drop-threshold` | 1–100 | Порог падения «В наличии» для WARNING |
+| Рост ошибок, % | `check-err-threshold` | 1–500 | Порог роста ошибок для WARNING |
+| Baseline, дней | `check-baseline-days` | 0–30 | Сколько дней назад брать baseline для сравнения |
+| Мин. ошибок | `check-min-abs-errors` | 0–1000 | Минимальное абс. число ошибок (меньше — не предупреждаем) |
+
+**Ряд 2 — тренд-пороги:**
+
+| Поле | Класс | Диапазон | Смысл |
+|------|-------|----------|-------|
+| Тренд: падение, % | `check-trend-drop` | 1–500 | Порог долгосрочного падения для TREND-статуса |
+| Тренд: ошибки, % | `check-trend-err` | 1–1000 | Порог роста errorRate для TREND-статуса |
+| Кнопка **?** | — | — | Открывает `#trendErrHelpModal` с объяснением расчёта errorRate |
+
+#### Прогресс-бар проверки (скрыт, показывается во время работы)
+
+Анимированная полоска с процентом, обновляется через WebSocket (`/topic/zoomos-check/{operationId}`).
+
+#### Блок результатов (скрыт, появляется после завершения)
+
+| Элемент | Содержимое |
+|---------|-----------|
+| «Проверка завершена» | Иконка + текст |
+| Период | Бейдж с датами проверки |
+| OK | Зелёный бейдж — кол-во сайтов без проблем |
+| WARN | Жёлтый бейдж — кол-во сайтов с предупреждениями |
+| ERR | Красный бейдж — кол-во критичных сайтов |
+| NOT_FOUND | Тёмный бейдж — сайты не найденные при парсинге |
+| Кнопка **«Результаты»** | Ссылка → `/zoomos/check/results/{runId}` |
+
+---
+
+#### Секция сайтов-конкурентов (таблица city_ids)
+
+Заголовок секции:
+- «ID городов по сайтам-конкурентам (N)»
+- Кнопка **«Все»** (`select-all-btn`) — установить все чекбоксы в таблице
+- Кнопка **«Снять»** (`deselect-all-btn`) — снять все чекбоксы
+- Кнопка **«Удалить все»** (`btn-delete-all-sites`) — удалить все сайты магазина
+
+Таблица (collapse, скрытая по умолчанию):
+
+| Колонка | Элемент | Действие |
+|---------|---------|---------|
+| ✓ | Чекбокс (`.city-toggle`) | Включить/выключить сайт в проверке |
+| Сайт-конкурент | Название + ссылка ⛓ + ⭐ | ⛓ → матчинг на export.zoomos.by; ⭐ — пометить сайт приоритетным (глобальный баннер при проблемах) |
+| Тип проверки | Select: **API** / **ITEM** | Тип выкачки для этого сайта |
+| ID городов | Inline text input (`.city-ids-input`) | Редактируемый список city_id через запятую |
+| Мастер | Inline text input (`.master-city-input`) | Один мастер-город; если задан — проверяется только он |
+| ID адресов | Кнопка **«Адреса»** (`.btn-edit-addresses`) | Открывает модал управления адресами для каждого города |
+| Парсер | Кнопка 🔽 (`.btn-parser-filter`) | Настройка include/exclude фильтров типов парсера (подсвечена синим если фильтр задан) |
+| — | ⚠ бейдж | Предупреждение о проблеме в конфигурации (configIssueNote) |
+| — | Кнопка 🗑 (`.btn-delete-cityid`) | Удалить этот сайт из списка |
+
+Строка добавления сайта:
+- Поле «Название сайта» (`add-site-name`)
+- Поле «ID городов (необяз.)» (`add-city-ids`)
+- Кнопка **«Добавить сайт»** (`btn-add-cityid`) → `POST /zoomos/city-ids/add`
+
+---
+
+### Блок «Выключенные магазины» (collapse)
+
+Показывается только если есть выключенные магазины. Список с кнопками **«Включить»** (`btn-toggle-shop-enabled`).
+
+---
+
+### Все модальные окна главной страницы
+
+| ID модала | Назначение |
+|-----------|-----------|
+| `#defaultsModal` | Настройки по умолчанию (пороги) |
+| `#syncConfirmModal` | Preview синхронизации: показывает diff и кнопку «Применить» |
+| `#scheduleToggleModal` | Подтверждение включения/выключения расписания |
+| `#trendErrHelpModal` | Объяснение параметра «Тренд ош%» с таблицей примеров |
+| `#compactShopSettingsModal` | Настройки периода и порогов в компактном режиме |
+| `#addrModal` | Управление адресами по городам (сетка 4 колонки) |
+| `#parserFilterModal` | Фильтры по типам парсера (include/exclude) |
+
+---
+
+## Сценарии работы
+
+### Сценарий 1: Главная страница `/zoomos`
+
+**Файлы:** `ZoomosAnalysisController.java:81-144`, `src/main/resources/templates/zoomos/index.html`
+
+1. Пользователь заходит на `/zoomos`
+2. Контроллер вызывает `parserService.getAllShops()` → загружает все магазины из БД
+3. Для каждого магазина подгружаются:
+   - `cityIdRepository.findByShopIdInOrderBySiteName()` — список сайтов магазина (city_ids)
+   - `scheduleRepository.findAllByShopIdIn()` — расписания (включено ли автопроверка?)
+   - `knownSiteRepository.findAllByIsPriorityTrue()` — приоритетные сайты (иконки)
+4. Передаются в Thymeleaf шаблон с моделью:
+   - `shops` (все магазины)
+   - `disabledShops` (отключённые)
+   - `cityIdsMap` (сайты по магазинам)
+   - `schedulesMap` (расписания)
+   - `defaultThresholds` (пороги: падение 10%, рост ошибок 30% и т.д.)
+5. HTML отрисовывает карточку магазина с кнопками синхронизации, таблицей city_ids, кнопкой запуска проверки
+
+---
+
+### Сценарий 2: Запуск проверки выкачки
+
+**Файлы:**
+- `ZoomosAnalysisController.java:581-649` (backend)
+- `src/main/resources/templates/clients/zoomos.html:294-355` (frontend)
+
+```
+Пользователь нажимает "Проверить" с датами (2025-01-01 — 2025-01-10)
+          ↓
+JavaScript собирает параметры:
+  - shopId
+  - dateFrom, dateTo, timeFrom, timeTo (опционально)
+  - Пороги: dropThreshold=10%, errorGrowthThreshold=30%
+  - baselineDays=7 (сравнивать с данными за 7 дней до)
+  - minAbsoluteErrors=5 (минимум ошибок для триггера)
+  - trendDrop=30%, trendError=100% (для тренд-анализа)
+          ↓
+POST /zoomos/check/run
+  └─ Генерируется operationId (UUID)
+  └─ CompletableFuture.runAsync() запускает в фоне
+             ↓
+    ZoomosCheckService.runCheck(ZoomosCheckParams):
+      1. Создаёт ZoomosCheckRun(shopId, dateFrom, dateTo, status='RUNNING')
+      2. Запускает WebSocket на /ws
+      3. Парсит export.zoomos.by:
+         - Для каждого сайта (city_id) в магазине
+         - Собирает данные: статус, inStock, ошибки, скорость
+         - Сохраняет в ZoomosParsingStats
+      4. Публикует прогресс на /topic/zoomos-check/{operationId}
+         (0% → 50% → 100% — Завершено)
+      5. Запускает анализ (ZoomosAnalysisService.analyze())
+         - Сравнивает с baseline (7 дней назад)
+         - Проверяет пороги (падение, рост ошибок)
+         - Определяет статус каждого сайта (CRITICAL/WARNING/TREND/OK)
+         - Сохраняет причины (NOT_FOUND, STOCK_DROP, ERROR_GROWTH и т.д.)
+      6. Обновляет ZoomosCheckRun(status='COMPLETED', okCount, warnCount, errorCount)
+             ↓
+Frontend (JavaScript) подписан на WebSocket:
+  - Получает сообщения с процентом
+  - Обновляет progress-bar в реальном времени
+  - Когда "завершена" → отображает результаты
+  - Вызывает GET /zoomos/check/latest?shopId=123
+```
+
+Даты сохраняются в localStorage (`checkDateFrom-{shopId}`, `checkDateTo-{shopId}`) для предзаполнения следующего запуска.
+
+---
+
+### Сценарий 3: Просмотр результатов `/zoomos/check/results/{runId}`
+
+**Файлы:**
+- `ZoomosAnalysisController.java:652-683` (GET информация)
+- `ZoomosAnalysisController.java:728-745` (GET анализ)
+- `src/main/resources/templates/zoomos/check-results-new.html`
+- `src/main/resources/static/js/zoomos-check-results.js`
+
+```
+GET /zoomos/check/results-new/{runId}
+  ↓
+ZoomosAnalysisController:
+  1. Загружает ZoomosCheckRun с данными про магазин
+  2. Передаёт: runId, shopName, dateFrom, dateTo, status, errorMessage
+             ↓
+Frontend загружает JavaScript (zoomos-check-results.js)
+  ↓
+GET /zoomos/check/analyze/{runId}
+  └─ Загружает список всех сайтов (ZoomosSiteResult):
+     {
+       "siteName": "shop1.by",
+       "status": "CRITICAL",
+       "statusReasons": [...],
+       "cityResults": [
+         {
+           "cityId": "101",
+           "cityName": "Минск",
+           "issues": [
+             { "reason": "STOCK_DROP", "level": "CRITICAL", "metric": 45 → 20 = -55% }
+           ]
+         }
+       ]
+     }
+             ↓
+Frontend рендерит:
+  1. Фильтры: [CRITICAL] [WARNING] [TREND] [OK]
+  2. Карточка для каждого сайта:
+     ┌─────────────────────────────────┐
+     │ ⚠️ shop1.by  [Минск, Гомель]   │
+     │ STOCK_DROP: -55% (45→20)        │
+     │ CITIES_MISSING: Брест           │
+     │ Metrics: inStock: 45, Errors: 3 │
+     └─────────────────────────────────┘
+  3. Клик на сайт → детали городов
+  4. Клик на город → метрики и sparkline-графики
+```
+
+**Статусы** (из `zoomos-check-results.js:10-41`):
+
+| Статус | Значение |
+|--------|----------|
+| CRITICAL | Серьёзная проблема (NOT_FOUND, STOCK_ZERO, DEADLINE_MISSED) |
+| WARNING | Предупреждение (STOCK_DROP > 30%, ERROR_GROWTH > 30%) |
+| TREND | Долгосрочный тренд вниз (SPEED_TREND, STOCK_TREND_DOWN) |
+| IN_PROGRESS | Проверка идёт, результаты неполные |
+| OK | Всё хорошо |
+
+---
+
+### Сценарий 4: Расписание `/zoomos/schedule`
+
+**Файлы:** `ZoomosAnalysisController.java:910-1006`, `src/main/resources/templates/zoomos/schedule.html`
+
+```
+┌──────────────────────────────────────────────────────┐
+│ Метка    │ Cron          │ Период  │ Время   │ Вкл/выкл│
+├──────────────────────────────────────────────────────┤
+│ "Утро"   │ 0 0 8 * * *   │ -1 день │ 08:00   │ ✓      │
+│ "Ночь"   │ 0 0 2 * * *   │ 0 дней  │ —       │ ✗      │
+└──────────────────────────────────────────────────────┘
+```
+
+Кнопки: ➕ Добавить · ✏️ Редактировать · 🔄 Вкл/выкл (AJAX) · 🗑️ Удалить (AJAX)
+
+При сохранении:
+```
+POST /zoomos/schedule/item/{scheduleId}
+  └─ ZoomosSchedulerService.saveAndReschedule()
+     └─ Перезагружает Quartz-задачу
+```
+
+**Параметр "период":** `dateOffsetFrom = -1` → проверить за вчера, `dateOffsetTo = 0` → до сегодня.
+
+---
+
+### Сценарий 5: Управление городами и сайтами
+
+**Справочник городов** (`/zoomos/city-names`):
+- Автозаполнение при парсинге (из export.zoomos.by)
+- Ручное редактирование ID↔Имя
+- Каскадное удаление адресов
+
+**Справочник сайтов** (`/zoomos/sites`):
+
+```
+┌────────────────────────────────────────┐
+│ shop1.by │ ITEM │ ⭐ │ = цены │ Удал. │
+│ shop2.by │ API  │    │        │ Удал. │
+└────────────────────────────────────────┘
+```
+
+Колонки: имя сайта, тип выкачки (ITEM/API), приоритет ⭐, CITIES_EQUAL_PRICES, мастер-город.
+
+---
+
+### Сценарий 6: Связь с клиентом `/clients/{id}/zoomos`
+
+**Файлы:** `ClientController.java:342-430`, `src/main/resources/templates/clients/zoomos.html`
+
+```
+GET /clients/123/zoomos
+  ↓
+Если НЕ привязан:
+  └─ Dropdown свободных магазинов → POST /clients/123/zoomos/link?shopId=456
+
+Если привязан:
+  ├─ Имя магазина + "Открыть в Zoomos Check"
+  ├─ Блок запуска проверки (для одного магазина)
+  ├─ Активные cron-расписания
+  ├─ История последних 10 проверок → /zoomos/check/results/{runId}
+  └─ POST /clients/123/zoomos/unlink (с подтверждением)
+```
+
+---
+
+## Таблица URL
+
+| URL | Назначение | Метод/Контроллер |
+|-----|-----------|---------|
+| `/zoomos` | Главная: все магазины, синхронизация, быстрый запуск | `GET index()` |
+| `/zoomos/check/run` | Запуск проверки (фоновый процесс + WebSocket) | `POST runCheck()` |
+| `/zoomos/check/results/{runId}` | Результаты проверки (таблица сайтов со статусами) | `GET checkResultsNew()` |
+| `/zoomos/check/analyze/{runId}` | AJAX: загрузить анализ (JSON) | `GET analyzeRun()` |
+| `/zoomos/check/history` | История всех проверок (фильтр, пагинация) | `GET checkHistory()` |
+| `/zoomos/schedule` | Управление расписаниями (cron, включение) | `GET schedulePage()` |
+| `/zoomos/sites` | Справочник сайтов (приоритет, тип выкачки) | `GET showSites()` |
+| `/zoomos/city-names` | Справочник городов (ID ↔ Имя) | `GET cityNamesPage()` |
+| `/zoomos/clients` | Проверки по клиентам (привязанные магазины) | `GET clientsCheckPage()` |
+| `/clients/{id}/zoomos` | Страница Zoomos для конкретного клиента | `GET clientZoomosPage()` |
+| `/clients/{id}/zoomos/link` | Привязать магазин к клиенту | `POST linkShop()` |
+| `/clients/{id}/zoomos/unlink` | Отвязать магазин | `POST unlinkShop()` |
+
+---
+
+## Ловушки и неочевидное поведение
+
+### Проверка зависает на 99%
+**Причина:** WebSocket ждёт сообщение, содержащее слово "завершена" — если текст отличается, прогресс-бар висит вечно (`zoomos.html:381`).
+
+### Даты в localStorage не история, а последнее значение
+Ключи `checkDateFrom-{shopId}` перезаписываются при каждом запуске — предзаполнение удобное, но не история.
+
+### Пороги отправляются через URLSearchParams, не JSON
+`POST /zoomos/settings` использует `application/x-www-form-urlencoded` (`zoomos.html:280-290`).
+
+### Cron работает в UTC
+`0 0 8 * * *` = 08:00 UTC = 11:00 МСК. Нужно учитывать часовой пояс при настройке расписания.
+
+### baseline=0 отключает сравнение
+Если `baselineDays=0`, переменная `baselineFrom = null` и сравнение не выполняется.
+
+### `/zoomos/city-addresses` без фильтра возвращает пустой список
+`ZoomosAnalysisController:204-206` — без параметра `cityIds` возвращается `List.of()`, не все адреса.
+
+### Состояние развёрнутых сайтов сохраняется в localStorage
+`zoomos-check-results.js` кэширует свёрнутость/развёрнутость через ключ `zoomos.checked.{runId}.{siteName}` — это фича.
+
+### fetchEqualPricesAll запускается асинхронно
+`POST /sites/fetch-equal-prices-all` возвращает `{"success": true}` сразу, обработка идёт в фоне через `zoomosCheckExecutor`.
+
+---
+
+**Ключевой файл для понимания потока:** `src/main/resources/templates/clients/zoomos.html:247-456`
