@@ -283,7 +283,7 @@ function renderSiteResult(r) {
         +(headerLabel?'<span class="first-reason">'+esc(headerLabel)+'</span>':'')
         +'<button class="expand-btn ms-auto" tabindex="-1" aria-hidden="true"><i class="fas fa-chevron-down"></i></button>'
         +'</div>'
-        +'<div class="group-body"><div class="group-body-inner">'+bodyHtml+'</div></div>'
+        +'<div class="group-body"><div class="group-body-inner"><div class="group-body-content">'+bodyHtml+'</div></div></div>'
         +'</div>';
 }
 
