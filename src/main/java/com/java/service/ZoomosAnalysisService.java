@@ -496,18 +496,17 @@ public class ZoomosAnalysisService {
                         && (totalProducts == null || totalProducts == 0)
                         && (latestInStock == null || latestInStock == 0)
                         && latest.getCompletionPercent() != null && latest.getCompletionPercent() >= 100) {
-                    // Если среди inProgress есть зависшая с ненулевым inStock — добавляем её как дополнительный контекст
-                    Optional<ZonedDateTime> ipLatestUpdate = inProgress.stream()
-                            .map(ZoomosParsingStats::getUpdatedTime).filter(Objects::nonNull)
-                            .max(Comparator.naturalOrder());
-                    ZoomosParsingStats bestStalledIp = null;
-                    if (ipLatestUpdate.isPresent()
-                            && Duration.between(ipLatestUpdate.get(), now).toMinutes() >= stallMinutes) {
-                        bestStalledIp = inProgress.stream()
-                                .filter(s -> s.getCompletionPercent() != null && s.getInStock() != null && s.getInStock() > 0)
-                                .max(Comparator.comparingInt(ZoomosParsingStats::getCompletionPercent))
-                                .orElse(null);
-                    }
+                    // Если среди inProgress есть запись, которая сама по себе зависла (её updatedTime старый)
+                    // и при этом имеет ненулевой inStock — показываем её как дополнительный контекст.
+                    // Намеренно проверяем каждую запись индивидуально, а не max по всем —
+                    // чтобы свежая низко-процентная запись не скрывала старую высоко-процентную.
+                    ZoomosParsingStats bestStalledIp = inProgress.stream()
+                            .filter(s -> s.getCompletionPercent() != null
+                                    && s.getInStock() != null && s.getInStock() > 0
+                                    && s.getUpdatedTime() != null
+                                    && Duration.between(s.getUpdatedTime(), now).toMinutes() >= stallMinutes)
+                            .max(Comparator.comparingInt(ZoomosParsingStats::getCompletionPercent))
+                            .orElse(null);
                     String emptyMsg = StatusReason.EMPTY_RESULT.messageTemplate;
                     if (bestStalledIp != null) {
                         StringBuilder sb = new StringBuilder(emptyMsg);
