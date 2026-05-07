@@ -418,7 +418,24 @@ public class ZoomosAnalysisService {
                 : null;
 
         if (stats.isEmpty()) {
-            issues.add(new SiteIssue(StatusReason.NOT_FOUND, StatusReason.NOT_FOUND.messageTemplate));
+            // Если среди известных записей есть зависшая (completionPercent >= 50, незавершённая),
+            // формируем информативное сообщение вместо стандартного "Нет данных за период"
+            String notFoundMsg = StatusReason.NOT_FOUND.messageTemplate;
+            if (lastKnownStat != null
+                    && !Boolean.TRUE.equals(lastKnownStat.getIsFinished())
+                    && lastKnownStat.getCompletionPercent() != null
+                    && lastKnownStat.getCompletionPercent() >= 50) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("Выкачка зависла на ").append(lastKnownStat.getCompletionPercent()).append('%');
+                if (lastKnownUpdatedTime != null) {
+                    sb.append(". Обновлено ").append(lastKnownUpdatedTime.format(DATETIME_FMT));
+                }
+                if (lastKnownInStock != null) {
+                    sb.append(". inStock: ").append(String.format("%,d", lastKnownInStock));
+                }
+                notFoundMsg = sb.toString();
+            }
+            issues.add(new SiteIssue(StatusReason.NOT_FOUND, notFoundMsg));
             return new CityResult(cityId, cityName, ZoomosResultLevel.CRITICAL, null, sortedIssues(issues), null, null, false, null, null, null, null, null, null, null,
                     lastKnownDate, lastKnownInStock, lastKnownCompletionPercent, lastKnownIsStalled, lastKnownUpdatedTime);
         }
@@ -517,8 +534,33 @@ public class ZoomosAnalysisService {
             if (latestUpdate.isPresent()
                     && Duration.between(latestUpdate.get(), now).toMinutes() >= stallMinutes) {
                 stalledFound = true;
-                issues.add(new SiteIssue(StatusReason.STALLED,
-                        "Выкачка зависла (нет обновлений " + stallMinutes + " мин)"));
+                ZoomosParsingStats bestStalled = inProgress.stream()
+                        .filter(s -> s.getCompletionPercent() != null)
+                        .max(Comparator.comparingInt(ZoomosParsingStats::getCompletionPercent))
+                        .orElseGet(() -> inProgress.isEmpty() ? null : inProgress.get(0));
+                StringBuilder stalledMsg = new StringBuilder();
+                if (bestStalled != null && bestStalled.getCompletionPercent() != null) {
+                    stalledMsg.append("Выкачка зависла на ").append(bestStalled.getCompletionPercent()).append('%');
+                } else {
+                    stalledMsg.append("Выкачка зависла");
+                }
+                ZonedDateTime bestUpdated = bestStalled != null && bestStalled.getUpdatedTime() != null
+                        ? bestStalled.getUpdatedTime() : latestUpdate.get();
+                stalledMsg.append(". Обновлено ").append(bestUpdated.format(DATETIME_FMT));
+                if (bestStalled != null && bestStalled.getInStock() != null) {
+                    latestInStock = bestStalled.getInStock();
+                    stalledMsg.append(". inStock: ").append(String.format("%,d", latestInStock));
+                    double baselineMedian = computeMedian(pickBestPerDayList(baselineStats),
+                            s -> s.getInStock() != null ? (double) s.getInStock() : null);
+                    if (baselineMedian > 0) {
+                        baselineInStock = baselineMedian;
+                        inStockDelta = latestInStock - (int) Math.round(baselineMedian);
+                        inStockDeltaPercent = (int) Math.round((latestInStock - baselineMedian) / baselineMedian * 100);
+                        stalledMsg.append(", отклонение от медианы: ")
+                                .append(inStockDeltaPercent > 0 ? "+" : "").append(inStockDeltaPercent).append('%');
+                    }
+                }
+                issues.add(new SiteIssue(StatusReason.STALLED, stalledMsg.toString()));
             }
 
             if (!stalledFound) for (ZoomosParsingStats ip : inProgress) {

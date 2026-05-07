@@ -633,7 +633,8 @@ function updateFilterButtons() {
     document.querySelectorAll('#filter-bar .filter-btn').forEach(btn => {
         const f = btn.dataset.filter;
         if (f === 'ALL') {
-            btn.classList.toggle('active', activeFilters.size === 0);
+            const _all = ['CRITICAL','WARNING','TREND','IN_PROGRESS','OK'];
+            btn.classList.toggle('active', activeFilters.size === 0 || _all.every(s => activeFilters.has(s)));
         } else {
             btn.classList.toggle('active', activeFilters.has(f));
         }
@@ -645,10 +646,11 @@ document.getElementById('filter-bar').addEventListener('click', e => {
     if (!btn) return;
     const f = btn.dataset.filter;
     if (f === 'ALL') {
-        if (activeFilters.size === 0) {
-            activeFilters = new Set(['CRITICAL', 'WARNING']);
-        } else {
+        const _all = ['CRITICAL','WARNING','TREND','IN_PROGRESS','OK'];
+        if (_all.every(s => activeFilters.has(s))) {
             activeFilters.clear();
+        } else {
+            activeFilters = new Set(_all);
         }
     } else if (e.ctrlKey || e.metaKey) {
         if (activeFilters.has(f)) activeFilters.delete(f);
@@ -891,7 +893,7 @@ window.copyProblems = function() {
             const label = getHeaderLabel(r) || STATUS_LABEL[r.status] || r.status;
             lines.push(r.siteName + (cityPart ? ' — ' + cityPart : '') + ': ' + label);
         } else {
-            cities.filter(cr => cr.status === 'CRITICAL' || cr.status === 'WARNING').forEach(cr => {
+            cities.filter(cr => (cr.status === 'CRITICAL' || cr.status === 'WARNING') && !isCityChecked(r.siteName, cr.cityId)).forEach(cr => {
                 const cityPart = (cr.cityId || '') + (cr.cityName ? ' ' + cr.cityName : '');
                 const label = cr.issues && cr.issues.length ? (cr.issues[0].shortLabel || cr.issues[0].message) : STATUS_LABEL[cr.status];
                 lines.push(r.siteName + ' — ' + cityPart + ': ' + label);
@@ -1162,7 +1164,7 @@ function collectRmIssues(r) {
     }
 
     const cities = r.cityResults || [];
-    const problemCities = cities.filter(cr => cr.status !== 'OK');
+    const problemCities = cities.filter(cr => cr.status !== 'OK' && !isCityChecked(r.siteName, cr.cityId));
     if (problemCities.length > 0) {
         return problemCities.map(cr => ({
             cityId:     cr.cityId || '',
