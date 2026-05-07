@@ -634,40 +634,42 @@ window.toggleGroup = function(header) {
     const body = header.nextElementSibling;
     const btn  = header.querySelector('.expand-btn');
     if (body._animating) return;
+    body._animating = true;
 
     if (body.classList.contains('open')) {
-        // Сворачиваем: фиксируем текущую высоту → анимируем к 0
-        body.style.height = body.scrollHeight + 'px';
-        body.style.overflow = 'hidden';
-        body.style.transition = 'height 0.24s ease';
-        body._animating = true;
+        // Сворачиваем
         btn.classList.remove('open');
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            body.style.height = '0';
-            body.addEventListener('transitionend', function done() {
-                body.classList.remove('open');
-                body.style.cssText = '';
-                body._animating = false;
-                body.removeEventListener('transitionend', done);
-            }, { once: true });
-        }));
-    } else {
-        // Раскрываем: показываем → измеряем → анимируем от 0 к реальной высоте
-        body.classList.add('open');
-        body.style.height = '0';
-        body.style.overflow = 'hidden';
+        body.style.height     = body.scrollHeight + 'px';
+        body.style.overflow   = 'hidden';
+        void body.offsetHeight;                          // forced reflow
         body.style.transition = 'height 0.24s ease';
-        body._animating = true;
+        body.style.height     = '0';
+        body.addEventListener('transitionend', function done(e) {
+            if (e.propertyName !== 'height') return;
+            body.removeEventListener('transitionend', done);
+            body.classList.remove('open');
+            body.style.cssText  = '';
+            body._animating     = false;
+        });
+    } else {
+        // Раскрываем
         btn.classList.add('open');
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            body.style.height = body.scrollHeight + 'px';
-            body.addEventListener('transitionend', function done() {
-                body.style.cssText = '';
-                body._animating = false;
-                body.removeEventListener('transitionend', done);
-                initSparklines(body);
-            }, { once: true });
-        }));
+        body.classList.add('open');                      // display: block
+        body.style.height   = '0';
+        body.style.overflow = 'hidden';
+        void body.offsetHeight;                          // forced reflow
+        const targetH = body.scrollHeight;
+        body.style.transition = 'height 0.24s ease';
+        body.style.height     = targetH + 'px';
+        body.addEventListener('transitionend', function done(e) {
+            if (e.propertyName !== 'height') return;
+            body.removeEventListener('transitionend', done);
+            body.style.height     = 'auto';              // убираем фиксированную высоту без скачка
+            body.style.overflow   = '';
+            body.style.transition = '';
+            body._animating       = false;
+            initSparklines(body);
+        });
     }
 };
 
