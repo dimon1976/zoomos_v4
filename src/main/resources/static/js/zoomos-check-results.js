@@ -610,8 +610,7 @@ function render() {
     openCards.forEach(siteKey => {
         const group = list.querySelector('.site-group[data-site="' + CSS.escape(siteKey) + '"]');
         if (!group) return;
-        const body = group.querySelector('.group-body');
-        if (body) { body.classList.add('no-anim', 'open'); requestAnimationFrame(() => body.classList.remove('no-anim')); }
+        group.querySelector('.group-body')?.classList.add('open');
         group.querySelector('.expand-btn')?.classList.add('open');
     });
 }
@@ -632,12 +631,44 @@ window.toggleReasonText = function(el) {
 
 // ── Toggle handlers ───────────────────────────────────────────────────────
 window.toggleGroup = function(header) {
-    const body    = header.nextElementSibling;
-    const btn     = header.querySelector('.expand-btn');
-    const opening = !body.classList.contains('open');
-    body.classList.toggle('open');
-    btn.classList.toggle('open');
-    if (opening) requestAnimationFrame(() => initSparklines(body));
+    const body = header.nextElementSibling;
+    const btn  = header.querySelector('.expand-btn');
+    if (body._animating) return;
+
+    if (body.classList.contains('open')) {
+        // Сворачиваем: фиксируем текущую высоту → анимируем к 0
+        body.style.height = body.scrollHeight + 'px';
+        body.style.overflow = 'hidden';
+        body.style.transition = 'height 0.24s ease';
+        body._animating = true;
+        btn.classList.remove('open');
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            body.style.height = '0';
+            body.addEventListener('transitionend', function done() {
+                body.classList.remove('open');
+                body.style.cssText = '';
+                body._animating = false;
+                body.removeEventListener('transitionend', done);
+            }, { once: true });
+        }));
+    } else {
+        // Раскрываем: показываем → измеряем → анимируем от 0 к реальной высоте
+        body.classList.add('open');
+        body.style.height = '0';
+        body.style.overflow = 'hidden';
+        body.style.transition = 'height 0.24s ease';
+        body._animating = true;
+        btn.classList.add('open');
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            body.style.height = body.scrollHeight + 'px';
+            body.addEventListener('transitionend', function done() {
+                body.style.cssText = '';
+                body._animating = false;
+                body.removeEventListener('transitionend', done);
+                initSparklines(body);
+            }, { once: true });
+        }));
+    }
 };
 
 window.toggleOk = function(btn) {
