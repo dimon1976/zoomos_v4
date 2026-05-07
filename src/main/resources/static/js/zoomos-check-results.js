@@ -373,7 +373,17 @@ function lastKnownHint(cr) {
 function renderCitiesTable(r, cities) {
     const rows = cities.map(cr => {
         const lbl = STATUS_LABEL[cr.status]||cr.status;
-        const fi  = cr.issues && cr.issues.length ? esc(cr.issues[0].message || cr.issues[0].shortLabel) : '';
+        const rawReason = cr.issues && cr.issues.length ? (cr.issues[0].message || cr.issues[0].shortLabel || '') : '';
+        const REASON_LIMIT = 65;
+        let fi;
+        if (rawReason.length > REASON_LIMIT) {
+            const short = rawReason.slice(0, REASON_LIMIT);
+            fi = '<span class="reason-text" data-full="'+esc(rawReason)+'" data-short="'+esc(short)+'"'
+               + ' onclick="toggleReasonText(this)" title="Нажмите чтобы развернуть">'
+               + esc(short) + '… <i class="fas fa-chevron-right" style="font-size:.55rem;color:#0d6efd;vertical-align:middle"></i></span>';
+        } else {
+            fi = esc(rawReason);
+        }
         const cityDisplay = cr.cityId && cr.cityName
             ? esc(cr.cityId) + ' — ' + esc(cr.cityName)
             : esc(cr.cityName || cr.cityId || '—');
@@ -408,7 +418,7 @@ function renderCitiesTable(r, cities) {
             : '';
         const hiddenStyle = cityChecked ? ' style="display:none"' : '';
         const hint = lastKnownHint(cr);
-        const fiHtml = hint ? fi + '<div class="text-muted" style="font-size:0.8em;margin-top:2px">' + esc(hint) + '</div>' : fi;
+        const fiHtml = fi + (hint ? '<div class="text-muted" style="font-size:0.8em;margin-top:2px">' + esc(hint) + '</div>' : '');
         return '<tr data-city-status="'+cr.status+'"'+hiddenStyle+'><td>'+cityDisplay+extLink+'</td>'
             +'<td><span class="status-badge badge-'+cr.status+'" style="font-size:.68rem">'+lbl+'</span></td>'
             +'<td class="text-end">'+stockHtml+'</td>'
@@ -600,10 +610,25 @@ function render() {
     openCards.forEach(siteKey => {
         const group = list.querySelector('.site-group[data-site="' + CSS.escape(siteKey) + '"]');
         if (!group) return;
-        group.querySelector('.group-body')?.classList.add('open');
+        const body = group.querySelector('.group-body');
+        if (body) { body.classList.add('no-anim', 'open'); requestAnimationFrame(() => body.classList.remove('no-anim')); }
         group.querySelector('.expand-btn')?.classList.add('open');
     });
 }
+
+// ── Toggle reason text expand/collapse ───────────────────────────────────
+window.toggleReasonText = function(el) {
+    const expanded = el.dataset.expanded === '1';
+    if (expanded) {
+        el.innerHTML = esc(el.dataset.short) + '… <i class="fas fa-chevron-right" style="font-size:.55rem;color:#0d6efd;vertical-align:middle"></i>';
+        el.dataset.expanded = '0';
+        el.title = 'Нажмите чтобы развернуть';
+    } else {
+        el.innerHTML = esc(el.dataset.full) + ' <i class="fas fa-chevron-left" style="font-size:.55rem;color:#adb5bd;vertical-align:middle"></i>';
+        el.dataset.expanded = '1';
+        el.title = 'Нажмите чтобы свернуть';
+    }
+};
 
 // ── Toggle handlers ───────────────────────────────────────────────────────
 window.toggleGroup = function(header) {

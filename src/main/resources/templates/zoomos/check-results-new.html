@@ -30,7 +30,7 @@
 <style>
 :root {
     --c-critical:    #dc3545;
-    --c-warning:     #fd7e14;
+    --c-warning:     #d97706;
     --c-trend:       #0d6efd;
     --c-in-progress: #6f42c1;
     --c-ok:          #198754;
@@ -61,7 +61,7 @@
     flex-shrink: 0;
 }
 .badge-CRITICAL    { background: var(--c-critical); }
-.badge-WARNING     { background: var(--c-warning);  color: #000; }
+.badge-WARNING     { background: var(--c-warning); }
 .badge-TREND       { background: var(--c-trend); }
 .badge-IN_PROGRESS { background: var(--c-in-progress); }
 .badge-OK          { background: var(--c-ok); }
@@ -78,8 +78,10 @@
 }
 .filter-btn.active { opacity: 1; }
 .filter-btn:hover  { transform: translateY(-1px); }
+.filter-btn[data-filter="ALL"] { background: transparent; color: #495057; border-color: #adb5bd; font-weight: 500; }
+.filter-btn[data-filter="ALL"].active { background: #495057; color: #fff; border-color: #495057; opacity: 1; }
 .filter-btn-CRITICAL    { background: var(--c-critical);    color: #fff; border-color: var(--c-critical); }
-.filter-btn-WARNING     { background: var(--c-warning);     color: #000; border-color: var(--c-warning); }
+.filter-btn-WARNING     { background: var(--c-warning);     color: #fff; border-color: var(--c-warning); }
 .filter-btn-TREND       { background: var(--c-trend);       color: #fff; border-color: var(--c-trend); }
 .filter-btn-IN_PROGRESS { background: var(--c-in-progress); color: #fff; border-color: var(--c-in-progress); }
 .filter-btn-OK          { background: var(--c-ok);          color: #fff; border-color: var(--c-ok); }
@@ -161,12 +163,20 @@
 
 /* ── Group body ── */
 .group-body {
-    display: none;
-    border-top: 1px solid #dee2e6;
+    display: block;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    border-top: 1px solid transparent;
     background: #fafbfc;
+    padding: 0 16px;
+}
+.group-body.open {
+    max-height: 6000px;
+    border-top-color: #dee2e6;
     padding: 12px 16px;
 }
-.group-body.open { display: block; }
+.group-body.no-anim { transition: none !important; }
 
 /* ── Issue row ── */
 .issue-row {
@@ -312,6 +322,14 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
     vertical-align: middle;
 }
 
+/* ── Expandable reason text ── */
+.reason-text {
+    cursor: pointer;
+    border-bottom: 1px dotted #adb5bd;
+    line-height: 1.4;
+}
+.reason-text:hover { border-bottom-color: #0d6efd; color: #0d6efd; }
+
 /* ── City checkboxes ── */
 .city-check {
     width: 1.3em !important;
@@ -375,23 +393,23 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 
 <!-- ── Status filter buttons ── -->
 <div id="filter-bar" class="d-flex gap-2 flex-wrap align-items-center mb-3">
-    <button class="filter-btn" data-filter="ALL" style="background:transparent;color:#495057;border-color:#dee2e6;">
-        Все
+    <button class="filter-btn" data-filter="ALL">
+        <i class="fas fa-bars me-1"></i>Все
     </button>
     <button class="filter-btn filter-btn-CRITICAL active" data-filter="CRITICAL">
-        🔴 <span class="cnt" id="cnt-CRITICAL">—</span> критичных
+        <i class="fas fa-times-circle me-1"></i><span class="cnt" id="cnt-CRITICAL">—</span> критичных
     </button>
     <button class="filter-btn filter-btn-WARNING active" data-filter="WARNING">
-        🟡 <span class="cnt" id="cnt-WARNING">—</span> предупреждений
+        <i class="fas fa-exclamation-circle me-1"></i><span class="cnt" id="cnt-WARNING">—</span> предупреждений
     </button>
     <button class="filter-btn filter-btn-TREND" data-filter="TREND">
-        📈 <span class="cnt" id="cnt-TREND">—</span> трендов
+        <i class="fas fa-chart-line me-1"></i><span class="cnt" id="cnt-TREND">—</span> трендов
     </button>
     <button class="filter-btn filter-btn-IN_PROGRESS active" data-filter="IN_PROGRESS">
-        ⏳ <span class="cnt" id="cnt-IN_PROGRESS">—</span> в процессе
+        <i class="fas fa-spinner me-1"></i><span class="cnt" id="cnt-IN_PROGRESS">—</span> в процессе
     </button>
     <button class="filter-btn filter-btn-OK" data-filter="OK">
-        ✅ <span class="cnt" id="cnt-OK">—</span> ок
+        <i class="fas fa-check-circle me-1"></i><span class="cnt" id="cnt-OK">—</span> ок
     </button>
 </div>
 
@@ -655,7 +673,7 @@ table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
 </th:block>
 
 <th:block th:fragment="scripts">
-<script th:src="@{/js/zoomos-check-results.js(v=25)}"></script>
+<script th:src="@{/js/zoomos-check-results.js(v=26)}"></script>
 </th:block>
 
 </html>
