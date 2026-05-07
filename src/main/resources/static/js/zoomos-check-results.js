@@ -915,12 +915,13 @@ window.copyProblems = function() {
         const cities = r.cityResults || [];
         if (cities.length <= 1) {
             const cityPart = r.cityId ? r.cityId + (r.cityName ? ' ' + r.cityName : '') : '';
-            const label = getHeaderLabel(r) || STATUS_LABEL[r.status] || r.status;
+            const reasons = r.statusReasons || [];
+            const label = (reasons.length ? (reasons[0].message || reasons[0].shortLabel) : null) || STATUS_LABEL[r.status] || r.status;
             lines.push(r.siteName + (cityPart ? ' — ' + cityPart : '') + ': ' + label);
         } else {
             cities.filter(cr => (cr.status === 'CRITICAL' || cr.status === 'WARNING') && !isCityChecked(r.siteName, cr.cityId)).forEach(cr => {
                 const cityPart = (cr.cityId || '') + (cr.cityName ? ' ' + cr.cityName : '');
-                const label = cr.issues && cr.issues.length ? (cr.issues[0].shortLabel || cr.issues[0].message) : STATUS_LABEL[cr.status];
+                const label = cr.issues && cr.issues.length ? (cr.issues[0].message || cr.issues[0].shortLabel) : STATUS_LABEL[cr.status];
                 lines.push(r.siteName + ' — ' + cityPart + ': ' + label);
             });
         }
