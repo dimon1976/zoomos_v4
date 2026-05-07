@@ -83,11 +83,13 @@ public class ZoomosRedmineController {
             return ResponseEntity.ok(Map.of("success", false, "error", "Redmine не настроен"));
         try {
             ZoomosRedmineIssue updated = redmineService.updateIssue(issueId, req);
+            String shortMessage = extractShortMessage(req);
             Map<String, Object> issueData = new HashMap<>();
             issueData.put("id", issueId);
             issueData.put("url", updated != null ? updated.getIssueUrl() : "");
             issueData.put("statusName", updated != null ? updated.getIssueStatus() : "");
             issueData.put("isClosed", updated != null && updated.isClosed());
+            issueData.put("shortMessage", shortMessage);
             return ResponseEntity.ok(Map.of("success", true, "issue", issueData));
         } catch (Exception e) {
             log.error("Ошибка обновления задачи Redmine #{}: {}", issueId, e.getMessage());
