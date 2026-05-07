@@ -205,7 +205,7 @@ function renderSiteResult(r) {
         }
         bodyHtml += renderCitiesTable(r, cities);
         if (r.statusReasons && r.statusReasons.length) {
-            bodyHtml += renderIssueRows(r.statusReasons);
+            bodyHtml += '<div class="border-top mt-2 pt-2">' + renderIssueRows(r.statusReasons) + '</div>';
         }
     } else {
         const allIssues = [...(cities[0]?.issues||[]), ...(r.statusReasons||[])];
@@ -258,7 +258,7 @@ function renderSiteResult(r) {
           +'<i class="fas fa-handshake me-1"></i>Матчинг</a>'
         : '';
 
-    bodyHtml += '<div class="d-flex align-items-center gap-2 mt-2">'
+    bodyHtml += '<div class="d-flex align-items-center gap-2 pt-2 mt-2 border-top">'
         +'<div class="btn-group btn-group-sm">'+matchingBtn+eqBtn+configBtn+'</div>'
         +'<div class="ms-auto d-flex align-items-center gap-1">'+rmCreateBtn+checkBtn+'</div>'
         +'</div>';
@@ -283,7 +283,7 @@ function renderSiteResult(r) {
         +(headerLabel?'<span class="first-reason">'+esc(headerLabel)+'</span>':'')
         +'<button class="expand-btn ms-auto" tabindex="-1" aria-hidden="true"><i class="fas fa-chevron-down"></i></button>'
         +'</div>'
-        +'<div class="group-body">'+bodyHtml+'</div>'
+        +'<div class="group-body"><div class="group-body-inner">'+bodyHtml+'</div></div>'
         +'</div>';
 }
 
@@ -631,46 +631,12 @@ window.toggleReasonText = function(el) {
 
 // ── Toggle handlers ───────────────────────────────────────────────────────
 window.toggleGroup = function(header) {
-    const body = header.nextElementSibling;
-    const btn  = header.querySelector('.expand-btn');
-    if (body._animating) return;
-    body._animating = true;
-
-    if (body.classList.contains('open')) {
-        // Сворачиваем
-        btn.classList.remove('open');
-        body.style.height     = body.scrollHeight + 'px';
-        body.style.overflow   = 'hidden';
-        void body.offsetHeight;                          // forced reflow
-        body.style.transition = 'height 0.24s ease';
-        body.style.height     = '0';
-        body.addEventListener('transitionend', function done(e) {
-            if (e.propertyName !== 'height') return;
-            body.removeEventListener('transitionend', done);
-            body.classList.remove('open');
-            body.style.cssText  = '';
-            body._animating     = false;
-        });
-    } else {
-        // Раскрываем
-        btn.classList.add('open');
-        body.classList.add('open');                      // display: block
-        body.style.height   = '0';
-        body.style.overflow = 'hidden';
-        void body.offsetHeight;                          // forced reflow
-        const targetH = body.scrollHeight;
-        body.style.transition = 'height 0.24s ease';
-        body.style.height     = targetH + 'px';
-        body.addEventListener('transitionend', function done(e) {
-            if (e.propertyName !== 'height') return;
-            body.removeEventListener('transitionend', done);
-            body.style.height     = 'auto';              // убираем фиксированную высоту без скачка
-            body.style.overflow   = '';
-            body.style.transition = '';
-            body._animating       = false;
-            initSparklines(body);
-        });
-    }
+    const body    = header.nextElementSibling;
+    const btn     = header.querySelector('.expand-btn');
+    const opening = !body.classList.contains('open');
+    body.classList.toggle('open');
+    btn.classList.toggle('open');
+    if (opening) requestAnimationFrame(() => initSparklines(body));
 };
 
 window.toggleOk = function(btn) {

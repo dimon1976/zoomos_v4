@@ -167,6 +167,8 @@
         .shop-batch-cb { cursor: pointer; }
         .sortable-ghost { opacity: 0.4; background: #e8f4f8; }
         .shop-order-btns .btn.btn-icon { width: 2rem; height: 2rem; padding: 0; }
+        /* Выравнивание строк таблицы сайтов */
+        .shop-sites-section table td, .shop-sites-section table th { vertical-align: middle; }
         /* Compact-only элементы — скрыты в стандартном режиме */
         .compact-result { display: none; }
         .compact-run-btn { display: none !important; }
@@ -759,12 +761,7 @@
                                                 <i class="fas fa-filter"></i>
                                             </button>
                                         </td>
-                                        <td class="text-center">
-                                            <span th:if="${entry.hasConfigIssue}"
-                                                  class="badge bg-warning text-dark me-1"
-                                                  th:title="${'⚠ ' + entry.configIssueNote}">
-                                                <i class="fas fa-wrench"></i>
-                                            </span>
+                                        <td class="text-center align-middle">
                                             <button type="button"
                                                     class="btn btn-sm btn-outline-danger btn-delete-cityid"
                                                     th:data-id="${entry.id}"
@@ -2889,9 +2886,10 @@
                 ? '<i class="fas fa-chevron-up"></i>'
                 : '<i class="fas fa-chevron-down"></i>';
             this.title = expanded ? 'Свернуть' : 'Развернуть / свернуть список сайтов';
-            // Авто-раскрыть/свернуть таблицу сайтов
+            // Авто-раскрыть/свернуть таблицу сайтов (display напрямую — без Bootstrap-анимации)
             const cityTable = document.getElementById('cityTable-' + shopId);
             if (cityTable) {
+                cityTable.style.display = expanded ? 'block' : 'none';
                 cityTable.classList.toggle('show', expanded);
             }
         });
