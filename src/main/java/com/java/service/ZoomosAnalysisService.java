@@ -515,9 +515,9 @@ public class ZoomosAnalysisService {
                             sb.append(", обновлено ").append(bestStalledIp.getUpdatedTime().format(DATETIME_FMT));
                         }
                         sb.append(", inStock: ").append(String.format("%,d", bestStalledIp.getInStock()));
-                        double bm = computeMedian(pickBestPerDayList(baselineStats),
+                        Double bm = computeMedian(pickBestPerDayList(baselineStats),
                                 s -> s.getInStock() != null ? (double) s.getInStock() : null);
-                        if (bm > 0) {
+                        if (bm != null && bm > 0) {
                             int dp = (int) Math.round((bestStalledIp.getInStock() - bm) / bm * 100);
                             sb.append(", отклонение от медианы: ").append(dp > 0 ? "+" : "").append(dp).append('%');
                         }
@@ -577,9 +577,9 @@ public class ZoomosAnalysisService {
                 if (bestStalled != null && bestStalled.getInStock() != null) {
                     latestInStock = bestStalled.getInStock();
                     stalledMsg.append(". inStock: ").append(String.format("%,d", latestInStock));
-                    double baselineMedian = computeMedian(pickBestPerDayList(baselineStats),
+                    Double baselineMedian = computeMedian(pickBestPerDayList(baselineStats),
                             s -> s.getInStock() != null ? (double) s.getInStock() : null);
-                    if (baselineMedian > 0) {
+                    if (baselineMedian != null && baselineMedian > 0) {
                         baselineInStock = baselineMedian;
                         inStockDelta = latestInStock - (int) Math.round(baselineMedian);
                         inStockDeltaPercent = (int) Math.round((latestInStock - baselineMedian) / baselineMedian * 100);
