@@ -496,7 +496,35 @@ public class ZoomosAnalysisService {
                         && (totalProducts == null || totalProducts == 0)
                         && (latestInStock == null || latestInStock == 0)
                         && latest.getCompletionPercent() != null && latest.getCompletionPercent() >= 100) {
-                    issues.add(new SiteIssue(StatusReason.EMPTY_RESULT, StatusReason.EMPTY_RESULT.messageTemplate));
+                    // Если среди inProgress есть зависшая с ненулевым inStock — добавляем её как дополнительный контекст
+                    Optional<ZonedDateTime> ipLatestUpdate = inProgress.stream()
+                            .map(ZoomosParsingStats::getUpdatedTime).filter(Objects::nonNull)
+                            .max(Comparator.naturalOrder());
+                    ZoomosParsingStats bestStalledIp = null;
+                    if (ipLatestUpdate.isPresent()
+                            && Duration.between(ipLatestUpdate.get(), now).toMinutes() >= stallMinutes) {
+                        bestStalledIp = inProgress.stream()
+                                .filter(s -> s.getCompletionPercent() != null && s.getInStock() != null && s.getInStock() > 0)
+                                .max(Comparator.comparingInt(ZoomosParsingStats::getCompletionPercent))
+                                .orElse(null);
+                    }
+                    String emptyMsg = StatusReason.EMPTY_RESULT.messageTemplate;
+                    if (bestStalledIp != null) {
+                        StringBuilder sb = new StringBuilder(emptyMsg);
+                        sb.append(". Зависшая: ").append(bestStalledIp.getCompletionPercent()).append('%');
+                        if (bestStalledIp.getUpdatedTime() != null) {
+                            sb.append(", обновлено ").append(bestStalledIp.getUpdatedTime().format(DATETIME_FMT));
+                        }
+                        sb.append(", inStock: ").append(String.format("%,d", bestStalledIp.getInStock()));
+                        double bm = computeMedian(pickBestPerDayList(baselineStats),
+                                s -> s.getInStock() != null ? (double) s.getInStock() : null);
+                        if (bm > 0) {
+                            int dp = (int) Math.round((bestStalledIp.getInStock() - bm) / bm * 100);
+                            sb.append(", отклонение от медианы: ").append(dp > 0 ? "+" : "").append(dp).append('%');
+                        }
+                        emptyMsg = sb.toString();
+                    }
+                    issues.add(new SiteIssue(StatusReason.EMPTY_RESULT, emptyMsg));
                 } else if (latestInStock != null && latestInStock == 0) {
                     issues.add(new SiteIssue(StatusReason.STOCK_ZERO, StatusReason.STOCK_ZERO.messageTemplate));
                 } else if (latestInStock != null) {
