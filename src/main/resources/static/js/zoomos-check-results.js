@@ -373,7 +373,7 @@ function lastKnownHint(cr) {
 function renderCitiesTable(r, cities) {
     const rows = cities.map(cr => {
         const lbl = STATUS_LABEL[cr.status]||cr.status;
-        const fi  = cr.issues && cr.issues.length ? esc(cr.issues[0].shortLabel || cr.issues[0].message) : '';
+        const fi  = cr.issues && cr.issues.length ? esc(cr.issues[0].message || cr.issues[0].shortLabel) : '';
         const cityDisplay = cr.cityId && cr.cityName
             ? esc(cr.cityId) + ' — ' + esc(cr.cityName)
             : esc(cr.cityName || cr.cityId || '—');
