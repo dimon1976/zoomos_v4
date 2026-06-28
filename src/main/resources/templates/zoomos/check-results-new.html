@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/tabler-main :: html(
+        title='Результаты проверки',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle=${pageTitle},
+        pageActions=~{::pageActions}
+      )}">
+
+<th:block th:fragment="pageActions">
+    <a href="/zoomos" class="btn btn-sm btn-outline-secondary me-2">
+        <i class="fas fa-arrow-left me-1"></i>Магазины
+    </a>
+    <button id="btnFetchAllEqPrices" type="button" class="btn btn-sm btn-outline-info me-2"
+            title="Проверить CITIES_EQUAL_PRICES для всех сайтов"
+            onclick="fetchAllEqPrices()">
+        <i class="fas fa-sync-alt me-1"></i>= цены (все)
+    </button>
+    <span id="eqPricesProgress" class="small text-muted me-2 d-none">
+        <i class="fas fa-spinner fa-spin me-1"></i><span id="eqPricesProgressText">0/0</span>
+    </span>
+    <a th:href="@{'/zoomos/check/history?shop=' + ${shopName}}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-history me-1"></i>История
+    </a>
+</th:block>
+
+<th:block th:fragment="styles">
+<style>
+:root {
+    --c-critical:    #dc3545;
+    --c-warning:     #d97706;
+    --c-trend:       #0d6efd;
+    --c-in-progress: #6f42c1;
+    --c-ok:          #198754;
+}
+
+/* ── Status pill ── */
+.status-pill {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.pill-CRITICAL    { background: var(--c-critical); }
+.pill-WARNING     { background: var(--c-warning); }
+.pill-TREND       { background: var(--c-trend); }
+.pill-IN_PROGRESS { background: var(--c-in-progress); }
+.pill-OK          { background: var(--c-ok); }
+
+/* ── Status badge ── */
+.status-badge {
+    font-size: .7rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    color: #fff;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.badge-CRITICAL    { background: var(--c-critical); }
+.badge-WARNING     { background: var(--c-warning); }
+.badge-TREND       { background: var(--c-trend); }
+.badge-IN_PROGRESS { background: var(--c-in-progress); }
+.badge-OK          { background: var(--c-ok); }
+
+/* ── Filter button ── */
+.filter-btn {
+    font-size: .8rem;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    opacity: .35;
+    transition: opacity .15s, transform .1s;
+}
+.filter-btn.active { opacity: 1; }
+.filter-btn:hover  { transform: translateY(-1px); }
+.filter-btn[data-filter="ALL"] { background: transparent; color: #495057; border-color: #adb5bd; font-weight: 500; }
+.filter-btn[data-filter="ALL"].active { background: #495057; color: #fff; border-color: #495057; opacity: 1; }
+.filter-btn-CRITICAL    { background: var(--c-critical);    color: #fff; border-color: var(--c-critical); }
+.filter-btn-WARNING     { background: var(--c-warning);     color: #fff; border-color: var(--c-warning); }
+.filter-btn-TREND       { background: var(--c-trend);       color: #fff; border-color: var(--c-trend); }
+.filter-btn-IN_PROGRESS { background: var(--c-in-progress); color: #fff; border-color: var(--c-in-progress); }
+.filter-btn-OK          { background: var(--c-ok);          color: #fff; border-color: var(--c-ok); }
+
+/* ── Site group card ── */
+.site-group {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    overflow: hidden;
+}
+.site-group.border-CRITICAL    { border-left: 4px solid var(--c-critical); }
+.site-group.border-WARNING     { border-left: 4px solid var(--c-warning); }
+.site-group.border-TREND       { border-left: 4px solid var(--c-trend); }
+.site-group.border-IN_PROGRESS { border-left: 4px solid var(--c-in-progress); }
+.site-group.border-OK          { border-left: 4px solid var(--c-ok); }
+
+/* ── Group header row ── */
+.group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+    background: #fff;
+    transition: background .1s;
+}
+.group-header:hover { background: #f8f9fa; }
+.group-header .site-name {
+    font-weight: 600;
+    font-size: .9rem;
+    min-width: 0;
+    cursor: pointer;
+}
+.group-header .city-tag {
+    font-size: .78rem;
+    color: #6c757d;
+    white-space: nowrap;
+}
+@keyframes masterCityFlash {
+    0%   { color: #198754; font-weight: 700; background: #d1e7dd; border-radius: 3px; padding: 0 3px; }
+    70%  { color: #198754; font-weight: 600; }
+    100% { color: #6c757d; font-weight: 400; background: transparent; }
+}
+.master-city-flash {
+    animation: masterCityFlash 1.8s ease-out forwards;
+}
+.group-header .account-tag {
+    font-size: .75rem;
+    background: #e9ecef;
+    border-radius: 3px;
+    padding: 1px 6px;
+    white-space: nowrap;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.group-header .first-reason {
+    font-size: .8rem;
+    color: #495057;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.expand-btn {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: .85rem;
+    flex-shrink: 0;
+    transition: transform .2s;
+}
+.expand-btn.open { transform: rotate(180deg); }
+
+/* ── Group body ── */
+.group-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.25s ease;
+}
+.group-body.open { grid-template-rows: 1fr; }
+.group-body-inner {
+    min-height: 0;
+    overflow: hidden;  /* clips content + group-body-content padding */
+}
+.group-body-content {
+    border-top: 1px solid #dee2e6;
+    background: #fafbfc;
+    padding: 12px 16px;
+}
+
+/* ── Issue row ── */
+.issue-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: .85rem;
+}
+.issue-icon { flex-shrink: 0; margin-top: 2px; }
+.issue-CRITICAL    .issue-icon { color: var(--c-critical); }
+.issue-WARNING     .issue-icon { color: var(--c-warning); }
+.issue-TREND       .issue-icon { color: var(--c-trend); }
+.issue-IN_PROGRESS .issue-icon { color: var(--c-in-progress); }
+
+/* ── Metrics grid ── */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 6px;
+    margin-top: 10px;
+}
+.metric-cell {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+.metric-label { font-size: .7rem; color: #6c757d; text-transform: uppercase; letter-spacing: .04em; }
+.metric-value { font-size: .95rem; font-weight: 600; }
+.metric-delta { font-size: .7rem; color: #6c757d; }
+
+/* ── Progress bar ── */
+.mini-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: #e9ecef;
+    margin-top: 4px;
+}
+.mini-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--c-in-progress);
+    transition: width .3s;
+}
+
+/* ── Cities sub-table ── */
+.cities-table { font-size: .82rem; margin-top: 8px; }
+.cities-table th { font-size: .72rem; font-weight: 600; text-transform: uppercase; color: #6c757d; }
+table.cities-table.hide-ok-cities tr[data-city-status="OK"] { display: none; }
+
+/* ── OK table ── */
+.ok-collapse-header {
+    background: none;
+    border: 1px solid var(--c-ok);
+    color: var(--c-ok);
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    transition: background .15s;
+}
+.ok-collapse-header:hover { background: #d1fae5; }
+
+/* ── Empty state ── */
+.empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: #6c757d;
+}
+
+/* ── Проверено section ── */
+#checked-section {
+    border: 2px solid #198754;
+    border-radius: 6px;
+    background: #f8fff8;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+.checked-collapse-header {
+    background: #198754;
+    border: none;
+    color: #fff;
+    border-radius: 0;
+    padding: 8px 12px;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    transition: background .15s;
+}
+.checked-collapse-header:hover { background: #146c43; }
+#checked-list { padding: 0; }
+#checked-list .checked-row {
+    background: #fff;
+    border-bottom: 1px solid #dee2e6;
+    padding: 8px 12px;
+}
+#checked-list .checked-row:first-child { border-top: 1px solid #dee2e6; }
+
+/* ── Config issue badge ── */
+.config-issue-badge {
+    font-size: .65rem !important;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #6c757d !important;
+    color: #fff !important;
+    white-space: nowrap;
+}
+
+/* ── Toast ── */
+#copy-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    background: #198754;
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: .85rem;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity .2s;
+    pointer-events: none;
+}
+#copy-toast.show { opacity: 1; }
+
+/* ── Priority star ── */
+.priority-star { color: #ffc107; font-size: .75rem; flex-shrink: 0; }
+/* ── Not configured badge ── */
+.not-configured-badge { font-size: .62rem; background: #6c757d; color: #fff; padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+/* ── Redmine badge container ── */
+.rm-badge-container { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.rm-badge-container .btn {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+/* ── Expandable reason text ── */
+.reason-text {
+    cursor: pointer;
+    border-bottom: 1px dotted #adb5bd;
+    line-height: 1.4;
+}
+.reason-text:hover { border-bottom-color: #0d6efd; color: #0d6efd; }
+
+/* ── City checkboxes ── */
+.city-check {
+    width: 1.3em !important;
+    height: 1.3em !important;
+    cursor: pointer;
+    accent-color: #198754;
+    border: 2px solid #6c757d;
+    border-radius: 50%;
+    opacity: 1;
+    flex-shrink: 0;
+}
+.city-check:not(:checked) {
+    border-color: #adb5bd;
+    background-color: #f8f9fa;
+}
+</style>
+</th:block>
+
+<th:block th:fragment="content">
+
+<!-- run metadata for JS -->
+<input type="hidden" id="run-id"      th:value="${runId}">
+<input type="hidden" id="shop-name"   th:value="${shopName}">
+<input type="hidden" id="date-from"   th:value="${dateFrom}">
+<input type="hidden" id="date-to"     th:value="${dateTo}">
+<input type="hidden" id="started-at"  th:value="${startedAt}">
+<input type="hidden" id="base-url"    th:value="${baseUrl ?: ''}">
+
+<!-- ── Run info bar ── -->
+<div class="d-flex align-items-center gap-3 mb-3 text-muted small">
+    <span><i class="fas fa-store me-1"></i><strong class="text-body" th:text="${shopName}"></strong></span>
+    <span><i class="fas fa-calendar-alt me-1"></i><span th:text="${dateFromFmt} + ' — ' + ${dateToFmt}"></span></span>
+    <span><i class="fas fa-clock me-1"></i>Запущено: <span th:text="${startedAt}"></span></span>
+    <span th:if="${!#strings.isEmpty(baselineFromFmt)}" class="text-muted">
+        <i class="fas fa-chart-bar me-1"></i>База: <span th:text="${baselineFromFmt} + ' — ' + ${baselineToFmt}"></span>
+    </span>
+    <span th:if="${runStatus == 'FAILED'}" class="badge bg-danger ms-1">
+        <i class="fas fa-times-circle me-1"></i>Ошибка загрузки
+    </span>
+    <span th:if="${runStatus == 'RUNNING'}" class="badge bg-warning text-dark ms-1">
+        <i class="fas fa-spinner fa-spin me-1"></i>Выполняется
+    </span>
+</div>
+
+<!-- ── Run FAILED banner ── -->
+<div th:if="${runStatus == 'FAILED'}"
+     class="alert alert-danger d-flex align-items-start gap-2 mb-3 py-2" role="alert">
+    <i class="fas fa-exclamation-triangle mt-1 flex-shrink-0"></i>
+    <div>
+        <strong>Проверка завершилась с ошибкой.</strong>
+        <span th:if="${runErrorMessage != null}"
+              class="ms-2 text-break"
+              th:text="${#strings.length(runErrorMessage) > 200
+                         ? #strings.substring(runErrorMessage, 0, 200) + '…'
+                         : runErrorMessage}"></span>
+        <div class="text-muted small mt-1">
+            Данные могут быть неполными. Попробуйте запустить проверку повторно.
+        </div>
+    </div>
+</div>
+
+<!-- ── Status filter buttons ── -->
+<div id="filter-bar" class="d-flex gap-2 flex-wrap align-items-center mb-3">
+    <button class="filter-btn" data-filter="ALL">
+        <i class="fas fa-bars me-1"></i>Все
+    </button>
+    <button class="filter-btn filter-btn-CRITICAL active" data-filter="CRITICAL">
+        <i class="fas fa-times-circle me-1"></i><span class="cnt" id="cnt-CRITICAL">—</span> критичных
+    </button>
+    <button class="filter-btn filter-btn-WARNING active" data-filter="WARNING">
+        <i class="fas fa-exclamation-circle me-1"></i><span class="cnt" id="cnt-WARNING">—</span> предупреждений
+    </button>
+    <button class="filter-btn filter-btn-TREND" data-filter="TREND">
+        <i class="fas fa-chart-line me-1"></i><span class="cnt" id="cnt-TREND">—</span> трендов
+    </button>
+    <button class="filter-btn filter-btn-IN_PROGRESS active" data-filter="IN_PROGRESS">
+        <i class="fas fa-spinner me-1"></i><span class="cnt" id="cnt-IN_PROGRESS">—</span> в процессе
+    </button>
+    <button class="filter-btn filter-btn-OK" data-filter="OK">
+        <i class="fas fa-check-circle me-1"></i><span class="cnt" id="cnt-OK">—</span> ок
+    </button>
+</div>
+
+<!-- ── Search + Type filter + Copy ── -->
+<div class="d-flex gap-2 align-items-center mb-3 flex-wrap">
+    <div class="input-group input-group-sm" style="max-width:260px">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" id="site-search" class="form-control" placeholder="Поиск по сайту…">
+    </div>
+    <div class="btn-group btn-group-sm" id="type-filter">
+        <button class="btn btn-outline-secondary active" data-type="ALL">Все</button>
+        <button class="btn btn-outline-secondary" data-type="API">API</button>
+        <button class="btn btn-outline-secondary" data-type="ITEM">ITEM</button>
+    </div>
+    <div class="dropdown ms-auto">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            <i class="fas fa-copy me-1"></i>Копировать ▾
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#" onclick="event.preventDefault();copyDomains()">
+                <i class="fas fa-globe me-2 text-secondary"></i>Домены
+            </a></li>
+            <li><a class="dropdown-item" href="#" onclick="event.preventDefault();copyProblems()">
+                <i class="fas fa-exclamation-triangle me-2 text-warning"></i>Проблемы
+            </a></li>
+            <li><a class="dropdown-item" href="#" onclick="event.preventDefault();copyConfigIssues()">
+                <i class="fas fa-cog me-2 text-secondary"></i>Не выкачка
+            </a></li>
+            <li><a class="dropdown-item" href="#" onclick="event.preventDefault();copyNotConfigured()">
+                <i class="fas fa-exclamation-triangle me-2 text-secondary"></i>Не настроены
+            </a></li>
+        </ul>
+    </div>
+</div>
+
+<!-- ── Loading ── -->
+<div id="loading" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status"></div>
+    <div class="mt-2 text-muted small">Загрузка данных…</div>
+</div>
+
+<!-- ── Error ── -->
+<div id="error-msg" class="alert alert-danger d-none" role="alert">
+    <i class="fas fa-exclamation-triangle me-2"></i>Ошибка загрузки данных.
+    <a href="javascript:location.reload()" class="alert-link ms-2">Попробовать снова</a>
+</div>
+
+<!-- ── Results list ── -->
+<div id="results-list"></div>
+
+<!-- ── Проверено section ── -->
+<div id="checked-section" class="d-none mt-3">
+    <button class="checked-collapse-header" onclick="toggleCheckedSection()">
+        ✓ Проверено (<span id="checked-count">0</span>) <span id="checked-arrow">▾</span>
+    </button>
+    <div id="checked-list" class="d-none"></div>
+</div>
+
+<!-- ── OK section ── -->
+<div id="ok-section" class="d-none mt-3">
+    <button class="ok-collapse-header" onclick="toggleOk(this)">
+        ✅ Всё в порядке (<span id="ok-count">0</span>) ▾
+    </button>
+    <div id="ok-list" class="d-none mt-2">
+        <table class="table table-sm table-hover table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>Сайт</th>
+                    <th>Город</th>
+                    <th class="text-end">В наличии</th>
+                </tr>
+            </thead>
+            <tbody id="ok-table-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── Config Issue Modal ── -->
+<div class="modal fade" id="configIssueModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="fas fa-cog me-2"></i>Не выкачка: <span id="ciSiteName"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <select id="ciType" class="form-select form-select-sm mb-2">
+                    <option value="">— выберите тип —</option>
+                    <option value="MATCHING_ERRORS">Некорректные ссылки</option>
+                    <option value="KNOWN_ISSUE">Известная проблема, в работе</option>
+                    <option value="NOT_RELEVANT">Данные не актуальны</option>
+                    <option value="OTHER">Другое</option>
+                </select>
+                <textarea id="ciNote" class="form-control form-control-sm" rows="2"
+                          placeholder="Комментарий (необязательно)"></textarea>
+                <div class="form-check mt-2 d-none" id="ciClearRow">
+                    <input class="form-check-input" type="checkbox" id="ciClearFlag">
+                    <label class="form-check-label small" for="ciClearFlag">Снять флаг (проблема устранена)</label>
+                </div>
+                <div id="ciError" class="text-danger small mt-2 d-none"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button id="ciSaveBtn" class="btn btn-sm btn-warning">
+                    <i class="fas fa-save me-1"></i>Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Toast ── -->
+<div id="copy-toast"></div>
+
+<!-- ── Redmine Success Toast ── -->
+<div id="rm-success-toast" class="toast align-items-center text-bg-success border-0"
+     style="position:fixed;bottom:24px;right:24px;z-index:1090" role="alert" aria-live="assertive">
+    <div class="d-flex">
+        <div class="toast-body" id="rm-success-text"></div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+</div>
+
+<!-- ── Equal Prices Modal ── -->
+<div id="eqPricesModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="fas fa-city me-2 text-success"></i>
+                    Цены копируются — <span id="eqSiteName" class="fw-bold"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-1">Выберите из выкачанных городов:</p>
+                <div id="eqCitiesList" class="list-group list-group-flush mb-2" style="max-height:200px;overflow-y:auto"></div>
+                <hr class="my-2">
+                <p class="small text-muted mb-1">Или введите ID города вручную:</p>
+                <div class="input-group input-group-sm">
+                    <input type="text" id="eqManualCityId" class="form-control" placeholder="напр. 4400 - Москва">
+                    <button class="btn btn-outline-primary" type="button" id="eqManualSetBtn">Установить</button>
+                </div>
+                <button class="btn btn-sm btn-outline-danger w-100 mt-2" type="button" id="eqClearBtn">
+                    <i class="fas fa-times me-1"></i>Снять мастер-город
+                </button>
+                <div id="eqMasterMsg" class="alert alert-success py-1 small mt-2 d-none"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Redmine Modal ── -->
+<div id="redmineModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i class="fas fa-bug me-2 text-danger"></i>Redmine — <span id="rmSiteName" class="fw-bold"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div id="rmLoading" class="text-center py-3">
+                    <i class="fas fa-spinner fa-spin me-2"></i>Загрузка...
+                </div>
+                <!-- Phase 1: выбор проблем -->
+                <div id="issueSelectPanel" class="d-none">
+                    <div class="small text-muted fw-semibold mb-2 d-flex align-items-center justify-content-between">
+                        <span><i class="fas fa-list-check me-1"></i>Выберите проблемы для задачи:</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
+                                id="rmToggleAllBtn" onclick="rmToggleAllIssues()" style="font-size:.75rem">Снять все</button>
+                    </div>
+                    <div id="issueSelectList" class="list-group list-group-flush mb-0"
+                         style="max-height:220px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px"></div>
+                </div>
+                <!-- Phase 2: форма -->
+                <div id="rmCreateBlock" class="d-none">
+                    <div class="row g-1 mb-2">
+                        <div class="col">
+                            <div class="small text-muted mb-1">Трекер</div>
+                            <select id="rmSelectTracker" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Статус</div>
+                            <select id="rmSelectStatus" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Приоритет</div>
+                            <select id="rmSelectPriority" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col">
+                            <div class="small text-muted mb-1">Исполнитель</div>
+                            <select id="rmSelectAssignee" class="form-select form-select-sm"></select>
+                        </div>
+                    </div>
+                    <!-- Custom field: В чем ошибка (multi-select, показывается если настроен в Redmine) -->
+                    <div id="rmCfErrorRow" class="mb-2" style="display:none">
+                        <div class="small text-muted mb-1">В чем ошибка
+                            <span class="text-muted" style="font-size:.75em">(Ctrl/Shift для выбора нескольких)</span>
+                        </div>
+                        <select id="rmSelectCfError" class="form-select form-select-sm" multiple size="4"></select>
+                    </div>
+                    <div class="row g-1 mb-2">
+                        <div id="rmCfMethodCol" class="col-6" style="display:none">
+                            <div class="small text-muted mb-1">Способ выкачки</div>
+                            <select id="rmSelectCfMethod" class="form-select form-select-sm"></select>
+                        </div>
+                        <div id="rmCfVariantCol" class="col-6" style="display:none">
+                            <div class="small text-muted mb-1">Вариант настройки</div>
+                            <select id="rmSelectCfVariant" class="form-select form-select-sm"></select>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="small text-muted mb-1">В чём ошибка (custom field)</div>
+                        <input type="text" id="rmShortMessage" class="form-control form-control-sm"
+                               placeholder="Что случилось">
+                    </div>
+                    <div class="mb-2">
+                        <div class="small text-muted mb-1">Описание</div>
+                        <textarea id="rmDescription" class="form-control form-control-sm" rows="5"
+                                  style="font-size:.8rem;font-family:monospace;resize:vertical"></textarea>
+                    </div>
+                    <div id="rmNotesBlock" class="d-none mb-2">
+                        <div class="small text-muted mb-1">Добавить комментарий</div>
+                        <textarea id="rmNotes" class="form-control form-control-sm" rows="2"
+                                  placeholder="Текст комментария" style="font-size:.8rem;resize:vertical"></textarea>
+                    </div>
+                </div>
+                <div id="rmSuccessBlock" class="d-none">
+                    <div class="alert alert-success py-2 mb-2">
+                        <i class="fas fa-check-circle me-1"></i><span id="rmSuccessMsg">Готово!</span>
+                    </div>
+                    <pre id="rmCopyText" class="border rounded p-2 mb-1"
+                         style="font-size:.82rem;white-space:pre-wrap;margin:0;color:#212529;background:#f8f9fa"></pre>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="rmCopyBtn">
+                        <i class="fas fa-copy me-1"></i>Скопировать
+                    </button>
+                </div>
+                <div id="rmErrorMsg" class="d-none text-danger small mt-2"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button id="rmNextBtn" class="btn btn-sm btn-primary d-none">
+                    Далее <i class="fas fa-arrow-right ms-1"></i>
+                </button>
+                <button id="rmCreateBtn" class="btn btn-sm btn-danger d-none">
+                    <i class="fas fa-bug me-1"></i>Создать задачу
+                </button>
+                <button id="rmUpdateBtn" class="btn btn-sm btn-primary d-none">
+                    <i class="fas fa-save me-1"></i>Обновить задачу
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</th:block>
+
+<th:block th:fragment="scripts">
+<script th:src="@{/js/zoomos-check-results.js(v=31)}"></script>
+</th:block>
+
+</html>

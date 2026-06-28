@@ -133,7 +133,22 @@ public class GlobalExceptionHandler {
                 "Превышен максимальный суммарный размер файлов (лимит: 1200 МБ). Уменьшите количество или размер файлов.");
 
         String referer = request.getHeader("Referer");
-        String redirectUrl = (referer != null && !referer.isEmpty()) ? referer : "/";
+        String redirectUrl = "/";
+        if (referer != null && !referer.isEmpty()) {
+            try {
+                java.net.URI refererUri = new java.net.URI(referer);
+                // Разрешаем только relative URL или тот же origin
+                boolean sameHost = refererUri.getHost() == null ||
+                        refererUri.getHost().equals(request.getServerName());
+                boolean samePort = refererUri.getPort() == -1 ||
+                        refererUri.getPort() == request.getServerPort();
+                if (sameHost && samePort) {
+                    redirectUrl = refererUri.getPath();
+                }
+            } catch (java.net.URISyntaxException ignored) {
+                // остаётся "/"
+            }
+        }
         return new RedirectView(redirectUrl);
     }
 
@@ -151,7 +166,7 @@ public class GlobalExceptionHandler {
             IOException ex, Model model, HttpServletRequest request) {
 
         logError("Ошибка обработки файла", ex);
-        setErrorAttributes(model, "Ошибка обработки файла: " + ex.getMessage(), request);
+        setErrorAttributes(model, "Ошибка обработки файла. Подробности в логах.", request);
 
         return FILE_ERROR_VIEW;
     }
@@ -313,8 +328,7 @@ public class GlobalExceptionHandler {
         Throwable rootCause = findRootCause(request, ex);
 
         logError("Необработанное исключение", rootCause);
-        setErrorAttributes(model,
-                "Произошла непредвиденная ошибка: " + rootCause.getMessage(), request);
+        setErrorAttributes(model, "Произошла непредвиденная ошибка. Подробности в логах.", request);
 
         return DEFAULT_ERROR_VIEW;
     }

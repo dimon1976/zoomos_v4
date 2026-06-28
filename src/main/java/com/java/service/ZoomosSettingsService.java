@@ -57,6 +57,10 @@ public class ZoomosSettingsService {
         settings.forEach(this::set);
     }
 
+    public int getStallMinutes() {
+        return getInt("default.stall_minutes", 60);
+    }
+
     /** Возвращает все настройки, ключ которых начинается с prefix. Один SQL-запрос. */
     public Map<String, String> getByPrefix(String prefix) {
         Map<String, String> map = new HashMap<>();

@@ -1,7 +1,7 @@
 package com.java.controller;
 
 import com.java.dto.*;
-import com.java.repository.ClientRepository;
+import com.java.service.ClientService;
 import com.java.service.MaintenanceSchedulerService;
 import com.java.service.ZoomosSettingsService;
 import com.java.service.maintenance.DatabaseMaintenanceService;
@@ -35,7 +35,7 @@ public class MaintenanceController {
     private final FileManagementService fileManagementService;
     private final DatabaseMaintenanceService databaseMaintenanceService;
     private final SystemHealthService systemHealthService;
-    private final ClientRepository clientRepository;
+    private final ClientService clientService;
     private final DataCleanupService dataCleanupService;
     private final MaintenanceSchedulerService maintenanceSchedulerService;
     private final ZoomosSettingsService settingsService;
@@ -87,7 +87,7 @@ public class MaintenanceController {
         model.addAttribute("databaseCleanupDays", databaseCleanupDays);
 
         // Данные для новой системы очистки
-        model.addAttribute("clients", clientRepository.findAll());
+        model.addAttribute("clients", clientService.findAll());
 
         // Дата по умолчанию - 30 дней назад
         java.time.LocalDateTime defaultDate = java.time.LocalDateTime.now().minusDays(30);

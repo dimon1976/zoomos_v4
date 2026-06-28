@@ -114,8 +114,9 @@
             const templateId = button.getAttribute('data-template-id');
             const templateName = button.getAttribute('data-template-name');
 
+            const clientId = [[${clientId}]];
             document.getElementById('cloneTemplateName').textContent = templateName;
-            document.getElementById('cloneForm').action = '/export/templates/' + templateId + '/clone';
+            document.getElementById('cloneForm').action = '/clients/' + clientId + '/export/templates/' + templateId + '/clone';
             document.getElementById('newName').value = templateName + ' (копия)';
         });
     });

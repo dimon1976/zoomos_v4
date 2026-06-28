@@ -126,6 +126,12 @@ public interface ZoomosParsingStatsRepository extends JpaRepository<ZoomosParsin
     @Query("SELECT DISTINCT s.cityName FROM ZoomosParsingStats s WHERE s.siteName = :siteName AND s.cityName IS NOT NULL ORDER BY s.cityName")
     List<String> findDistinctCityNamesBySiteName(@Param("siteName") String siteName);
 
+    @Query("SELECT COALESCE(SUM(s.inStock), 0) FROM ZoomosParsingStats s WHERE s.checkRun.id = :runId AND s.isFinished = true AND s.isBaseline = false")
+    Long sumInStockByRunId(@Param("runId") Long runId);
+
+    @Query("SELECT COUNT(DISTINCT s.siteName) FROM ZoomosParsingStats s WHERE s.checkRun.id = :runId AND s.isFinished = true AND s.isBaseline = false")
+    Long countSitesByRunId(@Param("runId") Long runId);
+
     @Query(value = "SELECT DISTINCT ON (site_name, SPLIT_PART(city_name, ' ', 1)) * " +
                    "FROM zoomos_parsing_stats " +
                    "WHERE site_name = ANY(:siteNames) AND is_finished = false " +

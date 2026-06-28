@@ -193,18 +193,6 @@ public class PathResolver {
     }
 
     /**
-     * Перемещает файл из временной директории в директорию загрузок
-     *
-     * @deprecated Используйте moveFromTempToExport или moveFromTempToImport
-     */
-    @Deprecated
-    public Path moveFromTempToUpload(Path tempFilePath, String prefix) throws IOException {
-        // Для обратной совместимости перенаправляем на метод moveFromTempToExport
-        log.warn("Использование устаревшего метода moveFromTempToUpload. Используйте moveFromTempToExport");
-        return moveFromTempToExport(tempFilePath, prefix);
-    }
-
-    /**
      * Копирует файл из директории экспорта во временную директорию
      */
     public Path copyFromExportToTemp(Path exportFilePath) throws IOException {

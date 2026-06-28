@@ -7,7 +7,7 @@ import com.java.dto.StatisticsHistoryDto;
 import com.java.dto.StatisticsRequestDto;
 import com.java.model.entity.ExportSession;
 import com.java.model.entity.ExportTemplateField;
-import com.java.repository.ClientRepository;
+import com.java.service.ClientService;
 import com.java.repository.ExportSessionRepository;
 import com.java.repository.ExportStatisticsRepository;
 import com.java.repository.ExportTemplateRepository;
@@ -47,7 +47,7 @@ public class ExportStatisticsController {
     private final ExportSessionRepository sessionRepository;
     private final ExportTemplateRepository templateRepository;
     private final ExportStatisticsRepository statisticsRepository;
-    private final ClientRepository clientRepository;
+    private final ClientService clientService;
 
     /**
      * Страница выбора операций для анализа статистики
@@ -58,7 +58,7 @@ public class ExportStatisticsController {
                                       Model model) {
 
         // Получаем клиента для breadcrumbs
-        var client = clientRepository.findById(clientId)
+        var client = clientService.findById(clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
 
         // Получаем шаблоны клиента с включенной статистикой
@@ -112,7 +112,7 @@ public class ExportStatisticsController {
 
         try {
             // Получаем клиента для breadcrumbs
-            var client = clientRepository.findById(clientId)
+            var client = clientService.findById(clientId)
                     .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
 
             // Валидация параметров фильтра
@@ -450,7 +450,7 @@ public class ExportStatisticsController {
 
         try {
             // Получаем клиента
-            var client = clientRepository.findById(clientId)
+            var client = clientService.findById(clientId)
                     .orElseThrow(() -> new IllegalArgumentException("Клиент не найден"));
 
             // Вычисляем статистику с учетом фильтра

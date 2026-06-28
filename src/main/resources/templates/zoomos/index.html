@@ -134,6 +134,30 @@
         }
         .priority-star-btn:hover { opacity: 0.75; }
         .sched-label { white-space: nowrap; }
+        /* ── CSS Toggle switch ── */
+        .toggle-switch { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+        .toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .toggle-track {
+            width: 30px; height: 16px; border-radius: 8px;
+            background: #dee2e6; position: relative;
+            transition: background .2s; flex-shrink: 0;
+        }
+        .toggle-switch input:checked ~ .toggle-track { background: #198754; }
+        .toggle-thumb {
+            position: absolute; top: 2px; left: 2px;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3);
+            transition: transform .18s;
+        }
+        .toggle-switch input:checked ~ .toggle-track .toggle-thumb { transform: translateX(14px); }
+        .toggle-icon { font-size: .75rem; color: #6c757d; }
+        .toggle-switch input:checked ~ .toggle-icon { color: #198754; }
+        /* ── Sync status colors ── */
+        .sync-fresh { color: #198754 !important; }
+        .sync-stale { color: #d97706 !important; }
+        .sync-old   { color: #dc3545 !important; }
+        /* ── WARNING compact badge — согласован с results-new ── */
+        .badge-warn-custom { background: #d97706 !important; color: #fff !important; }
         #batchPanel {
             position: sticky; top: 0; z-index: 100;
             background: #fff3cd; border-bottom: 2px solid #ffc107;
@@ -143,6 +167,8 @@
         .shop-batch-cb { cursor: pointer; }
         .sortable-ghost { opacity: 0.4; background: #e8f4f8; }
         .shop-order-btns .btn.btn-icon { width: 2rem; height: 2rem; padding: 0; }
+        /* Выравнивание строк таблицы сайтов */
+        .shop-sites-section table td, .shop-sites-section table th { vertical-align: middle; }
         /* Compact-only элементы — скрыты в стандартном режиме */
         .compact-result { display: none; }
         .compact-run-btn { display: none !important; }
@@ -241,27 +267,19 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 
-    <!-- Панель добавления магазина -->
-    <div class="card mb-3">
-        <div class="card-header"><i class="fas fa-store me-2"></i>Управление магазинами</div>
-        <div class="card-body py-2">
-            <form th:action="@{/zoomos/shops/add}" method="post" class="row g-2 align-items-end">
-                <div class="col-md-4 col-sm-8 col-9">
-                    <label class="form-label fw-semibold mb-1">Добавить магазин</label>
-                    <input type="text" name="shopName" class="form-control form-control-sm"
-                           placeholder="vitaexpress.ru" required autocomplete="off">
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-sm btn-primary">
-                        <i class="fas fa-plus me-1"></i>Добавить
-                    </button>
-                </div>
-                <div class="col-auto ms-auto">
-                    <button type="button" class="btn btn-sm btn-outline-secondary"
-                            data-bs-toggle="modal" data-bs-target="#defaultsModal">
-                        <i class="fas fa-sliders-h me-1"></i>Настройки по умолчанию
-                    </button>
-                </div>
+    <!-- Панель добавления магазина (коллапс) -->
+    <div class="collapse mb-3" id="addShopPanel">
+        <div class="card card-body py-2">
+            <form th:action="@{/zoomos/shops/add}" method="post" class="d-flex align-items-center gap-2 flex-wrap">
+                <input type="text" name="shopName" class="form-control form-control-sm"
+                       style="max-width:260px" placeholder="vitaexpress.ru" required autocomplete="off">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fas fa-plus me-1"></i>Добавить
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+                        data-bs-toggle="modal" data-bs-target="#defaultsModal">
+                    <i class="fas fa-sliders-h me-1"></i>Настройки по умолчанию
+                </button>
             </form>
         </div>
     </div>
@@ -314,6 +332,12 @@
                                        min="1" max="1000"
                                        th:value="${defTrendErr}">
                             </div>
+                            <div class="col-6">
+                                <label class="form-label form-label-sm">Порог зависания, мин</label>
+                                <input type="number" name="default.stall_minutes" class="form-control form-control-sm"
+                                       min="1" max="1440"
+                                       th:value="${defStallMinutes}">
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -343,9 +367,16 @@
             <option value="50">50</option>
             <option value="0">Все</option>
         </select>
-        <button id="viewToggleBtn" class="btn btn-sm btn-outline-secondary ms-auto" title="Компактный вид">
-            <i class="fas fa-th-list"></i>
-        </button>
+        <div class="ms-auto d-flex gap-2">
+            <button class="btn btn-sm btn-outline-primary" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#addShopPanel"
+                    title="Добавить магазин">
+                <i class="fas fa-plus me-1"></i>Добавить
+            </button>
+            <button id="viewToggleBtn" class="btn btn-sm btn-outline-secondary" title="Компактный вид">
+                <i class="fas fa-th-list"></i>
+            </button>
+        </div>
     </div>
 
     <!-- Батч-панель (показывается при выборе магазинов) -->
@@ -395,12 +426,13 @@
                 </button>
                 <i class="fas fa-store me-1 text-primary"></i>
                 <strong th:text="${shop.shopName}">shop.ru</strong>
-                <span th:if="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
-                    <i class="fas fa-sync-alt me-1"></i>Обновлено:
-                    <span class="fw-semibold text-body" th:text="${#temporals.format(shop.lastSyncedAt, 'dd.MM.yyyy HH:mm')}"></span>
+                <span th:if="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status"
+                      th:data-synced="${shop.lastSyncedAt}">
+                    <i class="fas fa-sync-alt me-1"></i>
+                    <span th:text="${@dateTimeHelper.format(shop.lastSyncedAt, 'dd.MM.yyyy HH:mm')}"></span>
                 </span>
-                <span th:unless="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status">
-                    <i class="fas fa-clock me-1"></i>Не синхронизировано
+                <span th:unless="${shop.lastSyncedAt}" class="text-muted ms-3 sync-status sync-old">
+                    <i class="fas fa-clock me-1"></i>Нет синхронизации
                 </span>
                 <a th:href="@{'https://export.zoomos.by/shop/' + ${shop.shopName} + '/settings'}"
                    target="_blank" class="ms-3 small text-decoration-none text-muted"
@@ -413,10 +445,11 @@
                     <i class="fas fa-history"></i> история
                 </a>
                 <!-- Статус-точка и результаты только в список-режиме -->
+                <span class="compact-instock-wrap d-none me-1 small" th:id="'compact-instock-' + ${shop.id}"></span>
                 <span class="compact-status-dot" th:id="'status-dot-' + ${shop.id}"></span>
                 <span class="compact-result ms-1">
                     <span class="badge bg-success text-white fw-semibold d-none" th:id="'compact-ok-' + ${shop.id}"></span>
-                    <span class="badge bg-warning text-dark fw-semibold d-none" th:id="'compact-warn-' + ${shop.id}"></span>
+                    <span class="badge badge-warn-custom fw-semibold d-none" th:id="'compact-warn-' + ${shop.id}"></span>
                     <span class="badge bg-danger text-white fw-semibold d-none" th:id="'compact-err-' + ${shop.id}"></span>
                     <a href="#" class="ms-1 small text-decoration-none compact-result-link d-none"
                        th:id="'compact-link-' + ${shop.id}" title="Открыть результаты">
@@ -439,39 +472,18 @@
                         th:data-shop-id="${shop.id}" title="Проверить" style="display:none">
                     <i class="fas fa-play"></i>
                 </button>
-                <!-- Кнопки переупорядочивания -->
-                <div class="d-flex gap-1 align-items-center border-end pe-2 shop-order-btns">
-                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
-                            th:data-shop-id="${shop.id}" data-direction="top" title="В начало">
-                        <i class="fas fa-angle-double-up"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
-                            th:data-shop-id="${shop.id}" data-direction="up" title="Вверх">
-                        <i class="fas fa-angle-up"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
-                            th:data-shop-id="${shop.id}" data-direction="down" title="Вниз">
-                        <i class="fas fa-angle-down"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-icon btn-ghost-secondary btn-shop-move"
-                            th:data-shop-id="${shop.id}" data-direction="bottom" title="В конец">
-                        <i class="fas fa-angle-double-down"></i>
-                    </button>
-                </div>
-                <!-- Чекбокс расписания -->
+
+                <!-- Toggle расписания -->
                 <div th:with="sched=${schedulesMap != null ? schedulesMap[shop.id] : null}"
-                     class="d-flex align-items-center gap-1 border-end pe-2">
-                    <input type="checkbox" class="form-check-input schedule-enabled-cb"
-                           th:id="'sched-cb-' + ${shop.id}"
-                           th:data-shop-id="${shop.id}"
-                           th:data-shop-name="${shop.shopName}"
-                           th:checked="${sched != null and sched.enabled}"
-                           style="cursor:pointer;">
-                    <label th:for="'sched-cb-' + ${shop.id}"
-                           class="small mb-0 ms-1 sched-label"
-                           th:classappend="${sched != null and sched.enabled} ? 'text-success' : 'text-muted'"
-                           style="cursor:pointer;">
-                        <i class="fas fa-clock"></i> авто
+                     class="border-end pe-2" title="Авто-расписание">
+                    <label class="toggle-switch">
+                        <input type="checkbox" class="schedule-enabled-cb"
+                               th:id="'sched-cb-' + ${shop.id}"
+                               th:data-shop-id="${shop.id}"
+                               th:data-shop-name="${shop.shopName}"
+                               th:checked="${sched != null and sched.enabled}">
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        <i class="fas fa-clock toggle-icon"></i>
                     </label>
                 </div>
                 <div class="dropdown">
@@ -749,17 +761,7 @@
                                                 <i class="fas fa-filter"></i>
                                             </button>
                                         </td>
-                                        <td class="text-center">
-                                            <button type="button"
-                                                    th:classappend="${entry.hasConfigIssue} ? 'bg-warning border-warning' : ''"
-                                                    class="btn btn-sm btn-outline-secondary btn-config-issue me-1"
-                                                    th:data-id="${entry.id}"
-                                                    th:data-site="${entry.siteName}"
-                                                    th:data-has-issue="${entry.hasConfigIssue}"
-                                                    th:data-note="${entry.configIssueNote}"
-                                                    th:title="${entry.hasConfigIssue ? 'Конфиг. проблема: ' + entry.configIssueNote : 'Отметить конфигурационную проблему'}">
-                                                <i class="fas fa-wrench"></i>
-                                            </button>
+                                        <td class="text-center align-middle">
                                             <button type="button"
                                                     class="btn btn-sm btn-outline-danger btn-delete-cityid"
                                                     th:data-id="${entry.id}"
@@ -772,6 +774,19 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+                <!-- Добавить сайт вручную -->
+                <div class="border-top px-3 py-2 bg-light">
+                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                        <input type="text" class="form-control form-control-sm add-site-name"
+                               placeholder="Название сайта (напр. site.by)" style="max-width:220px">
+                        <input type="text" class="form-control form-control-sm add-city-ids"
+                               placeholder="ID городов (необяз.)" style="max-width:160px">
+                        <button type="button" class="btn btn-sm btn-outline-success btn-add-cityid"
+                                th:data-shop-id="${shop.id}">
+                            <i class="fas fa-plus me-1"></i>Добавить сайт
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2127,6 +2142,33 @@
         return d + '.' + m;
     }
 
+    function fmtInStock(n) {
+        if (!n && n !== 0) return '';
+        return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    }
+
+    function fetchLastInStock(shopId) {
+        fetch('/zoomos/shops/' + shopId + '/last-instock')
+            .then(r => r.json())
+            .then(data => {
+                if (!data || data.inStock === null || data.inStock === undefined) return;
+                const el = document.getElementById('compact-instock-' + shopId);
+                if (!el) return;
+                const change = data.change;
+                let html = '';
+                if (change !== null && change !== undefined) {
+                    if (change > 0) html = '<span class="text-success fw-semibold">↑ ' + fmtInStock(data.inStock) + '</span>';
+                    else if (change < 0) html = '<span class="text-danger fw-semibold">↓ ' + fmtInStock(data.inStock) + '</span>';
+                    else html = '<span class="text-muted">' + fmtInStock(data.inStock) + '</span>';
+                } else {
+                    html = '<span class="text-muted">' + fmtInStock(data.inStock) + '</span>';
+                }
+                el.innerHTML = html;
+                el.classList.remove('d-none');
+            })
+            .catch(() => {});
+    }
+
     function showCheckResult(shopId, data) {
         function showBadge(id, count, label) {
             const el = document.getElementById(id);
@@ -2139,12 +2181,14 @@
         showBadge('result-err-'      + shopId, data.errorCount    || 0, 'Error');
         showBadge('result-notfound-' + shopId, data.notFoundCount || 0, 'НЕТ/ИДЁТ');
         // Compact-mode badges
-        showBadge('compact-ok-'   + shopId, data.okCount      || 0, 'OK');
+        if (!(data.errorCount || 0) && !(data.warningCount || 0) && !(data.notFoundCount || 0)) {
+            showBadge('compact-ok-' + shopId, data.okCount || 0, 'OK');
+        }
         showBadge('compact-warn-' + shopId, data.warningCount || 0, 'Warn');
         showBadge('compact-err-'  + shopId, data.errorCount   || 0, 'Error');
         // Compact result link
         const compactLink = document.getElementById('compact-link-' + shopId);
-        if (compactLink) { compactLink.href = '/zoomos/check/results/' + data.runId; compactLink.classList.remove('d-none'); }
+        if (compactLink) { compactLink.href = '/zoomos/check/results-new/' + data.runId; compactLink.classList.remove('d-none'); }
         // Status dot
         const dot = document.getElementById('status-dot-' + shopId);
         if (dot) {
@@ -2163,7 +2207,7 @@
             startedEl.textContent = data.startedAt;
             startedEl.style.display = '';
         }
-        document.getElementById('result-link-' + shopId).href = '/zoomos/check/results/' + data.runId;
+        document.getElementById('result-link-' + shopId).href = '/zoomos/check/results-new/' + data.runId;
         document.getElementById('check-result-' + shopId).style.display = 'block';
         // Обновить метку "Обновлено:" в header карточки
         const serverTime = data.completedAt || data.startedAt;
@@ -2372,6 +2416,38 @@
     });
 
     // ==================================================================
+    // Добавление сайта вручную
+    // ==================================================================
+    document.querySelectorAll('.btn-add-cityid').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const shopId = this.dataset.shopId;
+            const container = this.closest('.border-top');
+            const siteInput = container.querySelector('.add-site-name');
+            const cityInput = container.querySelector('.add-city-ids');
+
+            const siteName = siteInput.value.trim();
+            if (!siteName) { siteInput.focus(); return; }
+
+            const fd = new FormData();
+            fd.append('siteName', siteName);
+            if (cityInput.value.trim()) fd.append('cityIds', cityInput.value.trim());
+
+            this.disabled = true;
+            fetch('/zoomos/shops/' + shopId + '/city-ids/add', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Ошибка: ' + (data.error || 'неизвестная'));
+                        this.disabled = false;
+                    }
+                })
+                .catch(err => { alert('Ошибка сети: ' + err.message); this.disabled = false; });
+        });
+    });
+
+    // ==================================================================
     // Приоритетные магазины (звёздочка в заголовке карточки)
     // ==================================================================
 
@@ -2488,10 +2564,6 @@
                 getSchedToggleModal().hide();
                 if (data.success) {
                     cb.checked = data.isEnabled;
-                    const label = document.querySelector('label[for="sched-cb-' + shopId + '"]');
-                    if (label) {
-                        label.className = 'small mb-0 ms-1 sched-label ' + (data.isEnabled ? 'text-success' : 'text-muted');
-                    }
                 } else {
                     alert((data.error || 'Расписание не создано. Настройте его на странице расписаний.'));
                 }
@@ -2630,6 +2702,7 @@
                 }
             })
             .catch(() => {});
+        fetchLastInStock(shopId);
     });
 
     // ==================================================================
@@ -2813,9 +2886,10 @@
                 ? '<i class="fas fa-chevron-up"></i>'
                 : '<i class="fas fa-chevron-down"></i>';
             this.title = expanded ? 'Свернуть' : 'Развернуть / свернуть список сайтов';
-            // Авто-раскрыть/свернуть таблицу сайтов
+            // Авто-раскрыть/свернуть таблицу сайтов (display напрямую — без Bootstrap-анимации)
             const cityTable = document.getElementById('cityTable-' + shopId);
             if (cityTable) {
+                cityTable.style.display = expanded ? 'block' : 'none';
                 cityTable.classList.toggle('show', expanded);
             }
         });
@@ -2918,6 +2992,17 @@
             if (globalBar) globalBar.style.display = isCompact ? 'flex' : 'none';
         });
     })();
+
+    // ---- Цветовая индикация даты последней синхронизации ----
+    document.querySelectorAll('[data-synced]').forEach(el => {
+        const ms = Date.parse(el.dataset.synced);
+        if (!isNaN(ms)) {
+            const daysAgo = (Date.now() - ms) / 86400000;
+            if (daysAgo < 1)      el.classList.add('sync-fresh');
+            else if (daysAgo < 4) el.classList.add('sync-stale');
+            else                  el.classList.add('sync-old');
+        }
+    });
 </script>
 </th:block>
 </html>

@@ -15,4 +15,10 @@ public class ZoomosConfig {
     private int timeoutSeconds = 30;
     private int retryAttempts = 3;
     private int retryDelaySeconds = 3;
+
+    public String getBaseUrlNormalized() {
+        if (baseUrl == null) return "";
+        String s = baseUrl.stripTrailing();
+        return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
+    }
 }

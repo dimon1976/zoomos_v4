@@ -89,13 +89,13 @@
                             <span th:text="${session.fileName}">export.csv</span>
                         </p>
                         <p><strong>Начало:</strong>
-                            <span th:text="${#temporals.format(session.startedAt, 'dd.MM.yyyy HH:mm:ss')}">
+                            <span th:text="${@dateTimeHelper.format(session.startedAt, 'dd.MM.yyyy HH:mm:ss')}">
                                 01.01.2025
                             </span>
                         </p>
                         <p th:if="${session.completedAt}">
                             <strong>Завершение:</strong>
-                            <span th:text="${#temporals.format(session.completedAt, 'dd.MM.yyyy HH:mm:ss')}">
+                            <span th:text="${@dateTimeHelper.format(session.completedAt, 'dd.MM.yyyy HH:mm:ss')}">
                                 01.01.2025
                             </span>
                         </p>

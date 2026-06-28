@@ -1,5 +1,6 @@
 package com.java.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -21,10 +22,12 @@ public class ZoomosParsingStats {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "check_run_id", nullable = false)
     private ZoomosCheckRun checkRun;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "city_id_ref")
     private ZoomosCityId cityIdRef;
@@ -97,6 +100,9 @@ public class ZoomosParsingStats {
 
     @Column(name = "parser_description", columnDefinition = "TEXT")
     private String parserDescription;
+
+    @Column(name = "account_name")
+    private String accountName;
 
     // Мета
     @Column(name = "parsing_date", nullable = false)

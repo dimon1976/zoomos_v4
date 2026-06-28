@@ -317,7 +317,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
         log.debug("Поиск в справочнике: webSite={}, regionCode={}", webSite, regionCode);
 
         if (isBlank(regionCode)) {
-            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? LIMIT 1";
+            String sql = "SELECT handbook_retail_network_code, handbook_retail_network, handbook_region_code, handbook_physical_address FROM av_handbook WHERE handbook_web_site = ? LIMIT 1";
             log.debug("SQL без региона: {}, параметр: {}", sql, webSite);
             List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, webSite);
             log.debug("Найдено записей без региона: {}", results.size());
@@ -333,7 +333,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
         }
 
         if (altRegion != null) {
-            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? " +
+            String sql = "SELECT handbook_retail_network_code, handbook_retail_network, handbook_region_code, handbook_physical_address FROM av_handbook WHERE handbook_web_site = ? " +
                     "AND (handbook_region_code = ? OR handbook_region_code = ?) LIMIT 1";
             log.debug("SQL с альтернативным регионом: {}, параметры: {}, {}, {}",
                     sql, webSite, normalizedRegion, altRegion);
@@ -341,7 +341,7 @@ public class TaskReportExportStrategy implements ExportStrategy {
             log.debug("Найдено записей с альтернативным регионом: {}", results.size());
             return results.isEmpty() ? null : results.get(0);
         } else {
-            String sql = "SELECT * FROM av_handbook WHERE handbook_web_site = ? " +
+            String sql = "SELECT handbook_retail_network_code, handbook_retail_network, handbook_region_code, handbook_physical_address FROM av_handbook WHERE handbook_web_site = ? " +
                     "AND handbook_region_code = ? LIMIT 1";
             log.debug("SQL с точным регионом: {}, параметры: {}, {}", sql, webSite, normalizedRegion);
             List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, webSite, normalizedRegion);
