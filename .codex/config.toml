@@ -1,0 +1,15 @@
+[mcp_servers.context7]
+args = [
+    "/c",
+    "npx",
+    "@upstash/context7-mcp@latest",
+]
+command = "cmd"
+
+[mcp_servers.playwright]
+args = [
+    "/c",
+    "npx",
+    "@playwright/mcp@latest",
+]
+command = "cmd"
