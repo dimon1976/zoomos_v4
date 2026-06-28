@@ -8,13 +8,10 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Сервис для работы с глобальными настройками Zoomos Check (таблица zoomos_settings).
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class ZoomosSettingsService {
+public class SettingsService {
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -50,18 +47,12 @@ public class ZoomosSettingsService {
         jdbcTemplate.update(
                 "INSERT INTO zoomos_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
                 key, value);
-        log.debug("ZoomosSettings: {} = {}", key, value);
     }
 
     public void saveAll(Map<String, String> settings) {
         settings.forEach(this::set);
     }
 
-    public int getStallMinutes() {
-        return getInt("default.stall_minutes", 60);
-    }
-
-    /** Возвращает все настройки, ключ которых начинается с prefix. Один SQL-запрос. */
     public Map<String, String> getByPrefix(String prefix) {
         Map<String, String> map = new HashMap<>();
         jdbcTemplate.query(

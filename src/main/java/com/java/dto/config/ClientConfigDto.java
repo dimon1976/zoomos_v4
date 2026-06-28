@@ -30,7 +30,4 @@ public class ClientConfigDto {
 
     @Builder.Default
     private List<ExportTemplateConfigDto> exportTemplates = new ArrayList<>();
-
-    @Builder.Default
-    private List<ZoomosShopConfigDto> zoomosShops = new ArrayList<>();
 }

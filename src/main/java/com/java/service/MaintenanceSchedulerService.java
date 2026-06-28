@@ -37,7 +37,7 @@ public class MaintenanceSchedulerService {
     private final SystemHealthService systemHealthService;
     private final MaintenanceNotificationService notificationService;
     private final DataCleanupService dataCleanupService;
-    private final ZoomosSettingsService settingsService;
+    private final SettingsService settingsService;
 
     @Qualifier("maintenanceTaskScheduler")
     private final ThreadPoolTaskScheduler taskScheduler;

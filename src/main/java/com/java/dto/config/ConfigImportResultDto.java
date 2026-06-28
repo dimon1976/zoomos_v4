@@ -35,30 +35,5 @@ public class ConfigImportResultDto {
     private int updatedExportTemplates = 0;
 
     @Builder.Default
-    private int createdZoomosShops = 0;
-    @Builder.Default
-    private int updatedZoomosShops = 0;
-
-    @Builder.Default
-    private int createdSchedules = 0;
-    @Builder.Default
-    private int updatedSchedules = 0;
-
-    @Builder.Default
-    private int createdKnownSites = 0;
-    @Builder.Default
-    private int updatedKnownSites = 0;
-
-    @Builder.Default
-    private int createdCityNames = 0;
-    @Builder.Default
-    private int updatedCityNames = 0;
-
-    @Builder.Default
-    private int createdCityAddresses = 0;
-    @Builder.Default
-    private int updatedCityAddresses = 0;
-
-    @Builder.Default
     private List<String> errors = new ArrayList<>();
 }

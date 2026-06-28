@@ -3,7 +3,7 @@ package com.java.controller;
 import com.java.dto.*;
 import com.java.service.ClientService;
 import com.java.service.MaintenanceSchedulerService;
-import com.java.service.ZoomosSettingsService;
+import com.java.service.SettingsService;
 import com.java.service.maintenance.DatabaseMaintenanceService;
 import com.java.service.maintenance.FileManagementService;
 import com.java.service.maintenance.SystemHealthService;
@@ -38,7 +38,7 @@ public class MaintenanceController {
     private final ClientService clientService;
     private final DataCleanupService dataCleanupService;
     private final MaintenanceSchedulerService maintenanceSchedulerService;
-    private final ZoomosSettingsService settingsService;
+    private final SettingsService settingsService;
 
     @Value("${database.maintenance.cleanup.old-data.days:120}")
     private int databaseCleanupDays;
