@@ -63,7 +63,7 @@ public class ReportTransformService {
             List<String> sourceRow = reportRows.get(i);
             Map<String, Object> rowValues = new LinkedHashMap<>();
             for (int col = 0; col < reportHeaders.size() && col < sourceRow.size(); col++) {
-                rowValues.put(reportHeaders.get(col), coerceValue(sourceRow.get(col)));
+                rowValues.put(reportHeaders.get(col), sourceRow.get(col));
             }
 
             for (ReportOutputColumn lookupColumn : lookupColumns) {
@@ -74,19 +74,27 @@ public class ReportTransformService {
                 rowValues.put(lookupColumn.getOutputHeaderName(), value);
             }
 
+            // Separate map for SpEL evaluation only — numeric-looking strings are coerced here so
+            // arithmetic/comparison operators work, but rowValues itself (used for lookup keys, SOURCE
+            // passthrough, and final output) is never mutated, so leading zeros and exact string form
+            // are preserved for lookup matching and output rendering.
+            Map<String, Object> evaluationValues = new LinkedHashMap<>();
+            rowValues.forEach((key, value) -> evaluationValues.put(key, coerceForEvaluation(value)));
+
             for (ReportOutputColumn computedColumn : computedColumns) {
-                Object value = expressionEvaluator.evaluateFormula(computedColumn.getFormula(), rowValues);
+                Object value = expressionEvaluator.evaluateFormula(computedColumn.getFormula(), evaluationValues);
                 if (value == null && computedColumn.getFormula() != null) {
                     log.warn("Формула '{}' не вычислена для строки {} рана — пустая ячейка",
                             computedColumn.getFormula(), i);
                     warnings++;
                 }
                 rowValues.put(computedColumn.getOutputHeaderName(), value);
+                evaluationValues.put(computedColumn.getOutputHeaderName(), value);
             }
 
             String filterExpression = config.getRowFilterExpression();
             if (filterExpression != null && !filterExpression.isBlank()) {
-                boolean include = expressionEvaluator.evaluateFilter(filterExpression, rowValues);
+                boolean include = expressionEvaluator.evaluateFilter(filterExpression, evaluationValues);
                 if (!include) {
                     continue;
                 }
@@ -113,21 +121,27 @@ public class ReportTransformService {
      * Converts a raw CSV/XLSX cell string to a Long/Double when it looks numeric, so that
      * SpEL arithmetic in COMPUTED formulas works (SpEL cannot subtract two Strings).
      * Blank/non-numeric values are left as-is (e.g. an empty cell must stay "" for
-     * rowFilterExpression comparisons like ['ОГРН'] != '').
+     * rowFilterExpression comparisons like ['ОГРН'] != ''). Non-String values (e.g. an Integer
+     * already produced by a prior formula) are passed through unchanged. Used only to build the
+     * separate {@code evaluationValues} map — never applied to the canonical {@code rowValues}.
      */
-    private Object coerceValue(String raw) {
-        if (raw == null || raw.isEmpty()) {
+    private Object coerceForEvaluation(Object raw) {
+        if (!(raw instanceof String)) {
             return raw;
         }
+        String value = (String) raw;
+        if (value.isEmpty()) {
+            return value;
+        }
         try {
-            return Long.parseLong(raw);
+            return Long.parseLong(value);
         } catch (NumberFormatException ignored) {
             // not a plain integer, try decimal below
         }
         try {
-            return Double.parseDouble(raw);
+            return Double.parseDouble(value);
         } catch (NumberFormatException ignored) {
-            return raw;
+            return value;
         }
     }
 

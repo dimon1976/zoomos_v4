@@ -160,4 +160,31 @@ class ReportTransformServiceTest {
         String content = Files.readString(result.resultFilePath());
         assertFalse(content.contains("Цена"));
     }
+
+    @Test
+    void shouldPreserveLeadingZerosForSourceColumnAndLookupKey() throws Exception {
+        Path source = writeCsv("ОГРН;Цена\n0111;150\n");
+        Path lookup = writeCsv("ОГРН;Юр. лицо\n0111;ООО Тест\n");
+
+        ReportConfig config = baseConfig();
+        config.setLookupFileStoredPath(lookup.toString());
+        config.setLookupFileOriginalName("lookup.csv");
+        config.setLookupFileFormat("CSV");
+        config.setLookupFileDelimiter(";");
+        config.setLookupFileEncoding("UTF-8");
+        config.getOutputColumns().add(ReportOutputColumn.builder()
+                .config(config).type(ReportOutputColumnType.SOURCE)
+                .outputHeaderName("ОГРН").sourceColumnName("ОГРН").position(0).included(true).build());
+        config.getOutputColumns().add(ReportOutputColumn.builder()
+                .config(config).type(ReportOutputColumnType.LOOKUP)
+                .outputHeaderName("Юр. лицо").keyColumnInReport("ОГРН").keyColumnInLookup("ОГРН")
+                .valueColumnInLookup("Юр. лицо").position(1).included(true).build());
+
+        ReportTransformService.ReportTransformResult result =
+                transformService.transform(source, "report.csv", "CSV", config);
+
+        String content = Files.readString(result.resultFilePath());
+        assertTrue(content.contains("0111"), "Leading zero in ОГРН must be preserved in output, got: " + content);
+        assertTrue(content.contains("ООО Тест"), "Lookup must match on the raw (uncoerced) key, got: " + content);
+    }
 }
