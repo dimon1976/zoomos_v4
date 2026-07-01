@@ -43,7 +43,11 @@ Excel/CSV, многопользовательские права доступа 
 | `name` | String | Название конфига |
 | `clientId` | Long, nullable | FK на `Client` — необязательная привязка отчёта к клиенту, для организации/фильтрации в списке конфигов |
 | `sourceUrl` | Text | Полный URL запроса к export.zoomos.by, как есть, одной строкой |
-| `lookupFileMetadataId` | Long, nullable | FK на `FileMetadata` — справочник для lookup-колонок, обновляется вручную перезаливкой файла |
+| `lookupFileOriginalName` | String, nullable | Имя загруженного файла-справочника |
+| `lookupFileStoredPath` | String, nullable | Путь к сохранённому файлу-справочнику на диске |
+| `lookupFileFormat` | String, nullable | `CSV` / `XLSX` / `XLS`, определяется по расширению при загрузке |
+| `lookupFileDelimiter` | String, nullable | Разделитель для CSV-справочника (по умолчанию `;`) |
+| `lookupFileEncoding` | String, nullable | Кодировка для CSV-справочника (по умолчанию `UTF-8`) |
 | `detectedReportColumns` | Text (JSON-массив строк), nullable | Заголовки, реально пришедшие в последнем успешном скачивании; заполняется автоматически, используется билдером `outputColumns` для выпадающих списков |
 | `outputFormat` | String | `xlsx` / `csv`, по умолчанию — формат исходного отчёта |
 | `rowFilterExpression` | Text, nullable | Необязательное булево SpEL-выражение — строки, для которых оно возвращает `false`, не попадают в итоговый файл. Вычисляется после `COMPUTED`/`LOOKUP`, см. раздел «Фильтрация строк» |
@@ -153,12 +157,16 @@ export.zoomos.by требует авторизованную сессию для
    вычисляется через `SimpleEvaluationContext` с этим Map как root-объектом (в classpath уже
    есть `spring-expression`, новая зависимость не нужна). Ошибка вычисления в одной строке
    → пустая ячейка + WARN в лог рана, весь прогон не прерывается.
-4. **Lookup-колонки (`LOOKUP`).** Файл-справочник (`lookupFileMetadataId`) читается один раз
-   через `fileReaderUtils.readAllRows(...)` и индексируется в `Map<String key, List<String> row>`
-   по `keyColumnInLookup`. Для каждой строки отчёта берётся значение `keyColumnInReport`,
-   ищется в индексе, подтягивается `valueColumnInLookup`. Не найдено → пустая ячейка.
-   Подход аналогичен уже существующему `DataMergerService`, но не переиспользует его код
-   напрямую (другая DTO-модель).
+4. **Lookup-колонки (`LOOKUP`).** Файл-справочник (`lookupFileStoredPath` конфига) читается один
+   раз через `fileReaderUtils.readAllRows(...)` (тоже через временный, не персистентный
+   `FileMetadata`) и индексируется в `Map<String key, List<String> row>` по `keyColumnInLookup`.
+   Для каждой строки отчёта берётся значение `keyColumnInReport`, ищется в индексе, подтягивается
+   `valueColumnInLookup`. Не найдено → пустая ячейка. Подход аналогичен уже существующему
+   `DataMergerService`, но не переиспользует его код напрямую (другая DTO-модель).
+
+   Ограничение MVP: все `LOOKUP`-колонки одного конфига используют один и тот же
+   `keyColumnInLookup` (один файл-справочник — один ключ индексации). Это проверяется при
+   сохранении конфига.
 
    **Пример.** В отчёте есть колонка `ОГРН`, в справочнике — тоже `ОГРН` плюс поля `Юр. лицо`,
    `Город`, `Статус`. Чтобы подтянуть все три поля отдельными колонками, заводится **по одной
