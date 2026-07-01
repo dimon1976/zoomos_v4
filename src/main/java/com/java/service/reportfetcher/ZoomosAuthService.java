@@ -61,7 +61,7 @@ public class ZoomosAuthService {
         return responseUri.getPath() != null && responseUri.getPath().contains("/login");
     }
 
-    public void login(HttpClient client) throws IOException, InterruptedException {
+    public synchronized void login(HttpClient client) throws IOException, InterruptedException {
         String form = "j_username=" + URLEncoder.encode(username, StandardCharsets.UTF_8)
                 + "&j_password=" + URLEncoder.encode(password, StandardCharsets.UTF_8);
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/login"))
@@ -78,7 +78,7 @@ public class ZoomosAuthService {
         log.info("Авторизация на {} выполнена успешно", baseUrl);
     }
 
-    public void saveCookies(HttpClient client) {
+    public synchronized void saveCookies(HttpClient client) {
         CookieManager cookieManager = (CookieManager) client.cookieHandler().orElseThrow();
         List<HttpCookie> cookies = cookieManager.getCookieStore().getCookies();
         List<SerializableCookie> serializable = cookies.stream()
