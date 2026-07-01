@@ -655,12 +655,27 @@ public class ReportExpressionException extends RuntimeException {
 }
 ```
 
+**Update (applied during code review of this task, before it was marked done):** the initial
+version below used `expression.getValue(row)`, which implicitly builds a full
+`StandardEvaluationContext` — exposing `T(...)` type references, `new`, and static method calls.
+Since report-config formulas are user-authored through a UI (not developer-authored code), that is
+a real code-execution surface, not just a theoretical one. The implementation was corrected to use
+`SimpleEvaluationContext.forReadOnlyDataBinding().withInstanceMethods().build()` instead — this
+still allows instance-method calls like `.contains(...)` and the ternary operator (needed by the
+SpEL user guide in the spec), but rejects `T()`/`new`/bean references. A `@Slf4j` logger was also
+added so a broken expression logs a one-line `WARN` (expression text + parser error message, no
+stack trace, no row data) instead of failing completely silently. The code block below reflects
+the corrected, final version (matches commit `fd49b17` on `feature/report-fetcher`, not the
+original commit `0c0ddab`).
+
 ```java
 package com.java.service.reportfetcher;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.SimpleEvaluationContext;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -670,9 +685,15 @@ import java.util.Map;
  * Column references use bracket indexing on the row map: ['Column Name'].
  */
 @Component
+@Slf4j
 public class ReportRowExpressionEvaluator {
 
     private final ExpressionParser parser = new SpelExpressionParser();
+
+    // Stateless/thread-safe: no variables are ever set on this shared context.
+    // withInstanceMethods() keeps .contains()/ternary working; T()/new/bean refs stay blocked.
+    private final SimpleEvaluationContext evaluationContext =
+            SimpleEvaluationContext.forReadOnlyDataBinding().withInstanceMethods().build();
 
     /**
      * Evaluates a COMPUTED column formula. Returns null (empty cell) on any parse/evaluation error
@@ -681,8 +702,9 @@ public class ReportRowExpressionEvaluator {
     public Object evaluateFormula(String formula, Map<String, Object> row) {
         try {
             Expression expression = parser.parseExpression(formula);
-            return expression.getValue(row);
+            return expression.getValue(evaluationContext, row);
         } catch (Exception e) {
+            log.warn("Не удалось вычислить SpEL-выражение '{}': {}", formula, e.getMessage());
             return null;
         }
     }
@@ -694,9 +716,10 @@ public class ReportRowExpressionEvaluator {
     public boolean evaluateFilter(String filterExpression, Map<String, Object> row) {
         try {
             Expression expression = parser.parseExpression(filterExpression);
-            Object result = expression.getValue(row);
+            Object result = expression.getValue(evaluationContext, row);
             return Boolean.TRUE.equals(result);
         } catch (Exception e) {
+            log.warn("Не удалось вычислить SpEL-фильтр '{}': {}", filterExpression, e.getMessage());
             return false;
         }
     }
