@@ -75,14 +75,29 @@
 <script th:inline="javascript">
     function runConfig(button) {
         var configId = button.getAttribute('data-config-id');
+        var originalText = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Запуск...';
+
         fetch('/utils/report-fetcher/' + configId + '/run', {method: 'POST'})
-            .then(function (response) { return response.json().then(function (data) { return {ok: response.ok, data: data}; }); })
+            .then(function (response) {
+                return response.json()
+                    .catch(function () { return {}; })
+                    .then(function (data) { return {ok: response.ok, data: data}; });
+            })
             .then(function (result) {
                 if (result.ok) {
                     window.location.href = '/utils/report-fetcher/' + configId + '/history';
                 } else {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
                     alert(result.data.error || 'Не удалось запустить отчёт');
                 }
+            })
+            .catch(function () {
+                button.disabled = false;
+                button.innerHTML = originalText;
+                alert('Не удалось связаться с сервером. Попробуйте ещё раз.');
             });
     }
 </script>
