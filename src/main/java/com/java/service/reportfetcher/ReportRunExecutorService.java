@@ -30,16 +30,22 @@ public class ReportRunExecutorService {
 
     @Async("reportFetchExecutor")
     public void execute(Long runId) {
-        ReportRun run = reportRunRepository.findById(runId)
-                .orElseThrow(() -> new IllegalStateException("ReportRun не найден: " + runId));
-        ReportConfig config = run.getConfig();
+        ReportRun run;
+        try {
+            run = reportRunRepository.findByIdWithConfigAndOutputColumns(runId)
+                    .orElseThrow(() -> new IllegalStateException("ReportRun не найден: " + runId));
+        } catch (Exception e) {
+            log.error("Не удалось загрузить ReportRun {}: {}", runId, e.getMessage(), e);
+            return;
+        }
 
+        ReportConfig config = run.getConfig();
         run.setStartedAt(ZonedDateTime.now());
         updateStatus(run, ReportRunStatus.DOWNLOADING, null);
 
+        ReportDownloadService.ReportDownloadResult downloaded = null;
         try {
-            ReportDownloadService.ReportDownloadResult downloaded =
-                    downloadService.download(config.getSourceUrl());
+            downloaded = downloadService.download(config.getSourceUrl());
 
             updateStatus(run, ReportRunStatus.TRANSFORMING, null);
 
@@ -58,7 +64,16 @@ public class ReportRunExecutorService {
         } catch (Exception e) {
             log.error("Ошибка выполнения ReportRun {}: {}", runId, e.getMessage(), e);
             run.setFinishedAt(ZonedDateTime.now());
-            updateStatus(run, ReportRunStatus.ERROR, e.getMessage());
+            String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            updateStatus(run, ReportRunStatus.ERROR, errorMessage);
+        } finally {
+            if (downloaded != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(downloaded.filePath());
+                } catch (java.io.IOException e) {
+                    log.warn("Не удалось удалить временный файл {}: {}", downloaded.filePath(), e.getMessage());
+                }
+            }
         }
     }
 
