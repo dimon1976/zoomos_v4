@@ -145,7 +145,7 @@ public class ReportConfigService {
     }
 
     public ReportConfig getEntity(Long id) {
-        return reportConfigRepository.findById(id)
+        return reportConfigRepository.findByIdWithClient(id)
                 .orElseThrow(() -> new IllegalArgumentException("Конфиг не найден: " + id));
     }
 
