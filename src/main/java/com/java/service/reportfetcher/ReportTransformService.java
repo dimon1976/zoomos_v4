@@ -174,6 +174,8 @@ public class ReportTransformService {
                 .build();
         List<List<String>> lookupRows = fileReaderUtils.readAllRows(lookupMetadata);
 
+        // MVP-ограничение (по спеке): все LOOKUP-колонки конфига используют один и тот же файл-
+        // справочник и одну колонку-ключ — берём keyColumnInLookup первой LOOKUP-колонки.
         String keyColumn = config.getOutputColumns().stream()
                 .filter(c -> c.getType() == ReportOutputColumnType.LOOKUP)
                 .map(ReportOutputColumn::getKeyColumnInLookup)
