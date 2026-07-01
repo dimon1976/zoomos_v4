@@ -24,6 +24,10 @@ public class ReportDownloadService {
     @Value("${report-fetcher.download.timeout-hours:3}")
     private int downloadTimeoutHours = 3;
 
+    /**
+     * Downloads the report from {@code sourceUrl}, authenticating (or re-authenticating) as needed.
+     * The caller is responsible for deleting {@link ReportDownloadResult#filePath()} after use.
+     */
     public ReportDownloadResult download(String sourceUrl) throws IOException, InterruptedException {
         HttpClient client = authService.buildAuthenticatedClient();
         HttpResponse<byte[]> response = sendGet(client, sourceUrl);

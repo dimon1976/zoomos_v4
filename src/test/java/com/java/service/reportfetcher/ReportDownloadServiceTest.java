@@ -55,6 +55,11 @@ class ReportDownloadServiceTest {
             exchange.sendResponseHeaders(500, -1);
             exchange.close();
         });
+        server.createContext("/always-login.xls", exchange -> {
+            exchange.getResponseHeaders().add("Location", "/login");
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+        });
         server.start();
         baseUrl = "http://localhost:" + server.getAddress().getPort();
 
@@ -92,5 +97,11 @@ class ReportDownloadServiceTest {
     @Test
     void shouldThrowOnUnknownHost() {
         assertThrows(Exception.class, () -> downloadService.download("http://localhost:1/report.xls"));
+    }
+
+    @Test
+    void shouldThrowWhenRetryStillHitsLoginAfterReauth() {
+        assertThrows(ZoomosAuthException.class,
+                () -> downloadService.download(baseUrl + "/always-login.xls"));
     }
 }
