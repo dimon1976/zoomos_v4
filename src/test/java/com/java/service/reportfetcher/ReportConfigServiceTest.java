@@ -9,7 +9,12 @@ import com.java.repository.ReportConfigRepository;
 import com.java.util.FileReaderUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
@@ -94,5 +99,28 @@ class ReportConfigServiceTest {
         dto.setId(42L);
 
         assertThrows(IllegalArgumentException.class, () -> service.save(dto));
+    }
+
+    @Test
+    void shouldSanitizeFilenameToPreventPathTraversal() throws Exception {
+        Path lookupDir = Files.createTempDirectory("report-fetcher-lookup-test-");
+        ReflectionTestUtils.setField(service, "lookupFileDir", lookupDir.toString());
+
+        when(reportConfigRepository.findById(1L))
+                .thenReturn(Optional.of(ReportConfig.builder().id(1L).name("Test").build()));
+
+        MockMultipartFile maliciousFile = new MockMultipartFile(
+                "file", "../../../../evil.csv", "text/csv", "a,b\n1,2".getBytes());
+
+        service.attachLookupFile(1L, maliciousFile);
+
+        ArgumentCaptor<ReportConfig> captor = ArgumentCaptor.forClass(ReportConfig.class);
+        verify(reportConfigRepository).save(captor.capture());
+        ReportConfig saved = captor.getValue();
+
+        Path storedPath = Path.of(saved.getLookupFileStoredPath());
+        assertTrue(storedPath.normalize().startsWith(lookupDir.normalize()),
+                "Stored file must stay inside the configured lookup directory, got: " + storedPath);
+        assertTrue(Files.exists(storedPath));
     }
 }

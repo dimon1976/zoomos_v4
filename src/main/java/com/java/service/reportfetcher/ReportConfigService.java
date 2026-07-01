@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -92,7 +93,7 @@ public class ReportConfigService {
 
         Path dir = Path.of(lookupFileDir);
         Files.createDirectories(dir);
-        String storedName = configId + "_" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
+        String storedName = configId + "_" + UUID.randomUUID() + extractExtension(file.getOriginalFilename());
         Path storedPath = dir.resolve(storedName);
         file.transferTo(storedPath);
 
@@ -127,6 +128,14 @@ public class ReportConfigService {
         if (lower.endsWith(".xlsx")) return "XLSX";
         if (lower.endsWith(".xls")) return "XLS";
         return "CSV";
+    }
+
+    private String extractExtension(String filename) {
+        if (filename == null) {
+            return "";
+        }
+        int dotIndex = filename.lastIndexOf('.');
+        return dotIndex >= 0 ? filename.substring(dotIndex) : "";
     }
 
     public List<ReportConfig> findAll(Long clientId) {
