@@ -39,12 +39,12 @@ public class ReportRunExecutorService {
             return;
         }
 
-        ReportConfig config = run.getConfig();
-        run.setStartedAt(ZonedDateTime.now());
-        updateStatus(run, ReportRunStatus.DOWNLOADING, null);
-
         ReportDownloadService.ReportDownloadResult downloaded = null;
         try {
+            ReportConfig config = run.getConfig();
+            run.setStartedAt(ZonedDateTime.now());
+            updateStatus(run, ReportRunStatus.DOWNLOADING, null);
+
             downloaded = downloadService.download(config.getSourceUrl());
 
             updateStatus(run, ReportRunStatus.TRANSFORMING, null);
