@@ -230,8 +230,12 @@
             '<div class="col-2 field-lookup" style="display:none"><label class="form-label">Значение из справочника</label>' +
             '<input class="form-control" list="lookupColumnsList" name="outputColumns[' + index + '].valueColumnInLookup" value="' + escapeHtml(data.valueColumnInLookup || '') + '"/></div>' +
             '<div class="col-1"><label class="form-label">Вкл.</label><br/>' +
-            '<input type="hidden" name="outputColumns[' + index + '].included" value="false"/>' +
-            '<input type="checkbox" name="outputColumns[' + index + '].included" value="true"' + (data.included ? ' checked' : '') + '/></div>' +
+            // Порядок важен: Spring биндит СЕРВЕРУ ПЕРВОЕ значение из нескольких параметров
+            // с одинаковым name (подтверждено эмпирически на ServletRequestDataBinder +
+            // ConversionService). Чекбокс должен идти раньше hidden-заглушки — иначе при
+            // отмеченном чекбоксе всё равно всегда придёт "false" от hidden-поля.
+            '<input type="checkbox" name="outputColumns[' + index + '].included" value="true"' + (data.included ? ' checked' : '') + '/>' +
+            '<input type="hidden" name="outputColumns[' + index + '].included" value="false"/></div>' +
             '</div>' +
             '<button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest(\'.column-row\').remove(); reindexRows();">&times;</button>' +
             '</div>';
