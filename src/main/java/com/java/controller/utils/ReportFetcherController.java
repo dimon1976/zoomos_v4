@@ -91,12 +91,31 @@ public class ReportFetcherController {
                                     RedirectAttributes redirectAttributes) {
         try {
             reportConfigService.attachLookupFile(id, file);
-            redirectAttributes.addFlashAttribute("success", "Справочник загружен");
+            redirectAttributes.addFlashAttribute("success", "Справочник загружен: " + file.getOriginalFilename());
         } catch (IOException e) {
             log.error("Ошибка загрузки справочника для конфига {}", id, e);
             redirectAttributes.addFlashAttribute("error", "Ошибка загрузки: " + e.getMessage());
         }
         return "redirect:/utils/report-fetcher/" + id + "/edit";
+    }
+
+    @GetMapping("/{id}/lookup-file")
+    public ResponseEntity<Resource> downloadLookupFile(@PathVariable Long id) throws IOException {
+        ReportConfig config = reportConfigService.getEntity(id);
+        if (config.getLookupFileStoredPath() == null) {
+            throw new IllegalStateException("Файл-справочник не загружен");
+        }
+        Path path = Path.of(config.getLookupFileStoredPath());
+        if (!Files.exists(path)) {
+            throw new IllegalStateException("Файл-справочник указан в конфиге, но отсутствует на диске: " + path);
+        }
+        byte[] data = Files.readAllBytes(path);
+        String filename = config.getLookupFileOriginalName() != null
+                ? config.getLookupFileOriginalName() : path.getFileName().toString();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(new ByteArrayResource(data));
     }
 
     @PostMapping("/{id}/run")

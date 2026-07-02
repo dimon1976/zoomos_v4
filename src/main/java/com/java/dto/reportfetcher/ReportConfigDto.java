@@ -30,6 +30,8 @@ public class ReportConfigDto {
     // Заголовки загруженного файла-справочника — подсказки для полей "Ключ в справочнике"/
     // "Значение из справочника". Пусто, если справочник не загружен.
     private List<String> lookupFileColumns = new ArrayList<>();
+    private String lookupFileOriginalName;
+    private String lookupFileStoredPath;
 
     public static ReportConfigDto fromEntity(ReportConfig config) {
         ReportConfigDto dto = new ReportConfigDto();
@@ -40,6 +42,8 @@ public class ReportConfigDto {
         dto.setOutputFormat(config.getOutputFormat());
         dto.setRowFilterExpression(config.getRowFilterExpression());
         dto.setDetectedReportColumns(parseColumnList(config.getDetectedReportColumns()));
+        dto.setLookupFileOriginalName(config.getLookupFileOriginalName());
+        dto.setLookupFileStoredPath(config.getLookupFileStoredPath());
         dto.setOutputColumns(config.getOutputColumns().stream().map(column -> {
             ReportOutputColumnDto columnDto = new ReportOutputColumnDto();
             columnDto.setId(column.getId());

@@ -134,9 +134,35 @@ class ReportConfigServiceTest {
         ReportConfig config = ReportConfig.builder().id(1L).name("Test").build();
         when(reportConfigRepository.findByIdWithClientAndOutputColumns(1L)).thenReturn(Optional.of(config));
         when(reportRunRepository.existsByConfigIdAndStatusIn(eq(1L), anyList())).thenReturn(false);
+        when(reportRunRepository.findAllByConfigIdOrderByCreatedAtDesc(1L)).thenReturn(List.of());
 
         service.delete(1L);
 
+        verify(reportConfigRepository).delete(config);
+    }
+
+    @Test
+    void shouldDeleteLookupFileAndRunResultFilesOnConfigDelete() throws Exception {
+        Path lookupFile = Files.createTempFile("report-fetcher-lookup-", ".csv");
+        Path resultFile1 = Files.createTempFile("report-fetcher-result-", ".csv");
+        Path resultFile2 = Files.createTempFile("report-fetcher-result-", ".csv");
+
+        ReportConfig config = ReportConfig.builder().id(1L).name("Test")
+                .lookupFileStoredPath(lookupFile.toString())
+                .build();
+        when(reportConfigRepository.findByIdWithClientAndOutputColumns(1L)).thenReturn(Optional.of(config));
+        when(reportRunRepository.existsByConfigIdAndStatusIn(eq(1L), anyList())).thenReturn(false);
+        com.java.model.entity.ReportRun run1 = com.java.model.entity.ReportRun.builder()
+                .id(10L).resultFilePath(resultFile1.toString()).build();
+        com.java.model.entity.ReportRun run2 = com.java.model.entity.ReportRun.builder()
+                .id(11L).resultFilePath(resultFile2.toString()).build();
+        when(reportRunRepository.findAllByConfigIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(run1, run2));
+
+        service.delete(1L);
+
+        assertFalse(Files.exists(lookupFile), "Lookup file must be deleted");
+        assertFalse(Files.exists(resultFile1), "First run's result file must be deleted");
+        assertFalse(Files.exists(resultFile2), "Second run's result file must be deleted");
         verify(reportConfigRepository).delete(config);
     }
 

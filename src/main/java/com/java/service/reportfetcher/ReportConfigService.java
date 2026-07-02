@@ -5,6 +5,7 @@ import com.java.dto.reportfetcher.ReportOutputColumnDto;
 import com.java.model.entity.FileMetadata;
 import com.java.model.entity.ReportConfig;
 import com.java.model.entity.ReportOutputColumn;
+import com.java.model.entity.ReportRun;
 import com.java.model.enums.ReportOutputColumnType;
 import com.java.model.enums.ReportRunStatus;
 import com.java.repository.ClientRepository;
@@ -171,13 +172,26 @@ public class ReportConfigService {
         if (reportRunRepository.existsByConfigIdAndStatusIn(id, ACTIVE_RUN_STATUSES)) {
             throw new IllegalStateException("Нельзя удалить конфиг с активным запуском");
         }
-        if (config.getLookupFileStoredPath() != null) {
-            try {
-                Files.deleteIfExists(Path.of(config.getLookupFileStoredPath()));
-            } catch (IOException e) {
-                log.warn("Не удалось удалить файл-справочник {}: {}", config.getLookupFileStoredPath(), e.getMessage());
-            }
+
+        // Удаляем все файлы результатов запусков этого конфига — сами записи ReportRun
+        // будут удалены каскадно на уровне БД (ON DELETE CASCADE), но файлы на диске
+        // каскад не трогает и без этого остались бы висеть без ссылок.
+        for (ReportRun run : reportRunRepository.findAllByConfigIdOrderByCreatedAtDesc(id)) {
+            deleteFileQuietly(run.getResultFilePath());
         }
+        deleteFileQuietly(config.getLookupFileStoredPath());
+
         reportConfigRepository.delete(config);
+    }
+
+    private void deleteFileQuietly(String path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(Path.of(path));
+        } catch (IOException e) {
+            log.warn("Не удалось удалить файл {}: {}", path, e.getMessage());
+        }
     }
 }
