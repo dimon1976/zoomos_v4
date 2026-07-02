@@ -19,6 +19,6 @@ public interface ReportConfigRepository extends JpaRepository<ReportConfig, Long
     @EntityGraph(attributePaths = "client")
     List<ReportConfig> findAllByClientIdOrderByNameAsc(Long clientId);
 
-    @Query("SELECT c FROM ReportConfig c LEFT JOIN FETCH c.client WHERE c.id = :id")
-    Optional<ReportConfig> findByIdWithClient(@Param("id") Long id);
+    @Query("SELECT DISTINCT c FROM ReportConfig c LEFT JOIN FETCH c.client LEFT JOIN FETCH c.outputColumns WHERE c.id = :id")
+    Optional<ReportConfig> findByIdWithClientAndOutputColumns(@Param("id") Long id);
 }

@@ -106,7 +106,7 @@ class ReportConfigServiceTest {
         Path lookupDir = Files.createTempDirectory("report-fetcher-lookup-test-");
         ReflectionTestUtils.setField(service, "lookupFileDir", lookupDir.toString());
 
-        when(reportConfigRepository.findByIdWithClient(1L))
+        when(reportConfigRepository.findByIdWithClientAndOutputColumns(1L))
                 .thenReturn(Optional.of(ReportConfig.builder().id(1L).name("Test").build()));
 
         MockMultipartFile maliciousFile = new MockMultipartFile(
