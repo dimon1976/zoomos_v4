@@ -69,7 +69,7 @@ public class ReportConfigService {
             ReportOutputColumn column = ReportOutputColumn.builder()
                     .config(config)
                     .type(columnDto.getType())
-                    .outputHeaderName(columnDto.getOutputHeaderName())
+                    .outputHeaderName(resolveOutputHeaderName(columnDto))
                     .position(position++)
                     .included(columnDto.getIncluded() != null ? columnDto.getIncluded() : true)
                     .sourceColumnName(columnDto.getSourceColumnName())
@@ -80,8 +80,55 @@ public class ReportConfigService {
                     .build();
             config.getOutputColumns().add(column);
         }
+        validateNoDuplicateHeaders(config.getOutputColumns());
 
         return reportConfigRepository.save(config);
+    }
+
+    /**
+     * Одинаковый outputHeaderName у нескольких ВКЛЮЧЁННЫХ колонок вызывает ту же коллизию,
+     * что и незаполненный заголовок (см. resolveOutputHeaderName) — колонки затирают друг
+     * друга в карте строки итогового файла. Выключенные колонки в файл не попадают, их
+     * заголовки не проверяем.
+     */
+    private void validateNoDuplicateHeaders(List<ReportOutputColumn> columns) {
+        Set<String> seen = new java.util.HashSet<>();
+        for (ReportOutputColumn column : columns) {
+            if (!Boolean.TRUE.equals(column.getIncluded())) {
+                continue;
+            }
+            if (!seen.add(column.getOutputHeaderName())) {
+                throw new IllegalArgumentException(
+                        "Повторяющийся заголовок среди включённых колонок: '" + column.getOutputHeaderName()
+                                + "' — заголовки включённых колонок должны быть уникальны");
+            }
+        }
+    }
+
+    /**
+     * Если заголовок не задан явно — подставляем осмысленное имя по умолчанию вместо пустой
+     * строки. Это принципиально: пустой/одинаковый outputHeaderName у нескольких колонок
+     * означает одинаковый ключ в карте строки итогового файла — они начинают затирать друг
+     * друга, и в файл во все такие колонки попадает одно и то же значение (реальный баг,
+     * из-за которого ломались данные при пустых заголовках).
+     */
+    private String resolveOutputHeaderName(ReportOutputColumnDto columnDto) {
+        if (columnDto.getOutputHeaderName() != null && !columnDto.getOutputHeaderName().isBlank()) {
+            return columnDto.getOutputHeaderName().trim();
+        }
+        if (columnDto.getType() == ReportOutputColumnType.SOURCE
+                && columnDto.getSourceColumnName() != null && !columnDto.getSourceColumnName().isBlank()) {
+            return columnDto.getSourceColumnName().trim();
+        }
+        if (columnDto.getType() == ReportOutputColumnType.LOOKUP
+                && columnDto.getValueColumnInLookup() != null && !columnDto.getValueColumnInLookup().isBlank()) {
+            return columnDto.getValueColumnInLookup().trim();
+        }
+        throw new IllegalArgumentException(
+                "У колонки не задан заголовок, и подставить его по умолчанию не из чего "
+                        + "(укажите заголовок явно" + (columnDto.getType() == ReportOutputColumnType.SOURCE
+                        ? " или исходную колонку" : columnDto.getType() == ReportOutputColumnType.LOOKUP
+                        ? " или значение из справочника" : "") + ")");
     }
 
     private void validateOutputColumns(List<ReportOutputColumnDto> columns) {

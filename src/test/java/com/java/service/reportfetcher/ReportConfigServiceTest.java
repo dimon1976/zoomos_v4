@@ -98,6 +98,81 @@ class ReportConfigServiceTest {
     }
 
     @Test
+    void shouldDefaultBlankSourceHeaderToSourceColumnName() {
+        ReportOutputColumnDto sourceColumn = new ReportOutputColumnDto();
+        sourceColumn.setType(ReportOutputColumnType.SOURCE);
+        sourceColumn.setOutputHeaderName("  ");
+        sourceColumn.setIncluded(true);
+        sourceColumn.setSourceColumnName("Время прохода");
+
+        ReportConfig saved = service.save(dtoWithColumns(sourceColumn));
+
+        assertEquals("Время прохода", saved.getOutputColumns().get(0).getOutputHeaderName());
+    }
+
+    @Test
+    void shouldDefaultBlankLookupHeaderToValueColumnInLookup() {
+        ReportOutputColumnDto lookup = new ReportOutputColumnDto();
+        lookup.setType(ReportOutputColumnType.LOOKUP);
+        lookup.setIncluded(true);
+        lookup.setKeyColumnInReport("ОГРН");
+        lookup.setKeyColumnInLookup("ОГРН");
+        lookup.setValueColumnInLookup("Юр. лицо");
+        // outputHeaderName intentionally left null
+
+        ReportConfig saved = service.save(dtoWithColumns(lookup));
+
+        assertEquals("Юр. лицо", saved.getOutputColumns().get(0).getOutputHeaderName());
+    }
+
+    @Test
+    void shouldRejectBlankHeaderForComputedColumnWithNoFallback() {
+        ReportOutputColumnDto computed = new ReportOutputColumnDto();
+        computed.setType(ReportOutputColumnType.COMPUTED);
+        computed.setIncluded(true);
+        computed.setFormula("['Цена'] - ['РРЦ']");
+        // outputHeaderName intentionally left null — COMPUTED has no source column to fall back to
+
+        assertThrows(IllegalArgumentException.class, () -> service.save(dtoWithColumns(computed)));
+    }
+
+    @Test
+    void shouldRejectDuplicateHeadersAmongIncludedColumns() {
+        ReportOutputColumnDto col1 = new ReportOutputColumnDto();
+        col1.setType(ReportOutputColumnType.SOURCE);
+        col1.setOutputHeaderName("Цена");
+        col1.setIncluded(true);
+        col1.setSourceColumnName("Цена по карте");
+
+        ReportOutputColumnDto col2 = new ReportOutputColumnDto();
+        col2.setType(ReportOutputColumnType.SOURCE);
+        col2.setOutputHeaderName("Цена");
+        col2.setIncluded(true);
+        col2.setSourceColumnName("Цена со скидкой");
+
+        assertThrows(IllegalArgumentException.class, () -> service.save(dtoWithColumns(col1, col2)));
+    }
+
+    @Test
+    void shouldAllowDuplicateHeadersWhenOneColumnIsExcluded() {
+        ReportOutputColumnDto col1 = new ReportOutputColumnDto();
+        col1.setType(ReportOutputColumnType.SOURCE);
+        col1.setOutputHeaderName("Цена");
+        col1.setIncluded(true);
+        col1.setSourceColumnName("Цена по карте");
+
+        ReportOutputColumnDto col2 = new ReportOutputColumnDto();
+        col2.setType(ReportOutputColumnType.SOURCE);
+        col2.setOutputHeaderName("Цена");
+        col2.setIncluded(false);
+        col2.setSourceColumnName("Цена со скидкой");
+
+        ReportConfig saved = service.save(dtoWithColumns(col1, col2));
+
+        assertEquals(2, saved.getOutputColumns().size());
+    }
+
+    @Test
     void shouldThrowWhenUpdatingMissingConfig() {
         when(reportConfigRepository.findById(42L)).thenReturn(Optional.empty());
         ReportConfigDto dto = dtoWithColumns();
