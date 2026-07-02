@@ -104,4 +104,18 @@ class ReportDownloadServiceTest {
         assertThrows(ZoomosAuthException.class,
                 () -> downloadService.download(baseUrl + "/always-login.xls"));
     }
+
+    @Test
+    void shouldDownloadWhenUrlContainsCharactersIllegalForJavaNetUri() throws Exception {
+        // Real Zoomos report URLs contain raw spaces/pipes/">" in the "cols=" parameter
+        // (copy-pasted from the Zoomos UI, never percent-encoded) — java.net.URI rejects
+        // these per strict RFC 3986 parsing unless they're sanitized first.
+        String urlWithIllegalChars = baseUrl + "/report.xls?cols=ID конкурента=>Артикул МП|Цена=>РРЦ поле";
+
+        ReportDownloadService.ReportDownloadResult result = downloadService.download(urlWithIllegalChars);
+
+        assertEquals("XLS", result.format());
+        String content = Files.readString(result.filePath());
+        assertTrue(content.contains("val1"));
+    }
 }
