@@ -145,8 +145,28 @@ public class ReportTransformService {
         try {
             return Double.parseDouble(value);
         } catch (NumberFormatException ignored) {
-            return value;
+            // not a plain dot-decimal either, try normalizing русскую-locale number formatting below
         }
+
+        // Русскоязычные выгрузки часто пишут числа как "1 200,50" (пробел/неразрывный пробел —
+        // разделитель разрядов, запятая — десятичный разделитель). Пробуем распознать это ПОСЛЕ
+        // обычного парсинга — если после нормализации получилось число, используем его для
+        // формул/фильтра; если нет (это реальный текст с пробелами/запятыми, а не число) —
+        // возвращаем исходную строку без изменений, чтобы не испортить её.
+        String normalized = value.replace(" ", "").replace(" ", "").replace(",", ".");
+        if (!normalized.equals(value)) {
+            try {
+                return Long.parseLong(normalized);
+            } catch (NumberFormatException ignored) {
+                // fall through
+            }
+            try {
+                return Double.parseDouble(normalized);
+            } catch (NumberFormatException ignored) {
+                // not numeric even normalized — fall through to returning the original string
+            }
+        }
+        return value;
     }
 
     private List<ReportOutputColumn> buildPassthroughColumns(List<String> reportHeaders) {

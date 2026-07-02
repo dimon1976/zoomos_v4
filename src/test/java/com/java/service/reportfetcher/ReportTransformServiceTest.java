@@ -99,6 +99,42 @@ class ReportTransformServiceTest {
     }
 
     @Test
+    void shouldNormalizeSpaceThousandsAndCommaDecimalInFormulaOperands() throws Exception {
+        // "1 200,50" — обычный пробел как разделитель разрядов, запятая как десятичный
+        // разделитель (типичная выгрузка в русской локали).
+        Path source = writeCsv("РРЦ;Цена по карте\n1 200,50;800\n");
+        ReportConfig config = baseConfig();
+        config.getOutputColumns().add(ReportOutputColumn.builder()
+                .config(config).type(ReportOutputColumnType.COMPUTED)
+                .outputHeaderName("Сумма").formula("['РРЦ'] + ['Цена по карте']").position(0).included(true).build());
+
+        ReportTransformService.ReportTransformResult result =
+                transformService.transform(source, "report.csv", "CSV", config);
+
+        String content = Files.readString(result.resultFilePath());
+        assertTrue(content.contains("2000,5") || content.contains("2000.5"),
+                "1200.50 + 800 must be summed numerically (2000.5), not string-concatenated, got: " + content);
+    }
+
+    @Test
+    void shouldNotCorruptNonNumericTextContainingSpacesAndCommasInFilter() throws Exception {
+        Path source = writeCsv("Адрес;Цена\nг. Минск, ул. Ленина;150\nМогилёв;100\n");
+        ReportConfig config = baseConfig();
+        config.setRowFilterExpression("['Адрес'].contains('Минск')");
+        config.getOutputColumns().add(ReportOutputColumn.builder()
+                .config(config).type(ReportOutputColumnType.SOURCE)
+                .outputHeaderName("Адрес").sourceColumnName("Адрес").position(0).included(true).build());
+
+        ReportTransformService.ReportTransformResult result =
+                transformService.transform(source, "report.csv", "CSV", config);
+
+        String content = Files.readString(result.resultFilePath());
+        assertTrue(content.contains("г. Минск, ул. Ленина"),
+                "Non-numeric text with spaces/commas must reach the filter and output unmodified, got: " + content);
+        assertFalse(content.contains("Могилёв"));
+    }
+
+    @Test
     void shouldApplyMultipleLookupColumnsFromSameKey() throws Exception {
         Path source = writeCsv("ОГРН;Цена\n111;150\n999;80\n");
         Path lookup = writeCsv("ОГРН;Юр. лицо;Город\n111;ООО Ромашка;Минск\n");
