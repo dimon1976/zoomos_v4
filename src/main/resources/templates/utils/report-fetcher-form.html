@@ -217,8 +217,8 @@
             '<select class="form-select col-type" name="outputColumns[' + index + '].type">' +
             '<option value="SOURCE">SOURCE</option><option value="COMPUTED">COMPUTED</option><option value="LOOKUP">LOOKUP</option>' +
             '</select></div>' +
-            '<div class="col-2"><label class="form-label">Заголовок (необязательно)</label>' +
-            '<input class="form-control" placeholder="как в отчёте/справочнике" name="outputColumns[' + index + '].outputHeaderName" value="' + escapeHtml(data.outputHeaderName || '') + '"/></div>' +
+            '<div class="col-2"><label class="form-label text-nowrap">Заголовок</label>' +
+            '<input class="form-control" placeholder="необязательно" title="Необязательно — если не указать, подставится исходное имя колонки" name="outputColumns[' + index + '].outputHeaderName" value="' + escapeHtml(data.outputHeaderName || '') + '"/></div>' +
             '<div class="col-2 field-source"><label class="form-label">Исходная колонка</label>' +
             '<input class="form-control" list="detectedColumnsList" name="outputColumns[' + index + '].sourceColumnName" value="' + escapeHtml(data.sourceColumnName || '') + '"/></div>' +
             '<div class="col-3 field-computed" style="display:none"><label class="form-label">Формула</label>' +
