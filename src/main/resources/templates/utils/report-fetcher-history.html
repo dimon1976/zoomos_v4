@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{__${_layout ?: 'layout/tabler-main'}__ :: html(
+        title=${pageTitle},
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle=${pageTitle},
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title th:text="${pageTitle}">История запусков</title>
+</head>
+
+<th:block th:fragment="styles"></th:block>
+
+<th:block th:fragment="pageActions">
+    <a href="/utils/report-fetcher" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> К списку конфигов
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        <table class="table table-vcenter">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Статус</th>
+                <th>Начат</th>
+                <th>Завершён</th>
+                <th>Ошибка</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="run : ${runs}" th:id="'run-' + ${run.id}">
+                <td th:text="${run.id}"></td>
+                <td class="run-status" th:text="${run.status}"></td>
+                <td th:text="${run.startedAt}"></td>
+                <td th:text="${run.finishedAt}"></td>
+                <td class="run-error" th:text="${run.errorMessage}"></td>
+                <td>
+                    <a th:if="${run.status.name() == 'DONE'}"
+                       th:href="@{/utils/report-fetcher/runs/{id}/download(id=${run.id})}"
+                       class="btn btn-sm btn-outline-primary">Скачать</a>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script th:inline="javascript">
+    var pendingIds = [];
+    document.querySelectorAll('.run-status').forEach(function (cell) {
+        var status = cell.textContent.trim();
+        if (status === 'PENDING' || status === 'DOWNLOADING' || status === 'TRANSFORMING') {
+            var row = cell.closest('tr');
+            pendingIds.push(row.id.replace('run-', ''));
+        }
+    });
+
+    if (pendingIds.length > 0) {
+        var socket = new SockJS('/ws');
+        var stompClient = Stomp.over(socket);
+        stompClient.connect({}, function () {
+            pendingIds.forEach(function (runId) {
+                stompClient.subscribe('/topic/report-fetcher/' + runId, function (message) {
+                    var status = JSON.parse(message.body);
+                    var row = document.getElementById('run-' + status.runId);
+                    if (!row) return;
+                    row.querySelector('.run-status').textContent = status.status;
+                    row.querySelector('.run-error').textContent = status.errorMessage || '';
+                    if (status.status === 'DONE' || status.status === 'ERROR') {
+                        location.reload();
+                    }
+                });
+            });
+        });
+    }
+</script>
+</th:block>
+</html>

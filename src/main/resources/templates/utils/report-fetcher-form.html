@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{__${_layout ?: 'layout/tabler-main'}__ :: html(
+        title=${pageTitle},
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle=${pageTitle},
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title th:text="${pageTitle}">Конфиг отчёта</title>
+</head>
+
+<th:block th:fragment="styles"></th:block>
+
+<th:block th:fragment="pageActions">
+    <a href="/utils/report-fetcher" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> К списку конфигов
+    </a>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        <form method="post" action="/utils/report-fetcher/save" id="configForm">
+            <input type="hidden" name="id" th:value="${config.id}"/>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Название</label>
+                        <input type="text" name="name" class="form-control" th:value="${config.name}" required/>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Клиент (необязательно)</label>
+                        <select name="clientId" class="form-select">
+                            <option value="">—</option>
+                            <option th:each="c : ${clients}" th:value="${c.id}" th:text="${c.name}"
+                                    th:selected="${config.clientId != null and config.clientId == c.id}"></option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">URL запроса отчёта</label>
+                        <textarea name="sourceUrl" class="form-control" rows="3" required th:text="${config.sourceUrl}"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Формат итогового файла</label>
+                        <select name="outputFormat" class="form-select">
+                            <option value="XLSX" th:selected="${config.outputFormat == 'XLSX'}">XLSX</option>
+                            <option value="CSV" th:selected="${config.outputFormat == 'CSV'}">CSV</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">
+                            Фильтр строк (SpEL, необязательно)
+                            <button type="button" class="btn btn-sm btn-link" data-bs-toggle="modal" data-bs-target="#spelHelpModal">Как писать?</button>
+                        </label>
+                        <input type="text" name="rowFilterExpression" class="form-control"
+                               th:value="${config.rowFilterExpression}"
+                               placeholder="['ОГРН'] != null and ['ОГРН'] != ''"/>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3" th:if="${config.id != null}">
+                <div class="card-header">Файл-справочник (для LOOKUP-колонок)</div>
+                <div class="card-body">
+                    <form th:action="@{/utils/report-fetcher/{id}/lookup-file(id=${config.id})}" method="post" enctype="multipart/form-data" class="row g-2">
+                        <div class="col-auto">
+                            <input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xls" required/>
+                        </div>
+                        <div class="col-auto">
+                            <button type="submit" class="btn btn-outline-primary">Загрузить / заменить</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Колонки итогового файла</span>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="addColumnRow()">Добавить колонку</button>
+                </div>
+                <div class="card-body">
+                    <div id="columnsList"></div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary mt-3">Сохранить</button>
+        </form>
+    </div>
+
+    <div class="modal modal-blur fade" id="spelHelpModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">Справка по SpEL</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <p>Название колонки всегда в квадратных скобках: <code>['Название колонки']</code>.</p>
+                    <ul>
+                        <li><code>['Цена'] - ['РРЦ']</code> — разница</li>
+                        <li><code>['ОГРН'] != null and ['ОГРН'] != ''</code> — не пусто</li>
+                        <li><code>['Название'].contains('Акция')</code> — содержит текст</li>
+                        <li><code>['Цена'] > ['РРЦ'] ? 'Дороже' : 'Дешевле или равно'</code> — если-то-иначе</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
+<script th:inline="javascript">
+    var initialColumns = /*[[${config.outputColumns}]]*/ [];
+    var columnsList = document.getElementById('columnsList');
+    var rowCounter = 0;
+
+    function escapeHtml(value) {
+        var div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        return div.innerHTML;
+    }
+
+    function reindexRows() {
+        var rows = columnsList.querySelectorAll('.column-row');
+        rows.forEach(function (row, i) {
+            row.querySelectorAll('[name]').forEach(function (input) {
+                input.name = input.name.replace(/outputColumns\[\d+\]/, 'outputColumns[' + i + ']');
+            });
+        });
+    }
+
+    function addColumnRow(data) {
+        data = data || {type: 'SOURCE', included: true};
+        var index = rowCounter++;
+        var row = document.createElement('div');
+        row.className = 'card mb-2 column-row';
+        row.innerHTML =
+            '<div class="card-body d-flex gap-2 align-items-start">' +
+            '<span class="drag-handle" style="cursor:move;padding-top:8px;">&#9776;</span>' +
+            '<div class="flex-grow-1 row g-2">' +
+            '<div class="col-2"><label class="form-label">Тип</label>' +
+            '<select class="form-select col-type" name="outputColumns[' + index + '].type">' +
+            '<option value="SOURCE">SOURCE</option><option value="COMPUTED">COMPUTED</option><option value="LOOKUP">LOOKUP</option>' +
+            '</select></div>' +
+            '<div class="col-2"><label class="form-label">Заголовок</label>' +
+            '<input class="form-control" name="outputColumns[' + index + '].outputHeaderName" value="' + escapeHtml(data.outputHeaderName || '') + '"/></div>' +
+            '<div class="col-2 field-source"><label class="form-label">Исходная колонка</label>' +
+            '<input class="form-control" name="outputColumns[' + index + '].sourceColumnName" value="' + escapeHtml(data.sourceColumnName || '') + '"/></div>' +
+            '<div class="col-3 field-computed" style="display:none"><label class="form-label">Формула</label>' +
+            '<input class="form-control" name="outputColumns[' + index + '].formula" value="' + escapeHtml(data.formula || '') + '"/></div>' +
+            '<div class="col-2 field-lookup" style="display:none"><label class="form-label">Ключ в отчёте</label>' +
+            '<input class="form-control" name="outputColumns[' + index + '].keyColumnInReport" value="' + escapeHtml(data.keyColumnInReport || '') + '"/></div>' +
+            '<div class="col-2 field-lookup" style="display:none"><label class="form-label">Ключ в справочнике</label>' +
+            '<input class="form-control" name="outputColumns[' + index + '].keyColumnInLookup" value="' + escapeHtml(data.keyColumnInLookup || '') + '"/></div>' +
+            '<div class="col-2 field-lookup" style="display:none"><label class="form-label">Значение из справочника</label>' +
+            '<input class="form-control" name="outputColumns[' + index + '].valueColumnInLookup" value="' + escapeHtml(data.valueColumnInLookup || '') + '"/></div>' +
+            '<div class="col-1"><label class="form-label">Вкл.</label><br/>' +
+            '<input type="hidden" name="outputColumns[' + index + '].included" value="false"/>' +
+            '<input type="checkbox" name="outputColumns[' + index + '].included" value="true"' + (data.included ? ' checked' : '') + '/></div>' +
+            '</div>' +
+            '<button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest(\'.column-row\').remove(); reindexRows();">&times;</button>' +
+            '</div>';
+        columnsList.appendChild(row);
+        reindexRows();
+
+        var typeSelect = row.querySelector('.col-type');
+        typeSelect.value = data.type || 'SOURCE';
+        function toggleFields() {
+            var type = typeSelect.value;
+            row.querySelector('.field-source').style.display = type === 'SOURCE' ? '' : 'none';
+            row.querySelector('.field-computed').style.display = type === 'COMPUTED' ? '' : 'none';
+            row.querySelectorAll('.field-lookup').forEach(function (el) { el.style.display = type === 'LOOKUP' ? '' : 'none'; });
+        }
+        typeSelect.addEventListener('change', toggleFields);
+        toggleFields();
+    }
+
+    initialColumns.forEach(function (c) { addColumnRow(c); });
+
+    Sortable.create(columnsList, {
+        animation: 150,
+        handle: '.drag-handle',
+        onEnd: function () { reindexRows(); }
+    });
+</script>
+</th:block>
+</html>

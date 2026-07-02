@@ -17,6 +17,17 @@ Spring MVC controller + service + Thymeleaf-шаблон.
 | Link Extractor | `/utils/link-extractor` | `LinkExtractorService` |
 | Stats Processor | `/utils/stats-processor` | `StatsProcessorService` |
 | Normalization | `/utils/normalization` | (контроллер, без файлов) |
+| Report Fetcher | `/utils/report-fetcher` | `ReportConfigService`, `ReportRunService`, `ReportDownloadService`, `ReportTransformService` |
+
+**Report Fetcher — отличается от классического паттерна утилиты.** Не «загрузил файл →
+скачал результат за один запрос», а долгоживущий фоновый процесс: сохранённый конфиг
+(`ReportConfig`) хранит URL долгого GET-запроса к export.zoomos.by, авторизация и куки —
+через `ZoomosAuthService`/`ZoomosAuthSession` (реактивный релогин при истёкшей сессии),
+скачивание — через `ReportDownloadService` (таймаут до нескольких часов, `@Async` executor
+`reportFetchExecutor`), трансформация — через `ReportTransformService` (SpEL-формулы,
+lookup-справочник, фильтр строк — синтаксис `['Название колонки']`, см. модальное окно
+справки на форме конфига). Статус (`ReportRun`) обновляется по WebSocket
+(`/topic/report-fetcher/{runId}`) на странице истории запусков.
 
 ---
 

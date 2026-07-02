@@ -127,6 +127,23 @@ public class AsyncConfig {
         return executor;
     }
 
+    @Bean(name = "reportFetchExecutor")
+    public Executor reportFetchExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(3);
+        executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("ReportFetchExecutor-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+
+        log.info("Инициализирован пул потоков для Report Fetcher: core=2, max=3, queue=20");
+
+        return executor;
+    }
+
     /**
      * Пул потоков для обработки редиректов (IO-интенсивные операции)
      */

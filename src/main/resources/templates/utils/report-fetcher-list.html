@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{__${_layout ?: 'layout/tabler-main'}__ :: html(
+        title='Report Fetcher',
+        content=~{::content},
+        scripts=~{::scripts},
+        styles=~{::styles},
+        pageTitle='Report Fetcher',
+        pageActions=~{::pageActions}
+      )}">
+<head>
+    <title>Report Fetcher</title>
+</head>
+
+<th:block th:fragment="styles"></th:block>
+
+<th:block th:fragment="pageActions">
+    <div class="d-flex gap-2">
+        <a href="/utils/report-fetcher/new" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Новый конфиг
+        </a>
+        <a href="/utils" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Назад к утилитам
+        </a>
+    </div>
+</th:block>
+
+<th:block th:fragment="content">
+    <div class="container-fluid">
+        <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+        <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="get" class="mb-3 row g-2 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label">Клиент</label>
+                        <select name="clientId" class="form-select" onchange="this.form.submit()">
+                            <option value="">Все</option>
+                            <option th:each="c : ${clients}" th:value="${c.id}" th:text="${c.name}"
+                                    th:selected="${selectedClientId != null and selectedClientId == c.id}"></option>
+                        </select>
+                    </div>
+                </form>
+
+                <table class="table table-vcenter">
+                    <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Клиент</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="config : ${configs}">
+                        <td th:text="${config.name}"></td>
+                        <td th:text="${config.client != null ? config.client.name : '—'}"></td>
+                        <td class="text-end">
+                            <a th:href="@{/utils/report-fetcher/{id}/history(id=${config.id})}"
+                               class="btn btn-sm btn-outline-secondary">История</a>
+                            <a th:href="@{/utils/report-fetcher/{id}/edit(id=${config.id})}"
+                               class="btn btn-sm btn-outline-secondary">Редактировать</a>
+                            <button type="button" class="btn btn-sm btn-primary"
+                                    th:attr="data-config-id=${config.id}" onclick="runConfig(this)">Запустить</button>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</th:block>
+
+<th:block th:fragment="scripts">
+<script th:inline="javascript">
+    function runConfig(button) {
+        var configId = button.getAttribute('data-config-id');
+        var originalText = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Запуск...';
+
+        fetch('/utils/report-fetcher/' + configId + '/run', {method: 'POST'})
+            .then(function (response) {
+                return response.json()
+                    .catch(function () { return {}; })
+                    .then(function (data) { return {ok: response.ok, data: data}; });
+            })
+            .then(function (result) {
+                if (result.ok) {
+                    window.location.href = '/utils/report-fetcher/' + configId + '/history';
+                } else {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                    alert(result.data.error || 'Не удалось запустить отчёт');
+                }
+            })
+            .catch(function () {
+                button.disabled = false;
+                button.innerHTML = originalText;
+                alert('Не удалось связаться с сервером. Попробуйте ещё раз.');
+            });
+    }
+</script>
+</th:block>
+</html>
