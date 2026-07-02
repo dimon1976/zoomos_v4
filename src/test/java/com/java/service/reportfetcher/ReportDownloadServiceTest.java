@@ -51,6 +51,21 @@ class ReportDownloadServiceTest {
             }
             exchange.close();
         });
+        server.createContext("/report-with-name.xls", exchange -> {
+            String cookieHeader = exchange.getRequestHeaders().getFirst("Cookie");
+            boolean authenticated = cookieHeader != null && cookieHeader.contains("JSESSIONID=valid-session");
+            if (authenticated) {
+                exchange.getResponseHeaders().add("Content-Type", "application/vnd.ms-excel");
+                exchange.getResponseHeaders().add("Content-Disposition", "attachment; filename=\"finncolor-competitors.xls\"");
+                byte[] body = "col1;col2\nval1;val2\n".getBytes();
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+            } else {
+                exchange.getResponseHeaders().add("Location", "/login");
+                exchange.sendResponseHeaders(302, -1);
+            }
+            exchange.close();
+        });
         server.createContext("/broken.xls", exchange -> {
             exchange.sendResponseHeaders(500, -1);
             exchange.close();
@@ -85,8 +100,16 @@ class ReportDownloadServiceTest {
         ReportDownloadService.ReportDownloadResult result = downloadService.download(baseUrl + "/report.xls");
 
         assertEquals("XLS", result.format());
+        assertNull(result.originalFileName(), "No Content-Disposition header sent, so no name should be extracted");
         String content = Files.readString(result.filePath());
         assertTrue(content.contains("val1"));
+    }
+
+    @Test
+    void shouldExtractOriginalFileNameFromContentDisposition() throws Exception {
+        ReportDownloadService.ReportDownloadResult result = downloadService.download(baseUrl + "/report-with-name.xls");
+
+        assertEquals("finncolor-competitors.xls", result.originalFileName());
     }
 
     @Test

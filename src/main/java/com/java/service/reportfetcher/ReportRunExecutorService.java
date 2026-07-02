@@ -59,6 +59,7 @@ public class ReportRunExecutorService {
             reportConfigRepository.save(config);
 
             run.setResultFilePath(result.resultFilePath().toString());
+            run.setOriginalFileName(downloaded.originalFileName());
             run.setFinishedAt(ZonedDateTime.now());
             updateStatus(run, ReportRunStatus.DONE, null);
         } catch (Exception e) {

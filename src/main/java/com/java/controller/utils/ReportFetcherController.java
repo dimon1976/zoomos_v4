@@ -158,8 +158,33 @@ public class ReportFetcherController {
         Path path = Path.of(run.getResultFilePath());
         byte[] data = Files.readAllBytes(path);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + path.getFileName() + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + downloadFileName(run, path) + "\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(new ByteArrayResource(data));
+    }
+
+    /**
+     * Prefers the filename Zoomos itself suggested (via Content-Disposition on the source
+     * report response) so downloads keep a recognizable, client-facing name — but always
+     * uses the actual generated file's real extension, since the requested output format
+     * (XLSX/CSV) may differ from whatever Zoomos originally sent.
+     */
+    private String downloadFileName(ReportRun run, Path resultPath) {
+        String actualExtension = getExtension(resultPath.getFileName().toString());
+        if (run.getOriginalFileName() == null || run.getOriginalFileName().isBlank()) {
+            return resultPath.getFileName().toString();
+        }
+        String originalBaseName = stripExtension(run.getOriginalFileName());
+        return actualExtension.isEmpty() ? originalBaseName : originalBaseName + "." + actualExtension;
+    }
+
+    private String getExtension(String filename) {
+        int dotIndex = filename.lastIndexOf('.');
+        return dotIndex >= 0 ? filename.substring(dotIndex + 1) : "";
+    }
+
+    private String stripExtension(String filename) {
+        int dotIndex = filename.lastIndexOf('.');
+        return dotIndex >= 0 ? filename.substring(0, dotIndex) : filename;
     }
 }

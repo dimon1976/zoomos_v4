@@ -43,6 +43,11 @@ public class ReportRun {
     @Column(name = "result_file_path")
     private String resultFilePath;
 
+    // Имя файла из заголовка Content-Disposition ответа Zoomos, если он его прислал —
+    // используется вместо внутреннего сгенерированного имени при скачивании результата.
+    @Column(name = "original_file_name")
+    private String originalFileName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "triggered_by", nullable = false)
     @Builder.Default

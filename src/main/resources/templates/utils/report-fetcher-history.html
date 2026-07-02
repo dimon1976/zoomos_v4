@@ -29,6 +29,7 @@
                 <th>Статус</th>
                 <th>Начат</th>
                 <th>Завершён</th>
+                <th>Имя файла Zoomos</th>
                 <th>Ошибка</th>
                 <th></th>
             </tr>
@@ -39,6 +40,7 @@
                 <td class="run-status" th:text="${run.status}"></td>
                 <td th:text="${run.startedAt}"></td>
                 <td th:text="${run.finishedAt}"></td>
+                <td th:text="${run.originalFileName ?: '—'}"></td>
                 <td class="run-error" th:text="${run.errorMessage}"></td>
                 <td>
                     <a th:if="${run.status.name() == 'DONE'}"

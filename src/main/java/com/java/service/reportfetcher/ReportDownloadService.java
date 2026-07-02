@@ -7,13 +7,17 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -54,11 +58,12 @@ public class ReportDownloadService {
 
         String contentType = response.headers().firstValue("Content-Type").orElse("");
         String format = detectFormat(sourceUrl, contentType);
+        String originalFileName = extractOriginalFileName(response);
 
         Path tempFile = Files.createTempFile("report-fetcher-", "." + format.toLowerCase());
         Files.write(tempFile, response.body());
 
-        return new ReportDownloadResult(tempFile, format);
+        return new ReportDownloadResult(tempFile, format, originalFileName);
     }
 
     private HttpResponse<byte[]> sendGet(HttpClient client, String url)
@@ -101,6 +106,39 @@ public class ReportDownloadService {
         return sanitized.toString();
     }
 
+    // RFC 5987 extended notation, e.g. filename*=UTF-8''%D0%BE%D1%82%D1%87%D1%91%D1%82.xlsx
+    private static final Pattern FILENAME_STAR_PATTERN =
+            Pattern.compile("filename\\*\\s*=\\s*[^']*''([^;]+)", Pattern.CASE_INSENSITIVE);
+    // Plain filename="..." or filename=... (with or without quotes)
+    private static final Pattern FILENAME_PATTERN =
+            Pattern.compile("filename\\s*=\\s*\"?([^\";]+)\"?", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Extracts the filename Zoomos itself suggests via the Content-Disposition response
+     * header, if present — used so the file the user downloads keeps Zoomos's own naming
+     * instead of our internally generated one. Returns null if the header is absent or
+     * doesn't contain a recognizable filename.
+     */
+    private String extractOriginalFileName(HttpResponse<?> response) {
+        String header = response.headers().firstValue("Content-Disposition").orElse(null);
+        if (header == null) {
+            return null;
+        }
+        Matcher starMatcher = FILENAME_STAR_PATTERN.matcher(header);
+        if (starMatcher.find()) {
+            try {
+                return URLDecoder.decode(starMatcher.group(1).trim(), StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                log.warn("Не удалось раскодировать filename* из Content-Disposition: {}", e.getMessage());
+            }
+        }
+        Matcher matcher = FILENAME_PATTERN.matcher(header);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+        return null;
+    }
+
     private String detectFormat(String sourceUrl, String contentType) {
         String ct = contentType.toLowerCase();
         if (ct.contains("spreadsheetml")) return "XLSX";
@@ -114,5 +152,5 @@ public class ReportDownloadService {
         return "XLSX";
     }
 
-    public record ReportDownloadResult(Path filePath, String format) {}
+    public record ReportDownloadResult(Path filePath, String format, String originalFileName) {}
 }
