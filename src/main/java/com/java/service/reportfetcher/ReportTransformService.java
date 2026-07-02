@@ -52,10 +52,14 @@ public class ReportTransformService {
 
         List<ReportOutputColumn> lookupColumns = filterSortedByType(config, ReportOutputColumnType.LOOKUP);
         List<ReportOutputColumn> computedColumns = filterSortedByType(config, ReportOutputColumnType.COMPUTED);
-        List<ReportOutputColumn> includedColumns = config.getOutputColumns().stream()
-                .filter(ReportOutputColumn::getIncluded)
-                .sorted(Comparator.comparing(ReportOutputColumn::getPosition))
-                .toList();
+        // No columns configured at all — download the report as-is, with every source column
+        // included unchanged, instead of failing with "no fields configured".
+        List<ReportOutputColumn> includedColumns = config.getOutputColumns().isEmpty()
+                ? buildPassthroughColumns(reportHeaders)
+                : config.getOutputColumns().stream()
+                        .filter(ReportOutputColumn::getIncluded)
+                        .sorted(Comparator.comparing(ReportOutputColumn::getPosition))
+                        .toList();
 
         int warnings = 0;
         List<Map<String, Object>> outputRows = new ArrayList<>();
@@ -143,6 +147,21 @@ public class ReportTransformService {
         } catch (NumberFormatException ignored) {
             return value;
         }
+    }
+
+    private List<ReportOutputColumn> buildPassthroughColumns(List<String> reportHeaders) {
+        List<ReportOutputColumn> columns = new ArrayList<>();
+        int position = 0;
+        for (String header : reportHeaders) {
+            columns.add(ReportOutputColumn.builder()
+                    .type(ReportOutputColumnType.SOURCE)
+                    .sourceColumnName(header)
+                    .outputHeaderName(header)
+                    .position(position++)
+                    .included(true)
+                    .build());
+        }
+        return columns;
     }
 
     private List<ReportOutputColumn> filterSortedByType(ReportConfig config, ReportOutputColumnType type) {

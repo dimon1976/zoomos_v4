@@ -187,4 +187,19 @@ class ReportTransformServiceTest {
         assertTrue(content.contains("0111"), "Leading zero in ОГРН must be preserved in output, got: " + content);
         assertTrue(content.contains("ООО Тест"), "Lookup must match on the raw (uncoerced) key, got: " + content);
     }
+
+    @Test
+    void shouldPassThroughAllSourceColumnsWhenNoOutputColumnsConfigured() throws Exception {
+        Path source = writeCsv("ОГРН;Цена;РРЦ\n111;150;100\n222;80;100\n");
+        ReportConfig config = baseConfig(); // outputColumns intentionally left empty
+
+        ReportTransformService.ReportTransformResult result =
+                transformService.transform(source, "report.csv", "CSV", config);
+
+        String content = Files.readString(result.resultFilePath());
+        assertTrue(content.contains("ОГРН") && content.contains("Цена") && content.contains("РРЦ"),
+                "All original headers must be present when no columns are configured, got: " + content);
+        assertTrue(content.contains("111") && content.contains("150") && content.contains("100"),
+                "All original data must be present when no columns are configured, got: " + content);
+    }
 }
