@@ -6,8 +6,10 @@ import com.java.model.entity.FileMetadata;
 import com.java.model.entity.ReportConfig;
 import com.java.model.entity.ReportOutputColumn;
 import com.java.model.enums.ReportOutputColumnType;
+import com.java.model.enums.ReportRunStatus;
 import com.java.repository.ClientRepository;
 import com.java.repository.ReportConfigRepository;
+import com.java.repository.ReportRunRepository;
 import com.java.util.FileReaderUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,8 +31,12 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ReportConfigService {
 
+    private static final List<ReportRunStatus> ACTIVE_RUN_STATUSES =
+            List.of(ReportRunStatus.PENDING, ReportRunStatus.DOWNLOADING, ReportRunStatus.TRANSFORMING);
+
     private final ReportConfigRepository reportConfigRepository;
     private final ClientRepository clientRepository;
+    private final ReportRunRepository reportRunRepository;
     private final FileReaderUtils fileReaderUtils;
 
     @Value("${report-fetcher.lookup-file.dir:data/upload/report-fetcher-lookups}")
@@ -150,6 +156,28 @@ public class ReportConfigService {
     }
 
     public ReportConfigDto toDto(Long id) {
-        return ReportConfigDto.fromEntity(getEntity(id));
+        ReportConfigDto dto = ReportConfigDto.fromEntity(getEntity(id));
+        try {
+            dto.setLookupFileColumns(getLookupFileColumns(id));
+        } catch (IOException e) {
+            log.warn("Не удалось прочитать колонки файла-справочника для конфига {}: {}", id, e.getMessage());
+        }
+        return dto;
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        ReportConfig config = getEntity(id);
+        if (reportRunRepository.existsByConfigIdAndStatusIn(id, ACTIVE_RUN_STATUSES)) {
+            throw new IllegalStateException("Нельзя удалить конфиг с активным запуском");
+        }
+        if (config.getLookupFileStoredPath() != null) {
+            try {
+                Files.deleteIfExists(Path.of(config.getLookupFileStoredPath()));
+            } catch (IOException e) {
+                log.warn("Не удалось удалить файл-справочник {}: {}", config.getLookupFileStoredPath(), e.getMessage());
+            }
+        }
+        reportConfigRepository.delete(config);
     }
 }

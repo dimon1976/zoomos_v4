@@ -75,6 +75,17 @@ public class ReportFetcherController {
         return "redirect:/utils/report-fetcher";
     }
 
+    @PostMapping("/{id}/delete")
+    public String delete(@PathVariable Long id, RedirectAttributes redirectAttributes) {
+        try {
+            reportConfigService.delete(id);
+            redirectAttributes.addFlashAttribute("success", "Конфиг удалён");
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/utils/report-fetcher";
+    }
+
     @PostMapping("/{id}/lookup-file")
     public String uploadLookupFile(@PathVariable Long id, @RequestParam("file") MultipartFile file,
                                     RedirectAttributes redirectAttributes) {

@@ -6,6 +6,7 @@ import com.java.model.entity.ReportConfig;
 import com.java.model.enums.ReportOutputColumnType;
 import com.java.repository.ClientRepository;
 import com.java.repository.ReportConfigRepository;
+import com.java.repository.ReportRunRepository;
 import com.java.util.FileReaderUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,19 +21,23 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class ReportConfigServiceTest {
 
     private ReportConfigRepository reportConfigRepository;
+    private ReportRunRepository reportRunRepository;
     private ReportConfigService service;
 
     @BeforeEach
     void setUp() {
         reportConfigRepository = mock(ReportConfigRepository.class);
         ClientRepository clientRepository = mock(ClientRepository.class);
+        reportRunRepository = mock(ReportRunRepository.class);
         FileReaderUtils fileReaderUtils = new FileReaderUtils();
-        service = new ReportConfigService(reportConfigRepository, clientRepository, fileReaderUtils);
+        service = new ReportConfigService(reportConfigRepository, clientRepository, reportRunRepository, fileReaderUtils);
 
         when(reportConfigRepository.save(any(ReportConfig.class))).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -122,5 +127,26 @@ class ReportConfigServiceTest {
         assertTrue(storedPath.normalize().startsWith(lookupDir.normalize()),
                 "Stored file must stay inside the configured lookup directory, got: " + storedPath);
         assertTrue(Files.exists(storedPath));
+    }
+
+    @Test
+    void shouldDeleteConfigWhenNoActiveRun() {
+        ReportConfig config = ReportConfig.builder().id(1L).name("Test").build();
+        when(reportConfigRepository.findByIdWithClientAndOutputColumns(1L)).thenReturn(Optional.of(config));
+        when(reportRunRepository.existsByConfigIdAndStatusIn(eq(1L), anyList())).thenReturn(false);
+
+        service.delete(1L);
+
+        verify(reportConfigRepository).delete(config);
+    }
+
+    @Test
+    void shouldRejectDeleteWhenActiveRunExists() {
+        ReportConfig config = ReportConfig.builder().id(1L).name("Test").build();
+        when(reportConfigRepository.findByIdWithClientAndOutputColumns(1L)).thenReturn(Optional.of(config));
+        when(reportRunRepository.existsByConfigIdAndStatusIn(eq(1L), anyList())).thenReturn(true);
+
+        assertThrows(IllegalStateException.class, () -> service.delete(1L));
+        verify(reportConfigRepository, never()).delete(any());
     }
 }

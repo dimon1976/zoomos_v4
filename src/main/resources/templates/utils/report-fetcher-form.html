@@ -82,12 +82,23 @@
                     <button type="button" class="btn btn-sm btn-primary" onclick="addColumnRow()">Добавить колонку</button>
                 </div>
                 <div class="card-body">
+                    <p th:if="${#lists.isEmpty(config.detectedReportColumns)}" class="text-muted small mb-2">
+                        Список колонок отчёта появится здесь после первого успешного запуска —
+                        пока вводите названия колонок вручную (должны точно совпадать с заголовками в отчёте).
+                    </p>
                     <div id="columnsList"></div>
                 </div>
             </div>
 
             <button type="submit" class="btn btn-primary mt-3">Сохранить</button>
         </form>
+
+        <datalist id="detectedColumnsList">
+            <option th:each="col : ${config.detectedReportColumns}" th:value="${col}"></option>
+        </datalist>
+        <datalist id="lookupColumnsList">
+            <option th:each="col : ${config.lookupFileColumns}" th:value="${col}"></option>
+        </datalist>
     </div>
 
     <div class="modal modal-blur fade" id="spelHelpModal" tabindex="-1">
@@ -147,15 +158,15 @@
             '<div class="col-2"><label class="form-label">Заголовок</label>' +
             '<input class="form-control" name="outputColumns[' + index + '].outputHeaderName" value="' + escapeHtml(data.outputHeaderName || '') + '"/></div>' +
             '<div class="col-2 field-source"><label class="form-label">Исходная колонка</label>' +
-            '<input class="form-control" name="outputColumns[' + index + '].sourceColumnName" value="' + escapeHtml(data.sourceColumnName || '') + '"/></div>' +
+            '<input class="form-control" list="detectedColumnsList" name="outputColumns[' + index + '].sourceColumnName" value="' + escapeHtml(data.sourceColumnName || '') + '"/></div>' +
             '<div class="col-3 field-computed" style="display:none"><label class="form-label">Формула</label>' +
             '<input class="form-control" name="outputColumns[' + index + '].formula" value="' + escapeHtml(data.formula || '') + '"/></div>' +
             '<div class="col-2 field-lookup" style="display:none"><label class="form-label">Ключ в отчёте</label>' +
-            '<input class="form-control" name="outputColumns[' + index + '].keyColumnInReport" value="' + escapeHtml(data.keyColumnInReport || '') + '"/></div>' +
+            '<input class="form-control" list="detectedColumnsList" name="outputColumns[' + index + '].keyColumnInReport" value="' + escapeHtml(data.keyColumnInReport || '') + '"/></div>' +
             '<div class="col-2 field-lookup" style="display:none"><label class="form-label">Ключ в справочнике</label>' +
-            '<input class="form-control" name="outputColumns[' + index + '].keyColumnInLookup" value="' + escapeHtml(data.keyColumnInLookup || '') + '"/></div>' +
+            '<input class="form-control" list="lookupColumnsList" name="outputColumns[' + index + '].keyColumnInLookup" value="' + escapeHtml(data.keyColumnInLookup || '') + '"/></div>' +
             '<div class="col-2 field-lookup" style="display:none"><label class="form-label">Значение из справочника</label>' +
-            '<input class="form-control" name="outputColumns[' + index + '].valueColumnInLookup" value="' + escapeHtml(data.valueColumnInLookup || '') + '"/></div>' +
+            '<input class="form-control" list="lookupColumnsList" name="outputColumns[' + index + '].valueColumnInLookup" value="' + escapeHtml(data.valueColumnInLookup || '') + '"/></div>' +
             '<div class="col-1"><label class="form-label">Вкл.</label><br/>' +
             '<input type="hidden" name="outputColumns[' + index + '].included" value="false"/>' +
             '<input type="checkbox" name="outputColumns[' + index + '].included" value="true"' + (data.included ? ' checked' : '') + '/></div>' +
