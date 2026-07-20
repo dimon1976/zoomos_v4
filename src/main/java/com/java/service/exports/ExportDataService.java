@@ -67,6 +67,9 @@ public class ExportDataService {
         if (!columns.contains("operation_id")) {
             columns.add("operation_id");
         }
+        if (!columns.contains("created_at")) {
+            columns.add("created_at");
+        }
         if (template.getExportStrategy() == ExportStrategy.TASK_REPORT
                 && template.getEntityType() == EntityType.AV_DATA
                 && !columns.contains("data_source")) {
@@ -153,9 +156,14 @@ public class ExportDataService {
             log.debug("Применен фильтр data_source=REPORT для стратегии TASK_REPORT");
         }
 
-        sql.append(" ORDER BY created_at DESC");
-
-        String baseSql = sql.toString();
+        // Оборачиваем фильтр в MATERIALIZED CTE — оптимизационный барьер,
+        // заставляющий Postgres сначала выполнить выборку по operation_id
+        // (дешёвый bitmap index scan), а сортировку/пагинацию делать уже
+        // над небольшим результатом. Без барьера планировщик из-за
+        // неточной оценки селективности operation_id выбирает обратный
+        // индексный скан по created_at и вычитывает почти всю таблицу.
+        String baseSql = "WITH filtered_export_data AS MATERIALIZED (" + sql
+                + ") SELECT * FROM filtered_export_data ORDER BY created_at DESC";
         log.debug("SQL запрос: {}", baseSql);
         log.debug("Параметры: {}", params);
 
