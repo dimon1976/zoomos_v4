@@ -68,42 +68,6 @@
                                            id="expExport" checked>
                                     <label class="form-check-label" for="expExport">Шаблоны экспорта</label>
                                 </div>
-                                <div class="form-check">
-                                    <input type="hidden" name="_includeZoomosShops" value="on">
-                                    <input class="form-check-input" type="checkbox" name="includeZoomosShops"
-                                           id="expShops" checked>
-                                    <label class="form-check-label" for="expShops">
-                                        <i class="fas fa-store text-success"></i> Магазины Zoomos Check
-                                    </label>
-                                </div>
-                                <div class="sub-option">
-                                    <div class="form-check">
-                                        <input type="hidden" name="_includeSchedules" value="on">
-                                        <input class="form-check-input" type="checkbox" name="includeSchedules"
-                                               id="expSchedules" checked>
-                                        <label class="form-check-label" for="expSchedules">Расписания проверок</label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="section-checkbox mb-3">
-                            <div class="form-check">
-                                <input type="hidden" name="_includeKnownSites" value="on">
-                                <input class="form-check-input" type="checkbox" name="includeKnownSites"
-                                       id="expSites" checked>
-                                <label class="form-check-label" for="expSites">
-                                    <i class="fas fa-globe text-info"></i> Справочник известных сайтов
-                                </label>
-                            </div>
-                        </div>
-                        <div class="section-checkbox mb-4">
-                            <div class="form-check">
-                                <input type="hidden" name="_includeCityDirectory" value="on">
-                                <input class="form-check-input" type="checkbox" name="includeCityDirectory"
-                                       id="expCities" checked>
-                                <label class="form-check-label" for="expCities">
-                                    <i class="fas fa-city text-secondary"></i> Справочник городов и адресов
-                                </label>
                             </div>
                         </div>
                         <div class="d-grid">
@@ -113,7 +77,7 @@
                         </div>
                         <p class="text-muted small mt-2 mb-0">
                             <i class="fas fa-info-circle"></i>
-                            Файл: <code>zoomos-config-YYYY-MM-DD.json</code>
+                            Файл: <code>config-YYYY-MM-DD.json</code>
                         </p>
                     </form>
                 </div>
@@ -146,24 +110,6 @@
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" id="impClients" checked>
                                             <label class="form-check-label" for="impClients">Клиенты и шаблоны</label>
-                                        </div>
-                                    </div>
-                                    <div class="col">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="impShops" checked>
-                                            <label class="form-check-label" for="impShops">Магазины Zoomos</label>
-                                        </div>
-                                    </div>
-                                    <div class="col">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="impSites" checked>
-                                            <label class="form-check-label" for="impSites">Известные сайты</label>
-                                        </div>
-                                    </div>
-                                    <div class="col">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="impCities" checked>
-                                            <label class="form-check-label" for="impCities">Справочник городов</label>
                                         </div>
                                     </div>
                                 </div>
@@ -244,11 +190,7 @@ function getImportOptions() {
     return {
         includeClients: document.getElementById('impClients').checked,
         includeImportTemplates: document.getElementById('impClients').checked,
-        includeExportTemplates: document.getElementById('impClients').checked,
-        includeZoomosShops: document.getElementById('impShops').checked,
-        includeSchedules: document.getElementById('impShops').checked,
-        includeKnownSites: document.getElementById('impSites').checked,
-        includeCityDirectory: document.getElementById('impCities').checked
+        includeExportTemplates: document.getElementById('impClients').checked
     };
 }
 
@@ -290,11 +232,6 @@ function showPreview(p) {
         ['Клиенты', p.newClients, p.updatedClients],
         ['Шаблоны импорта', p.newImportTemplates, p.updatedImportTemplates],
         ['Шаблоны экспорта', p.newExportTemplates, p.updatedExportTemplates],
-        ['Магазины Zoomos Check', p.newZoomosShops, p.updatedZoomosShops],
-        ['Расписания проверок', p.newSchedules, p.updatedSchedules],
-        ['Известные сайты', p.newKnownSites, p.updatedKnownSites],
-        ['Города', p.newCityNames, p.updatedCityNames],
-        ['Адреса', p.newCityAddresses, p.updatedCityAddresses],
     ];
 
     const tbody = document.getElementById('previewBody');
@@ -308,13 +245,6 @@ function showPreview(p) {
 
     if (!tbody.innerHTML) {
         tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Нет изменений</td></tr>';
-    }
-
-    if (p.schedulesImportedDisabled) {
-        const warn = document.createElement('div');
-        warn.className = 'alert alert-warning mt-2 mb-0';
-        warn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Расписания будут импортированы <strong>отключёнными</strong> — потребуется явное включение после импорта.';
-        document.getElementById('previewBody').closest('table').after(warn);
     }
 
     document.getElementById('step1').classList.add('d-none');
@@ -359,15 +289,6 @@ function showResult(r) {
             r.updatedImportTemplates > 0 ? `<span class="updated">${r.updatedImportTemplates} шаблонов импорта обновлено</span>` : null,
             r.createdExportTemplates > 0 ? `<span class="created">+${r.createdExportTemplates} шаблонов экспорта</span>` : null,
             r.updatedExportTemplates > 0 ? `<span class="updated">${r.updatedExportTemplates} шаблонов экспорта обновлено</span>` : null,
-            r.createdZoomosShops > 0 ? `<span class="created">+${r.createdZoomosShops} магазинов</span>` : null,
-            r.updatedZoomosShops > 0 ? `<span class="updated">${r.updatedZoomosShops} магазинов обновлено</span>` : null,
-            r.createdSchedules > 0 ? `<span class="created">+${r.createdSchedules} расписаний</span>` : null,
-            r.updatedSchedules > 0 ? `<span class="updated">${r.updatedSchedules} расписаний обновлено</span>` : null,
-            r.createdKnownSites > 0 ? `<span class="created">+${r.createdKnownSites} известных сайтов</span>` : null,
-            r.updatedKnownSites > 0 ? `<span class="updated">${r.updatedKnownSites} сайтов обновлено</span>` : null,
-            r.createdCityNames > 0 ? `<span class="created">+${r.createdCityNames} городов</span>` : null,
-            r.updatedCityNames > 0 ? `<span class="updated">${r.updatedCityNames} городов обновлено</span>` : null,
-            r.createdCityAddresses > 0 ? `<span class="created">+${r.createdCityAddresses} адресов</span>` : null,
         ].filter(Boolean);
 
         const errHtml = r.errors && r.errors.length > 0

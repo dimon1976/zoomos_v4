@@ -38,25 +38,18 @@ public class BreadcrumbAdvice {
         SEGMENT_NAMES.put("status", "Статус");
         SEGMENT_NAMES.put("setup", "Настройка");
         SEGMENT_NAMES.put("results", "Результаты");
-        SEGMENT_NAMES.put("zoomos", "Анализ выкачки");
-        SEGMENT_NAMES.put("check", "Проверки");
-        SEGMENT_NAMES.put("history", "История");
-        SEGMENT_NAMES.put("schedule", "Расписание");
-        SEGMENT_NAMES.put("sites", "Справочник сайтов");
     }
 
     private final ClientService clientService;
     private final ExportTemplateService exportTemplateService;
     private final ImportTemplateService importTemplateService;
-    
+
     // Паттерны для идентификации различных типов страниц
     private static final Pattern CLIENT_PATH_PATTERN = Pattern.compile("^/clients/(\\d+)(?:/(.+))?$");
     private static final Pattern TEMPLATE_PATH_PATTERN = Pattern.compile("^/clients/(\\d+)/(import|export)/templates(?:/(.+))?$");
 
     // Промежуточные пути, у которых нет собственного маршрута — не делаем кликабельными
-    private static final Set<String> NON_LINKABLE_PATHS = new HashSet<>(Arrays.asList(
-            "/zoomos/check/results"
-    ));
+    private static final Set<String> NON_LINKABLE_PATHS = new HashSet<>(Arrays.asList());
 
     @ModelAttribute("breadcrumbs")
     public List<Breadcrumb> breadcrumbs(HttpServletRequest request) {

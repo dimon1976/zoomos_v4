@@ -93,6 +93,15 @@ public class UtilsController {
             "status", "ready"
         ));
 
+        utilities.add(Map.of(
+            "id", "report-fetcher",
+            "title", "Report Fetcher",
+            "description", "Скачивание длинных отчётов Zoomos в фоне, трансформация и справочники",
+            "icon", "fas fa-file-download",
+            "url", "/utils/report-fetcher",
+            "status", "ready"
+        ));
+
         return utilities;
     }
 }

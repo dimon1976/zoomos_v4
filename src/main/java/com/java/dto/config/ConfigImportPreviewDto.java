@@ -20,7 +20,6 @@ public class ConfigImportPreviewDto {
     private String exportedAt;
     private String generatedBy;
 
-    /** Секции, присутствующие в файле */
     @Builder.Default
     private List<String> sections = new ArrayList<>();
 
@@ -38,33 +37,4 @@ public class ConfigImportPreviewDto {
     private int newExportTemplates = 0;
     @Builder.Default
     private int updatedExportTemplates = 0;
-
-    @Builder.Default
-    private int newZoomosShops = 0;
-    @Builder.Default
-    private int updatedZoomosShops = 0;
-
-    @Builder.Default
-    private int newSchedules = 0;
-    @Builder.Default
-    private int updatedSchedules = 0;
-
-    @Builder.Default
-    private int newKnownSites = 0;
-    @Builder.Default
-    private int updatedKnownSites = 0;
-
-    @Builder.Default
-    private int newCityNames = 0;
-    @Builder.Default
-    private int updatedCityNames = 0;
-
-    @Builder.Default
-    private int newCityAddresses = 0;
-    @Builder.Default
-    private int updatedCityAddresses = 0;
-
-    /** Расписания при импорте всегда отключены — требуют явного включения */
-    @Builder.Default
-    private boolean schedulesImportedDisabled = false;
 }

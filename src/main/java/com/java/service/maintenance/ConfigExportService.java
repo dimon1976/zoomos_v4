@@ -21,11 +21,6 @@ public class ConfigExportService {
     private final ClientRepository clientRepository;
     private final ImportTemplateRepository importTemplateRepository;
     private final ExportTemplateRepository exportTemplateRepository;
-    private final ZoomosShopRepository zoomosShopRepository;
-    private final ZoomosShopScheduleRepository scheduleRepository;
-    private final ZoomosKnownSiteRepository knownSiteRepository;
-    private final ZoomosCityNameRepository cityNameRepository;
-    private final ZoomosCityAddressRepository cityAddressRepository;
 
     @Transactional(readOnly = true)
     public ConfigExportDto exportConfig(ConfigExportOptionsDto options) {
@@ -38,28 +33,11 @@ public class ConfigExportService {
                 .sections(sections)
                 .build();
 
-        if (options.isIncludeKnownSites()) {
-            dto.setKnownSites(exportKnownSites());
-        }
-
-        if (options.isIncludeCityDirectory()) {
-            dto.setCityNames(exportCityNames());
-            dto.setCityAddresses(exportCityAddresses());
-        }
-
         if (options.isIncludeClients()) {
             dto.setClients(exportClients(options));
         }
 
-        if (options.isIncludeZoomosShops()) {
-            dto.setStandaloneZoomosShops(exportStandaloneShops(options));
-        }
-
-        log.info("Экспорт завершён: {} секций, {} клиентов, {} standalone-магазинов, {} известных сайтов",
-                sections.size(),
-                dto.getClients().size(),
-                dto.getStandaloneZoomosShops().size(),
-                dto.getKnownSites().size());
+        log.info("Экспорт завершён: {} секций, {} клиентов", sections.size(), dto.getClients().size());
         return dto;
     }
 
@@ -68,36 +46,7 @@ public class ConfigExportService {
         if (options.isIncludeClients()) sections.add("clients");
         if (options.isIncludeImportTemplates()) sections.add("importTemplates");
         if (options.isIncludeExportTemplates()) sections.add("exportTemplates");
-        if (options.isIncludeZoomosShops()) sections.add("zoomosShops");
-        if (options.isIncludeSchedules()) sections.add("schedules");
-        if (options.isIncludeKnownSites()) sections.add("knownSites");
-        if (options.isIncludeCityDirectory()) sections.add("cityDirectory");
         return sections;
-    }
-
-    private List<ZoomosKnownSiteConfigDto> exportKnownSites() {
-        return knownSiteRepository.findAllByOrderBySiteNameAsc().stream()
-                .map(this::toKnownSiteDto)
-                .toList();
-    }
-
-    private List<ZoomosCityNameConfigDto> exportCityNames() {
-        return cityNameRepository.findAll().stream()
-                .map(cn -> ZoomosCityNameConfigDto.builder()
-                        .cityId(cn.getCityId())
-                        .cityName(cn.getCityName())
-                        .build())
-                .toList();
-    }
-
-    private List<ZoomosCityAddressConfigDto> exportCityAddresses() {
-        return cityAddressRepository.findAll().stream()
-                .map(ca -> ZoomosCityAddressConfigDto.builder()
-                        .cityId(ca.getCityId())
-                        .addressId(ca.getAddressId())
-                        .addressName(ca.getAddressName())
-                        .build())
-                .toList();
     }
 
     private List<ClientConfigDto> exportClients(ConfigExportOptionsDto options) {
@@ -122,10 +71,6 @@ public class ConfigExportService {
 
         if (options.isIncludeExportTemplates()) {
             dto.setExportTemplates(exportExportTemplates(client));
-        }
-
-        if (options.isIncludeZoomosShops()) {
-            dto.setZoomosShops(exportShops(client, options));
         }
 
         return dto;
@@ -226,76 +171,6 @@ public class ConfigExportService {
                 .filterType(f.getFilterType() != null ? f.getFilterType().name() : null)
                 .filterValue(f.getFilterValue())
                 .isActive(f.getIsActive())
-                .build();
-    }
-
-    private List<ZoomosShopConfigDto> exportShops(Client client, ConfigExportOptionsDto options) {
-        return zoomosShopRepository.findAllByClient(client).stream()
-                .map(shop -> toShopDto(shop, options))
-                .toList();
-    }
-
-    private List<ZoomosShopConfigDto> exportStandaloneShops(ConfigExportOptionsDto options) {
-        return zoomosShopRepository.findAllByClientIsNull().stream()
-                .map(shop -> toShopDto(shop, options))
-                .toList();
-    }
-
-    private ZoomosShopConfigDto toShopDto(ZoomosShop shop, ConfigExportOptionsDto options) {
-        ZoomosShopConfigDto dto = ZoomosShopConfigDto.builder()
-                .shopName(shop.getShopName())
-                .isEnabled(shop.isEnabled())
-                .isPriority(shop.isPriority())
-                .cityIds(shop.getCityIds().stream().map(this::toCityIdDto).toList())
-                .build();
-
-        if (options.isIncludeSchedules()) {
-            dto.setSchedules(scheduleRepository.findAllByShopId(shop.getId()).stream()
-                    .map(this::toScheduleDto)
-                    .toList());
-        }
-
-        return dto;
-    }
-
-    private ZoomosCityIdConfigDto toCityIdDto(ZoomosCityId c) {
-        return ZoomosCityIdConfigDto.builder()
-                .siteName(c.getSiteName())
-                .cityIds(c.getCityIds())
-                .addressIds(c.getAddressIds())
-                .checkType(c.getCheckType())
-                .isActive(c.getIsActive())
-                .parserInclude(c.getParserInclude())
-                .parserIncludeMode(c.getParserIncludeMode())
-                .parserExclude(c.getParserExclude())
-                .build();
-    }
-
-    private ZoomosScheduleConfigDto toScheduleDto(ZoomosShopSchedule s) {
-        return ZoomosScheduleConfigDto.builder()
-                .label(s.getLabel())
-                .cronExpression(s.getCronExpression())
-                .isEnabled(s.isEnabled())
-                .timeFrom(s.getTimeFrom())
-                .timeTo(s.getTimeTo())
-                .dropThreshold(s.getDropThreshold())
-                .errorGrowthThreshold(s.getErrorGrowthThreshold())
-                .baselineDays(s.getBaselineDays())
-                .minAbsoluteErrors(s.getMinAbsoluteErrors())
-                .trendDropThreshold(s.getTrendDropThreshold())
-                .trendErrorThreshold(s.getTrendErrorThreshold())
-                .dateOffsetFrom(s.getDateOffsetFrom())
-                .dateOffsetTo(s.getDateOffsetTo())
-                .build();
-    }
-
-    private ZoomosKnownSiteConfigDto toKnownSiteDto(ZoomosKnownSite site) {
-        return ZoomosKnownSiteConfigDto.builder()
-                .siteName(site.getSiteName())
-                .checkType(site.getCheckType())
-                .description(site.getDescription())
-                .isPriority(site.isPriority())
-                .ignoreStock(site.isIgnoreStock())
                 .build();
     }
 }

@@ -12,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -22,16 +21,7 @@ public class ConfigImportService {
     private final ClientRepository clientRepository;
     private final ImportTemplateRepository importTemplateRepository;
     private final ExportTemplateRepository exportTemplateRepository;
-    private final ZoomosShopRepository zoomosShopRepository;
-    private final ZoomosShopScheduleRepository scheduleRepository;
-    private final ZoomosKnownSiteRepository knownSiteRepository;
-    private final ZoomosCityIdRepository cityIdRepository;
-    private final ZoomosCityNameRepository cityNameRepository;
-    private final ZoomosCityAddressRepository cityAddressRepository;
 
-    /**
-     * Анализирует файл конфигурации без сохранения — возвращает предварительный просмотр.
-     */
     @Transactional(readOnly = true)
     public ConfigImportPreviewDto preview(ConfigExportDto config, ConfigExportOptionsDto options) {
         ConfigImportPreviewDto preview = ConfigImportPreviewDto.builder()
@@ -40,55 +30,6 @@ public class ConfigImportService {
                 .generatedBy(config.getGeneratedBy())
                 .sections(config.getSections())
                 .build();
-
-        if (options.isIncludeKnownSites() && config.getKnownSites() != null) {
-            for (ZoomosKnownSiteConfigDto dto : config.getKnownSites()) {
-                if (knownSiteRepository.existsBySiteName(dto.getSiteName())) {
-                    preview.setUpdatedKnownSites(preview.getUpdatedKnownSites() + 1);
-                } else {
-                    preview.setNewKnownSites(preview.getNewKnownSites() + 1);
-                }
-            }
-        }
-
-        if (options.isIncludeCityDirectory()) {
-            if (config.getCityNames() != null) {
-                for (ZoomosCityNameConfigDto dto : config.getCityNames()) {
-                    if (cityNameRepository.existsById(dto.getCityId())) {
-                        preview.setUpdatedCityNames(preview.getUpdatedCityNames() + 1);
-                    } else {
-                        preview.setNewCityNames(preview.getNewCityNames() + 1);
-                    }
-                }
-            }
-            if (config.getCityAddresses() != null) {
-                preview.setNewCityAddresses(config.getCityAddresses().size());
-            }
-        }
-
-        if (options.isIncludeZoomosShops() && config.getStandaloneZoomosShops() != null) {
-            for (ZoomosShopConfigDto shopDto : config.getStandaloneZoomosShops()) {
-                Optional<ZoomosShop> existingShopOpt = zoomosShopRepository.findByShopName(shopDto.getShopName());
-                if (existingShopOpt.isPresent()) {
-                    preview.setUpdatedZoomosShops(preview.getUpdatedZoomosShops() + 1);
-                } else {
-                    preview.setNewZoomosShops(preview.getNewZoomosShops() + 1);
-                }
-                if (options.isIncludeSchedules() && shopDto.getSchedules() != null) {
-                    ZoomosShop existingShop = existingShopOpt.orElse(null);
-                    for (ZoomosScheduleConfigDto sDto : shopDto.getSchedules()) {
-                        boolean schedExists = existingShop != null &&
-                                scheduleRepository.findAllByShopId(existingShop.getId()).stream()
-                                        .anyMatch(s -> labelMatches(s.getLabel(), sDto.getLabel()));
-                        if (schedExists) {
-                            preview.setUpdatedSchedules(preview.getUpdatedSchedules() + 1);
-                        } else {
-                            preview.setNewSchedules(preview.getNewSchedules() + 1);
-                        }
-                    }
-                }
-            }
-        }
 
         if (options.isIncludeClients() && config.getClients() != null) {
             for (ClientConfigDto clientDto : config.getClients()) {
@@ -124,71 +65,21 @@ public class ConfigImportService {
                         }
                     }
                 }
-
-                if (options.isIncludeZoomosShops() && clientDto.getZoomosShops() != null) {
-                    for (ZoomosShopConfigDto shopDto : clientDto.getZoomosShops()) {
-                        Optional<ZoomosShop> existingShopOpt2 = zoomosShopRepository.findByShopName(shopDto.getShopName());
-                        if (existingShopOpt2.isPresent()) {
-                            preview.setUpdatedZoomosShops(preview.getUpdatedZoomosShops() + 1);
-                        } else {
-                            preview.setNewZoomosShops(preview.getNewZoomosShops() + 1);
-                        }
-
-                        if (options.isIncludeSchedules() && shopDto.getSchedules() != null) {
-                            ZoomosShop existingShop = existingShopOpt2.orElse(null);
-                            for (ZoomosScheduleConfigDto sDto : shopDto.getSchedules()) {
-                                boolean schedExists = existingShop != null &&
-                                        scheduleRepository.findAllByShopId(existingShop.getId()).stream()
-                                                .anyMatch(s -> labelMatches(s.getLabel(), sDto.getLabel()));
-                                if (schedExists) {
-                                    preview.setUpdatedSchedules(preview.getUpdatedSchedules() + 1);
-                                } else {
-                                    preview.setNewSchedules(preview.getNewSchedules() + 1);
-                                }
-                            }
-                        }
-                    }
-                }
             }
-        }
-
-        if (options.isIncludeSchedules() && (preview.getNewSchedules() + preview.getUpdatedSchedules()) > 0) {
-            preview.setSchedulesImportedDisabled(true);
         }
 
         return preview;
     }
 
-    /**
-     * Выполняет импорт конфигурации. Транзакция — весь импорт атомарен.
-     */
     @Transactional
     public ConfigImportResultDto execute(ConfigExportDto config, ConfigExportOptionsDto options) {
         log.info("Начало импорта конфигурации v{} от {}", config.getVersion(), config.getExportedAt());
         ConfigImportResultDto result = new ConfigImportResultDto();
 
         try {
-            if (options.isIncludeKnownSites() && config.getKnownSites() != null) {
-                importKnownSites(config.getKnownSites(), result);
-            }
-
-            if (options.isIncludeCityDirectory()) {
-                if (config.getCityNames() != null) {
-                    importCityNames(config.getCityNames(), result);
-                }
-                if (config.getCityAddresses() != null) {
-                    importCityAddresses(config.getCityAddresses(), result);
-                }
-            }
-
             if (options.isIncludeClients() && config.getClients() != null) {
                 importClients(config.getClients(), options, result);
             }
-
-            if (options.isIncludeZoomosShops() && config.getStandaloneZoomosShops() != null) {
-                importShops(config.getStandaloneZoomosShops(), null, options, result);
-            }
-
         } catch (Exception e) {
             log.error("Ошибка при импорте конфигурации", e);
             result.setSuccess(false);
@@ -197,43 +88,6 @@ public class ConfigImportService {
 
         log.info("Импорт завершён. Успех: {}, ошибок: {}", result.isSuccess(), result.getErrors().size());
         return result;
-    }
-
-    private void importKnownSites(List<ZoomosKnownSiteConfigDto> sites, ConfigImportResultDto result) {
-        for (ZoomosKnownSiteConfigDto dto : sites) {
-            ZoomosKnownSite site = knownSiteRepository.findBySiteName(dto.getSiteName())
-                    .orElseGet(ZoomosKnownSite::new);
-            boolean isNew = site.getId() == null;
-
-            site.setSiteName(dto.getSiteName());
-            site.setCheckType(dto.getCheckType() != null ? dto.getCheckType() : "ITEM");
-            site.setDescription(dto.getDescription());
-            site.setPriority(dto.isPriority());
-            site.setIgnoreStock(dto.isIgnoreStock());
-
-            knownSiteRepository.save(site);
-
-            if (isNew) result.setCreatedKnownSites(result.getCreatedKnownSites() + 1);
-            else result.setUpdatedKnownSites(result.getUpdatedKnownSites() + 1);
-        }
-    }
-
-    private void importCityNames(List<ZoomosCityNameConfigDto> cityNames, ConfigImportResultDto result) {
-        for (ZoomosCityNameConfigDto dto : cityNames) {
-            if (dto.getCityId() == null || dto.getCityName() == null) continue;
-            boolean isNew = !cityNameRepository.existsById(dto.getCityId());
-            cityNameRepository.upsert(dto.getCityId(), dto.getCityName());
-            if (isNew) result.setCreatedCityNames(result.getCreatedCityNames() + 1);
-            else result.setUpdatedCityNames(result.getUpdatedCityNames() + 1);
-        }
-    }
-
-    private void importCityAddresses(List<ZoomosCityAddressConfigDto> addresses, ConfigImportResultDto result) {
-        for (ZoomosCityAddressConfigDto dto : addresses) {
-            if (dto.getCityId() == null || dto.getAddressId() == null) continue;
-            cityAddressRepository.upsert(dto.getCityId(), dto.getAddressId(), dto.getAddressName());
-            result.setCreatedCityAddresses(result.getCreatedCityAddresses() + 1);
-        }
     }
 
     private void importClients(List<ClientConfigDto> clients, ConfigExportOptionsDto options,
@@ -261,9 +115,6 @@ public class ConfigImportService {
             if (options.isIncludeExportTemplates() && dto.getExportTemplates() != null) {
                 importExportTemplates(dto.getExportTemplates(), client, result);
             }
-            if (options.isIncludeZoomosShops() && dto.getZoomosShops() != null) {
-                importShops(dto.getZoomosShops(), client, options, result);
-            }
         }
     }
 
@@ -287,7 +138,6 @@ public class ConfigImportService {
             template.setSkipHeaderRows(dto.getSkipHeaderRows());
             template.setIsActive(dto.getIsActive());
 
-            // Полная замена полей (orphanRemoval=true)
             template.getFields().clear();
             if (dto.getFields() != null) {
                 for (ImportTemplateFieldConfigDto fDto : dto.getFields()) {
@@ -349,7 +199,6 @@ public class ConfigImportService {
             template.setExportTypeLabel(dto.getExportTypeLabel());
             template.setOperationNameSource(dto.getOperationNameSource());
 
-            // Полная замена полей и фильтров (orphanRemoval=true)
             template.getFields().clear();
             if (dto.getFields() != null) {
                 for (ExportTemplateFieldConfigDto fDto : dto.getFields()) {
@@ -387,90 +236,6 @@ public class ConfigImportService {
             if (isNew) result.setCreatedExportTemplates(result.getCreatedExportTemplates() + 1);
             else result.setUpdatedExportTemplates(result.getUpdatedExportTemplates() + 1);
         }
-    }
-
-    private void importShops(List<ZoomosShopConfigDto> shops, Client client,
-                             ConfigExportOptionsDto options, ConfigImportResultDto result) {
-        for (ZoomosShopConfigDto dto : shops) {
-            ZoomosShop shop = zoomosShopRepository.findByShopName(dto.getShopName())
-                    .orElseGet(ZoomosShop::new);
-            boolean isNew = shop.getId() == null;
-
-            shop.setShopName(dto.getShopName());
-            shop.setEnabled(dto.isEnabled());
-            shop.setPriority(dto.isPriority());
-            shop.setClient(client);
-
-            // Upsert cityIds
-            shop = zoomosShopRepository.save(shop);
-
-            if (dto.getCityIds() != null) {
-                importCityIds(dto.getCityIds(), shop);
-            }
-
-            if (options.isIncludeSchedules() && dto.getSchedules() != null) {
-                importSchedules(dto.getSchedules(), shop, result);
-            }
-
-            if (isNew) result.setCreatedZoomosShops(result.getCreatedZoomosShops() + 1);
-            else result.setUpdatedZoomosShops(result.getUpdatedZoomosShops() + 1);
-        }
-    }
-
-    private void importCityIds(List<ZoomosCityIdConfigDto> cityIds, ZoomosShop shop) {
-        for (ZoomosCityIdConfigDto dto : cityIds) {
-            ZoomosCityId cityId = cityIdRepository.findByShopIdAndSiteName(shop.getId(), dto.getSiteName())
-                    .orElseGet(ZoomosCityId::new);
-            cityId.setShop(shop);
-            cityId.setSiteName(dto.getSiteName());
-            cityId.setCityIds(dto.getCityIds());
-            cityId.setAddressIds(dto.getAddressIds());
-            cityId.setCheckType(dto.getCheckType() != null ? dto.getCheckType() : "API");
-            cityId.setIsActive(dto.getIsActive());
-            cityId.setParserInclude(dto.getParserInclude());
-            cityId.setParserIncludeMode(dto.getParserIncludeMode() != null ? dto.getParserIncludeMode() : "OR");
-            cityId.setParserExclude(dto.getParserExclude());
-            cityIdRepository.save(cityId);
-        }
-    }
-
-    private void importSchedules(List<ZoomosScheduleConfigDto> schedules, ZoomosShop shop,
-                                 ConfigImportResultDto result) {
-        List<ZoomosShopSchedule> existing = scheduleRepository.findAllByShopId(shop.getId());
-        for (ZoomosScheduleConfigDto dto : schedules) {
-            ZoomosShopSchedule schedule = existing.stream()
-                    .filter(s -> labelMatches(s.getLabel(), dto.getLabel()))
-                    .findFirst()
-                    .orElseGet(ZoomosShopSchedule::new);
-            boolean isNew = schedule.getId() == null;
-
-            schedule.setShopId(shop.getId());
-            schedule.setLabel(dto.getLabel());
-            schedule.setCronExpression(dto.getCronExpression());
-            // Расписания при импорте всегда отключены — требуют явного включения
-            schedule.setEnabled(false);
-            schedule.setTimeFrom(dto.getTimeFrom());
-            schedule.setTimeTo(dto.getTimeTo());
-            schedule.setDropThreshold(dto.getDropThreshold());
-            schedule.setErrorGrowthThreshold(dto.getErrorGrowthThreshold());
-            schedule.setBaselineDays(dto.getBaselineDays());
-            schedule.setMinAbsoluteErrors(dto.getMinAbsoluteErrors());
-            schedule.setTrendDropThreshold(dto.getTrendDropThreshold());
-            schedule.setTrendErrorThreshold(dto.getTrendErrorThreshold());
-            schedule.setDateOffsetFrom(dto.getDateOffsetFrom());
-            schedule.setDateOffsetTo(dto.getDateOffsetTo());
-
-            scheduleRepository.save(schedule);
-
-            if (isNew) result.setCreatedSchedules(result.getCreatedSchedules() + 1);
-            else result.setUpdatedSchedules(result.getUpdatedSchedules() + 1);
-        }
-    }
-
-    private boolean labelMatches(String existingLabel, String dtoLabel) {
-        if (existingLabel == null && dtoLabel == null) return true;
-        if (existingLabel == null || dtoLabel == null) return false;
-        return existingLabel.equals(dtoLabel);
     }
 
     private <E extends Enum<E>> E parseEnum(Class<E> enumClass, String value) {

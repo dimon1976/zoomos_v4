@@ -32,8 +32,4 @@ public class ClientDto {
     private boolean isActive;
 
     private int sortOrder;
-
-    // Привязка к Zoomos Check
-    private Long linkedShopId;
-    private String linkedShopName;
 }

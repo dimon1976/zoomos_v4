@@ -47,7 +47,7 @@ public class ConfigImportExportController {
         log.info("Запрос на экспорт конфигурации");
         try {
             ConfigExportDto dto = exportService.exportConfig(options);
-            String filename = "zoomos-config-" + LocalDate.now() + ".json";
+            String filename = "config-" + LocalDate.now() + ".json";
             response.setContentType("application/json; charset=UTF-8");
             String disposition = ContentDisposition.attachment()
                     .filename(filename, StandardCharsets.UTF_8).build().toString();
