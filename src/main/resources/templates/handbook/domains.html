@@ -35,15 +35,15 @@
 
     let renameDomainId = null;
 
-    function openRenameModal(btn) {
+    document.getElementById('renameModal').addEventListener('show.bs.modal', function(event) {
+        const btn = event.relatedTarget;
         renameDomainId = btn.dataset.domainId;
         document.getElementById('renameCurrentDomain').textContent = btn.dataset.domainName;
         document.getElementById('renameNewDomain').value = btn.dataset.domainName;
         document.getElementById('renamePreview').classList.add('d-none');
         document.getElementById('renameSubmitBtn').disabled = true;
         document.getElementById('renameForm').action = '/handbook/domains/' + renameDomainId + '/rename';
-        new bootstrap.Modal(document.getElementById('renameModal')).show();
-    }
+    });
 
     function previewRename() {
         const newDomain = document.getElementById('renameNewDomain').value.trim();
@@ -164,9 +164,9 @@
                                     </button>
                                 </form>
                                 <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        data-bs-toggle="modal" data-bs-target="#renameModal"
                                         th:data-domain-id="${d.id}"
-                                        th:data-domain-name="${d.domain}"
-                                        onclick="openRenameModal(this)">
+                                        th:data-domain-name="${d.domain}">
                                     <i class="fas fa-pencil-alt"></i>
                                 </button>
                             </td>
